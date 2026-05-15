@@ -1,0 +1,25 @@
+original_authors:
+  - name: Marco Grossi
+  - name: Alessio Sereno
+  - name: Vincenzo Barbato
+  - name: Alessandro Montanari
+  - name: Giacomo Passarani
+  - name: Paolo Zolla
+  - name: Marco Fabiani
+  - name: Gianluca Cocirla
+  - name: Alex Falco
+
+present_maintainers:
+  - name: Marco Grossi
+  - name: Alessio Sereno
+  - name: Vincenzo Barbato
+  - name: Alessandro Montanari
+  - name: Alex Falco
+  - name: Giacomo Passarani
+  - name: Marco Fabiani
+  - name: Gianluca Cocirla
+  - name: Andrea Giacomi
+
+exclude:
+  - dependabot[bot]
+  - github-actions[bot]

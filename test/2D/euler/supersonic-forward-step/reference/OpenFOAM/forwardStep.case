@@ -1,0 +1,18 @@
+FORMAT
+type: ensight gold
+
+GEOMETRY
+model:        1     forwardStep.0000.mesh
+
+VARIABLE
+scalar per element:            1       p               forwardStep.****.p
+scalar per element:            1       T               forwardStep.****.T
+vector per element:            1       U               forwardStep.****.U
+
+TIME
+time set:                      1
+number of steps:               1
+filename start number:         0
+filename increment:            1
+time values:
+0.00000e+00  

@@ -1,0 +1,12 @@
+# Canonical Git author identities for log shortlog/blame.
+# Format: Canonical Name <canonical@email> [Alias Name] <alias@email>
+
+# Marco Grossi variants
+Marco Grossi <marcogrossi@live.it> <50102629+MarcoGrossi92@users.noreply.github.com>
+Marco Grossi <marcogrossi@live.it> MarcoGrossi92 <marco.grossi@uniroma1it>
+Marco Grossi <marcogrossi@live.it> MarcoGrossi92 <marcogrossi@live.it>
+Marco Grossi <marcogrossi@live.it> marco grossi (monolith) <marco.grossi@uniroma1.it>
+
+# Vincenzo Barbato variants
+Vincenzo Barbato <vincenzo.barbato@uniroma1.it> vinbar1 <157361815+vinbar1@users.noreply.github.com>
+Vincenzo Barbato <vincenzo.barbato@uniroma1.it> vinbar1 <vincenzo.barbato@uniroma1.it>

@@ -1,0 +1,51 @@
+name: CTest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Python dependencies
+        run: |
+          pip install numpy
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=TESTING \
+            -DCMAKE_Fortran_COMPILER=gfortran \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DUSE_OPENMP=ON \
+            -DUSE_MPI=OFF \
+            -DUSE_TECIO=OFF \
+            -DUSE_SUNDIALS=OFF \
+            -DUSE_CANTERA=OFF
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure --timeout 300

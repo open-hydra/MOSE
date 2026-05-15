@@ -1,0 +1,11 @@
+  problem   case=Merlin1D
+    rocket  equilibrium 
+    sup,Ae/At = 16.0
+    p,bar=108.0
+    o/f = 2.35
+  react
+    fuel=RP-1 wt=100.0 t,K=300.0
+    oxid=O2(L)  wt=100.0
+  output
+       siunits massf short
+  end

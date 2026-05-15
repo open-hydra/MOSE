@@ -1,0 +1,78 @@
+
+ *******************************************************************************
+
+         NASA-GLENN CHEMICAL EQUILIBRIUM PROGRAM CEA2, MAY 21, 2004
+                   BY  BONNIE MCBRIDE AND SANFORD GORDON
+      REFS: NASA RP-1311, PART I, 1994 AND NASA RP-1311, PART II, 1996
+
+ *******************************************************************************
+
+
+
+   problem   case=Merlin1D
+     rocket  frozen
+     sub,Ae/At = 2.0, 1.5
+     sup,Ae/At = 2.0, 4.0, 8.0, 16.0
+     p,bar=108.0
+     o/f = 2.35
+   react
+     fuel=RP-1 wt=100.0 t,K=300.0
+     oxid=O2(L)  wt=100.0
+   output
+        siunits massf short
+   end
+
+
+
+
+
+           THEORETICAL ROCKET PERFORMANCE ASSUMING FROZEN COMPOSITION
+
+ Pin =  1566.4 PSIA
+ CASE = Merlin1D       
+
+             REACTANT                    WT FRACTION      ENERGY      TEMP
+                                          (SEE NOTE)     KJ/KG-MOL      K  
+ FUEL        RP-1                         1.0000000   -295023.665    300.000
+ OXIDANT     O2(L)                        1.0000000    -12979.000     90.170
+
+ O/F=    2.35000  %FUEL= 29.850746  R,EQ.RATIO= 1.456147  PHI,EQ.RATIO= 1.456147
+
+                 CHAMBER   THROAT     EXIT     EXIT     EXIT     EXIT     EXIT     EXIT
+ Pinf/P            1.0000   1.7820   1.0605   1.1221   8.5198   24.181   64.133   165.49
+ P, BAR            108.00   60.606   101.84   96.248   12.676   4.4664   1.6840  0.65259
+ T, K             3644.12  3289.48  3606.55  3570.79  2477.34  2037.39  1686.54  1393.69
+ RHO, KG/CU M    8.0087 0 4.9787 0 7.6304 0 7.2838 0 1.3827 0 5.9240-1 2.6982-1 1.2653-1
+ H, KJ/KG         -807.75 -1548.36  -886.57  -961.54 -3208.17 -4077.25 -4747.72 -5286.71
+ U, KJ/KG        -2156.28 -2765.65 -2221.20 -2282.93 -4124.93 -4831.20 -5371.84 -5802.46
+ G, KJ/KG        -42353.4 -39050.8 -42003.9 -41671.1 -31451.7 -27305.0 -23975.5 -21175.8
+ S, KJ/(KG)(K)    11.4007  11.4007  11.4007  11.4007  11.4007  11.4007  11.4007  11.4007
+
+ M, (1/n)          22.468   22.468   22.468   22.468   22.468   22.468   22.468   22.468
+ Cp, KJ/(KG)(K)    2.0992   2.0768   2.0970   2.0949   2.0043   1.9430   1.8757   1.8023
+ GAMMAs            1.2140   1.2168   1.2143   1.2145   1.2264   1.2353   1.2458   1.2584
+ SON VEL,M/SEC     1279.5   1217.1   1273.0   1266.8   1060.4    965.1    881.8    805.6
+ MACH NUMBER        0.000    1.000    0.312    0.438    2.066    2.650    3.184    3.715
+
+ PERFORMANCE PARAMETERS
+
+ Ae/At                      1.0000   2.0000   1.5000   2.0000   4.0000   8.0000   16.000
+ CSTAR, M/SEC               1782.4   1782.4   1782.4   1782.4   1782.4   1782.4   1782.4
+ CF                         0.6828   0.2228   0.3112   1.2293   1.4347   1.5750   1.6792
+ Ivac, M/SEC                2217.3   3758.4   2937.2   2609.5   2852.0   3029.5   3165.3
+ Isp, M/SEC                 1217.1    397.1    554.6   2191.1   2557.2   2807.1   2993.0
+
+ MASS FRACTIONS
+
+ *CO             0.44529   *CO2            0.23680   COOH            0.00005
+ *H              0.00118   HCO             0.00006   HO2             0.00006
+ *H2             0.01031   HCOOH           0.00001   H2O             0.26450
+ H2O2            0.00001   *O              0.00353   *OH             0.03044
+ *O2             0.00775
+
+  * THERMODYNAMIC PROPERTIES FITTED TO 20000.K
+
+ NOTE. WEIGHT FRACTION OF FUEL IN TOTAL FUELS AND OF OXIDANT IN TOTAL OXIDANTS
+
+
+

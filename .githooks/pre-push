@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Git pre-push hook — runs CTest validation before allowing a push.
+# Activate with:  git config core.hooksPath .githooks
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+BUILD_DIR="${REPO_ROOT}/build"
+
+if [[ ! -f "${BUILD_DIR}/Makefile" && ! -f "${BUILD_DIR}/build.ninja" ]]; then
+    echo "[pre-push] No build directory found at ${BUILD_DIR} — skipping tests."
+    echo "[pre-push] Run 'cmake --preset default && cmake --build build' first."
+    exit 0
+fi
+
+echo "[pre-push] Running CTest validation (Sod79, PrandtlMeyer)..."
+if ctest --test-dir "${BUILD_DIR}" --output-on-failure --timeout 300; then
+    echo "[pre-push] All tests passed."
+else
+    echo "[pre-push] Tests FAILED — push aborted."
+    exit 1
+fi

@@ -1,0 +1,190 @@
+{% extends "main.html" %}
+
+{% block tabs %}
+{{ super() }}
+
+<style>.md-header { position: initial; }</style>
+
+<div class="mose-home">
+
+  <!-- ══════════════════════════════════════════ HERO ══════════════════════════════════════════ -->
+  <section class="mose-hero">
+    <div class="mose-hero__grid"></div>
+    <div class="mose-hero__glow mose-hero__glow--a"></div>
+    <div class="mose-hero__glow mose-hero__glow--b"></div>
+    <div class="mose-hero__wrap">
+
+      <span class="mose-badge">
+        <span class="mose-badge__dot"></span>
+        Hydra CFD Suite
+      </span>
+
+      <h1 class="mose-hero__h1">MOSE</h1>
+      <p class="mose-hero__sub">Multipurpose Open Solver for ideal-gas Equations</p>
+      <p class="mose-hero__body">
+        Open-source compressible-flow solver for the Euler and Navier-Stokes equations on
+        multi-block structured grids — from classical shock-tube benchmarks to turbulent
+        reacting flows.
+      </p>
+
+      <div class="mose-hero__btns">
+        <a href="{{ 'getting-started/' | url }}" class="mose-btn mose-btn--primary">
+          Get Started &nbsp;&rarr;
+        </a>
+        <a href="{{ 'overview/' | url }}" class="mose-btn mose-btn--ghost">
+          Overview
+        </a>
+      </div>
+
+      <div class="mose-hero__pills">
+        <div class="mose-pill"><strong>6+</strong>&nbsp;Riemann Solvers</div>
+        <div class="mose-pill"><strong>5+</strong>&nbsp;Turbulence Models</div>
+        <div class="mose-pill"><strong>OpenMP</strong>&nbsp;+ MPI</div>
+        <div class="mose-pill"><strong>Modern</strong>&nbsp;Fortran</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════ FEATURES ════════════════════════════════════════ -->
+  <section class="mose-features">
+    <div class="mose-container">
+      <div class="mose-section-hd">
+        <h2>Everything you need for compressible flow</h2>
+        <p>A complete, battle-tested CFD solver written in modern Fortran</p>
+      </div>
+      <div class="mose-grid">
+
+        <article class="mose-card mose-card--indigo">
+          <div class="mose-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+          </div>
+          <h3>Compressible Flow Solver</h3>
+          <p>Euler and Navier-Stokes equations on multi-block structured grids, with steady-state and time-accurate computation modes.</p>
+        </article>
+
+        <article class="mose-card mose-card--violet">
+          <div class="mose-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <h3>High-Order Numerics</h3>
+          <p>MUSCL reconstruction with five flux limiters. Six Riemann solvers: HLLC, HLLE, SLAU, AUSM&#x207A;-up, Godunov, Lax-Friedrichs.</p>
+        </article>
+
+        <article class="mose-card mose-card--orange">
+          <div class="mose-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <h3>Finite-Rate Chemistry</h3>
+          <p>Multi-species reacting flows with finite-rate kinetics or NASA CEA chemical equilibrium. Soot formation models included.</p>
+        </article>
+
+        <article class="mose-card mose-card--teal">
+          <div class="mose-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </div>
+          <h3>Turbulence Modelling</h3>
+          <p>RANS: Spalart-Allmaras (with RC corrections), Menter SST, Wilcox k-&#969; 2006, SSGLRR, and QCR2000.</p>
+        </article>
+
+        <article class="mose-card mose-card--green">
+          <div class="mose-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <h3>Parallel Execution</h3>
+          <p>Shared-memory parallelism via OpenMP and distributed-memory MPI for large-scale HPC cluster runs.</p>
+        </article>
+
+        <article class="mose-card mose-card--pink">
+          <div class="mose-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          </div>
+          <h3>Flexible I/O</h3>
+          <p>Tecplot (ASCII &amp; binary) and VTK output. Point probes for time histories and full restart capability.</p>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════ QUICK START ══════════════════════════════════════ -->
+  <section class="mose-qs">
+    <div class="mose-container mose-qs__inner">
+
+      <div class="mose-qs__text">
+        <h2>Up and running in minutes</h2>
+        <p>MOSE ships with a single install script that handles all dependencies, compiles the Fortran core, and puts the binary on your PATH.</p>
+        <div class="mose-qs__links">
+          <a href="{{ 'getting-started/installation/' | url }}" class="mose-btn mose-btn--primary">
+            Installation guide &rarr;
+          </a>
+          <a href="{{ 'getting-started/quick-start/' | url }}" class="mose-btn mose-btn--secondary">
+            Quick start
+          </a>
+        </div>
+      </div>
+
+      <div class="mose-qs__code">
+        <div class="mose-term">
+          <div class="mose-term__bar">
+            <span class="mose-term__dot mose-term__dot--r"></span>
+            <span class="mose-term__dot mose-term__dot--y"></span>
+            <span class="mose-term__dot mose-term__dot--g"></span>
+            <span class="mose-term__label">terminal</span>
+          </div>
+          <pre class="mose-term__body"><code><span class="tc"># Clone and build</span>
+<span class="tp">$</span> git clone https://github.com/open-hydra/MOSE.git
+<span class="tp">$</span> cd MOSE &amp;&amp; ./install.sh
+
+<span class="tc"># Run a simulation</span>
+<span class="tp">$</span> ./bin/MOSE input.ini</code></pre>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════ ECOSYSTEM ════════════════════════════════════════ -->
+  <section class="mose-eco">
+    <div class="mose-container">
+      <div class="mose-section-hd">
+        <h2>The Hydra CFD Suite</h2>
+        <p>MOSE is the ideal-gas compressible-flow solver in an integrated multi-physics simulation suite</p>
+      </div>
+      <div class="mose-eco__flow">
+        <a href="https://github.com/open-hydra/ATLAS" target="_blank" rel="noopener" class="mose-eco__node">
+          <span class="mose-eco__node-name">ATLAS</span>
+          <span class="mose-eco__node-role">Pre-processor</span>
+          <span class="mose-eco__node-desc">Initial &amp; boundary conditions, thermodynamic and chemical data</span>
+        </a>
+        <div class="mose-eco__arrow">&#8594;</div>
+        <div class="mose-eco__node mose-eco__node--active">
+          <span class="mose-eco__node-tag">You are here</span>
+          <span class="mose-eco__node-name">MOSE</span>
+          <span class="mose-eco__node-role">Solver</span>
+          <span class="mose-eco__node-desc">Compressible Euler &amp; Navier-Stokes with finite-rate chemistry</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div><!-- /.mose-home -->
+{% endblock %}
+
+{% block content %}{% endblock %}
+{% block footer %}{{ super() }}{% endblock %}

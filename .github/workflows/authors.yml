@@ -1,0 +1,43 @@
+name: Authors
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  authors:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Conda (base)
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-activate-base: true
+          activate-environment: base
+          python-version: "3.12"
+
+      - name: Generate AUTHORS.md
+        shell: bash -el {0}
+        run: |
+          conda activate base
+          python -m pip install --quiet pyyaml
+          python scripts/generate-authors.py
+
+      - name: Commit updated AUTHORS.md
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if ! git diff --quiet AUTHORS.md; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+            git add AUTHORS.md
+            git commit -m "chore: update AUTHORS.md"
+            git push
+          fi
