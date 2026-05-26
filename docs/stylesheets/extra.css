@@ -379,10 +379,27 @@
   gap: 1.5rem;
   flex-wrap: wrap;
 }
+.mose-eco__flow--graph {
+  flex-wrap: nowrap;
+}
+.mose-eco__parallel,
+.mose-eco__branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+.mose-eco__parallel {
+  gap: 1.25rem;
+}
 .mose-eco__arrow {
   font-size: 1.75rem;
   color: var(--md-default-fg-color--light, #888);
   flex-shrink: 0;
+}
+.mose-eco__arrow--diag {
+  line-height: 1;
 }
 .mose-eco__node {
   display: flex;
@@ -455,11 +472,18 @@
   .mose-hero {
     padding: 5rem 1.5rem 4rem;
   }
-  .mose-eco__flow {
+  .mose-eco__flow,
+  .mose-eco__flow--graph {
     flex-direction: column;
   }
   .mose-eco__arrow {
     transform: rotate(90deg);
+  }
+  .mose-eco__branch {
+    flex-direction: row;
+  }
+  .mose-eco__arrow--diag {
+    transform: none;
   }
 }
 

@@ -112,6 +112,7 @@ nav:
   - Verification & Validation:
     - vv/index.md
     - Shock Tube: vv/1D.md
+    - Reactive Shock Tube (Fer14): vv/1D-fer14.md
     - Woodward-Colella Step: vv/2D-woodward-colella.md
     - Oblique Shock: vv/2D-oblique-shock.md
     - Hypersonic Cylinder: vv/2D-hypersonic-cylinder.md
@@ -119,6 +120,7 @@ nav:
     - Laminar Flat Plate: vv/2D-flat-plate-laminar.md
     - Turbulent Flat Plate: vv/2D-flat-plate-turbulent.md
     - Shock Boundary Layer Interaction: vv/2D-swbli.md
+    - Rotating Frame: vv/rotating-frame.md
 
   - Developer Guide:
     - development/index.md

@@ -166,19 +166,47 @@
         <h2>The Hydra CFD Suite</h2>
         <p>MOSE is the ideal-gas compressible-flow solver in an integrated multi-physics simulation suite</p>
       </div>
-      <div class="mose-eco__flow">
+      <div class="mose-eco__flow mose-eco__flow--graph">
         <a href="https://github.com/open-hydra/ATLAS" target="_blank" rel="noopener" class="mose-eco__node">
           <span class="mose-eco__node-name">ATLAS</span>
           <span class="mose-eco__node-role">Pre-processor</span>
           <span class="mose-eco__node-desc">Initial &amp; boundary conditions, thermodynamic and chemical data</span>
         </a>
-        <div class="mose-eco__arrow">&#8594;</div>
-        <div class="mose-eco__node mose-eco__node--active">
-          <span class="mose-eco__node-tag">You are here</span>
-          <span class="mose-eco__node-name">MOSE</span>
-          <span class="mose-eco__node-role">Solver</span>
-          <span class="mose-eco__node-desc">Compressible Euler &amp; Navier-Stokes with finite-rate chemistry</span>
+
+        <div class="mose-eco__branch" aria-hidden="true">
+          <span class="mose-eco__arrow mose-eco__arrow--diag">&#8599;</span>
+          <span class="mose-eco__arrow mose-eco__arrow--diag">&#8600;</span>
         </div>
+
+        <div class="mose-eco__parallel">
+          <div class="mose-eco__node mose-eco__node--active">
+            <span class="mose-eco__node-tag">You are here</span>
+            <span class="mose-eco__node-name">MOSE</span>
+            <span class="mose-eco__node-role">Solver/Library</span>
+            <span class="mose-eco__node-desc">Compressible ideal-gas CFD solver</span>
+          </div>
+          <a href="https://github.com/open-hydra/FUSS" target="_blank" rel="noopener" class="mose-eco__node">
+            <span class="mose-eco__node-name">FUSS</span>
+            <span class="mose-eco__node-role">Solver/Library</span>
+            <span class="mose-eco__node-desc">Solid heat conduction solver</span>
+          </a>
+          <a href="https://github.com/open-hydra/GROOT" target="_blank" rel="noopener" class="mose-eco__node">
+            <span class="mose-eco__node-name">GROOT</span>
+            <span class="mose-eco__node-role">Solver/Library</span>
+            <span class="mose-eco__node-desc">Radiative transfer equation solver</span>
+          </a>
+        </div>
+
+        <div class="mose-eco__branch" aria-hidden="true">
+          <span class="mose-eco__arrow mose-eco__arrow--diag">&#8600;</span>
+          <span class="mose-eco__arrow mose-eco__arrow--diag">&#8599;</span>
+        </div>
+
+        <a href="https://github.com/open-hydra" target="_blank" rel="noopener" class="mose-eco__node">
+          <span class="mose-eco__node-name">Hydra</span>
+          <span class="mose-eco__node-role">Solver</span>
+          <span class="mose-eco__node-desc">Integrated solver for fully-coupled simulations</span>
+        </a>
       </div>
     </div>
   </section>
