@@ -5,6 +5,12 @@ on:
     branches:
       - main
   pull_request:
+  schedule:
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   authors:
@@ -30,14 +36,13 @@ jobs:
           python -m pip install --quiet pyyaml
           python scripts/generate-authors.py
 
-      - name: Commit updated AUTHORS.md
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          if ! git diff --quiet AUTHORS.md; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-            git add AUTHORS.md
-            git commit -m "chore: update AUTHORS.md"
-            git push
-          fi
+      - name: Create or update PR for AUTHORS.md
+        if: github.event_name != 'pull_request'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update AUTHORS.md"
+          title: "chore: update AUTHORS.md"
+          body: "Automated update of AUTHORS.md"
+          branch: "ci/update-authors"
+          delete-branch: true
