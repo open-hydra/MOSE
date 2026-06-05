@@ -65,7 +65,7 @@ MOSE/
 
 | Library | Purpose |
 |---------|---------|
-| `FLINT` | Thermochemistry (internally depends on `OSlo` ODE solvers) |
+| `FLINT` | Thermochemistry (internally depends on `OSLO` ODE solvers) |
 | `ORION` | Structured multi-block grid I/O |
 | `FiNeR` | INI file parser |
 
@@ -259,7 +259,7 @@ External library paths are set via CMake cache variables or the
 |----------|---------|---------|
 | `ORION_PATH` | `lib/ORION/` | ORION I/O |
 | `FLINT_PATH` | `lib/FLINT/` | FLINT thermochemistry |
-| `OSLO_PATH` | `lib/FLINT/lib/OSlo/` | OSlo ODE solvers |
+| `OSLO_PATH` | `lib/FLINT/lib/OSLO/` | OSLO ODE solvers |
 | `FINER_PATH` | `lib/third_party/FiNeR/` | FiNeR INI parser |
 
 ---

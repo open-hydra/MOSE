@@ -34,7 +34,7 @@ MOSE builds upon the work of:
 
 - **FLINT** contributors (thermochemistry library)
 - **ORION** contributors (I/O library)
-- **OSlo** contributors (ODE solvers)
+- **OSLO** contributors (ODE solvers)
 - **FiNeR** contributors (INI parser)
 - The broader Fortran and scientific computing community
 

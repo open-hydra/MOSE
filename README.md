@@ -68,7 +68,7 @@ MOSE is built on top of several companion libraries, included as Git submodules:
 |---|---|
 | [FLINT](https://github.com/MarcoGrossi92/FLINT) | Thermodynamic and chemical kinetics database |
 | [ORION](https://github.com/MarcoGrossi92/ORION) | Multi-format I/O (Tecplot, VTK, Plot3D) |
-| [OSlo](https://github.com/MarcoGrossi92/OSlo) | ODE solver library (stiff chemistry integration) |
+| [OSLO](https://github.com/MarcoGrossi92/OSLO) | ODE solver library (stiff chemistry integration) |
 | [FiNeR](https://github.com/szaghi/FiNeR) | INI configuration file parser |
 | [ExactPack](https://github.com/lanl/ExactPack) | Exact solutions for verification |
 

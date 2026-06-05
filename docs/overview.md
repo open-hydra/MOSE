@@ -56,7 +56,7 @@ MOSE models the gas mixture as a collection of $N_s$ **thermally perfect** speci
 
 MOSE supports two chemistry modes that can be used independently or together:
 
-**Finite-rate kinetics** — species mass fractions evolve by elementary, three-body, and pressure-dependent reactions following the modified Arrhenius law $k_f = A\,T^b\,\exp(-E_a/R_u T)$. The kinetics framework is provided by [FLINT](https://github.com/MarcoGrossi92/FLINT). Stiff source terms are integrated with Strang operator splitting via the [OSlo](https://github.com/MarcoGrossi92/OSlo) ODE library.
+**Finite-rate kinetics** — species mass fractions evolve by elementary, three-body, and pressure-dependent reactions following the modified Arrhenius law $k_f = A\,T^b\,\exp(-E_a/R_u T)$. The kinetics framework is provided by [FLINT](https://github.com/MarcoGrossi92/FLINT). Stiff source terms are integrated with Strang operator splitting via the [OSLO](https://github.com/MarcoGrossi92/OSLO) ODE library.
 
 **Chemical equilibrium** — NASA CEA integration for flows where the chemistry time scale is much shorter than the flow time scale (e.g. rocket nozzle expansions).
 
@@ -66,7 +66,7 @@ MOSE supports two chemistry modes that can be used independently or together:
 |------------|---------|
 | Reaction types | Elementary, three-body, pressure-dependent (Lindemann/Troe) |
 | Rate law | Modified Arrhenius; forward–backward via equilibrium constants |
-| Stiff integration | Strang splitting + [OSlo](https://github.com/MarcoGrossi92/OSlo) / SUNDIALS |
+| Stiff integration | Strang splitting + [OSLO](https://github.com/MarcoGrossi92/OSLO) / SUNDIALS |
 | Equilibrium | NASA CEA back-end |
 | Soot | Volume-fraction and sectional models |
 
@@ -130,7 +130,7 @@ Typical applications: turbomachinery (impellers, rotors), swirling jets, and pro
 |-|---------|
 | Explicit | Multi-stage Runge–Kutta (up to RK3) |
 | Implicit | Implicit Residual Smoothing (IRS) |
-| Chemistry coupling | Strang operator splitting for stiff source terms (via [OSlo](https://github.com/MarcoGrossi92/OSlo)) |
+| Chemistry coupling | Strang operator splitting for stiff source terms (via [OSLO](https://github.com/MarcoGrossi92/OSLO)) |
 
 ### Parallel computing
 
@@ -150,7 +150,7 @@ Typical applications: turbomachinery (impellers, rotors), swirling jets, and pro
 |---------|------|--------|
 | [FLINT](https://github.com/MarcoGrossi92/FLINT) | Thermodynamic & chemical kinetics database | Bundled submodule |
 | [ORION](https://github.com/MarcoGrossi92/ORION) | Multi-format I/O — Tecplot, VTK, Plot3D | Bundled submodule |
-| [OSlo](https://github.com/MarcoGrossi92/OSlo) | Stiff ODE solver (chemistry integration) | Bundled submodule |
+| [OSLO](https://github.com/MarcoGrossi92/OSLO) | Stiff ODE solver (chemistry integration) | Bundled submodule |
 | [FiNeR](https://github.com/szaghi/FiNeR) | INI configuration file parser | Bundled submodule |
 
 ### Optional libraries

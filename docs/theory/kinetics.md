@@ -146,7 +146,7 @@ The four Troe parameters ($a$, $T^*$, $T^{**}$, $T^{***}$) are fitted to experim
 
 ## ODE Integration
 
-The species production rates form a stiff system of ordinary differential equations that must be integrated at each grid cell during operator-split time advancement. MOSE uses the stiff ODE solvers provided by the [OSlo](https://github.com/MarcoGrossi92/OSlo) library:
+The species production rates form a stiff system of ordinary differential equations that must be integrated at each grid cell during operator-split time advancement. MOSE uses the stiff ODE solvers provided by the [OSLO](https://github.com/MarcoGrossi92/OSLO) library:
 
 | Solver | Type | Description |
 |--------|------|-------------|

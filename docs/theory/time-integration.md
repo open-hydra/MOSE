@@ -181,8 +181,7 @@ $$
    (species densities + temperature)
 3. Advance the remaining half step with the RK operator
 
-The chemistry ODE is solved by the stiff integrators in the **OSlo**
-library (BDF, SDIRK, or CVODE).
+The chemistry ODE is solved by the stiff integrators in the **OSLO** library.
 
 ---
 

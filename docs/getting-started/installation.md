@@ -24,7 +24,7 @@ MOSE depends on several repositories that are included as Git submodules.
 | `lib/third_party/ExactPack`        | `https://github.com/lanl/ExactPack.git`              | Exact solutions database for reference    |
 | `lib/ORION`                        | `https://github.com/MarcoGrossi92/ORION.git`         | I/O routines (TecIO, VTK, Plot3D, etc.)  |
 | `lib/third_party/FiNeR`            | `https://github.com/szaghi/FiNeR.git`                | INI file parser                      |
-| `build/lib/OSlo` (installed by FLINT) | `https://github.com/MarcoGrossi92/OSlo.git`       | ODE solvers library               |
+| `build/lib/OSLO` (installed by FLINT) | `https://github.com/MarcoGrossi92/OSLO.git`       | ODE solvers library               |
 | `lib/FLINT`                        | `https://github.com/MarcoGrossi92/FLINT.git`         | Thermodynamic database utilities          |
 
 ## Build methods
@@ -77,7 +77,7 @@ Options accepted by `build`
 * `--use-cantera` – build and link Cantera (requires a C++ compiler; if enabled, SUNDIALS should also be enabled).
 * `--include-orion=PATH` – use an external ORION tree instead of the submodule.
 * `--include-flint=PATH` – same for FLINT.
-* `--include-oslo=PATH` – same for OSlo.
+* `--include-oslo=PATH` – same for OSLO.
 * `--include-finer=PATH` – same for FiNeR.
 
 The script sets up environment variables for the chosen compilers and then invokes CMake. After a successful build, a `CMakePresets.json` file is written in the source root so that subsequent compilations can reuse the configuration.
@@ -116,7 +116,7 @@ cmake .. \
     -DUSE_CANTERA=ON \                   # optional (needs C++ compiler)
     -DORION_PATH=/path/to/ORION \        # optional
     -DFLINT_PATH=/path/to/FLINT \        # optional
-    -DOSLO_PATH=/path/to/OSlo \          # optional
+    -DOSLO_PATH=/path/to/OSLO \          # optional
     -DFINER_PATH=/path/to/FiNeR          # optional
 cmake --build . --parallel
 ```
