@@ -111,7 +111,8 @@ contains
     end if
     call Riemann ( Face_Prim(1:nsc), U1(1), U1(2), U1(3), Face_Prim(np), Sound, rotot, &
                    Face_Prim(1:nsc), U4(1), U4(2), U4(3), Face_Prim(np), Sound, rotot, &
-                   1d0, Normal(1), Normal(2), Normal(3), F_r, F_u, F_v, F_w, F_e )
+                   1d0, Blk%Ur(Im,Jm,Km), Blk%Ur(Im,Jm,Km), Normal(1), Normal(2), Normal(3), &
+                   F_r, F_u, F_v, F_w, F_e )
 
     ! Fluxes
     Flux = 0d0

@@ -38,7 +38,7 @@ contains
     call reg%add( trim(section), 'time-accurate', obj_time_scheme%time_accurate, '.false.', 'Time accurate switch', 'logical', .true. )
 
     ! New state
-    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'cons', 'Integration variables (cons/prim)', 'cons ,  prim', .false. )
+    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'cons', 'Integration variables (cons/prim/prec)', 'cons ,  prim , prec', .false. )
 
 
     ! Implicit residual smoothing --------------------------
@@ -47,6 +47,18 @@ contains
     obj_irs%error_message   = 'none'
     call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', 'Implicit Residual Smoothing', 'logical', .false. )
     call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', 'IRS beta parameter', '>= 0', .false. )
+
+    ! Preconditioning controls (used when integration-variables = prec)
+    obj_prec%description     = 'none'
+    obj_prec%warning_message = 'none'
+    obj_prec%error_message   = 'none'
+    obj_prec%enabled         = .false.
+    call reg%add( trim(section), 'preconditioning-Uref', obj_prec%Ur_ref, '0.0', 'Reference velocity for preconditioning', '>= 0', .false. )
+    call reg%add( trim(section), 'preconditioning-Mach', obj_prec%Mach_target, '0.0', 'Mach target for preconditioning', '>= 0', .false. )
+    call reg%add( trim(section), 'preconditioning-eps-min', obj_prec%eps_min, '0.05', 'Low-Mach cutoff for Ur', 'in (0, 1)', .false. )
+    call reg%add( trim(section), 'preconditioning-Ur-min', obj_prec%Ur_min, '0.0', 'Floor on Ur [m/s]', '>= 0', .false. )
+    call reg%add( trim(section), 'preconditioning-Ur-factor', obj_prec%Ur_factor, '1.0', 'Weiss-Smith multiplicative factor', '> 0', .false. )
+    call reg%add( trim(section), 'preconditioning-Ur-smooth', obj_prec%n_smooth_Ur, '0', 'Ur max-smoothing passes', '>= 0', .false. )
 
     !! ------------------------------------------------------
     !! ------------------------------------------------------
@@ -68,8 +80,9 @@ contains
     obj_riemann%description     = 'none'
     obj_riemann%warning_message = 'none'
     obj_riemann%error_message   = 'none'
-    call reg%add( trim(section), 'riemann-solver', obj_riemann%description, 'HLLC', 'Riemann solver', 'SLAU, SLAU2, HLLC+, HLLE++, HLLE, HLLEM, HLLC, AUSM+, AUSM+-up, AUSM+-up2, exact', .false. )
-    call reg%add( trim(section), 'riemann-options-Minf', obj_riemann%Minf, '0.0', 'Mach infinity for AUSM+-up', '>= 0', .false. )
+    call reg%add( trim(section), 'riemann-solver', obj_riemann%description, 'HLLC', &
+          'Riemann solver', 'HLLC, HLLC+, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, AUSM+, AUSM+M, LLF, Rusanov, exact', .false. )
+    call reg%add( trim(section), 'riemann-options-Minf', obj_riemann%Minf, '0.0', 'Mach-infinity floor for AUSM+M scaling', '>= 0', .false. )
 
 
     ! Multigrid levels --------------------------------------

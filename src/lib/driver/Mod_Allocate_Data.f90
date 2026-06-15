@@ -110,6 +110,9 @@ contains
     allocate( blk % dir(3) % f (ni, nj, 0:nk) )
     allocate ( blk % yn ( 1-gc:ni+gc, 1-gc:nj+gc, 1-gc:nk+gc ) )
 
+    ! Preconditioning reference velocity
+    allocate( blk % Ur ( 1-gc:ni+gc, 1-gc:nj+gc, 1-gc:nk+gc ) )
+
     ! Prim and Residuals
     allocate( blk % P (nprim, 1-gc:ni+gc, 1-gc:nj+gc, 1-gc:nk+gc ) )
     allocate( blk % PO, blk % R, mold = blk % P )

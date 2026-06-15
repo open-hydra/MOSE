@@ -135,29 +135,6 @@ contains
       Dist12 = Dl1 + Dl2
       Dist34 = Dl3 + Dl4
 
-      ! ! Reconstruction in point (2)
-      ! diff32 = ( Prim3 - Prim2 ) / Dist23
-      ! diff21 = ( Prim2 - Prim1 ) / Dist12
-
-      ! ! Limiter for point (2) slope => state (1) for the riemann solver
-      ! do s = 1, nprim
-      !   Slope(s) = rlimiter ( diff32(s), diff21(s) )
-      ! end do
-    
-      ! ! Extrapolation from point (2) to the interface => state (1)
-      ! Prim_L = Prim2 + Slope * Dl2
-
-      ! ! Reconstruction in point (3)
-      ! diff43 = ( Prim4 - Prim3 ) / Dist34
-
-      ! ! Limiter for point (3) slope => state (4) for the riemann solver
-      ! do s = 1, nprim
-      !   Slope(s) = rlimiter ( diff43(s), diff32(s) )
-      ! end do
-
-      ! ! Extrapolation from point (3) to the interface => state (4)
-      ! Prim_R = Prim3 - Slope * Dl3
-
       call Reconstruction ( Prim1, Prim2, Prim3, Prim4, Dist12, Dist23, Dist34, Dl2, Dl3, 1d0, Prim_L, Prim_R )
 
       ! Auxiliary variables for state (L)
@@ -170,7 +147,8 @@ contains
 
       call Riemann ( Prim_L(1:nsc), Prim_L(nu), Prim_L(nv), Prim_L(nw), Prim_L(np), a_L, rho_L, &
                      Prim_R(1:nsc), Prim_R(nu), Prim_R(nv), Prim_R(nw), Prim_R(np), a_R, rho_R, &
-                     1d0, normal(1),normal(2),normal(3), F_r, F_u, F_v, F_w, F_E)
+                     1d0, Blk%Ur(Im,Jm,K2), Blk%Ur(Im,Jm,K3), normal(1),normal(2),normal(3), &
+                     F_r, F_u, F_v, F_w, F_E)
 
       su = sign ( 0.5d0, F_r )
       Sel_L = 0.5d0 + su

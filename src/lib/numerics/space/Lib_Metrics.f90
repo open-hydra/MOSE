@@ -6,7 +6,7 @@ module MOSE_Lib_Metrics
   use MOSE_Parameters_m
 
   implicit none
-  real(R8), public :: delthe   ! grid axisymmetric angle
+  real(R8), public :: delthe = 0d0  ! grid axisymmetric angle
 
 contains
 
@@ -37,6 +37,7 @@ contains
     elseif (domain%Blk(1)%dim(3)==1 .and. domain%Blk(1)%dim(2)==1) then
       ! 1D
       ndir = 1
+      delthe = 0d0
     else
       ! 2D
       ndir = 2
@@ -661,7 +662,13 @@ contains
         endif
 
       case(5)
-        if ( ndir==2 .and. delthe==0d0 .or. ndir==1 ) then
+        if ( ndir==1 ) then
+          do g = 1, gc
+            Mg(g)   = blk % M(Im, Jm, Km)
+            dlg(g)  = blk % dl(Im, Jm, Km)
+            volg(g) = blk % vol(Im, Jm, Km)
+          enddo
+        elseif ( ndir==2 .and. delthe==0d0 ) then
           do g = 0, 1
             N1(g)%c = blk % node (Im-1,Jm-1,Km+g-1) % c
             N3(g)%c = blk % node (Im-1,Jm  ,Km+g-1) % c
@@ -727,7 +734,13 @@ contains
         endif
 
       case(6)
-        if ( ndir==2 .and. delthe==0d0 .or. ndir==1 ) then
+        if ( ndir==1 ) then
+          do g = 1, gc
+            Mg(g)   = blk % M(Im, Jm, Km)
+            dlg(g)  = blk % dl(Im, Jm, Km)
+            volg(g) = blk % vol(Im, Jm, Km)
+          enddo
+        elseif ( ndir==2 .and. delthe==0d0 ) then
           do g = 0, -1, -1
             N2(g)%c = blk % node (Im-1,Jm-1,Km+g) % c
             N4(g)%c = blk % node (Im-1,Jm  ,Km+g) % c

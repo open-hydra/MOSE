@@ -37,4 +37,40 @@ contains
 
   end function SD_Tramel
 
+
+  !> @brief Chen multidimensional pressure-ratio shock indicator h.
+  !>
+  !> Chen et al. (2020): h = min_k min(p_C/p_k, p_k/p_C) over the face neighbours
+  !> of the cell (Eq. 24 of the HLLC+ paper / Eq. 25 of the AUSM+M paper).
+  !> Returns h in (0,1]: h -> 1 in smooth flow, h -> 0 at a strong pressure jump.
+  !> Each Chen solver maps h to its own gate g:
+  !>   - AUSM+M : g = (1 + cos(pi*h))/2
+  !>   - HLLC+  : g = 1 - h**M
+  !> so the multidimensional sensing (neighbour scan) is shared while the
+  !> per-scheme functional form stays faithful to each paper.
+  pure function SD_Chen(pmatrix) result(h)
+    implicit none
+    real(R8), intent(in)  :: pmatrix(0:2,0:2,0:2)
+    real(R8)              :: h
+    ! Local
+    real(R8) :: pC
+
+    pC = pmatrix(1,1,1)
+    h  = 1.d0
+    h  = min(h, pratio(pC, pmatrix(0,1,1)))
+    h  = min(h, pratio(pC, pmatrix(2,1,1)))
+    h  = min(h, pratio(pC, pmatrix(1,0,1)))
+    h  = min(h, pratio(pC, pmatrix(1,2,1)))
+    h  = min(h, pratio(pC, pmatrix(1,1,0)))
+    h  = min(h, pratio(pC, pmatrix(1,1,2)))
+
+  contains
+    pure function pratio(pa, pb) result(r)
+      real(R8), intent(in) :: pa, pb
+      real(R8) :: r
+      r = min(pa, pb) / max(pa, pb)
+    end function pratio
+
+  end function SD_Chen
+
 end module MOSE_Lib_Shock_Detector

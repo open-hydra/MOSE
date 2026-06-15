@@ -52,9 +52,9 @@ convective flux into a **convective** (mass-flux) part and a **pressure**
 part, treated independently.  This avoids a full eigenvalue decomposition
 and naturally handles low-Mach flows.
 
-### AUSM+ (Liou, 2006)
+### AUSM+ (Liou, 1996)
 
-Mach-based splitting extending standard AUSM (+) with improved low-Mach behavior.
+Mach-based splitting extending standard AUSM with improved behavior near $|M|=1$.
 
 **Key features:**
 
@@ -70,25 +70,27 @@ Mach-based splitting extending standard AUSM (+) with improved low-Mach behavior
 3. **Interface pressure:** Combination of left and right contributions,
    $$ p_{\frac{1}{2}} = \mathcal{P}^+(M_L)\,p_L + \mathcal{P}^-(M_R)\,p_R $$
 
-**Advantages:** Conservative, handles subsonic and supersonic regions, simple.  
-**Disadvantages:** Can exhibit odd–even decoupling at very low Mach.
+**Advantages:** Conservative, handles subsonic and supersonic regions, simple.
+**Disadvantages:** Can exhibit odd–even decoupling at very low Mach; not all-speed.
+**Role in MOSE:** kept as the simple AUSM **baseline** (teaching/reference). For
+production all-speed work use **AUSM+M** below.
 
-### AUSM+-up
+### AUSM+M (Chen et al., 2020)
 
-Extends AUSM+ with:
+An improved AUSM-family all-speed scheme (Chen, Cai, Xue, Wang & Yan, *Applied
+Mathematical Modelling* 77, 2020). It fixes the two weaknesses of AUSM+-up — the
+`Kp/fa` stagnation time-step restriction and carbuncle at high Mach — with three
+ingredients:
 
-- **Pressure diffusion** in the mass flux — scales with $1/M^2$ and
-  eliminates odd–even decoupling at low Mach.
-- **Velocity diffusion** in the interface pressure — improves robustness
-  across the subsonic/transonic transition.
-
-Recommended for flows with mixed subsonic and supersonic regions.
-
-### AUSM+-up2
-
-Further improvement for hypersonic flows with refined Mach-dependent
-dissipation scaling.  Preserves the accuracy of AUSM+-up in the
-low-Mach limit while adding stability at strong-shock crossings.
+- **Pressure-diffusion mass flux** whose denominator has **no Mach number**
+  (Eq. 14), so no stagnation singularity and a larger stable time step than
+  AUSM+-up at low speed: $M_p = -\tfrac12(1-f)\,\frac{\Delta p}{\rho_{1/2}c_{1/2}^2}(1-g)$,
+  with $f = \tfrac12(1-\cos\pi M)$.
+- **Pressure flux** with a scaling Mach function $f_o$ for low-Mach accuracy,
+  plus a multidimensional **velocity-diffusion** term gated by a pressure-ratio
+  shock sensor $g$ for carbuncle control.
+- **AUSMPW+ numerical sound speed** (Kim et al.) for correct oblique shocks and
+  no unphysical expansion shocks.
 
 ---
 
@@ -101,8 +103,9 @@ intermediate state across the entire fan, leading to unconditional stability.
 
 **Key variants:**  
 - **HLLE:** Two-wave solver; very robust but highly dissipative  
-- **HLLEM:** Adds anti-diffusion correction to capture contacts sharper  
 - **HLLC:** Three waves (contact explicitly resolved); sharp contacts, may oscillate at shocks  
+- **HLLC (PC):** Low-Mach preconditioned HLLC (steady)  
+- **HLLC+:** All-speed low-Mach shock-stable HLLC (Chen et al. 2020)  
 - **HLLE++, HLLC+:** Tramel variants with improved eigenvalue handling and shock detection  
 
 The Harten–Lax–van Leer (HLL) solvers form a family of approximate Riemann solvers
@@ -152,26 +155,6 @@ $$
 
 **Use cases:** Extremely strong shocks, near-vacuum flows, severe transients.
 
-### HLLEM (Einfeldt's Modification)
-
-Improves HLLE's contact-wave resolution via an **anti-diffusion correction** inspired by
-the exact Roe solver. When $S_L < 0 < S_R$ (subsonic flow):
-
-1. Decompose left/right state jumps into eigencomponents (density, shear, acoustic):
-   $$ \mathbf{U}_R - \mathbf{U}_L = \sum_i \alpha_i\,\mathbf{r}_i $$
-   where $\mathbf{r}_i$ are Roe eigenvectors.
-
-2. Compute anti-diffusion weight:
-   $$ \delta = \frac{\tilde{a}}{\tilde{a} + |\tfrac{1}{2}(S_L + S_R)|} $$
-   (stronger in subsonic regions, weaker when mean wave speed is large)
-
-3. Subtract correction from HLLE flux:
-   $$ \mathbf{F}_{\frac{1}{2}}^{\text{HLLEM}} = \mathbf{F}_{\frac{1}{2}}^{\text{HLLE}} - C\,\delta\,\sum_i |\lambda_i|\,\alpha_i\,\mathbf{r}_i $$
-   where $C = S_L S_R / (S_R - S_L)$ is a normalization factor.
-
-**Advantages:** Significantly sharper contact resolution than HLLE.  
-**Disadvantages:** Weaker at strong shocks than HLLC; intermediate cost.
-
 ### HLLC (Batten, 1997)
 
 **Three-wave solver:** Explicitly resolves the **contact discontinuity** to overcome HLLE's 
@@ -204,6 +187,64 @@ $$
 
 **Recommendation:** Use HLLC+ instead for adaptive shock-aware fallback.
 
+### HLLC+ (Chen et al., 2020)
+
+A genuine **all-speed** HLLC (Chen, Lin, Li & Yan, *SIAM J. Sci. Comput.* 42(4),
+2020). It is the standard HLLC star flux plus a single correction term
+(their Eq. 3.25):
+
+$$
+\mathbf{F}^{\ast+}_K = \mathbf{F}^{\ast}_K +
+\frac{\varphi_L \varphi_R}{\varphi_R - \varphi_L}
+\bigl[\,0,\ (f^\ast\!-\!1)\,\Delta U\,\hat{\mathbf n} + \zeta\,\Delta\mathbf{u}_t,\ (f^\ast\!-\!1)\,\Delta U\,S^\ast\,\bigr]^T
+$$
+
+with $\varphi_K = \rho_K(S_K - U_K)$. Two effects, on the normal and transverse
+velocity jumps respectively:
+
+- **Low-Mach fix:** the $f(M)$ factor (Thornber interface Mach) scales away the
+  $\mathcal O(a)$ pressure dissipation that makes plain HLLC over-diffuse at low
+  Mach — added to **both** momentum and energy to recover the correct $M^2$
+  pressure *and* density scaling.
+- **Carbuncle cure:** a transverse shear dissipation, active only near strong
+  shocks via the **multidimensional** pressure-ratio sensor $g = 1 - h^{M}$
+  (where $h$ scans the neighbouring interfaces, shared with AUSM+M's sensor) and
+  the factor $\zeta = g\,S_K/(S_K - S^\ast)$. The same $g$ also restrains the
+  low-Mach $f^\ast$ near shocks (in place of the paper's separate sonic sensor).
+
+It reduces to plain HLLC at $M\ge 1$ in smooth flow and has **no tunable
+parameters**.
+
+**Advantages:** all-speed accuracy + carbuncle robustness in one solver; cheap
+(a small add-on to HLLC). In MOSE testing it held the Gresho vortex at
+$M=10^{-3}$ (peak velocity 0.995 vs exact 1.0, vs 0.91 for plain HLLC) and gave a
+Sod profile essentially identical to HLLC. **Recommendation:** excellent default
+for **reacting / low-Mach + shock** problems.
+
+### HLLC+ (Tramel, 2009)
+
+Hybrid solver that **adaptively blends HLLC and HLLE** using a shock-detection parameter.
+
+**Hybrid blending formula:**
+
+Given a shock-detection indicator $\beta \in [0,1]$ computed from pressure gradients
+(see [Shock Detection](numerics.md#shock-detection)):
+
+$$\mathbf{F}_{\frac{1}{2}} = \beta\,\mathbf{F}_{\text{HLLC}} + (1-\beta)\,\mathbf{F}_{\text{HLLE}}$$
+
+| Regime | $\beta$ | Solver | Characteristic |
+|:------:|:-------:|:------:|----------------|
+| Smooth flow (no shock) | $\approx 1.0$ | HLLC | Sharp contact waves, lower dissipation |
+| Weak shock | $0.4 \text{--} 1.0$ | HLLC dominant | Balanced |
+| Strong shock / discontinuity | $\approx 0.0$ | HLLE | Maximum dissipation, unconditionally stable |
+
+**Use cases:**  
+- Flows with shock-boundary layer interactions  
+- Unsteady shock-contact interactions  
+- Carbuncle-prone geometries (e.g., blunt bodies) where HLLC exhibits instabilities  
+
+**Recommended:** Excellent all-around choice for compressible flows with mixed subsonic/supersonic regions and shocks.
+
 ### HLLE++ (Tramel, 2009)
 
 Tramel's improved variant of HLLE for better shear-layer resolution.
@@ -231,30 +272,6 @@ For acoustic eigenvalues, Harten–Hyman entropy correction is applied.
 **Disadvantages:**  
 - Less robust at strong normal shocks than HLLE
 
-### HLLC+ (Tramel, 2009) with Shock Detection
-
-Hybrid solver that **adaptively blends HLLC and HLLE** using a shock-detection parameter.
-
-**Hybrid blending formula:**
-
-Given a shock-detection indicator $\beta \in [0,1]$ computed from pressure gradients
-(see [Shock Detection](numerics.md#shock-detection)):
-
-$$\mathbf{F}_{\frac{1}{2}} = \beta\,\mathbf{F}_{\text{HLLC}} + (1-\beta)\,\mathbf{F}_{\text{HLLE}}$$
-
-| Regime | $\beta$ | Solver | Characteristic |
-|:------:|:-------:|:------:|----------------|
-| Smooth flow (no shock) | $\approx 1.0$ | HLLC | Sharp contact waves, lower dissipation |
-| Weak shock | $0.4 \text{--} 1.0$ | HLLC dominant | Balanced |
-| Strong shock / discontinuity | $\approx 0.0$ | HLLE | Maximum dissipation, unconditionally stable |
-
-**Use cases:**  
-- Flows with shock-boundary layer interactions  
-- Unsteady shock-contact interactions  
-- Carbuncle-prone geometries (e.g., blunt bodies) where HLLC exhibits instabilities  
-
-**Recommended:** Excellent all-around choice for compressible flows with mixed subsonic/supersonic regions and shocks.
-
 ### Rotated HLLC / HLLE
 
 Alternative hybrid approach using a **frame rotation** aligned with the local
@@ -280,6 +297,62 @@ complex shock orientations.
 While HLLC+ uses shock detection in the original frame, the rotated variant
 senses shock proximity through the velocity-difference orientation, providing
 a complementary robustness mechanism for angled discontinuities.
+
+---
+
+## Roe Family
+
+**Physical principle:**
+Roe solvers linearise the Riemann problem about a special **Roe-averaged state** and decompose the jump between the left and right states onto the **eigenvectors** of the resulting flux Jacobian. Each wave (two acoustic, one entropy, two shear) is upwinded by the sign of its own eigenvalue, giving sharp resolution of every wave family.
+
+$$
+\mathbf{F}_{\frac{1}{2}} =
+\tfrac{1}{2}(\mathbf{F}_L + \mathbf{F}_R)
+- \tfrac{1}{2}\sum_i |\lambda_i|\,\alpha_i\,\mathbf{r}_i ,
+\qquad
+\mathbf{U}_R - \mathbf{U}_L = \sum_i \alpha_i\,\mathbf{r}_i
+$$
+
+with eigenvalues $\lambda_i = \{\tilde v_n - \tilde a,\ \tilde v_n,\ \tilde v_n,\ \tilde v_n,\ \tilde v_n + \tilde a\}$
+and Roe-averaged eigenvectors $\mathbf r_i$.
+
+The standard Roe flux is accurate and low-cost but suffers two well-known issues:
+it admits expansion shocks without an **entropy fix**, and — crucially for this
+code's target applications — it is **not accurate in the low-Mach limit**: its
+momentum dissipation contains a term $\sim \tfrac{1}{2}\rho a\,\Delta v_n$ that
+is $\mathcal{O}(1/M)$ too large. MOSE therefore exposes the low-Mach-corrected
+variant directly.
+
+### LMRoe (Rieper, 2011)
+
+**Low-Mach fix for Roe.** The asymptotic analysis shows the offending term is the **jump in the normal velocity** $\Delta v_n$ carried by the acoustic waves. Rieper's remedy is a one-line change: multiply that jump by the local Mach number before forming the acoustic wave strengths,
+
+$$
+\Delta v_n \;\longrightarrow\; \phi\,\Delta v_n ,
+\qquad
+\phi = \min\!\bigl(1,\; \tilde M\bigr),
+\quad
+\tilde M = \frac{|\tilde v_n| + |\tilde v_t|}{\tilde a},
+$$
+
+applied **only** to the two acoustic characteristics. Eigenvalues, eigenvectors, and the entropy/shear wave strengths are **unchanged**. This removes the $\mathcal{O}(1/M)$ momentum dissipation while leaving density, shear, and energy dissipation at their correct level.
+
+A small floor $\phi = \max(\phi_{\min}, \min(1,\tilde M))$ with
+$\phi_{\min}\approx 0.05$ is retained: without it $\phi \to 0$ at stagnation points removes the acoustic pressure–velocity coupling and re-introduces odd–even (checkerboard) modes.
+
+**Advantages:**
+- Accurate in the incompressible limit on a fixed mesh — preserves vortices and
+  acoustic-scale structures that standard Roe/HLLC diffuse away.
+- Trivial, parameter-light, and **time-accurate** (a pure flux modification — it
+  does not touch the time integration).
+- Robust: the eigen-structure is untouched, so there is no preconditioning
+  singularity at stagnation.
+
+**Disadvantages:**
+- Mildly under-dissipative if the floor is too small (amplitude overshoot /
+  checkerboard noise).
+- For *steady-state convergence acceleration* it offers nothing — it is an
+  accuracy fix, not a preconditioner.
 
 ---
 
@@ -458,11 +531,14 @@ HLLC+ balances accuracy, robustness, and cost.
 
 | Flow Type | Recommended Solver | Reason |
 |---|---|---|
-| **Shock-dominated** (hypersonic, detonation) | HLLE, HLLC+ | Robust; HLLC+ adds contact resolution |
-| **Smooth subsonic** (combustor, inlet) | SLAU2, AUSM+-up | Low-Mach accuracy; SLAU2 best |
-| **Mixed subsonic/transonic** | HLLC+, AUSM+-up | HLLC+ adaptive; AUSM+-up is simpler |
-| **Boundary layers + shocks** | HLLC+ | Shock detection aids shear resolution |
-| **Very low Mach (incompressible limit)** | SLAU2, PLLF | Preconditioning essential |
+| **Shock-dominated** (hypersonic, detonation) | HLLE, HLLC+, AUSM+M | Robust; AUSM+M/HLLC+Chen are carbuncle-stable |
+| **All-speed (low Mach + shocks)** | **HLLC+Chen**, **AUSM+M**, SLAU2 | single solver across the whole Mach range |
+| **Smooth subsonic** (combustor, inlet) | SLAU2, AUSM+M | Low-Mach accuracy; SLAU2 best |
+| **Mixed subsonic/transonic** | HLLC+, AUSM+M | HLLC+ adaptive; AUSM+M all-speed |
+| **Boundary layers + shocks** | HLLC+, HLLC+Chen | shock-aware; HLLC+Chen preserves shear |
+| **Very low Mach, time-accurate** | **LMRoe**, SLAU2, HLLC+Chen | flux-only low-Mach fix; time-accurate |
+| **Very low Mach, steady** | HLLC-PC, LMRoe | preconditioned / low-Mach; clean convergence |
+| **Vortex / acoustic-near-field preservation** | LMRoe, HLLC+Chen | removes the $\mathcal{O}(1/M)$ momentum dissipation |
 | **Unsteady shock interaction** | HLLC+ | Shock detection tracks transients |
 | **Emergency (solver divergence)** | HLLE, LLF | Maximum stability; accept extra diffusion |
 
@@ -494,3 +570,9 @@ HLLC+ balances accuracy, robustness, and cost.
 7. R. Tramel, R. Nichols, P. Buning, "Addition of improved shock-capturing
    schemes to OVERFLOW 2.1," *19th AIAA Computational Fluid Dynamics*,
    2009. AIAA Paper 2009-3988.
+8. S.-s. Chen, B. Lin, Y. Li, C. Yan, "HLLC+: Low-Mach shock-stable HLLC-type
+   Riemann solver for all-speed flows," *SIAM J. Sci. Comput.*, 42(4), 2020,
+   B921–B950.
+9. S.-s. Chen, F.-j. Cai, H.-c. Xue, N. Wang, C. Yan, "An improved AUSM-family
+   scheme with robustness and accuracy for all Mach number flows,"
+   *Appl. Math. Modelling*, 77, 2020, 1065–1081.

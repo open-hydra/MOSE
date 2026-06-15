@@ -32,6 +32,7 @@ contains
         
         ! Compute local cell dt according to CFL and VNN numbers
         call compute ( rhoi = domain%blk(b)%p(1:nsc,i,j,k), &
+                       Ur = domain%blk(b)%Ur(i,j,k), &
                        vel = domain%blk(b)%p(nu:nw,i,j,k), &
                        p = domain%blk(b)%p(np,i,j,k), &
                        rans_ = domain%blk(b)%P(nt:nprim,i,j,k), &
@@ -58,30 +59,49 @@ contains
 
     contains
       
-      subroutine compute ( rhoi, vel, p, rans_, met, dl, dtmin, cfl, vnn )
+      subroutine compute ( rhoi, Ur, vel, p, rans_, met, dl, dtmin, cfl, vnn )
         use MOSE_Global_m
+        use MOSE_Config_Types_m, only: obj_prec
         use FLINT_Lib_Thermodynamic
+        use MOSE_Lib_Preconditioning, only: comp_Ur
         implicit none
         real(R8), intent(in)  :: rhoi(nsc), vel(3), p, rans_(:)
-        real(R8), intent(in)  :: met(3,3), dl(3), cfl, vnn
+        real(R8), intent(in)  :: met(3,3), dl(3), cfl, vnn, Ur
         real(R8), intent(out) :: dtmin
         ! Local
         integer :: d
         real(R8) :: rho, Rgas, Sound, dt, versor(3), lambda, mie, mil, mi
+        real(R8) :: Alpha, Beta, dx
+        real(R8) :: c_star
         real(R8) :: vel_, dummy(3,3)=0d0
 
         call co_rotot_Rtot ( rhoi, rho, Rgas )
         Sound = f_ss ( rhoi, p, rho, Rgas )
        
+        if ( obj_prec%enabled ) then
+          Beta = 1.0/Sound**2
+          Alpha = 0.5 * ( 1d0 - Beta * Ur**2 )
+        endif
+
         dtmin = 1d8
+
         do d = 1, ndir
+
           ! CFL condition along d-direction
           versor = met(d,:) / norm2 ( met(d,:) )
           vel_ = abs ( dot_product ( vel, versor ) )
 
-          lambda  = vel_ + Sound
+          if ( obj_prec%enabled ) then
+            c_star = Sqrt ( Alpha**2 * Vel_**2 + Ur**2 )
+            Vel_ = Vel_ * ( 1d0 - Alpha )
+            lambda = vel_ + c_star
+          else
+            lambda = vel_ + Sound
+          endif
+
           dt = dl(d) / lambda * cfl
           dtmin = min ( dt, dtmin )
+        
         enddo
 
         if ( model==0 ) return
@@ -128,5 +148,36 @@ contains
     enddo
     
   end subroutine Set_Global_dt
+
+
+  subroutine Set_Dt_Control ( domain, control )
+    use MOSE_Advanced_Types_m
+    use MOSE_Mod_MPI, only: is_local_block
+
+    implicit none
+    real(R8), intent(in) :: control
+    type(MOSE_domain_type), intent(inout) :: domain
+    ! Local
+    integer :: b, i, j, k
+
+
+    do b = 1, domain % nb
+      if (.not. is_local_block(b)) cycle
+
+      !$omp parallel
+      !$omp do collapse(3)
+      do k = 1, domain % blk(b) % dim(3)
+      do j = 1, domain % blk(b) % dim(2)
+      do i = 1, domain % blk(b) % dim(1)
+        domain % blk(b) % dtlocal(i,j,k) = &
+        min( domain % blk(b) % dtlocal(i,j,k), control*domain % dtglobal )
+      end do
+      end do
+      end do
+      !$omp end parallel
+
+    end do
+
+  end subroutine Set_Dt_Control
 
 end module MOSE_Mod_dt

@@ -13,6 +13,7 @@ contains
     use MOSE_Global_m
     use MOSE_Read_Ini,             only: Read_Inifile
     use MOSE_Load_ThermoTransport, only: Load_ThermoTransport
+    use MOSE_Lib_Preconditioning, only: update_derived_variables
     use MOSE_Load_Chemistry,       only: Load_Chemistry
     use MOSE_Assign_Setup,         only: Assign_Setup
     use MOSE_IO_Solution,          only: Read_IC, Setup_Output_Solution
@@ -145,6 +146,7 @@ contains
           obj_sim_param%iter_from_call = 0
         enddo
         call Fill_Ghost_Cell ( simulation%domain(1) )
+        call Update_Derived_Variables ( simulation%domain(1) )
 
         ! Interpolate initial solution on coarser domains
         if ( obj_multigrid%MGL > 1 ) then

@@ -7,7 +7,7 @@ module MOSE_Lib_Convective
 
 contains
 
-  subroutine Convective_Flux ( dl, normal, area, Prim, Res, beta, SD_limiter )
+  subroutine Convective_Flux ( dl, normal, area, Prim, Res, beta, SD_limiter, Ur_0, Ur_1 )
     use MOSE_Global_m
     use MOSE_Lib_Reconstruction, only: Reconstruction
     use MOSE_Mod_Riemann
@@ -19,6 +19,7 @@ contains
     real(R8), intent(inout), dimension(nprim,0:1) :: Res
     real(R8), intent(in) :: beta
     logical, intent(in)  :: SD_limiter
+    real(R8), intent(in) :: Ur_0, Ur_1
     ! Local
     real(R8) :: l0, l1, l2, lm, lp
     real(R8), dimension(nprim) :: Prim1, Prim4
@@ -60,7 +61,7 @@ contains
     ! Solve the Riemann problem
     call Riemann (prim1(1:nsc), prim1(nu), prim1(nv), prim1(nw), prim1(np), a1, rotot1, &
                   prim4(1:nsc), prim4(nu), prim4(nv), prim4(nw), prim4(np), a4, rotot4, &
-                  beta, normal(1),normal(2),normal(3), F_r, F_u, F_v, F_w, F_E)
+                  beta, Ur_0, Ur_1, normal(1), normal(2), normal(3), F_r, F_u, F_v, F_w, F_E)
 
     ! Sign of velocity at the interface
     su = sign ( 0.5d0, F_r )
@@ -83,6 +84,43 @@ contains
     Res (:,1) = Res (:,1) - Flux
     
   end subroutine Convective_Flux
+
+
+  subroutine Sanitize_Primitive_State(state)
+    use MOSE_Global_m, only: nprim, nsc, nu, nv, nw, np
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    implicit none
+    real(R8), intent(inout) :: state(nprim)
+    integer :: i
+    real(R8), parameter :: state_cap = 1.0d100
+    real(R8), parameter :: vel_cap = 1.0d100
+
+    do i = 1, nsc
+      if ((.not. ieee_is_finite(state(i))) .or. state(i) <= tiny(1.0_R8)) then
+        state(i) = tiny(1.0_R8)
+      end if
+      state(i) = min(state(i), state_cap)
+    end do
+
+    if ((.not. ieee_is_finite(state(np))) .or. state(np) <= tiny(1.0_R8)) then
+      state(np) = tiny(1.0_R8)
+    end if
+    state(np) = min(state(np), state_cap)
+
+    if (.not. ieee_is_finite(state(nu))) state(nu) = 0.0_R8
+    if (.not. ieee_is_finite(state(nv))) state(nv) = 0.0_R8
+    if (.not. ieee_is_finite(state(nw))) state(nw) = 0.0_R8
+    state(nu) = max(-vel_cap, min(state(nu), vel_cap))
+    state(nv) = max(-vel_cap, min(state(nv), vel_cap))
+    state(nw) = max(-vel_cap, min(state(nw), vel_cap))
+
+    if (nprim > np) then
+      do i = np + 1, nprim
+        if (.not. ieee_is_finite(state(i))) state(i) = 0.0_R8
+        state(i) = max(-state_cap, min(state(i), state_cap))
+      end do
+    end if
+  end subroutine Sanitize_Primitive_State
 
 
 end module MOSE_Lib_Convective

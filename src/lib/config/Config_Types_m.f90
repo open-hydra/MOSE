@@ -68,7 +68,7 @@ module MOSE_Config_Types_m
     ! USER-DEFINED INPUTS
     real(R8)            :: dtime
     integer             :: diter
-    character(len=clen) :: file
+    character(len=llen) :: file
     character(len=hlen) :: varnames
     integer             :: iloc(4)
     real(R8)            :: loc(3)
@@ -121,6 +121,26 @@ module MOSE_Config_Types_m
   !! ------------------------------------------------------
 
   !! ------------------------------------------------------
+  !! Weiss-Smith Preconditioning --------------------------
+  !! ------------------------------------------------------
+  type :: prec_t
+    character(len=llen) :: warning_message
+    character(len=llen) :: error_message
+    character(len=llen) :: description
+    ! USER-DEFINED INPUTS
+    real(R8) :: eps_min     = 0.0_R8  ! Low-Mach cutoff for Ur
+    real(R8) :: Ur_ref      = 0.0_R8   ! Uniform reference velocity
+    real(R8) :: Ur_min      = 0.0_R8   ! Floor on Ur [m/s]
+    real(R8) :: Mach_target = 0.0_R8   ! Target preconditioned Mach
+    real(R8) :: Ur_factor   = 1.0_R8   ! Multiplicative factor on Ur in Weiss-Smith
+    integer  :: n_smooth_Ur = 0        ! Ur max-smoothing passes (0 = disabled)
+    ! Useful variables
+    logical   :: enabled
+  end type prec_t
+  !! ------------------------------------------------------
+  !! ------------------------------------------------------
+
+  !! ------------------------------------------------------
   !! Space Discretization ---------------------------------
   !! ------------------------------------------------------
   type :: space_scheme_t
@@ -147,6 +167,7 @@ module MOSE_Config_Types_m
     real(R8) :: Minf
     ! Useful variables
     logical  :: SD
+    logical  :: SD_chen   ! use Chen pressure-ratio sensor (g) instead of Tramel beta
   end type riemann_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -336,6 +357,7 @@ module MOSE_Config_Types_m
   type(io_bc_t), public                 :: obj_io_bc
   type(time_scheme_t), public           :: obj_time_scheme
   type(irs_t), public                   :: obj_irs
+  type(prec_t), public                  :: obj_prec
   type(space_scheme_t), public          :: obj_space_scheme
   type(riemann_t), public               :: obj_riemann
   type(shock_detector_t), public        :: obj_shock_detector

@@ -90,7 +90,8 @@ contains
 
     call Riemann ( Prim_L(1:nsc), Prim_L(nu), Prim_L(nv), Prim_L(nw), Prim_L(np), a_L, rho_L, &
                    Prim_R(1:nsc), Prim_R(nu), Prim_R(nv), Prim_R(nw), Prim_R(np), a_R, rho_R, &
-                   beta_, Normal(1), Normal(2), Normal(3), F_r, F_u, F_v, F_w, F_E)
+                   beta_, blk%Ur(I2,J2,K2), Blk%Ur(I3,J3,K3), Normal(1), Normal(2), Normal(3), &
+                   F_r, F_u, F_v, F_w, F_E)
 
     su = sign ( 0.5d0, F_r )
     Sel_L = 0.5d0 + su

@@ -22,7 +22,7 @@ contains
     use MOSE_Lib_RotatingFrame,   only: Setup_RotatingFrame
     implicit none
 
-    ! Setting simulation type
+    !! Setting simulation type
     if (obj_sim_param%simulation_type=='euler') then
       model = 0
     elseif (obj_sim_param%simulation_type=='navier-stokes') then
@@ -34,10 +34,10 @@ contains
       end if
     endif
 
-    ! Setting input solution
+    !! Setting input solution
     call Setup_Input_Solution()
 
-    ! Space
+    !! Space
     call Setup_Space_Scheme()
     call Assign_Riemann_Solver()
     if ( obj_riemann%SD .or. obj_space_scheme%SD) then
@@ -46,26 +46,35 @@ contains
       obj_shock_detector%SD = .false.
     end if
 
-    ! Time
+    !! Time
+    ! Time scheme
     if (obj_time_scheme%solver_type /= 'euler') then
       read(obj_time_scheme%solver_type(3:3), *) obj_time_scheme%n_rk
     else
       obj_time_scheme%n_rk = 1
     end if
-    if (obj_irs%beta>0d0) obj_irs%enabled = .true. 
+    ! Implicit residual smoothing
+    if (obj_irs%beta>0d0) obj_irs%enabled = .true.
+    ! Preconditioning
+    if ( trim(obj_time_scheme%integration_variables) == 'prec' ) then
+      obj_prec%enabled = .true.
+    else
+      obj_prec%enabled = .false.
+    end if
+    ! Integration variables
     call Assign_Integration_Variables()
 
-    ! Assign Chemistry
+    !! Assign Chemistry
     call Setup_Chemistry()
     call Setup_Strang_Splitting()
     
-    ! Assign soot model
+    !! Assign soot model
     call Setup_Soot()
 
-    ! Assign RANS model
+    !! Assign RANS model
     call Setup_RANS_Model()
 
-    ! Assign Rotating frame
+    !! Assign Rotating frame
     call Setup_RotatingFrame()
 
     !! Descriptions, warnings and errors
@@ -87,15 +96,23 @@ contains
     if (obj_time_scheme%time_accurate) then
       obj_time_scheme%description = trim(obj_time_scheme%description)//' with time-accurate switch enabled'
     end if
+    if (trim(obj_time_scheme%integration_variables) == 'Preconditioned' .and. obj_time_scheme%time_accurate) then
+      obj_time_scheme%error_message = '[ERROR] integration-variables=prec is currently supported only for steady/pseudo-time runs.'
+    end if
     if (obj_irs%enabled) then
       obj_irs%description = 'Beta set to '//trim(str(.true.,real(obj_irs%beta)))
     end if
     ! Space scheme
     ! ... written in Mod_Space ...
     ! Riemann solver
-    if (trim(obj_riemann%description) == 'AUSM+-up' .or. trim(obj_riemann%description) == 'AUSM+-up2') then
+    if (index(obj_riemann%description, 'AUSM+M') > 0) then
       if (obj_riemann%Minf == 0.0d0) then
-        obj_riemann%error_message = '[ERROR] AUSM+-up solver selected. Minf must be defined in input.'
+        obj_riemann%error_message = '[ERROR] AUSM+M solver selected. Minf must be defined in input.'
+      end if
+    endif
+    if (trim(obj_riemann%description) == 'HLLC-PC') then
+      if (obj_time_scheme%integration_variables /= 'prec') then
+        obj_riemann%error_message = '[ERROR] Preconditioned HLL solver selected. integration-variables must be set to "prec".'
       end if
     endif
     ! Transport

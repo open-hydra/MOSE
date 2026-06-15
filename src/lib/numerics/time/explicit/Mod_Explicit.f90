@@ -13,11 +13,12 @@ contains
     use MOSE_Global_m
     use MOSE_Mod_dt,            only: Set_Global_dt, Compute_dt
     use MOSE_Lib_Ghost,         only: Fill_Ghost_Cell, Ghost_Wall_Extrapolation
-    use MOSE_Mod_Fluxes,        only: Fluxes
+    use MOSE_Mod_Fluxes,        only: Zero_Residuals, Internal_Fluxes
     use MOSE_Mod_BC_Fluxes,     only: BC_Fluxes
     use MOSE_Lib_RANS,          only: RANS_Source_Terms
     use MOSE_Mod_Soot,          only: Soot_Source_Terms
     use MOSE_Mod_Newstate,      only: RK_Newstate
+    use MOSE_Lib_Preconditioning, only: update_derived_variables
     use MOSE_Lib_Chemistry,     only: Chemistry_Newstate, Chemistry_Equilibrium
     use MOSE_Mod_Diagnostic,    only: Compute_Residual
     use MOSE_Lib_RotatingFrame, only: RotatingFrame_Source_Terms
@@ -62,8 +63,9 @@ contains
 
       rk: do i_rk = 1, obj_time_scheme%n_RK
 
+        call Zero_Residuals ( domain(level) )                ! Zero residuals
         call Fill_Ghost_Cell ( domain(level) )               ! Fill ghost cells
-        call Fluxes ( domain(level) )                        ! Convective and Diffusive fluxes
+        call Internal_Fluxes ( domain(level) )               ! Convective and Diffusive fluxes
         call BC_Fluxes ( domain(level) )                     ! Boundary fluxes
 
         call External_Function ( domain(level) )             ! External function (e.g. source terms)
@@ -81,6 +83,7 @@ contains
         end if 
 
         call RK_Newstate ( domain(level), i_rk )             ! State update
+        call Update_Derived_Variables ( domain(level) ) 
 
       enddo rk
 

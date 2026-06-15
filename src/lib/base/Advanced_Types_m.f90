@@ -45,6 +45,7 @@ module MOSE_Advanced_Types_m
     real(R8), dimension(:,:,:,:), allocatable :: RS1, RS2              ! Implicit smoothing residuals (temporary storage)
     real(R8), dimension(:,:,:), allocatable   :: dtlocal               ! Local time step
     real(R8), dimension(:,:,:), allocatable   :: beta                  ! Shock detector flag
+    real(R8), dimension(:,:,:), allocatable   :: Ur                    ! Preconditioning reference velocity
     type(MOSE_tensor_3D_type), allocatable    :: vel_gradient(:,:,:)   ! Gradient of velocity
     real(R8), allocatable                     :: rc_term1(:,:,:)       ! Spalart-Shur rotation/curvature correction terms
     real(R8), allocatable                     :: rc_term2(:,:,:)       ! Spalart-Shur rotation/curvature correction terms

@@ -10,7 +10,7 @@ module MOSE_Mod_Riemann
 
   !> Abstract interface relative to the riemann solver procedure
   abstract interface
-    subroutine riemann_if(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+    subroutine riemann_if(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
       use iso_fortran_env, only: I4 => int32, R8 => real64
       use MOSE_Global_m, only: nsc
       use FLINT_Lib_Thermodynamic
@@ -21,6 +21,7 @@ module MOSE_Mod_Riemann
       real(R8), intent(in)  :: dltot,drtot
       real(R8), intent(in)  :: nx, ny, nz
       real(R8), intent(in)  :: beta
+      real(R8), intent(in)  :: url, urr
       real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_e
       ! common
       real(R8) :: Rgasl,Rgasr
@@ -36,25 +37,26 @@ contains
     use MOSE_Lib_Riemann_HLL
     use MOSE_Lib_Riemann_LF
     use MOSE_Lib_Riemann_SLAU
+    use MOSE_Lib_Riemann_Roe
     implicit none
 
     nullify(Riemann)
 
+    ! Reset sensor flags; SD-requiring solvers re-enable them below.
+    obj_riemann%SD      = .false.
+    obj_riemann%SD_chen = .false.
+
     select case (obj_riemann%description)
 
       !! AUSM-type solvers
-      case ('Hanel')
-        Riemann => riemann_Hanel
-        obj_riemann%description = 'Hanel'
       case ('AUSM+')
         Riemann => riemann_AUSMp
         obj_riemann%description = 'AUSM+'
-      case ('AUSM+-up')
-        Riemann => riemann_AUSMp_up
-        obj_riemann%description = 'AUSM+-up'
-      case ('AUSM+-up2')
-        Riemann => riemann_AUSMp_up2
-        obj_riemann%description = 'AUSM+-up2'
+      case ('AUSM+M')
+        Riemann => riemann_AUSMp_M
+        obj_riemann%SD      = .true.    ! enables the global shock detector
+        obj_riemann%SD_chen = .true.    ! use Chen pressure-ratio sensor g
+        obj_riemann%description = 'AUSM+M (Chen et al. 2020)'
 
       !! Godunov solvers
       case ('exact','Exact')
@@ -66,13 +68,19 @@ contains
         Riemann => riemann_HLLE
         obj_riemann%description = 'HLLE'
 
-      case ('HLLEM')
-        obj_riemann%description = 'HLLEM'
-        Riemann => riemann_HLLEM
+      case ('HLLC-PC')
+        Riemann => riemann_HLLCprec
+        obj_riemann%description = 'HLLC-PC'
 
       case ('HLLC')
         obj_riemann%description = 'HLLC Batten'
         Riemann => riemann_HLLC
+
+      case ('HLLC+Chen')
+        Riemann => riemann_HLLCp_Chen
+        obj_riemann%SD      = .true.    ! enables the global shock detector
+        obj_riemann%SD_chen = .true.    ! use Chen pressure-ratio sensor g
+        obj_riemann%description = 'HLLC+ (Chen et al. 2020)'
 
       case ('HLLC+')
         obj_riemann%SD = .true.
@@ -92,9 +100,6 @@ contains
       case ('LLF','Rusanov')
         Riemann => riemann_LLF
         obj_riemann%description = 'Local Lax-Friedrichs (Rusanov)'
-      case ('PLLF')
-        Riemann => riemann_PLLF
-        obj_riemann%description = 'Preconditioned Local Lax-Friedrichs'
 
       !! SLAU-type solvers
       case ('SLAU')
@@ -103,6 +108,11 @@ contains
       case ('SLAU2')
         Riemann => riemann_SLAU2
         obj_riemann%description = 'SLAU2'
+
+      !! Roe-type solvers
+      case ('LMRoe')
+        Riemann => riemann_LMRoe
+        obj_riemann%description = 'Low-Mach Roe'
 
       !! Default
       case default

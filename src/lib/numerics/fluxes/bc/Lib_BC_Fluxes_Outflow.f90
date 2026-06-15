@@ -19,7 +19,7 @@ contains
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k, Dir, Face_i, Face_j, Face_k
     real(R8) :: Bound_Prim(nprim), Int_Prim(nprim), Normal(3), Area, BC_Sign, Un
-    real(R8) :: Flux(nprim)
+    real(R8) :: Flux(nprim), p_exit
 
     error = 0
 
@@ -48,6 +48,11 @@ contains
       error = 1
       return
     endif
+
+    ! Relaxed exit pressure: partially non-reflecting boundary condition.
+    ! Blends ambient pressure with local pressure to reduce acoustic wave reflection.
+    ! At steady state p_bnd -> BC_pexit regardless of sigma (only convergence rate changes).
+    p_exit = BC_rel_fac * BC_pexit + (1.0_R8 - BC_rel_fac) * Bound_Prim(np)
 
     call Outflow( Bound_Prim, BC_Sign, Un, Normal, Area, BC_pexit, Flux, BC_mdot )
 

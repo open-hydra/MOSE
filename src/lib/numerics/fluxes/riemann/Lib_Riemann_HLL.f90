@@ -11,140 +11,16 @@ module MOSE_Lib_Riemann_HLL
 
   implicit none
   private
-  public :: riemann_HLLE, riemann_HLLEM, riemann_HLLC
+  public :: riemann_HLLE, riemann_HLLC
+  public :: riemann_HLLCp_Chen
+  public :: riemann_HLLCprec
   public :: riemann_HLLEpp
-  public :: riemann_HLLEMSD, riemann_HLLCSD
+  public :: riemann_HLLCSD
   public :: riemann_HLLCHLLE
-
-  real(R8) :: min_beta=0.0d0
 
 contains
 
-  ! HLLEM
-  ! Einfeldt, B., Munz, C.C., Roe, P.L., and Sjogreen, B., "On Godunov-type methods near low densities", J. Comput. Phys., 92 (1991), pp. 273–295.
-  subroutine riemann_HLLEM(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,dummy,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
-    use MOSE_Global_m, only: nsc
-    use FLINT_Lib_Thermodynamic
-    implicit none
-    real(R8), intent(in)  :: dl(nsc),ul,vl,wl,pl,al
-    real(R8), intent(in)  :: dr(nsc),ur,vr,wr,pr,ar
-    real(R8), intent(in)  :: dltot,drtot
-    real(R8), intent(in)  :: nx, ny, nz
-    real(R8), intent(in)  :: dummy
-    real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_e
-
-    !----------------------------------------------------
-    real(R8) :: h0r,h0l
-    ! Local variables
-    real(R8) :: S1,S4,C,delta
-    real(R8) :: Frl,Ful,Fvl,Fwl,Fel
-    real(R8) :: Frr,Fur,Fvr,Fwr,Fer
-    ! Roe averages
-    real(R8) :: rho_ROE,u_ROE,v_ROE,w_ROE
-    real(R8) :: a_ROE,un_ROE,h0_roe
-    ! Jumps
-    real(R8) :: drho,dp,du,dv,dw
-    ! Tangential basis
-    real(R8) :: t1x,t1y,t1z,t2x,t2y,t2z,normt
-    ! Wave strengths
-    real(R8) :: alpha_c,alpha_s1,alpha_s2
-
-    !------------------------------------------------
-    ! Roe averages
-    call roe_averages(nsc, dl, dr, dltot, drtot, &
-                      ul, vl, wl, ur, vr, wr, pl, pr, h0l, h0r, &
-                      rho_roe, u_roe, v_roe, w_roe, a_roe, h0_roe)
-
-    un_roe = u_roe*nx + v_roe*ny + w_roe*nz
-
-    !----------------------------------------------------
-    ! Wave speed estimates
-    S1 = min(0.d0, (ul*nx+vl*ny+wl*nz)-al, un_ROE-a_ROE)
-    S4 = max(0.d0, (ur*nx+vr*ny+wr*nz)+ar, un_ROE+a_ROE)
-
-    !----------------------------------------------------
-    ! Physical fluxes
-    call fluxes(pl,dl,ul,vl,wl,nx,ny,nz,Frl,Ful,Fvl,Fwl,Fel)
-    call fluxes(pr,dr,ur,vr,wr,nx,ny,nz,Frr,Fur,Fvr,Fwr,Fer)
-
-    !----------------------------------------------------
-    ! HLL flux
-    F_r = (S4*Frl - S1*Frr + S1*S4*(drtot-dltot))/(S4-S1)
-    F_u = (S4*Ful - S1*Fur + S1*S4*(drtot*ur-dltot*ul))/(S4-S1)
-    F_v = (S4*Fvl - S1*Fvr + S1*S4*(drtot*vr-dltot*vl))/(S4-S1)
-    F_w = (S4*Fwl - S1*Fwr + S1*S4*(drtot*wr-dltot*wl))/(S4-S1)
-    F_E = (S4*Fel - S1*Fer + S1*S4*(drtot*E0(pr,dr,dsqrt(ur*ur+vr*vr+wr*wr)) &
-          - dltot*E0(pl,dl,dsqrt(ul*ul+vl*vl+wl*wl))))/(S4-S1)
-
-    !----------------------------------------------------
-    ! HLLEM correction (only if S1 < 0 < S4)
-    if (S1 < 0.d0 .and. S4 > 0.d0) then
-
-      ! Jumps
-      drho = drtot - dltot
-      dp   = pr - pl
-      du   = ur - ul
-      dv   = vr - vl
-      dw   = wr - wl
-
-      ! Tangential basis
-      if (abs(nx) < 0.9d0) then
-        t1x = 0.d0
-        t1y = -nz
-        t1z =  ny
-      else
-        t1x = -nz
-        t1y = 0.d0
-        t1z =  nx
-      endif
-      normt = dsqrt(t1x*t1x+t1y*t1y+t1z*t1z)
-      t1x = t1x/normt ; t1y = t1y/normt ; t1z = t1z/normt
-
-      t2x = ny*t1z - nz*t1y
-      t2y = nz*t1x - nx*t1z
-      t2z = nx*t1y - ny*t1x
-
-      ! Wave strengths
-      alpha_c  = drho - dp/(a_ROE*a_ROE)
-      !alpha_s1 = rho_ROE*(-ny*du + nx*dv)
-      alpha_s1 = rho_ROE*(du*t1x + dv*t1y + dw*t1z)
-      alpha_s2 = rho_ROE*(du*t2x + dv*t2y + dw*t2z)
-
-      ! Antidiffusion coefficient
-      delta = a_ROE/(a_ROE + abs(0.5d0*(S1+S4)))
-
-      ! Prefactor
-      C = (S1*S4)/(S4-S1)
-
-      ! Mass
-      F_r = F_r - C*delta*alpha_c
-
-      ! Momentum
-      ! Contact contribution
-      F_u = F_u - C*delta*( alpha_c * u_ROE )
-      F_v = F_v - C*delta*( alpha_c * v_ROE )
-      F_w = F_w - C*delta*( alpha_c * w_ROE )
-      ! Shear contributions
-      ! F_u = F_u - C*delta*( -ny*alpha_s1 )
-      ! F_v = F_v - C*delta*( nx*alpha_s1 )
-      F_u = F_u - C*delta*( alpha_s1*t1x + alpha_s2*t2x )
-      F_v = F_v - C*delta*( alpha_s1*t1y + alpha_s2*t2y )
-      F_w = F_w - C*delta*( alpha_s1*t1z + alpha_s2*t2z )
-
-      ! Energy
-      ! Contact contribution
-      F_E = F_E - C*delta*( alpha_c*0.5*(u_ROE*u_ROE + v_ROE*v_ROE + w_ROE*w_ROE) )
-      !F_E = F_E - C*delta*( alpha_s1*(-ny*u_ROE + nx*v_ROE) )
-      ! Shear contributions
-      F_E = F_E - C*delta*( alpha_s1*(u_ROE*t1x+v_ROE*t1y+w_ROE*t1z) &
-                          + alpha_s2*(u_ROE*t2x+v_ROE*t2y+w_ROE*t2z) )
-
-    endif
-
-  end subroutine riemann_HLLEM
-
-
-  subroutine riemann_HLLC(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,dummy,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+  subroutine riemann_HLLC(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,dummy,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
     implicit none
     ! Inputs
@@ -153,7 +29,7 @@ contains
     real(R8), intent(in) :: pl, pr, al, ar
     real(R8), intent(in) :: dltot, drtot
     real(R8), intent(in) :: nx, ny, nz
-    real(R8), intent(in) :: dummy
+    real(R8), intent(in) :: dummy, url, urr
     ! Outputs
     real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_E
     ! Roe + flow variables
@@ -258,7 +134,162 @@ contains
    end subroutine riemann_HLLC
 
 
-  subroutine riemann_HLLE(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,dummy,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+  !> @brief HLLC+ : low-Mach shock-stable HLLC (Chen, Lin, Li & Yan, 2020)
+  !>
+  !> "HLLC+: Low-Mach shock-stable HLLC-type Riemann solver for all-speed flows",
+  !> SIAM J. Sci. Comput. 42(4) (2020) B921-B950.
+  !>
+  !> Standard HLLC plus two corrections added in the subsonic star region
+  !> (S_L < 0 < S_R), both with prefactor phi = phi_L*phi_R/(phi_R-phi_L):
+  !>  - Low-Mach normal-velocity anti-dissipation A_p (Eq. 3.7-3.15):
+  !>      momentum += phi*(f*-1)*dU*n ,  energy += phi*(f*-1)*dU*S_HLLC
+  !>    with f(M) = M*sqrt(4+(1-M^2)^2)/(1+M^2), M = Thornber clamp (Eq. 3.14).
+  !>    This rescales the O(a) pressure-difference dissipation p_d down to the
+  !>    convective scale, recovering Ma^2 pressure/density scaling at low speed.
+  !>  - Carbuncle shear viscosity (Eq. 3.22-3.25):
+  !>      momentum += phi*(S_K/(S_K-S_HLLC))*g*dU_transverse
+  !>    gated by the multidimensional pressure-ratio sensor g (Eq. 3.23-24,
+  !>    supplied as 'switch' by the shock-detector framework, SD_Chen).
+  !>
+  !> The near-shock restraint of f* (paper's lambda sonic sensor, Eq. 3.16) is
+  !> realised through the same g sensor: f* = f(M) + g*(1-f(M)), so f* -> 1 at a
+  !> shock (fix off) and f* -> f(M) in smooth flow (fix on), with a single sensor.
+  !>
+  !> @ingroup Lib_RiemannPrivateProcedure
+  subroutine riemann_HLLCp_Chen(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,switch,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+    use MOSE_Global_m, only: nsc
+    implicit none
+    real(R8), intent(in) :: dl(nsc), dr(nsc)
+    real(R8), intent(in) :: ul, vl, wl, ur, vr, wr
+    real(R8), intent(in) :: pl, pr, al, ar
+    real(R8), intent(in) :: dltot, drtot
+    real(R8), intent(in) :: nx, ny, nz
+    real(R8), intent(in) :: switch, url, urr
+    real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_E
+    ! Roe + flow variables
+    real(R8) :: rho_roe, u_roe, v_roe, w_roe, a_roe, un_roe, h0_roe
+    real(R8) :: h0l, h0r, unl, unr
+    ! HLLC variables
+    real(R8) :: S1, S4, Sstar, pstar, inv_denom
+    real(R8) :: U1S, U2S, U3S, U4S, U5S, e0l, e0r
+    ! Chen low-Mach + shear corrections
+    real(R8) :: phiL, phiR, pref, Mloc, fM, g, fstar, SK
+    real(R8) :: dU, dut_x, dut_y, dut_z, lm_coef, shear_coef
+
+    unl = ul*nx + vl*ny + wl*nz
+    unr = ur*nx + vr*ny + wr*nz
+
+    call roe_averages(nsc, dl, dr, dltot, drtot, &
+                      ul, vl, wl, ur, vr, wr, pl, pr, h0l, h0r, &
+                      rho_roe, u_roe, v_roe, w_roe, a_roe, h0_roe)
+    un_roe = u_roe*nx + v_roe*ny + w_roe*nz
+
+    e0l = h0l - pl/dltot
+    e0r = h0r - pr/drtot
+
+    ! Batten signal speeds
+    S1 = min(0.d0, unl - al, un_roe - a_roe)
+    S4 = max(0.d0, unr + ar, un_roe + a_roe)
+
+    inv_denom = 1.d0 / ( dltot*(S1-unl) - drtot*(S4-unr) )
+    Sstar = ( pr - pl + dltot*unl*(S1-unl) - drtot*unr*(S4-unr) ) * inv_denom
+    pstar = dltot*(unl-S1)*(unl-Sstar) + pl
+
+    ! --- Chen all-speed corrections (active only in the subsonic star region) ---
+    phiL = dltot*(S1 - unl)
+    phiR = drtot*(S4 - unr)
+    pref = phiL*phiR / (phiR - phiL)                 ! ~ -1/2 rho a (Eq. 3.20)
+    Mloc = min(1.d0, max( sqrt(ul*ul+vl*vl+wl*wl)/al, &
+                          sqrt(ur*ur+vr*vr+wr*wr)/ar ))      ! Eq. 3.14
+    fM   = Mloc*sqrt(4.d0 + (1.d0 - Mloc*Mloc)**2)/(1.d0 + Mloc*Mloc)   ! Eq. 3.13
+    g    = 1.d0 - switch**Mloc                        ! g = 1 - h^M (Eq. 3.23), switch = h
+    fstar = fM + g*(1.d0 - fM)                        ! f* -> 1 near shock, f(M) in smooth flow
+    dU    = unr - unl                                 ! normal velocity jump
+    dut_x = (ur-ul) - dU*nx                           ! transverse velocity jump (Eq. 3.25)
+    dut_y = (vr-vl) - dU*ny
+    dut_z = (wr-wl) - dU*nz
+
+    !------------------------------------------------
+    ! HLLC fluxes (+ Chen corrections in the two star branches)
+    if (S1 >= 0.d0) then
+
+      F_r = dltot*unl
+      F_u = F_r*ul + pl*nx
+      F_v = F_r*vl + pl*ny
+      F_w = F_r*wl + pl*nz
+      F_E = F_r*h0l
+
+    elseif (Sstar >= 0.d0) then
+
+      F_r = dltot*unl
+      F_u = F_r*ul + pl*nx
+      F_v = F_r*vl + pl*ny
+      F_w = F_r*wl + pl*nz
+      F_E = F_r*h0l
+
+      inv_denom = 1.d0 / (S1 - Sstar)
+      U1S = dltot*(S1-unl)*inv_denom
+      U2S = ((S1-unl)*dltot*ul + (pstar-pl)*nx)*inv_denom
+      U3S = ((S1-unl)*dltot*vl + (pstar-pl)*ny)*inv_denom
+      U4S = ((S1-unl)*dltot*wl + (pstar-pl)*nz)*inv_denom
+      U5S = ((S1-unl)*dltot*e0l - pl*unl + pstar*Sstar)*inv_denom
+
+      F_r = F_r + S1*(U1S - dltot)
+      F_u = F_u + S1*(U2S - dltot*ul)
+      F_v = F_v + S1*(U3S - dltot*vl)
+      F_w = F_w + S1*(U4S - dltot*wl)
+      F_E = F_E + S1*(U5S - dltot*e0l)
+
+      SK = S1
+      lm_coef    = pref*(fstar - 1.d0)*dU
+      shear_coef = pref*( SK/(SK - Sstar) )*g
+      F_u = F_u + lm_coef*nx + shear_coef*dut_x
+      F_v = F_v + lm_coef*ny + shear_coef*dut_y
+      F_w = F_w + lm_coef*nz + shear_coef*dut_z
+      F_E = F_E + lm_coef*Sstar
+
+    elseif (S4 > 0.d0) then
+
+      F_r = drtot*unr
+      F_u = F_r*ur + pr*nx
+      F_v = F_r*vr + pr*ny
+      F_w = F_r*wr + pr*nz
+      F_E = F_r*h0r
+
+      inv_denom = 1.d0 / (S4 - Sstar)
+      U1S = drtot*(S4-unr)*inv_denom
+      U2S = ((S4-unr)*drtot*ur + (pstar-pr)*nx)*inv_denom
+      U3S = ((S4-unr)*drtot*vr + (pstar-pr)*ny)*inv_denom
+      U4S = ((S4-unr)*drtot*wr + (pstar-pr)*nz)*inv_denom
+      U5S = ((S4-unr)*drtot*e0r - pr*unr + pstar*Sstar)*inv_denom
+
+      F_r = F_r + S4*(U1S - drtot)
+      F_u = F_u + S4*(U2S - drtot*ur)
+      F_v = F_v + S4*(U3S - drtot*vr)
+      F_w = F_w + S4*(U4S - drtot*wr)
+      F_E = F_E + S4*(U5S - drtot*e0r)
+
+      SK = S4
+      lm_coef    = pref*(fstar - 1.d0)*dU
+      shear_coef = pref*( SK/(SK - Sstar) )*g
+      F_u = F_u + lm_coef*nx + shear_coef*dut_x
+      F_v = F_v + lm_coef*ny + shear_coef*dut_y
+      F_w = F_w + lm_coef*nz + shear_coef*dut_z
+      F_E = F_E + lm_coef*Sstar
+
+    else
+
+      F_r = drtot*unr
+      F_u = F_r*ur + pr*nx
+      F_v = F_r*vr + pr*ny
+      F_w = F_r*wr + pr*nz
+      F_E = F_r*h0r
+
+    endif
+
+  end subroutine riemann_HLLCp_Chen
+
+  subroutine riemann_HLLE(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,dummy,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
     implicit none
     ! Inputs
@@ -267,7 +298,7 @@ contains
     real(R8), intent(in) :: pl, pr, al, ar
     real(R8), intent(in) :: dltot, drtot
     real(R8), intent(in) :: nx, ny, nz
-    real(R8), intent(in) :: dummy
+    real(R8), intent(in) :: dummy, url, urr
     ! Outputs
     real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_E
     ! Roe data
@@ -320,8 +351,130 @@ contains
   end subroutine riemann_HLLE
 
 
+  !> @brief HLLC Batten preconditioned (Luo–Baum–Löhner style)
+  subroutine Riemann_HLLCprec(dl, uL, vL, wL, pL, aL, dltot, dr, uR, vR, wR, pR, aR, drtot, beta, url, urr, nx, ny, nz, F_r, F_u, F_v, F_w, F_E)
+    use MOSE_Global_m, only: nsc
+    use FLINT_Lib_Thermodynamic, only: H
+    implicit none
+    ! Inputs
+    real(R8), intent(in)  :: dl(nsc), dr(nsc)
+    real(R8), intent(in)  :: ul, vl, wl, ur, vr, wr
+    real(R8), intent(in)  :: pl, pr, al, ar
+    real(R8), intent(in)  :: dltot, drtot
+    real(R8), intent(in)  :: nx, ny, nz
+    real(R8), intent(in)  :: beta, url, urr
+    real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_E
+    ! Local
+    real(R8) :: unL, unR, eL, eR, h0L, h0R, EtotL, EtotR
+    real(R8) :: FrL, FuL, FvL, FwL, FeL, FrR, FuR, FvR, FwR, FeR, hL, hR
+    real(R8) :: sqrtRhoL, sqrtRhoR, denom
+    real(R8) :: u_Roe, v_Roe, w_Roe, un_Roe, a_Roe
+    real(R8) :: S1, S4, Sstar, pstar
+    real(R8) :: U1S, U2S, U3S, U4S, U5S
+    real(R8) :: VrL, VrR, VrROE
+    real(R8) :: alphaL, alphaR, alphaROE
+    real(R8) :: vL_star, vR_star, vROE_star
+    real(R8) :: cL_star, cR_star, cROE_star
+
+    ! Normal velocities
+    unL = uL*nx + vL*ny + wL*nz
+    unR = uR*nx + vR*ny + wR*nz
+
+    hL = H(pl,dl)
+    hR = H(pr,dr)
+
+    ! Internal energy: e = h - p/rho
+    eL = hL - pL/dltot
+    eR = hR - pR/drtot
+
+    ! Total enthalpy: h0 = h + 0.5*v²
+    h0L = hL + 0.5d0*(uL**2 + vL**2 + wL**2)
+    h0R = hR + 0.5d0*(uR**2 + vR**2 + wR**2)
+
+    ! Total energy: E = e + 0.5*v²
+    EtotL = eL + 0.5d0*(uL**2 + vL**2 + wL**2)
+    EtotR = eR + 0.5d0*(uR**2 + vR**2 + wR**2)
+
+    ! Left/right fluxes
+    FrL = dltot * unL
+    FuL = FrL * uL + pL * nx
+    FvL = FrL * vL + pL * ny
+    FwL = FrL * wL + pL * nz
+    FeL = FrL * h0L
+
+    FrR = drtot * unR
+    FuR = FrR * uR + pR * nx
+    FvR = FrR * vR + pR * ny
+    FwR = FrR * wR + pR * nz
+    FeR = FrR * h0R
+
+    ! Roe averages
+    sqrtRhoL = sqrt(dltot)
+    sqrtRhoR = sqrt(drtot)
+    denom = sqrtRhoL + sqrtRhoR
+    u_Roe = (sqrtRhoL*uL + sqrtRhoR*uR) / denom
+    v_Roe = (sqrtRhoL*vL + sqrtRhoR*vR) / denom
+    w_Roe = (sqrtRhoL*wL + sqrtRhoR*wR) / denom
+    a_Roe = (sqrtRhoL*aL + sqrtRhoR*aR) / denom
+
+    ! Reference velocities from reconstructed cell values (includes viscous floor)
+    VrL   = min(UrL, aL)
+    VrR   = min(UrR, aR)
+    VrROE = (sqrtRhoL*VrL + sqrtRhoR*VrR) / denom
+
+    ! Preconditioning parameters
+    alphaL   = (1.0d0 - (VrL  **2) / (aL  **2)) / 2.0d0
+    alphaR   = (1.0d0 - (VrR  **2) / (aR  **2)) / 2.0d0
+    alphaROE = (1.0d0 - (VrROE**2) / (a_Roe**2)) / 2.0d0
+
+    vL_star   = unL   * (1.0d0 - alphaL)
+    vR_star   = unR   * (1.0d0 - alphaR)
+    vROE_star = un_Roe * (1.0d0 - alphaROE)
+
+    cL_star   = sqrt(max(alphaL  **2 * unL  **2 + VrL  **2, 0.0d0))
+    cR_star   = sqrt(max(alphaR  **2 * unR  **2 + VrR  **2, 0.0d0))
+    cROE_star = sqrt(max(alphaROE**2 * un_Roe**2 + VrROE**2, 0.0d0))
+
+    ! Preconditioned signal velocities
+    S1 = min(0.0d0, vL_star - cL_star, vROE_star - cROE_star)
+    S4 = max(0.0d0, vR_star + cR_star, vROE_star + cROE_star)
+
+    ! Star region estimates (Batten)
+    Sstar = ( pR - pL + dltot*unL*(S1 - unL) - drtot*unR*(S4 - unR) ) / ( dltot*(S1 - unL) - drtot*(S4 - unR) )
+    pstar = dltot*(unL - S1)*(unL - Sstar) + pL
+
+    if (S1 >= 0.0d0) then
+      F_r = FrL; F_u = FuL; F_v = FvL; F_w = FwL; F_E = FeL
+    else if (S4 <= 0.0d0) then
+      F_r = FrR; F_u = FuR; F_v = FvR; F_w = FwR; F_E = FeR
+    else if (Sstar >= 0.0d0) then
+      U1S = dltot*(S1 - unL)/(S1 - Sstar)
+      U2S = ((S1 - unL)*dltot*uL + (pstar - pL)*nx)/(S1 - Sstar)
+      U3S = ((S1 - unL)*dltot*vL + (pstar - pL)*ny)/(S1 - Sstar)
+      U4S = ((S1 - unL)*dltot*wL + (pstar - pL)*nz)/(S1 - Sstar)
+      U5S = ((S1 - unL)*dltot*EtotL - pL*unL + pstar*Sstar)/(S1 - Sstar)
+      F_r = FrL + S1*(U1S - dltot)
+      F_u = FuL + S1*(U2S - dltot*uL)
+      F_v = FvL + S1*(U3S - dltot*vL)
+      F_w = FwL + S1*(U4S - dltot*wL)
+      F_E = FeL + S1*(U5S - dltot*EtotL)
+    else
+      U1S = drtot*(S4 - unR)/(S4 - Sstar)
+      U2S = ((S4 - unR)*drtot*uR + (pstar - pR)*nx)/(S4 - Sstar)
+      U3S = ((S4 - unR)*drtot*vR + (pstar - pR)*ny)/(S4 - Sstar)
+      U4S = ((S4 - unR)*drtot*wR + (pstar - pR)*nz)/(S4 - Sstar)
+      U5S = ((S4 - unR)*drtot*EtotR - pR*unR + pstar*Sstar)/(S4 - Sstar)
+      F_r = FrR + S4*(U1S - drtot)
+      F_u = FuR + S4*(U2S - drtot*uR)
+      F_v = FvR + S4*(U3S - drtot*vR)
+      F_w = FwR + S4*(U4S - drtot*wR)
+      F_E = FeR + S4*(U5S - drtot*EtotR)
+    end if
+
+  end subroutine Riemann_HLLCprec
+
   ! HLLE++
-  subroutine riemann_HLLEpp(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+  subroutine riemann_HLLEpp(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
     use FLINT_Lib_Thermodynamic
     implicit none
@@ -329,7 +482,7 @@ contains
     real(R8), intent(in)  :: dr(nsc),ur,vr,wr,pr,ar
     real(R8), intent(in)  :: dltot,drtot
     real(R8), intent(in)  :: nx, ny, nz
-    real(R8), intent(in)  :: beta
+    real(R8), intent(in)  :: beta, url, urr
     real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_e
     !----------------------------------------------------
     ! Local variables
@@ -460,46 +613,9 @@ contains
   end subroutine riemann_HLLEpp
 
 
-  ! HLLEM - HLLE 
-  ! Hybrid solver working with a mulidimensional shock detector
-  subroutine riemann_HLLEMSD(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
-    use MOSE_Global_m, only: nsc
-    use FLINT_Lib_Thermodynamic
-    implicit none
-    real(R8), intent(in)  :: dl(nsc),ul,vl,wl,pl,al
-    real(R8), intent(in)  :: dr(nsc),ur,vr,wr,pr,ar
-    real(R8), intent(in)  :: dltot,drtot
-    real(R8), intent(in)  :: nx, ny, nz
-    real(R8), intent(in)  :: beta
-    real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_e
-    ! 
-    real(R8) :: FrE, FuE, FvE, FwE, FeE
-    real(R8) :: FrC, FuC, FvC, FwC, FeC
-    real(R8) :: beta_
-
-    beta_ = beta
-    ! beta_ = max(beta_,min_beta)
-
-    if (beta_ == 0d0) then
-      call riemann_HLLE  (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
-    elseif (beta_ >= 1d0) then
-      call riemann_HLLEM (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
-    else
-      call riemann_HLLE  (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,nx,ny,nz,FrE,FuE,FvE,FwE,FeE)
-      call riemann_HLLEM (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,nx,ny,nz,FrC,FuC,FvC,FwC,FeC)
-      F_r = beta_*FrC + (1d0-beta_)*FrE
-      F_u = beta_*FuC + (1d0-beta_)*FuE
-      F_v = beta_*FvC + (1d0-beta_)*FvE
-      F_w = beta_*FwC + (1d0-beta_)*FwE
-      F_e = beta_*FeC + (1d0-beta_)*FeE
-    endif
-
-  end subroutine riemann_HLLEMSD
-
-
   ! HLLC - HLLE 
   ! Hybrid solver working with a mulidimensional shock detector
-  subroutine riemann_HLLCSD(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+  subroutine riemann_HLLCSD(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
     use FLINT_Lib_Thermodynamic
     implicit none
@@ -507,7 +623,7 @@ contains
     real(R8), intent(in)  :: dr(nsc),ur,vr,wr,pr,ar
     real(R8), intent(in)  :: dltot,drtot
     real(R8), intent(in)  :: nx, ny, nz
-    real(R8), intent(in)  :: beta
+    real(R8), intent(in)  :: beta, url, urr
     real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_e
     ! 
     real(R8) :: FrE, FuE, FvE, FwE, FeE
@@ -518,12 +634,12 @@ contains
     ! beta_ = max(beta_,min_beta)
 
     if (beta_ == 0d0) then
-      call riemann_HLLE (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+      call riemann_HLLE (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     elseif (beta_ >= 1d0) then
-      call riemann_HLLC (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+      call riemann_HLLC (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     else
-      call riemann_HLLE (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,nx,ny,nz,FrE,FuE,FvE,FwE,FeE)
-      call riemann_HLLC (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,nx,ny,nz,FrC,FuC,FvC,FwC,FeC)
+      call riemann_HLLE (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,url,urr,nx,ny,nz,FrE,FuE,FvE,FwE,FeE)
+      call riemann_HLLC (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,0d0,url,urr,nx,ny,nz,FrC,FuC,FvC,FwC,FeC)
       F_r = beta_*FrC + (1d0-beta_)*FrE
       F_u = beta_*FuC + (1d0-beta_)*FuE
       F_v = beta_*FvC + (1d0-beta_)*FvE
@@ -647,6 +763,22 @@ contains
   end subroutine roe_averages
 
 
+  pure subroutine preconditioned_speed(un, a, ur_floor, un_pc, a_pc)
+    implicit none
+    real(R8), intent(in) :: un, a, ur_floor
+    real(R8), intent(out) :: un_pc, a_pc
+    real(R8) :: a_safe, ur, alpha
+
+    a_safe = max(a, 1.0d-14)
+    ur = max(ur_floor*a_safe, min(abs(un), a_safe))
+    alpha = 0.5d0*(1.d0 - (ur*ur)/(a_safe*a_safe))
+
+    un_pc = un*(1.d0 - alpha)
+    a_pc = sqrt(alpha*alpha*un*un + ur*ur)
+
+  end subroutine preconditioned_speed
+
+
   ! Subroutine for computing the conservative fluxes from primitive variables.
   pure subroutine fluxes(p,r,u,v,w,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
@@ -669,7 +801,7 @@ contains
   end subroutine fluxes
 
 
-  subroutine riemann_HLLCHLLE  (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+  subroutine riemann_HLLCHLLE  (dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
 
     implicit none
@@ -677,7 +809,7 @@ contains
     real(R8), intent(in)  :: dr(nsc),ur,vr,wr,pr,ar ! : density(s), velocity, pressure and sound velocity of right state
     real(R8), intent(in)  :: dltot,drtot
     real(R8), intent(in)  :: nx, ny, nz
-    real(R8), intent(in)  :: beta
+    real(R8), intent(in)  :: beta, url, urr
     real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_e
     ! specific
     real(R8) :: nx1, ny1, nz1, nx2, ny2, nz2
@@ -730,10 +862,10 @@ contains
       endif
           
       ! chiamata a HLLE in direzione n1
-      call riemann_HLLE(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,nx1,ny1,nz1,F_rHLLE,F_uHLLE,F_vHLLE,F_wHLLE, F_EHLLE)
+      call riemann_HLLE(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx1,ny1,nz1,F_rHLLE,F_uHLLE,F_vHLLE,F_wHLLE, F_EHLLE)
 
       ! chiamata a HLLC in direzione n2
-      call riemann_HLLC(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,nx2,ny2,nz2,F_rHLLC,F_uHLLC,F_vHLLC,F_wHLLC, F_EHLLC)
+      call riemann_HLLC(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx2,ny2,nz2,F_rHLLC,F_uHLLC,F_vHLLC,F_wHLLC, F_EHLLC)
 
       ! media pesata dei flussi per ottenere flusso rotato
       F_r=F_rHLLE*alfa1+F_rHLLC*alfa2
@@ -744,7 +876,7 @@ contains
       F_E=F_EHLLE*alfa1+F_EHLLC*alfa2
     else
       ! chiamata a HLLC in direzione n2, assumendo n1 tangente alla faccia
-      call riemann_HLLC(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,nx,ny,nz,F_rHLLC,F_uHLLC,F_vHLLC,F_wHLLC, F_EHLLC)
+      call riemann_HLLC(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx,ny,nz,F_rHLLC,F_uHLLC,F_vHLLC,F_wHLLC, F_EHLLC)
       F_r=F_rHLLC
       F_u=F_uHLLC
       F_v=F_vHLLC

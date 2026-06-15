@@ -361,7 +361,7 @@ contains
 
     call Riemann ( Prim_L(1:nsc), Prim_L(nu), Prim_L(nv), Prim_L(nw), Prim_L(np), Sound_L, rho_L, &
                    Prim_R(1:nsc), Prim_R(nu), Prim_R(nv), Prim_R(nw), Prim_R(np), Sound_R, rho_R, &
-                   1d0, Normal(1), Normal(2), Normal(3), F_r, F_u, F_v, F_w, F_E)
+                   1d0, Sound_L, Sound_R, Normal(1), Normal(2), Normal(3), F_r, F_u, F_v, F_w, F_E)
 
     su = sign ( 1d0, F_r )
     Sel_L = ( 1d0+su ) / 2d0  ! state left selector
