@@ -1,8 +1,8 @@
 """
 Shock Wave - Boundary Layer Interaction (SWBLI) validation case
 
-Reads wall shear stress from OUTPUT/wall.tec and compares the skin
-friction coefficient against SU2 and reference data.
+Generates separate skin-friction comparison plots for the SA and SST
+cases using the corresponding MOSE, SU2, Wind-US, and experiment data.
 
 Usage:
     python verify.py           # saves figure to OUTPUT/verify_Cf.png
@@ -31,7 +31,6 @@ mpl.rcParams.update({
 })
 
 # Increase font sizes
-title_fontsize = 18
 label_fontsize = 17
 cbar_fontsize = 17
 
@@ -178,35 +177,14 @@ print(f"  Re/L    = {U_inf/nu:.1f} m⁻¹")
 # Read reference data (if available)
 # -------------------------------------------------------------
 
-# Reference data
-x_ref, Cf_ref = None, None
-ref_path = "reference/schulein.dat"
-if os.path.exists(ref_path):
+def _load_xy_data(path):
+    if not os.path.exists(path):
+        return None, None
     try:
-        ref_data = np.loadtxt(ref_path)
-    except:
-        ref_data = np.loadtxt(ref_path, delimiter=',')
-    x_ref, Cf_ref = ref_data[:, 0], ref_data[:, 1]
-
-# SU2 reference data
-x_su2, Cf_su2 = None, None
-ref_path = "reference/SU2-SA.dat"
-if os.path.exists(ref_path):
-    try:
-        ref_data = np.loadtxt(ref_path)
-    except:
-        ref_data = np.loadtxt(ref_path, delimiter=',')
-    x_su2, Cf_su2 = ref_data[:, 0], ref_data[:, 1]
-
-# WIND reference data
-x_wind, Cf_wind = None, None
-ref_path = "reference/wind-SA.dat"
-if os.path.exists(ref_path):
-    try:
-        ref_data = np.loadtxt(ref_path)
-    except:
-        ref_data = np.loadtxt(ref_path, delimiter=',')
-    x_wind, Cf_wind = ref_data[:, 0], ref_data[:, 1]
+        ref_data = np.loadtxt(path)
+    except ValueError:
+        ref_data = np.loadtxt(path, delimiter=',')
+    return ref_data[:, 0], ref_data[:, 1]
 
 # -------------------------------------------------------------
 # Helper: read a wall.tec-style file and return (x_cell, Cf)
@@ -224,32 +202,38 @@ def _read_wall_cf(path, rho_inf, U_inf):
     Cf   = tauX / (0.5 * rho_inf * U_inf**2)
     return x_c, Cf
 
-# SA solution (used for reference comparison)
-x_plt, Cf_mose = _read_wall_cf("OUTPUT/wall.tec", rho_inf, U_inf)
+# SA / SST solutions
+x_mose_sa, Cf_mose_sa = _read_wall_cf("reference/MOSE-SA.tec", rho_inf, U_inf)
+x_mose_sst, Cf_mose_sst = _read_wall_cf("reference/MOSE-SST.tec", rho_inf, U_inf)
+
+# SA reference data
+x_ref_sa, Cf_ref_sa = _load_xy_data("reference/schulein.dat")
+x_su2_sa, Cf_su2_sa = _load_xy_data("reference/SU2-SA.dat")
+x_wind_sa, Cf_wind_sa = _load_xy_data("reference/wind-SA.dat")
+
+# SST reference data
+x_su2_sst, Cf_su2_sst = _load_xy_data("reference/SU2-SST.dat")
+x_wind_sst, Cf_wind_sst = _load_xy_data("reference/wind-SST.dat")
 
 # -------------------------------------------------------------
 # Plots
 # -------------------------------------------------------------
 
 # --- Cf vs x ---
-# Figure 1: Skin friction coefficient
+# Figure 1: Skin friction coefficient for SA
 fig1 = plt.figure(figsize=(10, 6))
 ax_cf = fig1.add_subplot(111)
 
-# Reference data (if available)
-if x_ref is not None:
-    ax_cf.plot(x_ref, Cf_ref, 'ko', ms=6, label='Schulein (exp)')
+if x_ref_sa is not None:
+    ax_cf.plot(x_ref_sa, Cf_ref_sa, 'ko', ms=6, label='Schulein (exp)')
 
-# SU2 reference data (if available)
-if x_su2 is not None:
-    ax_cf.plot(x_su2, Cf_su2, 'r--', lw=3, label='SU2')
+if x_su2_sa is not None:
+    ax_cf.plot(x_su2_sa, Cf_su2_sa, 'r--', lw=3, label='SU2')
 
-# WIND reference data (if available)
-if x_wind is not None:
-    ax_cf.plot(x_wind, Cf_wind, 'b-.', lw=3, label='Wind-US')
+if x_wind_sa is not None:
+    ax_cf.plot(x_wind_sa, Cf_wind_sa, 'b-.', lw=3, label='Wind-US')
 
-# MOSE data
-ax_cf.plot(x_plt, Cf_mose, 'g', lw=4.0, label='MOSE')
+ax_cf.plot(x_mose_sa, Cf_mose_sa, 'g', lw=4.0, label='MOSE')
 
 ax_cf.set_xlim(0.32, 0.41)
 ax_cf.set_ylim(-0.002, 0.0075)
@@ -263,4 +247,34 @@ plt.tight_layout()
 
 out_fig1 = Path(os.path.join(output_dir, "SWBLI-cf-sa.svg"))
 fig1.savefig(out_fig1, dpi=150)
+
+# Figure 2: Skin friction coefficient for SST
+fig2 = plt.figure(figsize=(10, 6))
+ax_cf = fig2.add_subplot(111)
+
+if x_ref_sa is not None:
+    ax_cf.plot(x_ref_sa, Cf_ref_sa, 'ko', ms=6, label='Schulein (exp)')
+
+if x_su2_sst is not None:
+    ax_cf.plot(x_su2_sst, Cf_su2_sst, 'r--', lw=3, label='SU2')
+
+if x_wind_sst is not None:
+    ax_cf.plot(x_wind_sst, Cf_wind_sst, 'b-.', lw=3, label='Wind-US')
+
+ax_cf.plot(x_mose_sst, Cf_mose_sst, 'g', lw=4.0, label='MOSE')
+
+ax_cf.set_xlim(0.32, 0.41)
+ax_cf.set_ylim(-0.002, 0.0075)
+ax_cf.set_xlabel(r'$x$  [m]', fontsize=label_fontsize)
+ax_cf.set_ylabel(r'$C_f$', fontsize=label_fontsize)
+ax_cf.tick_params(labelsize=label_fontsize - 2)
+ax_cf.legend(loc='best', fontsize=label_fontsize - 2)
+ax_cf.grid(True, alpha=0.3)
+
+plt.tight_layout()
+
+out_fig2 = Path(os.path.join(output_dir, "SWBLI-cf-sst.svg"))
+fig2.savefig(out_fig2, dpi=150)
+
 print(f"\nFigures saved to {out_fig1}")
+print(f"Figures saved to {out_fig2}")
