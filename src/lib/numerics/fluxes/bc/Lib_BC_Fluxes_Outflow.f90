@@ -50,11 +50,9 @@ contains
     endif
 
     ! Relaxed exit pressure: partially non-reflecting boundary condition.
-    ! Blends ambient pressure with local pressure to reduce acoustic wave reflection.
-    ! At steady state p_bnd -> BC_pexit regardless of sigma (only convergence rate changes).
     p_exit = BC_rel_fac * BC_pexit + (1.0_R8 - BC_rel_fac) * Bound_Prim(np)
 
-    call Outflow( Bound_Prim, BC_Sign, Un, Normal, Area, BC_pexit, Flux, BC_mdot )
+    call Outflow( Bound_Prim, BC_Sign, Un, Normal, Area, p_exit, Flux, BC_mdot )
 
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + Modfm2 * Flux
   

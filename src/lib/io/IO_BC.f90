@@ -109,7 +109,7 @@ contains
       ! IDs with VARIABLE-length property lines:
       !   102 = chimera
       select case(ti)
-      case(101, 103, 201, 301:309, 401:407, 410, 420, 501:502)
+      case(101, 103, 201, 301:309, 401:408, 410, 420, 501:502)
         read( unitfile,*,iostat=ios )
       case(102)
         read( unitfile,*,iostat=ios ) ci, cii
@@ -345,13 +345,24 @@ contains
           bc(i)%beta  = parse_dir_tok(beta_tok)
 
         ! ─────────────────────────────────────────────────────────────────────
+        ! Inlet, mass-flux un + T (static)
+        ! Second line: T, un, alpha, beta, rel_fac, massf, turb
+        case(408)
+          if (level == 1) nio = nio + 1
+          allocate( bc(i) % ci(1 : nsc+nrans) )
+          read( unitfile,*,iostat=ios ) &
+            bc(i)%T0, bc(i)%un, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
+          bc(i)%alpha = parse_dir_tok(alpha_tok)
+          bc(i)%beta  = parse_dir_tok(beta_tok)
+
+        ! ─────────────────────────────────────────────────────────────────────
         ! Assigned state via time-varying file
         case(410)
           if (level == 1) nstate = nstate + 1
           allocate ( bc(i) % Pg (nprim, 6) )
           read(unitfile, '(A)', iostat=ios) q2d_line
           q2d_line = adjustl(q2d_line)
-          ip = index(trim(q2d_line), ' ')
+          ip = index(trim(q2d_line), ',')
           if (ip > 0) then
             bc(i)%q2d_file = q2d_line(1:ip-1)
             if (index(q2d_line(ip:), 'periodic') > 0) bc(i)%q2d_periodic = .true.
@@ -361,14 +372,13 @@ contains
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Choked-nozzle BC
-        ! Second line: 0(alpha), T0, p0, psub, psup, rt, 0(rel_fac), massf, turb
+        ! Second line: T0, p0, psub, psup, g, rel_fac, yi, turb
         case(420)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : nsc+nrans) )
           read( unitfile,*,iostat=ios ) &
-            bc(i)%mach, bc(i)%T0, bc(i)%p0, bc(i)%psub, bc(i)%psup, bc(i)%rt_nozzle, bc(i)%rel_fac, &
+            bc(i)%T0, bc(i)%p0, bc(i)%psub, bc(i)%psup, bc(i)%mdot, bc(i)%rel_fac, &
             (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
-          bc(i)%pamb = bc(i)%psub   ! pass subsonic pressure as back-pressure to nozzle solver
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Manifold

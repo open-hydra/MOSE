@@ -104,8 +104,9 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 | `405` | Supersonic inlet ($M$, $T$, $p$) | `mach,  T,  p,  alpha,  beta,  rel_fac,  [massf],  [turb]` |
 | `406` | Outlet — back pressure | `p_back,  rel_fac` |
 | `407` | Ambient ($T_0$, $p_0$, $p_\text{back}$) | `T0,  p0,  p_back,  alpha,  beta,  rel_fac,  [massf],  [turb]` |
+| `408` | Inlet — velocity + $T$ static | `T,   un,  alpha,  beta,  rel_fac,  [massf],  [turb]` |
 | `410` | Assigned state (time-varying file) | `filename  [periodic]` |
-| `420` | Choked nozzle | `mach_dummy,  T0,  p0,  p_sub,  p_sup,  r_throat,  rel_fac,  [massf],  [turb]` |
+| `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  r_throat,  rel_fac,  [massf],  [turb]` |
 
 **Common fields:**
 
