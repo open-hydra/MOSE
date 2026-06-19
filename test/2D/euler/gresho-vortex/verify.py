@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Analyze the low-Mach Gresho vortex output of several Riemann solvers
-(LMRoe, HLLC, SLAU2, HLLC-PC).
+(LMRoe, HLLC, AUSM+M).
 
 The Gresho vortex is a STEADY solution of the Euler equations (centrifugal
 balance), so the exact answer is the initial vortex preserved unchanged.
@@ -14,24 +14,48 @@ error. Theory (Rieper 2011) predicts:
     so it should over-diffuse: lower peak velocity, smeared u_phi(r), KE decay.
 
 Usage:  python analyze_gresho.py
-Outputs: printed metrics + gresho_analysis.png
+Outputs: printed metrics + gresho_mach_matrix.png + gresho_profiles_by_mach.png
 """
 
+import os
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+
+# ---- global plot styling -----------------------------------------------------
+plt.rcParams.update({
+    "font.size": 20,
+    "axes.titlesize": 25,
+    "axes.titleweight": "bold",
+    "axes.labelsize": 25,
+    "xtick.labelsize": 23,
+    "ytick.labelsize": 23,
+    "legend.fontsize": 22,
+    "legend.title_fontsize": 22,
+    "axes.linewidth": 1.0,
+    "figure.facecolor": "none",
+    "axes.facecolor": "none",
+    "savefig.facecolor": "none",
+    "svg.fonttype": "none",
+})
 
 # ---- analytic Gresho (must match build_ic.py) -------------------------------
-XC, YC = 0.4, 0.4
+XC, YC = 0.5, 0.5
 GAMMA = 1.4
+
+def mach_field(d, Mref):
+    a = np.sqrt(GAMMA * d["p"] / d["rho"])
+    M = np.sqrt(d["u"]**2 + d["v"]**2) / a
+    return M / Mref
 
 def uphi_exact(r):
     return np.where(r < 0.2, 5.0*r, np.where(r < 0.4, 2.0 - 5.0*r, 0.0))
 
 # ---- Tecplot BLOCK reader (this specific zone layout) -----------------------
-NI, NJ, NK = 81, 81, 2            # nodes
-NX, NY, NZ = 80, 80, 1            # cells
+NI, NJ, NK = 101, 101, 2            # nodes
+NX, NY, NZ = 100, 100, 1            # cells
 NNODE = NI*NJ*NK
 NCELL = NX*NY*NZ
 
@@ -71,7 +95,7 @@ def analyze(name, d):
     urad = ( u*dx + v*dy)/rsafe            # should be ~0 for a clean vortex
     ue = uphi_exact(r)
 
-    area = (0.8/NX)*(0.8/NY)
+    area = (1.0/NX)*(1.0/NY)
     KE  = np.sum(0.5*rho*(u**2 + v**2))*area
     KEe = np.sum(0.5*1.0*ue**2)*area
 
@@ -100,66 +124,294 @@ def analyze(name, d):
         print("  ** DIVERGED — excluded from profile comparison **")
     return r, uphi, ue, diverged
 
-# name -> (output folder, plot color)
 RUNS = [
-    ("HLLC",    "OUT_HLLC",    "tab:blue"),
-    ("LMRoe",   "OUT_LMRoe",   "tab:orange"),
-    ("AUSM+M",  "OUT_AUSM+M",  "tab:red"),
-    ("HLLC-PC", "OUT_HLLC-PC", "tab:green"),
+
+    # solver, mach label, Mref, folder, color
+
+    ("HLLC",  "0.1",   1e-1, "HLLC_1",  "tab:red"),
+    ("HLLC",  "0.01",  1e-2, "HLLC_2",  "tab:red"),
+    ("HLLC",  "0.001", 1e-3, "HLLC_3",  "tab:red"),
+
+    ("LMRoe", "0.1",   1e-1, "LMRoe_1", "tab:blue"),
+    ("LMRoe", "0.01",  1e-2, "LMRoe_2", "tab:blue"),
+    ("LMRoe", "0.001", 1e-3, "LMRoe_3", "tab:blue"),
+
+    ("AUSM+M", "0.1",   1e-1, "AUSM+M_1", "tab:green"),
+    ("AUSM+M", "0.01",  1e-2, "AUSM+M_2", "tab:green"),
+    ("AUSM+M", "0.001", 1e-3, "AUSM+M_3", "tab:green"),
 ]
 
-def main():
-    import os
-    runs, colors = {}, {}
-    for name, folder, c in RUNS:
-        fpath = os.path.join(folder, "field.tec")
+# LMRoe Mach-cutoff sweep at Ma=0.001 (title, Mref, folder)
+LMROE_SWEEP = [
+    ("$M_{co}=0.500$", 1e-3, "LMRoe_3_high"),
+    ("$M_{co}=0.005$", 1e-3, "LMRoe_3"),
+    ("$M_{co}=0.001$", 1e-3, "LMRoe_3_low"),
+]
+
+
+def plot_lmroe_sweep():
+    """Mach fields for the LMRoe dissipation variants (single row, like the
+    first row of the matrix)."""
+    loaded = []
+    for title, Mref, folder in LMROE_SWEEP:
+        fpath = os.path.join("OUTPUT", "field_"+folder+".tec")
         if not os.path.exists(fpath):
-            print(f"  (skipping {name}: {fpath} not found)")
+            print(f"(skipping {folder}: missing)")
             continue
-        runs[name] = read_field(fpath); colors[name] = c
+        try:
+            d = read_field(fpath)
+            loaded.append((title, d, mach_field(d, Mref)))
+        except Exception as e:
+            print(f"(skipping {folder}: {e})")
 
-    res = {name: analyze(name, d) for name, d in runs.items()}
-    ok = [name for name in runs if not res[name][3]]   # converged runs only
+    if not loaded:
+        print("\nNo LMRoe sweep runs found — nothing to plot.")
+        return
 
-    rr = np.linspace(0, 0.45, 300)
-    bins = np.linspace(0, 0.45, 31); bc = 0.5*(bins[:-1]+bins[1:])
+    fig, axs = plt.subplots(
+        1, len(loaded),
+        figsize=(max(4.6*len(loaded) + 0.9, 7.8), 5.2),
+        squeeze=False,
+        constrained_layout=True,
+    )
+    axs = axs[0]
 
-    # ---- profile figure: scatter + binned mean/std (converged runs only) ----
-    fig, ax = plt.subplots(1, 2, figsize=(14, 5.5))
-    ax[0].plot(rr, uphi_exact(rr), 'k-', lw=2, label='exact', zorder=5)
-    for name in ok:
-        r, uphi, ue, _ = res[name]
-        ax[0].scatter(r.ravel(), uphi.ravel(), s=2, alpha=0.18, color=colors[name], label=name)
-    ax[0].set_xlabel("r"); ax[0].set_ylabel(r"$u_\phi$"); ax[0].set_ylim(-0.2, 1.35)
-    ax[0].legend(); ax[0].set_xlim(0,0.45)
+    pcm = None
+    for k, (ax, (title, d, Mnorm)) in enumerate(zip(axs, loaded)):
+        pcm = ax.pcolormesh(
+            d["xc"], d["yc"], Mnorm,
+            shading="auto",
+            cmap="turbo",
+            vmin=0.0,
+            vmax=1.1,
+        )
+        ax.set_aspect("equal")
+        ax.set_title(title, pad=8)
+        ax.set_xlabel(r"$x$")
+        if k == 0:
+            ax.set_ylabel(r"$y$")
 
-    ax[1].plot(rr, uphi_exact(rr), 'k-', lw=2, label='exact')
-    for name in ok:
-        r, uphi, ue, _ = res[name]
-        rf, uf = r.ravel(), uphi.ravel()
-        idx = np.digitize(rf, bins)
-        mean = np.array([uf[idx==k].mean() if np.any(idx==k) else np.nan for k in range(1,len(bins))])
-        std  = np.array([uf[idx==k].std()  if np.any(idx==k) else np.nan for k in range(1,len(bins))])
-        ax[1].plot(bc, mean, color=colors[name], label=name)
-        ax[1].fill_between(bc, mean-std, mean+std, color=colors[name], alpha=0.15)
-    ax[1].set_xlabel("r"); ax[1].set_ylabel(r"$u_\phi$"); ax[1].set_ylim(-0.2, 1.35)
-    ax[1].legend(); ax[1].set_xlim(0,0.45)
-    fig.tight_layout(); fig.savefig("gresho_profiles.png", dpi=130)
-    print("\nSaved gresho_profiles.png")
+    cbar = fig.colorbar(
+        pcm,
+        ax=axs,
+        orientation="horizontal",
+        fraction=0.05,
+        pad=0.03,
+        shrink=0.75,
+        aspect=15,
+    )
+    cbar.set_label(r"$M/M_{\rm ref}$", fontsize=20)
+    cbar.ax.tick_params(labelsize=20)
 
-    # ---- field figure: |u| for every solver (diverged panels auto-scaled) ---
-    n = len(runs); ncol = min(n, 4)
-    figf, axf = plt.subplots(1, ncol, figsize=(4.2*ncol, 4.2), squeeze=False)
-    for axi, name in zip(axf[0], runs):
-        d = runs[name]; div = res[name][3]
-        vmag = np.sqrt(d["u"]**2 + d["v"]**2)
-        vmax = vmag.max() if div else 1.0
-        pc = axi.pcolormesh(d["xc"], d["yc"], vmag, cmap="viridis", vmin=0, vmax=vmax)
-        axi.set_aspect("equal")
-        axi.set_title(f"|u| — {name}" + ("  (DIVERGED)" if div else ""))
-        figf.colorbar(pc, ax=axi, fraction=0.046)
-    figf.tight_layout(); figf.savefig("gresho_fields.png", dpi=130)
-    print("Saved gresho_fields.png")
+    fig.savefig("gresho_lmroe_sweep.svg", dpi=300, transparent=True)
+
+def main():
+    runs = {}
+    res = {}
+    colors = {}
+
+    solvers = []
+    machs = []
+
+    for solver, mach_lbl, Mref, folder, color in RUNS:
+
+        fpath = os.path.join("OUTPUT", "field_"+folder+".tec")
+        print(fpath)
+
+        if not os.path.exists(fpath):
+            print(f"(skipping {solver} Ma={mach_lbl}: missing)")
+            continue
+
+        try:
+            d = read_field(fpath)
+
+            runs[(solver, mach_lbl)] = (d, Mref)
+            res[(solver, mach_lbl)] = analyze(
+                f"{solver}_{mach_lbl}", d
+            )
+
+            colors[solver] = color
+
+            if solver not in solvers:
+                solvers.append(solver)
+
+            if mach_lbl not in machs:
+                machs.append(mach_lbl)
+
+        except Exception as e:
+            print(f"(skipping {solver} Ma={mach_lbl}: {e})")
+
+    if not solvers or not machs:
+        print("\nNo runs found — nothing to plot.")
+        return
+
+    fig, axs = plt.subplots(
+        len(solvers),
+        len(machs),
+        figsize=(max(4.6*len(machs) + 0.9, 7.8), 4.3*len(solvers) + 0.5),
+        squeeze=False,
+        constrained_layout=True,
+    )
+
+    pcm = None
+
+    for i, solver in enumerate(solvers):
+
+        for j, mach_lbl in enumerate(machs):
+
+            ax = axs[i,j]
+
+            key = (solver, mach_lbl)
+
+            if key not in runs:
+
+                ax.text(
+                    0.5, 0.5,
+                    "MISSING",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes
+                )
+                ax.set_axis_off()
+                continue
+
+            d, Mref = runs[key]
+
+            diverged = res[key][3]
+
+            Mnorm = mach_field(d, Mref)
+
+            pcm = ax.pcolormesh(
+                d["xc"],
+                d["yc"],
+                Mnorm,
+                shading="auto",
+                cmap="turbo",
+                vmin=0.0,
+                vmax=1.1
+            )
+
+            ax.set_aspect("equal")
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+            if i == 0:
+                ax.set_title(rf"$M_{{ref}}={mach_lbl}$", pad=8, fontsize=28)
+
+            if j == 0:
+                ax.set_ylabel(solver, fontsize=28, fontweight="bold", labelpad=8)
+
+            if diverged:
+
+                ax.text(
+                    0.5, 0.95,
+                    "DIVERGED",
+                    color="white",
+                    ha="center",
+                    va="top",
+                    fontsize=11,
+                    fontweight="bold",
+                    transform=ax.transAxes,
+                    bbox=dict(facecolor="red", alpha=0.85, boxstyle="round,pad=0.3")
+                )
+
+    if pcm is not None:
+        cbar = fig.colorbar(
+            pcm,
+            ax=axs,
+            fraction=0.025,
+            pad=0.02,
+            shrink=0.65,
+            aspect=20,
+        )
+        cbar.set_label(r"$M/M_{\rm ref}$", fontsize=20)
+        cbar.ax.tick_params(labelsize=20)
+
+    fig.savefig("gresho_mach_matrix.svg", dpi=100, transparent=True)
+
+    # genuine horizontal slice through the vortex centre (y = YC),
+    # normalised by the half-domain so r* spans [-1, 1].
+    RHALF = 0.5
+    ss = np.linspace(-1.0, 1.0, 600)
+    vexact = np.sign(ss)*uphi_exact(RHALF*np.abs(ss))
+
+    markers = {s: m for s, m in zip(solvers, ["o", "s", "^", "D", "v"])}
+
+    fig, axs = plt.subplots(
+        1,
+        len(machs),
+        figsize=(max(5.6*len(machs), 7.8), 5.2),
+        sharey=True,
+        constrained_layout=True,
+    )
+
+    if len(machs) == 1:
+        axs = [axs]
+
+    for ax, mach_lbl in zip(axs, machs):
+
+        ax.axhline(0.0, color="0.6", lw=0.8)
+
+        ax.plot(
+            ss,
+            vexact,
+            'k-',
+            lw=4,
+            label='Exact'
+        )
+
+        for solver in solvers:
+
+            key = (solver, mach_lbl)
+
+            if key not in runs or res[key][3]:   # missing or diverged
+                continue
+
+            d, _ = runs[key]
+            yc = d["yc"]
+            jrow = np.argmin(np.abs(yc[:, yc.shape[1]//2] - YC))
+
+            x = d["xc"][jrow, :]
+            # on the horizontal centre line the tangential velocity is v,
+            # signed so it flips across r = 0 (genuine vortex slice).
+            vline = d["v"][jrow, :]
+            rstar = (x - XC)/RHALF
+
+            ax.plot(
+                rstar,
+                vline,
+                linestyle="none",
+                marker=markers[solver],
+                markersize=12,
+                markerfacecolor="none",
+                markeredgewidth=3,
+                markevery=4,
+                color=colors[solver],
+                label=solver
+            )
+
+        ax.set_title(rf"$M_{{ref}}={mach_lbl}$", pad=8)
+        ax.set_xlim(-1.0,1.0)
+        ax.set_ylim(-1.25,1.25)
+        ax.set_xlabel(r"$r/R$")
+        ax.xaxis.set_major_locator(mticker.MultipleLocator(0.5))
+        ax.xaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f"))
+        ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.6)
+
+    axs[0].set_ylabel(r"$u_\phi$")
+
+    handles, labels = axs[-1].get_legend_handles_labels()
+    leg = fig.legend(
+        handles, labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.14),
+        ncol=len(labels),
+        frameon=False,
+    )
+
+    fig.savefig("gresho_profiles_by_mach.svg", dpi=300, bbox_inches="tight", bbox_extra_artists=(leg,), transparent=True)
+
+    plot_lmroe_sweep()
 
 if __name__ == "__main__":
     main()

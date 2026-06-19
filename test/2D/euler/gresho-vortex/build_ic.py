@@ -26,7 +26,7 @@ Mach number by changing M only:
 dp is the centrifugal-balance increment (dp/dr = rho u_phi^2 / r), zero in the
 far field, so the relative pressure fluctuation dp/p0 ~ M^2.
 
-The mesh spans [0,0.8] x [0,0.8], so the vortex is centered at (0.4, 0.4).
+The mesh spans [1.0,0.0] x [0.0,1.0], so the vortex is centered at (0.5, 0.5).
 Usage:  python build_ic.py [Mach]      (default Mach = 0.35, the classic case)
 """
 
@@ -38,8 +38,8 @@ from ORION import ORION
 
 # --- parameters --------------------------------------------------------------
 MESH_FILE = 'mesh.tec'
-IC_FILE   = 'INPUT/ic.tec'
-xc0, yc0  = 0.4, 0.4          # vortex center
+IC_FILE   = 'ic.tec'
+xc0, yc0  = 0.5, 0.5          # vortex center
 rho0      = 1.0               # constant density
 gamma     = 1.4              # ratio of specific heats
 mach      = 0.35             # target maximum Mach number (override via CLI arg)
