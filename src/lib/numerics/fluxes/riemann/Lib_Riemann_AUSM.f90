@@ -184,7 +184,7 @@ contains
     gam_L = f_gamma(dl, pl, dltot, f_Rtot(dl))
     gam_R = f_gamma(dr, pr, drtot, f_Rtot(dr))
     gam   = 0.5d0*(gam_L + gam_R)
-    hnorm = 0.5d0*( H(pl,dl) + H(pr,dr) )                    ! mean static enthalpy
+    hnorm = 0.5d0*( H(pl,dl) + H(pr,dr) )
     cs    = sqrt( 2.d0*(gam - 1.d0)/(gam + 1.d0)*hnorm )
     if (unl + unr >= 0.d0) then
       c12 = cs*cs/max(abs(unl), cs)
@@ -222,7 +222,13 @@ contains
     mdot  = M12*c12*merge(dltot, drtot, M12 >= 0.d0)
 
     ! --- pressure flux with f_o scaling (Eq. 19-20) ---
-    fo = min(1.d0, max(f, obj_riemann%Minf*obj_riemann%Minf))
+    ! Paper uses fo = max(f, M_inf^2) with M_inf the *freestream* Mach. Here we use
+    ! the shared low-Mach cutoff Mach Mco (riemann-options-Mco) and floor fo linearly
+    ! in Mco so the same input value is consistent with LMRoe/HLLC+Chen, whose
+    ! floors are linear in Mach. The AUSM+M acoustic dissipation coefficient is
+    ! D ~ 0.67*fo, so fo_min = Mco gives D ~ 0.67*Mco, matching the others to
+    ! within a factor < 2 (well inside the stability/accuracy window).
+    fo = min(1.d0, max(f, obj_riemann%Mco))
     ps = 0.5d0*(pl + pr) + 0.5d0*(psiLp - psiRm)*(pl - pr) &
        + fo*(psiLp + psiRm - 1.d0)*0.5d0*(pl + pr)
 

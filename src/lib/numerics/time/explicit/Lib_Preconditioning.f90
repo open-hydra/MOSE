@@ -141,19 +141,18 @@ contains
     real(R8) :: vel_mag
     real(R8) :: mu_turb_loc, mu_eff_loc, k_eff_loc, dx_min, Ur_visc
     ! Scalar dissipation rate (AMC model)
-    real(R8) :: eps_over_k, nu_tilde, nu_lam, chi_sa, fv1_val, S_sq, S_strain, omega_loc
+    real(R8) :: nu_tilde, nu_lam, chi_sa, fv1_val, S_sq, S_strain, omega_loc
     real(R8) :: Gvel(3,3), rho, rhoi(nsc), R, sound, mu, lambda, T, cp
     real(R8), parameter :: C_d = 2.0_R8, beta_star = 0.09_R8, C_mu = 0.09_R8, cv1 = 7.1_R8
     integer :: ii, jj
 
     process_all = .false.
 
-    !$omp do schedule(dynamic, 1) private(b)
     do b = 1, domain % nb
       if (.not. process_all .and. .not. is_local_block(b)) cycle
       !$omp do collapse(3) private(i, j, k, vel_mag, sound, rho, rhoi, R, mu, lambda, T, cp, &
-      !$omp   mu_turb_loc, mu_eff_loc, k_eff_loc, dx_min, rho_loc, Ur_visc, &
-      !$omp   eps_over_k, nu_tilde, nu_lam, chi_sa, fv1_val, S_sq, S_strain, omega_loc, Gvel, ii, jj)
+      !$omp   mu_turb_loc, mu_eff_loc, k_eff_loc, dx_min, Ur_visc, &
+      !$omp   nu_tilde, nu_lam, chi_sa, fv1_val, S_sq, S_strain, omega_loc, Gvel, ii, jj)
       do k = 1, domain%blk(b)%dim(3)
       do j = 1, domain%blk(b)%dim(2)
       do i = 1, domain%blk(b)%dim(1)
@@ -169,13 +168,13 @@ contains
         Ur_visc = 0.0_R8
         if (model>0) then
           dx_min  = minval(domain%blk(b)%dl(i,j,k)%c(1:ndir))
-
+          
+          cp = f_cp(domain%blk(b)%P(1:nsc,i,j,k),T,rho)
           call co_k_mi_lam_Wilke(rhoi,rho,T,mu,lambda)
 
           mu_eff_loc = mu
           k_eff_loc  = lambda
           if (model>1) then
-            cp = f_cp(domain%blk(b)%P(1:nsc,i,j,k),T,rho)
             call Eddy_Viscosity(mut=mu_turb_loc, &
                                 rans_variables=domain%blk(b)%P(nt:nt+nrans-1,i,j,k), &
                                 mul=mu, rho=rho, &
@@ -185,7 +184,6 @@ contains
             k_eff_loc  = k_eff_loc  + mu_turb_loc * cp / obj_rans%Prt
 
             !% Scalar dissipation rate: chi = C_d * (eps/k) * Zv  (AMC model)
-            eps_over_k = 0.0_R8
             if (nrans == 1) then
               ! SA: Bradshaw relations for eps/k
               nu_tilde = domain%blk(b)%P(nt, i,j,k) / rho
@@ -198,12 +196,9 @@ contains
                 S_sq = S_sq + (Gvel(ii,jj) + Gvel(jj,ii))**2
               end do; end do
               S_strain = sqrt(0.5_R8 * S_sq)
-              eps_over_k = fv1_val**(5.0_R8/6.0_R8) * sqrt(C_mu) * nu_tilde &
-                         * S_strain / (nu_tilde + nu_lam)
             elseif (nrans >= 2) then
               ! k-omega family: eps/k = beta_star * omega
               omega_loc = domain%blk(b)%P(nt+nrans-1, i,j,k) / rho
-              eps_over_k = beta_star * omega_loc
             end if
           endif
 
@@ -225,7 +220,6 @@ contains
                obj_prec%n_smooth_Ur)
 
     enddo
-    !$omp end do
 
   end subroutine Update_Derived_Variables
 
