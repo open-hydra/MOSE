@@ -458,7 +458,9 @@ contains
       write(*,'(A,T35,A)') '   Reconstruction', trim(obj_space_scheme%description)
       if (len_trim(obj_space_scheme%flux_limiter)>0) &
         write(*,'(A,T35,A)') '   Flux limiter',trim(obj_space_scheme%flux_limiter)
-      write(*,*)
+      if (obj_shock_detector%id/=0) &
+        write(*,'(A,T35,A)') '   Shock sensor',trim(obj_shock_detector%description)
+      write(*,*)  
       write(*,'(A,T35,A)') ' Time'
       write(*,'(A,T35,A)') '   Scheme', trim(obj_time_scheme%description)
       write(*,'(A,T35,A)') '   Integration variables', trim(obj_time_scheme%integration_variables)

@@ -7,7 +7,7 @@ module MOSE_Lib_Convective
 
 contains
 
-  subroutine Convective_Flux ( dl, normal, area, Prim, Res, beta, SD_limiter, Ur_0, Ur_1 )
+  subroutine Convective_Flux ( dl, normal, area, Prim, Res, beta, Ur_0, Ur_1 )
     use MOSE_Global_m
     use MOSE_Lib_Reconstruction, only: Reconstruction
     use MOSE_Mod_Riemann
@@ -18,13 +18,11 @@ contains
     real(R8), intent(in), dimension(nprim,-1:2) :: Prim
     real(R8), intent(inout), dimension(nprim,0:1) :: Res
     real(R8), intent(in) :: beta
-    logical, intent(in)  :: SD_limiter
     real(R8), intent(in) :: Ur_0, Ur_1
     ! Local
     real(R8) :: l0, l1, l2, lm, lp
     real(R8), dimension(nprim) :: Prim1, Prim4
     real(R8) :: rotot1, Rtot1, rotot4, Rtot4, a1, a4
-    real(R8) :: beta_
     real(R8) :: F_r, F_u, F_v, F_w, F_E, su, sp, sm, Flux(nprim)
     integer  :: error1, error4
 
@@ -35,12 +33,7 @@ contains
     lp = 0.5d0 * dl(1)
     
     ! Reconstruction phase. Stencil around interface /i (cells /i and /i+1): (i-1),(i),(i+1),(i+2)
-    if (SD_limiter) then
-      beta_ = beta
-    else
-      beta_ = 1d0
-    endif
-    call Reconstruction ( Prim(:,-1), Prim(:,0), Prim(:,1), Prim(:,2), l0, l1, l2, lm, lp, beta_, Prim1, Prim4 )
+    call Reconstruction ( Prim(:,-1), Prim(:,0), Prim(:,1), Prim(:,2), l0, l1, l2, lm, lp, beta, Prim1, Prim4 )
 
     ! Check for non-physical states at the interface and correct them if necessary
     call check_gas_state ( Prim1(1:nsc), Prim1(np), error1 )

@@ -42,10 +42,6 @@ contains
 
     nullify(Riemann)
 
-    ! Reset sensor flags; SD-requiring solvers re-enable them below.
-    obj_riemann%SD      = .false.
-    obj_riemann%SD_chen = .false.
-
     select case (obj_riemann%description)
 
       !! AUSM-type solvers
@@ -54,8 +50,6 @@ contains
         obj_riemann%description = 'AUSM+'
       case ('AUSM+M')
         Riemann => riemann_AUSMp_M
-        obj_riemann%SD      = .true.    ! enables the global shock detector
-        obj_riemann%SD_chen = .true.    ! use Chen pressure-ratio sensor g
         obj_riemann%description = 'AUSM+M (Chen et al. 2020)'
 
       !! Godunov solvers
@@ -78,19 +72,15 @@ contains
 
       case ('HLLC+Chen')
         Riemann => riemann_HLLCp_Chen
-        obj_riemann%SD      = .true.    ! enables the global shock detector
-        obj_riemann%SD_chen = .true.    ! use Chen pressure-ratio sensor g
         obj_riemann%description = 'HLLC+ (Chen et al. 2020)'
 
-      case ('HLLC+')
-        obj_riemann%SD = .true.
-        Riemann => riemann_HLLCSD
-        obj_riemann%description = 'Tramel HLLC+'
+      case ('HLLC+Tramel')
+        Riemann => riemann_HLLCp_Tramel
+        obj_riemann%description = 'HLLC+ (Tramel et al.)'
 
       case('HLLE++')
-        obj_riemann%SD = .true.
         Riemann => riemann_HLLEpp
-        obj_riemann%description = 'Tramel HLLE++'
+        obj_riemann%description = 'HLLE++ (Tramel et al.)'
 
       case ('HLLC Rotated')
         Riemann => riemann_HLLCHLLE
@@ -113,6 +103,10 @@ contains
       case ('LMRoe')
         Riemann => riemann_LMRoe
         obj_riemann%description = 'Low-Mach Roe'
+
+      case ('MiczekRoe','Miczek')
+        Riemann => riemann_MiczekRoe
+        obj_riemann%description = 'Miczek preconditioned Roe (Miczek et al. 2015)'
 
       !! Default
       case default

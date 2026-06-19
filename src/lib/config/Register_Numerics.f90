@@ -72,17 +72,21 @@ contains
     obj_space_scheme%description     = 'none'
     obj_space_scheme%warning_message = 'none'
     obj_space_scheme%error_message   = 'none'
-    call reg%add( trim(section), 'space-reconstruction', obj_space_scheme%space_reconstruction, '', 'Space reconstruction method', 'MUSCL-SD, MUSCL, first-order', .true. )
+    call reg%add( trim(section), 'space-reconstruction', obj_space_scheme%space_reconstruction, '', 'Space reconstruction method', 'MUSCL, first-order', .true. )
     call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, '', 'Flux limiter for space reconstruction', 'vanalbada, minmod, superbee, vanleer, mc', .false. )
 
+    ! Shock Detector ---------------------------------------
+    obj_shock_detector%warning_message = 'none'
+    obj_shock_detector%error_message   = 'none'
+    call reg%add( trim(section), 'shock-detector', obj_shock_detector%description, '', 'Shock detector method', 'Tramel, Chen', .false. )
 
     ! Riemann solver ---------------------------------------
     obj_riemann%description     = 'none'
     obj_riemann%warning_message = 'none'
     obj_riemann%error_message   = 'none'
     call reg%add( trim(section), 'riemann-solver', obj_riemann%description, 'HLLC', &
-          'Riemann solver', 'HLLC, HLLC+, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, AUSM+, AUSM+M, LLF, Rusanov, exact', .false. )
-    call reg%add( trim(section), 'riemann-options-Minf', obj_riemann%Minf, '0.0', 'Mach-infinity floor for AUSM+M scaling', '>= 0', .false. )
+          'Riemann solver', 'HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact', .false. )
+    call reg%add( trim(section), 'riemann-options-Mco', obj_riemann%Mco, '0.0', 'Low-Mach acoustic-dissipation cutoff Mach (floor)', '>= 0', .false. )
 
 
     ! Multigrid levels --------------------------------------

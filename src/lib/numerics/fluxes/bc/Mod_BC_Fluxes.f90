@@ -9,7 +9,7 @@ contains
 
   subroutine BC_Fluxes ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rans, obj_space_scheme, obj_riemann, obj_soot, obj_rot
+    use MOSE_Config_Types_m, only: obj_rans, obj_soot, obj_rot
     use MOSE_Global_m, only: model
     use MOSE_Mod_MPI, only: is_local_block
     use MOSE_Lib_RotatingFrame
@@ -35,12 +35,10 @@ contains
     integer  :: Bm, Im, Jm, Km, Fm, Bs, Fs
     real(R8) :: T0, g, pstat, rhot(nsc), visct(1:nrans)
     real(R8) :: r_fc(3)                              ! Face centre [m] (stationary-wall BCs)
-    logical  :: RSM, SD_limiter, SD_riemann, soot_enabled
+    logical  :: RSM, soot_enabled
     real(R8) :: Sc, Sct, Prt
 
     RSM = obj_rans%RSM
-    SD_limiter = obj_space_scheme%SD
-    SD_riemann = obj_riemann%SD
     Sc  = obj_rans%Sc
     Sct = obj_rans%Sct
     Prt = obj_rans%Prt
@@ -70,7 +68,7 @@ contains
               domain % blk(Bm) % R(:,Im,Jm,Km) = domain % blk(Bm) % R(:,Im,Jm,Km) + domain % bc(i) % ext_flux
 
             case (101,102,201) ! connection & chimera (101=block connect, 102=chimera)
-              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm), SD_limiter, SD_riemann )
+              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
               if (model>0) &
                 call BC_Connection_Visc ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Mg(1), domain % bc(i) % Pg, &
                                           Sc, Sct, Prt, soot_enabled )
@@ -185,7 +183,7 @@ contains
                                       domain % bc(i) % mdot )
 
             case (410) ! Mapped BC: Riemann flux with Q2D-interpolated ghost cell
-              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm), SD_limiter, SD_riemann )
+              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
 
             case(420) ! choked nozzle
               call BC_Inflow_Nozzle( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Mach, &

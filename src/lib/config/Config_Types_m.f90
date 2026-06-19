@@ -151,7 +151,7 @@ module MOSE_Config_Types_m
     character(len=llen) :: space_reconstruction ! Space reconstruction method
     character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction
     ! Useful variables
-    logical :: SD
+    ! ...
   end type space_scheme_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -164,10 +164,9 @@ module MOSE_Config_Types_m
     character(len=llen) :: error_message
     character(len=llen) :: description
     ! USER-DEFINED INPUTS
-    real(R8) :: Minf
+    real(R8) :: Mco
     ! Useful variables
-    logical  :: SD
-    logical  :: SD_chen   ! use Chen pressure-ratio sensor (g) instead of Tramel beta
+    ! ...
   end type riemann_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -182,7 +181,7 @@ module MOSE_Config_Types_m
     ! USER-DEFINED INPUTS
     ! ...
     ! Useful variables
-    logical :: SD
+    integer :: id
   end type shock_detector_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------

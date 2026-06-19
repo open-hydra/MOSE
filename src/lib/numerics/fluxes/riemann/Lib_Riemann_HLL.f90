@@ -15,7 +15,7 @@ module MOSE_Lib_Riemann_HLL
   public :: riemann_HLLCp_Chen
   public :: riemann_HLLCprec
   public :: riemann_HLLEpp
-  public :: riemann_HLLCSD
+  public :: riemann_HLLCp_Tramel
   public :: riemann_HLLCHLLE
 
 contains
@@ -158,6 +158,7 @@ contains
   !> @ingroup Lib_RiemannPrivateProcedure
   subroutine riemann_HLLCp_Chen(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,switch,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
+    use MOSE_Config_Types_m, only: obj_riemann
     implicit none
     real(R8), intent(in) :: dl(nsc), dr(nsc)
     real(R8), intent(in) :: ul, vl, wl, ur, vr, wr
@@ -198,14 +199,14 @@ contains
     ! --- Chen all-speed corrections (active only in the subsonic star region) ---
     phiL = dltot*(S1 - unl)
     phiR = drtot*(S4 - unr)
-    pref = phiL*phiR / (phiR - phiL)                 ! ~ -1/2 rho a (Eq. 3.20)
-    Mloc = min(1.d0, max( sqrt(ul*ul+vl*vl+wl*wl)/al, &
-                          sqrt(ur*ur+vr*vr+wr*wr)/ar ))      ! Eq. 3.14
-    fM   = Mloc*sqrt(4.d0 + (1.d0 - Mloc*Mloc)**2)/(1.d0 + Mloc*Mloc)   ! Eq. 3.13
-    g    = 1.d0 - switch**Mloc                        ! g = 1 - h^M (Eq. 3.23), switch = h
-    fstar = fM + g*(1.d0 - fM)                        ! f* -> 1 near shock, f(M) in smooth flow
-    dU    = unr - unl                                 ! normal velocity jump
-    dut_x = (ur-ul) - dU*nx                           ! transverse velocity jump (Eq. 3.25)
+    pref = phiL*phiR / (phiR - phiL)                                                ! ~ -1/2 rho a (Eq. 3.20)
+    Mloc = min(1.d0, max( sqrt(ul*ul+vl*vl+wl*wl)/al, sqrt(ur*ur+vr*vr+wr*wr)/ar )) ! Eq. 3.14
+    Mloc = max(obj_riemann%Mco, Mloc)                                              ! floor = shared low-Mach cutoff Mach; D ~ fM/2 ~ Mloc
+    fM   = Mloc*sqrt(4.d0 + (1.d0 - Mloc*Mloc)**2)/(1.d0 + Mloc*Mloc)               ! Eq. 3.13
+    g    = 1.d0 - switch**Mloc                                                      ! g = 1 - h^M (Eq. 3.23), switch = h
+    fstar = fM + g*(1.d0 - fM)                                                      ! f* -> 1 near shock, f(M) in smooth flow
+    dU    = unr - unl                                                               ! normal velocity jump
+    dut_x = (ur-ul) - dU*nx                                                         ! transverse velocity jump (Eq. 3.25)
     dut_y = (vr-vl) - dU*ny
     dut_z = (wr-wl) - dU*nz
 
@@ -288,6 +289,7 @@ contains
     endif
 
   end subroutine riemann_HLLCp_Chen
+
 
   subroutine riemann_HLLE(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,dummy,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
@@ -416,6 +418,7 @@ contains
     v_Roe = (sqrtRhoL*vL + sqrtRhoR*vR) / denom
     w_Roe = (sqrtRhoL*wL + sqrtRhoR*wR) / denom
     a_Roe = (sqrtRhoL*aL + sqrtRhoR*aR) / denom
+    un_Roe = u_Roe*nx + v_Roe*ny + w_Roe*nz
 
     ! Reference velocities from reconstructed cell values (includes viscous floor)
     VrL   = min(UrL, aL)
@@ -615,7 +618,7 @@ contains
 
   ! HLLC - HLLE 
   ! Hybrid solver working with a mulidimensional shock detector
-  subroutine riemann_HLLCSD(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+  subroutine riemann_HLLCp_Tramel(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
     use FLINT_Lib_Thermodynamic
     implicit none
@@ -647,7 +650,7 @@ contains
       F_e = beta_*FeC + (1d0-beta_)*FeE
     endif
 
-  end subroutine riemann_HLLCSD
+  end subroutine riemann_HLLCp_Tramel
 
 
   pure function hartenHyman(v,e) result(l)

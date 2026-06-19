@@ -37,19 +37,17 @@ contains
     !> Compute internal face fluxes only (no residual zeroing).
     !> Assumes R(:) and beta(:) have been initialized via Zero_Residuals.
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_shock_detector, obj_space_scheme, obj_riemann, obj_rans, obj_soot
+    use MOSE_Config_Types_m, only: obj_shock_detector, obj_rans, obj_soot
     use MOSE_Mod_MPI, only: is_local_block
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer  :: b
-    logical  :: SD, SD_limiter, SD_riemann, chen_sensor, soot_enabled
+    integer  :: SD_id
+    logical  :: soot_enabled
     real(R8) :: Sc, Sct, Prt
 
-    SD           = obj_shock_detector%SD
-    SD_limiter   = obj_space_scheme%SD
-    SD_riemann   = obj_riemann%SD
-    chen_sensor  = obj_riemann%SD_chen
+    SD_id = obj_shock_detector%id
     soot_enabled = obj_soot%enabled
     Sc  = obj_rans%Sc
     Sct = obj_rans%Sct
@@ -57,15 +55,13 @@ contains
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
-      call Fluxes_blk ( domain % blk(b), &
-                        SD, SD_limiter, SD_riemann, chen_sensor, &
-                        Sc, Sct, Prt, soot_enabled )
+      call Fluxes_blk ( domain % blk(b), SD_id, Sc, Sct, Prt, soot_enabled )
     enddo
 
   end subroutine Internal_Fluxes
 
 
-  subroutine Fluxes_blk ( blk, SD, SD_limiter, SD_riemann, chen_sensor, Sc, Sct, Prt, soot_enabled )
+  subroutine Fluxes_blk ( blk, SD_id, Sc, Sct, Prt, soot_enabled )
     use MOSE_Advanced_Types_m, only: MOSE_block_type
     use MOSE_Global_m, only: model, gc, nprim, np
     use MOSE_Lib_Shock_Detector
@@ -74,7 +70,8 @@ contains
     implicit none
     ! Inputs
     type(MOSE_block_type), intent(inout) :: blk
-    logical, intent(in)  :: SD, SD_limiter, SD_riemann, chen_sensor, soot_enabled
+    logical, intent(in)  :: soot_enabled
+    integer, intent(in)  :: SD_id
     real(R8), intent(in) :: Sc, Sct, Prt
     ! Local
     integer :: i, j, k, n(3)
@@ -83,19 +80,18 @@ contains
 
     ! -----------------------------------------------------------------
     ! Shock-detector
-    if (SD) then
-      if (chen_sensor) then
-        !$omp do collapse (3)
-        do k = 1, n(3); do j = 1, n(2); do i = 1, n(1)
-              blk % beta(i,j,k) = SD_Chen ( blk % P(np,i-1:i+1,j-1:j+1,k-1:k+1) )
-        enddo; enddo; enddo
-      else
-        !$omp do collapse (3)
-        do k = 1, n(3); do j = 1, n(2); do i = 1, n(1)
-              blk % beta(i,j,k) = SD_Tramel ( blk % P(np,i-1:i+1,j-1:j+1,k-1:k+1) )
-        enddo; enddo; enddo
-      endif
-    endif
+    select case(SD_id)
+    case(1)
+      !$omp do collapse (3)
+      do k = 1, n(3); do j = 1, n(2); do i = 1, n(1)
+            blk % beta(i,j,k) = SD_Tramel ( blk % P(np,i-1:i+1,j-1:j+1,k-1:k+1) )
+      enddo; enddo; enddo
+    case(2)
+      !$omp do collapse (3)
+      do k = 1, n(3); do j = 1, n(2); do i = 1, n(1)
+            blk % beta(i,j,k) = SD_Chen ( blk % P(np,i-1:i+1,j-1:j+1,k-1:k+1) )
+      enddo; enddo; enddo
+    end select
 
     ! -----------------------------------------------------------------
     ! Convective and diffusive fluxes computation
@@ -109,7 +105,6 @@ contains
                              blk % P(:,i-1:i+2,j,k),       &
                              blk % R(:,i:i+1,j,k),         &
                              blk % beta(i,j,k),            &
-                             SD_limiter,                   &
                              blk % Ur(i,j,k),              &
                              blk % Ur(i+1,j,k) )
     enddo; enddo; enddo
@@ -152,7 +147,6 @@ contains
                              blk % P(:,i,j-1:j+2,k),       &
                              blk % R(:,i,j:j+1,k),         &
                              blk % beta(i,j,k),            &
-                             SD_limiter,                   &
                              blk % Ur(i,j,k),              &
                              blk % Ur(i,j+1,k) )
     enddo; enddo; enddo
@@ -195,7 +189,6 @@ contains
                              blk % P(:,i,j,k-1:k+2),       &
                              blk % R(:,i,j,k:k+1),         &
                              blk % beta(i,j,k),            &
-                             SD_limiter,                   &
                              blk % Ur(i,j,k),              &
                              blk % Ur(i,j,k+1) )
     enddo; enddo; enddo

@@ -39,12 +39,21 @@ contains
 
     !! Space
     call Setup_Space_Scheme()
+
+    !! Riemann
     call Assign_Riemann_Solver()
-    if ( obj_riemann%SD .or. obj_space_scheme%SD) then
-      obj_shock_detector%SD = .true.
-    else
-      obj_shock_detector%SD = .false.
-    end if
+
+    !! Shock detector
+    obj_shock_detector%id = 0
+    if (obj_shock_detector%description=='tramel') then
+      obj_shock_detector%id = 1; obj_shock_detector%description='Tramel'
+    elseif (obj_shock_detector%description=='chen') then
+      obj_shock_detector%id = 2; obj_shock_detector%description='Chen'
+    elseif (obj_shock_detector%description=='' .and. index(obj_riemann%description,'Tramel')>0) then
+      obj_shock_detector%id = 1; obj_shock_detector%description='Tramel'
+    elseif (obj_shock_detector%description=='' .and. index(obj_riemann%description,'Chen')>0) then
+      obj_shock_detector%id = 2; obj_shock_detector%description='Chen'
+    endif
 
     !! Time
     ! Time scheme
@@ -105,9 +114,11 @@ contains
     ! Space scheme
     ! ... written in Mod_Space ...
     ! Riemann solver
-    if (index(obj_riemann%description, 'AUSM+M') > 0) then
-      if (obj_riemann%Minf == 0.0d0) then
-        obj_riemann%error_message = '[ERROR] AUSM+M solver selected. Minf must be defined in input.'
+    if (index(obj_riemann%description, 'AUSM+M')      > 0 .or. &
+        index(obj_riemann%description, 'HLLC+ (Chen') > 0 .or. &
+        index(obj_riemann%description, 'Low-Mach Roe') > 0) then
+      if (obj_riemann%Mco == 0.0d0) then
+        obj_riemann%error_message = '[ERROR] Low-Mach Riemann solver selected. Mco (riemann-options-Mco) must be defined in input.'
       end if
     endif
     if (trim(obj_riemann%description) == 'HLLC-PC') then

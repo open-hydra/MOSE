@@ -10,13 +10,12 @@ module MOSE_Lib_BC_Fluxes_Connection
 
 contains
 
-  subroutine BC_Connection_Eul ( Im, Jm, Km, Fm, Blk, SD_limiter, SD_riemann )
+  subroutine BC_Connection_Eul ( Im, Jm, Km, Fm, Blk )
     use MOSE_Lib_Reconstruction, only : reconstruction
     use MOSE_Mod_Riemann
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
-    logical, intent(in) :: SD_limiter, SD_riemann
     type(MOSE_block_type), intent(inout) :: Blk
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Dirm, Face_i, Face_j, Face_k
@@ -55,11 +54,7 @@ contains
     Prim3 = blk % P(:,I3,J3,K3)
     Prim4 = blk % P(:,I4,J4,K4)
 
-    if (SD_limiter) then
-      beta_ = blk % beta(Im,Jm,Km)
-    else
-      beta_ = 1d0
-    end if
+    beta_ = blk % beta(Im,Jm,Km)
     
     Normal = blk % dir(Dirm) % f(Face_i,Face_j,Face_k) % n
     Area = blk % dir(Dirm) % f(Face_i,Face_j,Face_k) % a
@@ -81,12 +76,6 @@ contains
     ! Auxiliary variables for state (R)
     call co_rotot_Rtot ( Prim_R(1:nsc), rho_R, Rtot_R)
     a_R = f_ss ( Prim_R(1:nsc), Prim_R(np), rho_R, Rtot_R )
-
-    if (SD_riemann) then
-      beta_ = blk % beta(Im,Jm,Km)
-    else
-      beta_ = 1d0
-    end if
 
     call Riemann ( Prim_L(1:nsc), Prim_L(nu), Prim_L(nv), Prim_L(nw), Prim_L(np), a_L, rho_L, &
                    Prim_R(1:nsc), Prim_R(nu), Prim_R(nv), Prim_R(nw), Prim_R(np), a_R, rho_R, &
