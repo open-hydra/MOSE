@@ -59,10 +59,11 @@
 | preconditioning-Ur-min | 0.0 | >= 0 |  no | Floor on Ur [m/s] |
 | preconditioning-Ur-factor | 1.0 | > 0 |  no | Weiss-Smith multiplicative factor |
 | preconditioning-Ur-smooth | 0 | >= 0 |  no | Ur max-smoothing passes |
-| space-reconstruction |  | MUSCL-SD, MUSCL, first-order | yes | Space reconstruction method |
+| space-reconstruction |  | MUSCL, first-order | yes | Space reconstruction method |
 | flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | Flux limiter for space reconstruction |
-| riemann-solver | HLLC | HLLC, HLLC+, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact |  no | Riemann solver |
-| riemann-options-Mco | 0.0 | >= 0 |  no | Low-Mach acoustic-dissipation cutoff Mach (floor) shared by LMRoe/HLLC+Chen/AUSM+M; set ~ a few x peak Mach |
+| shock-detector |  | Tramel, Chen |  no | Shock detector method |
+| riemann-solver | HLLC | HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact |  no | Riemann solver |
+| riemann-options-Mco | 0.0 | >= 0 |  no | Low-Mach acoustic-dissipation cutoff Mach (floor) |
 
 ## MOSE-Multigrid
 
