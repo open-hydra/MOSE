@@ -119,7 +119,7 @@ args = parser.parse_args()
 #   var[0]=rho  var[1]=u  var[2]=v  var[3]=w
 #   var[4]=p    var[5]=T  var[6]=g  var[7]=R
 # -------------------------------------------------------------
-solvers = ['HLLC', 'HLLC+', 'HLLE', 'SLAU']
+solvers = ['HLLC', 'HLLC+Tramel', 'HLLE', 'SLAU']
 files   = [f'OUTPUT/field-{s}.tec' for s in solvers]
 
 # -------------------------------------------------------------

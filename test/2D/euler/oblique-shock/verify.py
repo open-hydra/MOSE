@@ -153,7 +153,7 @@ args = parser.parse_args()
 #     axis 0 = i (streamwise along ramp, i=0 at wedge tip)
 #     axis 1 = j (wall-normal, j=0 at wall, j→ far-field)
 # -------------------------------------------------------------
-solvers = ['HLLC', 'HLLC+', 'HLLE', 'SLAU']
+solvers = ['HLLC', 'HLLC+Tramel', 'HLLE', 'SLAU']
 files   = [f'OUTPUT/field-{s}.tec' for s in solvers]
 
 # Pre-shock probe: block 0, interior cells away from interface
@@ -176,7 +176,7 @@ tol_M = 1.5
 # -------------------------------------------------------------
 fields_data = {}   # store read data per solver for optional plotting
 
-hdr = (f"{'Solver':<8} {'p2/p1':>10} {'err%':>7}  "
+hdr = (f"{'Solver':<12} {'p2/p1':>10} {'err%':>7}  "
        f"{'T2/T1':>10} {'err%':>7}  "
        f"{'r2/r1':>10} {'err%':>7}  "
        f"{'M2':>8} {'err%':>7}")
@@ -227,7 +227,7 @@ for solver, fpath in zip(solvers, files):
     e_r = (r2r1 - r2r1_ref) / r2r1_ref * 100.0
     e_m = (m2   - mach2_ref) / mach2_ref * 100.0
 
-    print(f"{solver:<8} {p2p1:>10.6f} {e_p:>7.2f}%  "
+    print(f"{solver:<12} {p2p1:>10.6f} {e_p:>7.2f}%  "
           f"{t2t1:>10.6f} {e_T:>7.2f}%  "
           f"{r2r1:>10.6f} {e_r:>7.2f}%  "
           f"{m2:>8.4f} {e_m:>7.2f}%")
