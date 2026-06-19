@@ -55,7 +55,7 @@ module MOSE_Advanced_Types_m
   type, extends(bc_type) :: MOSE_bc_type
     real(R8)                            :: qw, Tw, Taw, hg, qrad             ! BC viscous wall specifications   
     real(R8)                            :: T0, p0, alpha, beta, mach, pamb   ! BC 4 (inflow/outflow) specifications
-    real(R8)                            :: mdot                              ! BC 4 (inflow/outflow) specifications
+    real(R8)                            :: mdot, un                          ! BC 4 (inflow/outflow) specifications
     real(R8)                            :: rel_fac                           ! BC 4 (inflow/outflow) specifications
     real(R8), allocatable               :: ci(:)                             ! BC 4 (inflow/outflow) specifications
     real(R8)                            :: SF                                ! BC ? specifications
@@ -67,7 +67,6 @@ module MOSE_Advanced_Types_m
     real(R8)                            :: SF_geo   = 1.0_R8                 ! SRM geometric scale factor    (SRM BC 501)
     real(R8)                            :: psub     = 0.0_R8                 ! Nozzle subsonic  pressure     (nozzle BC 420)
     real(R8)                            :: psup     = 0.0_R8                 ! Nozzle supersonic pressure    (nozzle BC 420)
-    real(R8)                            :: rt_nozzle= 0.0_R8                 ! Nozzle mass flux parameter    (nozzle BC 420)
     type(time_series_type)              :: p0time
     type(time_series_type), allocatable :: q2d_map(:)                        ! BC 667 (Q2D mapped) time-varying primitive data (one per primitive)
     character(len=llen)                 :: q2d_file = ' '                    ! BC 667 (Q2D mapped) Tecplot filename from bc.txt

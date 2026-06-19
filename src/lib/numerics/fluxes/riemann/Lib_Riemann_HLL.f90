@@ -766,22 +766,6 @@ contains
   end subroutine roe_averages
 
 
-  pure subroutine preconditioned_speed(un, a, ur_floor, un_pc, a_pc)
-    implicit none
-    real(R8), intent(in) :: un, a, ur_floor
-    real(R8), intent(out) :: un_pc, a_pc
-    real(R8) :: a_safe, ur, alpha
-
-    a_safe = max(a, 1.0d-14)
-    ur = max(ur_floor*a_safe, min(abs(un), a_safe))
-    alpha = 0.5d0*(1.d0 - (ur*ur)/(a_safe*a_safe))
-
-    un_pc = un*(1.d0 - alpha)
-    a_pc = sqrt(alpha*alpha*un*un + ur*ur)
-
-  end subroutine preconditioned_speed
-
-
   ! Subroutine for computing the conservative fluxes from primitive variables.
   pure subroutine fluxes(p,r,u,v,w,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc

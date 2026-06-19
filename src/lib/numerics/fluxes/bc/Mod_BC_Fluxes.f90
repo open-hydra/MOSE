@@ -182,15 +182,23 @@ contains
                                       domain % bc(i) % ci(1:nrans), &
                                       domain % bc(i) % mdot )
 
+            case (408) ! inlet: static temperature T + prescribed velocity (u) normal to the boundary
+              call BC_Inlet_un_T ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
+                                      domain % bc(i) % T0, domain % bc(i) % un, &
+                                      domain % bc(i) % rel_fac, &
+                                      domain % bc(i) % alpha, domain % bc(i) % beta, &
+                                      domain % bc(i) % ci(nrans+1:nrans+nsc), &
+                                      domain % bc(i) % ci(1:nrans), error )
+              if (error == 1) call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+
             case (410) ! Mapped BC: Riemann flux with Q2D-interpolated ghost cell
               call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
 
             case(420) ! choked nozzle
-              call BC_Inflow_Nozzle( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Mach, &
+              call BC_Inflow_Nozzle( Im, Jm, Km, Fm, domain % blk(Bm), &
                                      domain % bc(i) % T0, domain % bc(i) % p0, domain % bc(i) % rel_fac, &
-                                     domain % bc(i) % alpha, domain % bc(i) % beta, domain % bc(i) % pAmb, &
-                                     domain % bc(i) % ci(nrans+1:nrans+nsc), domain % bc(i) % ci(1:nrans), &
-                                     domain % bc(i) % mdot, error )
+                                     domain % bc(i) % psub, domain % bc(i) % psup, domain % bc(i) % mdot, &
+                                     domain % bc(i) % ci(nrans+1:nrans+nsc), domain % bc(i) % ci(1:nrans), error )
               if (error == 1) then
                 call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
               endif

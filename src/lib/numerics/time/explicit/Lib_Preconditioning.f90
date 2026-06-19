@@ -168,7 +168,6 @@ contains
         Ur_visc = 0.0_R8
         if (model>0) then
           dx_min  = minval(domain%blk(b)%dl(i,j,k)%c(1:ndir))
-          
           cp = f_cp(domain%blk(b)%P(1:nsc,i,j,k),T,rho)
           call co_k_mi_lam_Wilke(rhoi,rho,T,mu,lambda)
 

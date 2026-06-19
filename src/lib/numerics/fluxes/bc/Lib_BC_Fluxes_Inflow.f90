@@ -8,7 +8,7 @@ module MOSE_Lib_BC_Fluxes_Inflow
   implicit none
   private
 
-  public :: BC_Inlet_StagnCond, BC_Inlet_MassFlux_T0, BC_Inlet_MassFlux_T, BC_Inlet_Supersonic_Static
+  public :: BC_Inlet_StagnCond, BC_Inlet_MassFlux_T0, BC_Inlet_MassFlux_T, BC_Inlet_Supersonic_Static, BC_Inlet_un_T
   public :: Stagn_Inflow, setup_inflow_geometry
 
 contains
@@ -173,7 +173,7 @@ contains
     integer,  intent(inout) :: error
     ! Local
     integer  :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k, s
-    real(R8) :: Normal(3), Area, t_Vec(3), BC_Sign, fmass
+    real(R8) :: Normal(3), Area, t_Vec(3), BC_Sign, fmass, g
     real(R8) :: Bound_Prim(nprim), Int_Prim(nprim)
     real(R8) :: Un, Bound_rho, Bound_Rgas, Bound_Sound, Bound_Gamma, Riem, alpha, beta
     real(R8) :: E1, E2, Rgas3, rho3, p3, Un3, Ut3, Ub3
@@ -183,9 +183,9 @@ contains
     error = 0
 
     call Setup_Inflow_Geometry ( Blk, Im, Jm, Km, Fm, modfm, modfm1, modfm2, modfm3, &
-                                  Int_i, Int_j, Int_k, Normal, Area, t_Vec, BC_Sign,   &
-                                  Bound_Prim, Int_Prim, Un, Bound_rho, Bound_Rgas,    &
-                                  Bound_Sound, Bound_Gamma, Riem )
+                                 Int_i, Int_j, Int_k, Normal, Area, t_Vec, BC_Sign,  &
+                                 Bound_Prim, Int_Prim, Un, Bound_rho, Bound_Rgas,    &
+                                 Bound_Sound, Bound_Gamma, Riem )
 
     if (BC_Sign * Un >= 0d0) then
       error = 1
@@ -219,7 +219,9 @@ contains
 
     p3   = Bound_Prim(np)      ! pressure extrapolated from interior
     rho3 = p3 / (Rgas3 * BC_T)
-    Un3  = BC_g / rho3
+    ! Relaxed value (partially non-reflecting acoustic channel).
+    g = BC_rel_fac * BC_g + (1d0 - BC_rel_fac) * Un * rho3
+    Un3  = g / rho3
     Ut3  = Un3 * E1
     Ub3  = Un3 * E2
 
@@ -234,6 +236,84 @@ contains
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
 
   end subroutine BC_Inlet_MassFlux_T
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! BC 408: Inlet — static temperature T + prescribed velocity un [m/s].
+  ! Pressure is extrapolated from the interior.
+  subroutine BC_Inlet_un_T ( Bm, Im, Jm, Km, Fm, Blk, BC_T, BC_un, &
+                                    BC_rel_fac, BC_alpha, BC_beta, BC_ci, BC_RANS, error )
+    use FLINT_Lib_Thermodynamic
+    implicit none
+    type(MOSE_block_type), intent(inout) :: Blk
+    integer,  intent(in)    :: Bm, Im, Jm, Km, Fm
+    real(R8), intent(in)    :: BC_T, BC_un, BC_rel_fac, BC_alpha, BC_beta
+    real(R8), intent(in)    :: BC_ci(nsc), BC_RANS(1:)
+    integer,  intent(inout) :: error
+    ! Local
+    integer  :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k, s
+    real(R8) :: Normal(3), Area, t_Vec(3), BC_Sign, fmass
+    real(R8) :: Bound_Prim(nprim), Int_Prim(nprim)
+    real(R8) :: Un, Bound_rho, Bound_Rgas, Bound_Sound, Bound_Gamma, Riem, alpha, beta
+    real(R8) :: E1, E2, Rgas3, rho3, p3, Un3, Ut3, Ub3
+    real(R8) :: Face_Prim(nprim), Face_rho, Face_Rgas, Flux(nprim)
+    real(R8) :: b_Vec(3), b_Mod, XA, XB, XC, XD, XE, XF, check
+
+    error = 0
+
+    call Setup_Inflow_Geometry ( Blk, Im, Jm, Km, Fm, modfm, modfm1, modfm2, modfm3, &
+                                 Int_i, Int_j, Int_k, Normal, Area, t_Vec, BC_Sign,  &
+                                 Bound_Prim, Int_Prim, Un, Bound_rho, Bound_Rgas,    &
+                                 Bound_Sound, Bound_Gamma, Riem )
+
+    if (BC_Sign * Un >= 0d0) then
+      error = 1
+      return
+    end if
+
+    call Compute_Inflow_Direction (Normal, BC_alpha, BC_beta, alpha, beta)
+
+    ! Vector product n x t (why?)
+    b_Vec(1) = Normal(2)*t_Vec(3) - Normal(3)*t_Vec(2)
+    b_Vec(2) = Normal(3)*t_Vec(1) - Normal(1)*t_Vec(3)
+    b_Vec(3) = Normal(1)*t_Vec(2) - Normal(2)*t_Vec(1)
+    b_Mod = norm2 ( b_Vec )
+    b_Vec = b_Vec/b_Mod
+
+    ! Obscure esotheric stuff
+    XA = Normal(2) - Normal(1) * tan(alpha)
+    XB =  t_Vec(2) -  t_Vec(1) * tan(alpha)
+    XC =  b_Vec(2) -  b_Vec(1) * tan(alpha)
+    XD = Normal(3) - Normal(1) * tan(beta)
+    XE =  t_Vec(3) -  t_Vec(1) * tan(beta)
+    XF =  b_Vec(3) -  b_vec(1) * tan(beta)
+    check = ( XC * XE - XF * XB )
+    E1 = ( XF * XA - XC * XD ) / check ! ??
+    E2 = ( XD * XB - XE * XA ) / check ! ??
+
+    Rgas3 = 0d0
+    do s = 1, nsc
+      Rgas3 = Rgas3 + BC_ci(s) * Ri_tab(s)
+    end do
+
+    p3   = Bound_Prim(np)      ! pressure extrapolated from interior
+    rho3 = p3 / (Rgas3 * BC_T)
+    ! Relaxed value (partially non-reflecting acoustic channel).
+    Un3  = BC_rel_fac * BC_un + (1d0 - BC_rel_fac) * Un
+    Ut3  = Un3 * E1
+    Ub3  = Un3 * E2
+
+    Face_Rgas         = Rgas3
+    Face_rho          = rho3
+    Face_Prim(1:nsc)  = Face_rho * BC_ci
+    Face_Prim(nu:nw)  = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
+    Face_Prim(np)     = p3
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+
+    call Compute_Flux_from_Face (Face_Prim, Face_rho, Face_Rgas, Area, Normal, Flux, fmass)
+    Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
+
+  end subroutine BC_Inlet_un_T
 
 
   !─────────────────────────────────────────────────────────────────────────────

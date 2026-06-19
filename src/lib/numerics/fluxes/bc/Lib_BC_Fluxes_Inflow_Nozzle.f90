@@ -11,27 +11,25 @@ module MOSE_Lib_BC_Fluxes_Inflow_Nozzle
 
 contains
 
-  subroutine BC_Inflow_Nozzle ( Im, Jm, Km, Fm, Blk, BC_Mach, BC_T0, BC_p0, BC_rel_fac, BC_alpha, BC_beta, BC_pAmb, BC_ci, BC_RANS, BC_mdot, error )
+  subroutine BC_Inflow_Nozzle ( Im, Jm, Km, Fm, Blk, BC_T0, BC_p0, BC_rel_fac, BC_sub, BC_sup, BC_g, BC_ci, BC_RANS, error )
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
-    real(R8), intent(in) :: BC_Mach, BC_T0, BC_p0, BC_rel_fac, BC_alpha, BC_beta, BC_pAmb, BC_ci(nsc), BC_RANS(1:)
-    real(R8), intent(out) :: BC_mdot
     type(MOSE_block_type), intent(inout) :: Blk
+    real(R8), intent(in) :: BC_T0, BC_p0, BC_rel_fac, BC_sub, BC_sup, BC_g, BC_ci(nsc), BC_RANS(1:)
+    integer, intent(inout) :: error
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k, Dir, Face_i, Face_j, Face_k
     real(R8) :: Bound_Prim(nprim), Int_Prim(nprim), Normal(3), Area, t_Vec(3), t_Mod, BC_Sign, Un
     real(R8) :: Bound_rho, Bound_Rgas, Bound_Sound, Bound_Gamma, Riem, Inflow_Outflow, Flux(nprim)
-    real(R8) :: pSub, pSup, g, alpha_app, beta_app, BC_supersonic
-    integer, intent(inout) :: error
+    real(R8) :: pSub, pSup, g, alpha_app, beta_app
 
     
     error = 0
-    BC_supersonic = 0.d0
 
-    pSub = BC_alpha * 1.d5
-    pSup = BC_beta * 1.d5
-    g = BC_pAmb
+    pSub = BC_sub
+    pSup = BC_sup
+    g = BC_g
     alpha_app = 0.d0
     beta_app = 0.d0
 
@@ -88,19 +86,13 @@ contains
         return
       elseif (( Bound_Prim(np) < BC_p0 ) .and. ( Bound_Prim(np) >= pSub )) then
         call BC_Nozzle_Subsonic ( Bound_Prim, Un, Bound_Sound, Bound_Gamma, Riem, alpha_app, beta_app, &
-                                  0d0, BC_ci, BC_RANS, BC_T0, BC_p0, BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux, BC_mdot )
+                                  0d0, BC_ci, BC_RANS, BC_T0, BC_p0, BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux )
       elseif (( Bound_Prim(np) < pSub) .and. (Bound_Prim(np) >= pSup)) then
         call BC_Nozzle_Subsonic ( Bound_Prim, Un, Bound_Sound, Bound_Gamma, Riem, alpha_app, beta_app, &
-                                 -10.d0, BC_ci, BC_RANS, BC_T0, g, BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux, BC_mdot )
+                                 -10.d0, BC_ci, BC_RANS, BC_T0, g, BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux )
       elseif ( Bound_Prim(np) < pSup ) then
-        if (BC_Mach == 0.d0) then
-          BC_supersonic = 1.d0
-          call BC_Nozzle_Supersonic ( Bound_Prim, Int_Prim, modfm, modfm1, modfm2, g, BC_p0, &
-                                      BC_T0, BC_ci, BC_RANS, alpha_app, beta_app, Normal, Area, Flux, BC_mdot, BC_supersonic )
-        else
-          call BC_Nozzle_Supersonic ( Bound_Prim, Int_Prim, modfm, modfm1, modfm2, BC_Mach, BC_p0, &
-                                      BC_T0, BC_ci, BC_RANS, alpha_app, beta_app, Normal, Area, Flux, BC_mdot, BC_supersonic )
-        endif
+        call BC_Nozzle_Supersonic ( Bound_Prim, Int_Prim, modfm, modfm1, modfm2, g, BC_p0, &
+                                    BC_T0, BC_ci, BC_RANS, alpha_app, beta_app, Normal, Area, Flux )
     endif
     ! Residual update
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + Modfm2 * Flux
@@ -109,20 +101,20 @@ contains
 
 
   subroutine BC_Nozzle_Supersonic ( Prim2, Int_Prim, modfm, modfm1, modfm2, g, BC_p0, BC_T0, BC_ci, & 
-                                    BC_RANS, alpha_app, beta_app, Normal, Area, Flux, Fmass, BC_supersonic )
+                                    BC_RANS, alpha_app, beta_app, Normal, Area, Flux )
     use MOSE_Lib_Limiters, only : rlimiter
     use MOSE_Mod_Riemann
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in) :: modfm, modfm1, modfm2
-    real(R8), intent(in) :: Prim2(nprim), Int_Prim(nprim), g, BC_p0, BC_T0, BC_supersonic
+    real(R8), intent(in) :: Prim2(nprim), Int_Prim(nprim), g, BC_p0, BC_T0
     real(R8), intent(in) :: BC_ci(nsc), BC_RANS(1:), alpha_app, beta_app, Normal(3), Area
-    real(R8), intent(out) :: Flux(nprim), Fmass
+    real(R8), intent(out) :: Flux(nprim)
     ! Local
     integer :: s
     real(R8) :: Sup_Prim(nprim), Sup_T, Sup_Rgas, Sup_rho, Sup_Sound, Prim1(nprim), Prim3(nprim)
     real(R8), dimension(nprim) :: Diff32, Diff21, Slope, Face_Prim, Prim_L, Prim_R
-    real(R8) :: rho_L, rho_R, Rgas_L, Rgas_R, Sound_L, Sound_R, F_r, F_u, F_v, F_w, F_E
+    real(R8) :: rho_L, rho_R, Rgas_L, Rgas_R, Sound_L, Sound_R, F_r, F_u, F_v, F_w, F_E, Fmass
     real(R8) :: su, Sel_L, Sel_R
     real(R8) :: h0_, cpSup, dcpSup, hSup, uSup, Sup_h0_, duSup, Sup_p, dpSup, dh0_Sup, gamSup, dgamSup, daSup
     real(R8) :: fun_T, diff_h0_, alpha, beta
@@ -154,27 +146,15 @@ contains
         cpSup = cpSup + BC_ci(s) * f_tabT( Sup_T,s,cp_tab )
         dcpSup = dcpSup + BC_ci(s) * f_tabT( Sup_T,s,dcpi_tab )
       enddo
-      if (BC_supersonic == 1.d0) then
-        call Trapezoidal ( sup_T, BC_T0, BC_ci, Sup_Rgas, fun_T ) 
-        Sup_p = BC_P0 / exp (fun_T)
-        Sup_rho = Sup_p / ( Sup_Rgas * Sup_T )
-        uSup = g / Sup_rho
-        Sup_h0_ = hSup + 0.5d0 * uSup ** 2
-        diff_h0_ = abs(Sup_h0_-h0_)/abs(h0_)
-        dpSup = BC_P0 / exp (fun_T) * cpSup / (Sup_Rgas * Sup_T)
-        duSup = g * Sup_Rgas * (Sup_p - dpSup * Sup_T) / Sup_p**2
-        dh0_Sup = cpSup + uSup * duSup
-      else  
-        gamSup = cpSup / (cpSup - Sup_Rgas)
-        Sup_Sound = sqrt(gamSup * Sup_Rgas * Sup_T)
-        uSup = Sup_Sound * g
-        Sup_h0_ = hSup + 0.5d0 * uSup ** 2
-        diff_h0_ = abs(Sup_h0_-h0_)/abs(h0_)
-        dgamSup = - Sup_Rgas * dcpSup / ( cpSup - Sup_Rgas )**2
-        daSup = sqrt(Sup_Rgas) * 0.5d0 / sqrt( gamSup * Sup_T ) * ( gamSup + Sup_T * dgamSup )
-        duSup = g * daSup
-        dh0_Sup = cpSup + uSup * duSup
-      endif
+      call Trapezoidal ( sup_T, BC_T0, BC_ci, Sup_Rgas, fun_T ) 
+      Sup_p = BC_P0 / exp (fun_T)
+      Sup_rho = Sup_p / ( Sup_Rgas * Sup_T )
+      uSup = g / Sup_rho
+      Sup_h0_ = hSup + 0.5d0 * uSup ** 2
+      diff_h0_ = abs(Sup_h0_-h0_)/abs(h0_)
+      dpSup = BC_P0 / exp (fun_T) * cpSup / (Sup_Rgas * Sup_T)
+      duSup = g * Sup_Rgas * (Sup_p - dpSup * Sup_T) / Sup_p**2
+      dh0_Sup = cpSup + uSup * duSup
       Sup_T = Sup_T - (Sup_h0_ - h0_)/(dh0_Sup)
     enddo  
     
@@ -190,11 +170,7 @@ contains
    !        Sup_Prim(nu) = BC_Mach * Sup_Sound / Sqrt( 1d0 + Tan(alpha)**2 + Tan(beta)**2 )
    !        Sup_Prim(nv) = Sup_Prim(nu) * Tan(alpha)
    !        Sup_Prim(nw) = Sup_Prim(nu) * Tan(beta)
-    if (BC_supersonic == 1.d0) then
-      Sup_Prim(nu:nw) = g / Sup_rho * normal
-    else
-      Sup_Prim(nu:nw) = g * Sup_Sound * normal
-    endif
+    Sup_Prim(nu:nw) = g / Sup_rho * normal
     if (model==2) Sup_Prim(nt:nprim) = Sup_rho * BC_RANS
 
     ! building a 3 cell stencil to extrapolate the solution at the interface
@@ -252,16 +228,16 @@ contains
     
 
   subroutine BC_Nozzle_Subsonic ( Prim, Un, Sound, Gamma, Riem, alpha_app, beta_app, BC_Mach, &
-                                   BC_ci, BC_RANS, BC_T0, BC_p0, BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux, Fmass )
+                                  BC_ci, BC_RANS, BC_T0, BC_p0, BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux )
     use FLINT_Lib_Thermodynamic
     implicit none
     real(R8), intent(in) :: Prim(nprim), Un, Sound, Gamma, Riem, alpha_app, beta_app, BC_Mach
      real(R8), intent(in) :: BC_ci(nsc), BC_RANS(1:), BC_T0, BC_p0, BC_rel_fac, BC_Sign, t_Vec(3), Normal(3), Area
-    real(R8), intent(out) :: Flux(nprim), Fmass
+    real(R8), intent(out) :: Flux(nprim)
     ! Local
     integer :: s
     real(R8) :: b_Vec(3), b_Mod, alpha, beta, XA, XB, XC, XD, XE, XF, check, E1, E2
-    real(R8) :: Face_Rgas, Un3
+    real(R8) :: Face_Rgas, Un3, Fmass
     real(R8) :: p3, Ut3, Ub3, mdot, Rgas3, cp3, T3, rho3, h3, h0_3, u3, h0_3_iter, p03, h3_iter
     real(R8) :: Face_T, Face_Prim(nprim), Face_rho, Face_Enthalpy, Face_Un
     real(R8) :: diff_h0_, da, du, dgam, ddel, dT, dp, dh0_, dp0
