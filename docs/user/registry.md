@@ -50,13 +50,19 @@
 | vnn | 0.3 | > 0 |  no | VNN parameter |
 | cfl-rise-threshold | 0 | >= 0 |  no | CFL rise threshold |
 | time-accurate | .false. | logical | yes | Time accurate switch |
-| integration-variables | cons | cons ,  prim |  no | Integration variables (cons/prim) |
+| integration-variables | cons | cons ,  prim , prec |  no | Integration variables (cons/prim/prec) |
 | irs | .false. | logical |  no | Implicit Residual Smoothing |
 | irs-beta | 0.0 | >= 0 |  no | IRS beta parameter |
+| preconditioning-Uref | 0.0 | >= 0 |  no | Reference velocity for preconditioning |
+| preconditioning-Mach | 0.0 | >= 0 |  no | Mach target for preconditioning |
+| preconditioning-eps-min | 0.05 | in (0, 1) |  no | Low-Mach cutoff for Ur |
+| preconditioning-Ur-min | 0.0 | >= 0 |  no | Floor on Ur [m/s] |
+| preconditioning-Ur-factor | 1.0 | > 0 |  no | Weiss-Smith multiplicative factor |
+| preconditioning-Ur-smooth | 0 | >= 0 |  no | Ur max-smoothing passes |
 | space-reconstruction |  | MUSCL-SD, MUSCL, first-order | yes | Space reconstruction method |
 | flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | Flux limiter for space reconstruction |
-| riemann-solver | HLLC | SLAU, SLAU2, HLLC+, HLLE++, HLLE, HLLEM, HLLC, AUSM+, AUSM+-up, AUSM+-up2, exact |  no | Riemann solver |
-| riemann-options-Minf | 0.0 | >= 0 |  no | Mach infinity for AUSM+-up |
+| riemann-solver | HLLC | HLLC, HLLC+, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact |  no | Riemann solver |
+| riemann-options-Mco | 0.0 | >= 0 |  no | Low-Mach acoustic-dissipation cutoff Mach (floor) shared by LMRoe/HLLC+Chen/AUSM+M; set ~ a few x peak Mach |
 
 ## MOSE-Multigrid
 

@@ -116,6 +116,7 @@ nav:
     - Woodward-Colella Step: vv/2D-woodward-colella.md
     - Oblique Shock: vv/2D-oblique-shock.md
     - Hypersonic Cylinder: vv/2D-hypersonic-cylinder.md
+    - Gresho Vortex: vv/2D-gresho-vortex.md
     - Rocket Nozzle: vv/2D-nozzle.md
     - Laminar Flat Plate: vv/2D-flat-plate-laminar.md
     - Turbulent Flat Plate: vv/2D-flat-plate-turbulent.md
