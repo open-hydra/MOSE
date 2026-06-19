@@ -25,10 +25,8 @@ contains
     real(R8) :: EL, ER, H0L, H0R, hL, hR
     real(R8) :: FL1,FL2,FL3,FL4,FL5, FR1,FR2,FR3,FR4,FR5
 
-    real(R8) :: sRL, sRR, denom
     real(R8) :: uRoe, vRoe, wRoe, unRoe, utmagRoe
     real(R8) :: HRoe, aRoe, rhoRoe
-    real(R8) :: kappaL, kappaR, kappaRoe, chiL, chiR, chiRoe
     real(R8) :: dp, drho, dun, dut1, dut2
     real(R8) :: Ma_loc, phi, dun_mod
 
@@ -110,44 +108,17 @@ contains
     FR4 = drtot*unR*wR + pR*n3
     FR5 = drtot*unR*H0R
 
-    ! Roe averages (density-weighted)
-    sRL   = sqrt(dltot)
-    sRR   = sqrt(drtot)
-    denom = sRL + sRR
-
-    uRoe = (sRL*uL + sRR*uR)/denom
-    vRoe = (sRL*vL + sRR*vR)/denom
-    wRoe = (sRL*wL + sRR*wR)/denom
-    HRoe = (sRL*H0L + sRR*H0R)/denom
+    call roe_averages(nsc, dl, dr, dltot, drtot, &
+                      ul, vl, wl, ur, vr, wr, pl, pr, h0l, h0r, &
+                      rhoroe, uroe, vroe, wroe, aroe, hroe)
+    
     unRoe = uRoe*n1 + vRoe*n2 + wRoe*n3
-
-    rhoRoe = sRL*sRR
-
-    ! Roe sound speed consistent with the eigenstructure for a general (incl.
-    ! thermally perfect) gas:  a^2 = chi + kappa*(H0 - 0.5|u|^2), with
-    !   kappa = dp/d(rho e)|_rho = gamma-1,   chi = dp/drho|_(rho e).
-    ! chi is recovered per side from the (correct) cell sound speed,
-    !   chi = a^2 - kappa*h_static,
-    ! so chi=0 for a calorically perfect gas (formula reduces to (gamma-1)*h),
-    ! while for a thermally perfect gas it stays offset-safe. Averaging aL,aR
-    ! directly, or using (gamma-1)*H0, is inconsistent with HRoe / r1 / r5.
-    kappaL   = f_gamma(dl, pL, dltot, f_Rtot(dl)) - 1.d0
-    kappaR   = f_gamma(dr, pR, drtot, f_Rtot(dr)) - 1.d0
-    chiL     = aL*aL - kappaL*hL
-    chiR     = aR*aR - kappaR*hR
-    kappaRoe = (sRL*kappaL + sRR*kappaR)/denom
-    chiRoe   = (sRL*chiL   + sRR*chiR  )/denom
-    u2Roe    = uRoe*uRoe + vRoe*vRoe + wRoe*wRoe
-    aRoe     = sqrt( max(1.d-30, chiRoe + kappaRoe*(HRoe - 0.5d0*u2Roe)) )
 
     ! Tangential speed magnitude at Roe state
     utmagRoe = sqrt( max(0.d0, u2Roe - unRoe*unRoe ) )
 
     ! Low-Mach factor (Rieper): phi = min(1, (|un| + |ut|)/a )
-    ! A small floor is retained (as in SU2's LMRoe/L2Roe) to keep a minimum of
-    ! acoustic upwinding; without it phi -> 0 near stagnation removes the
-    ! normal-velocity dissipation entirely and triggers odd-even/checkerboard
-    ! pressure-velocity decoupling at very low Mach.
+    ! A small floor is retained (as in SU2's LMRoe/L2Roe) to keep a minimum of acoustic upwinding.
     if (aRoe > 0.d0) then
       Ma_loc = (abs(unRoe) + utmagRoe)/aRoe
     else
@@ -240,5 +211,106 @@ contains
     F_E = 0.5d0*(FL5 + FR5) - 0.5d0*diss5
 
   end subroutine Riemann_LMRoe
+
+
+
+  pure subroutine roe_averages(nsc, dl, dr, dltot, drtot, ul, vl, wl, ur, vr, wr, pl, pr, h0l, h0r, rho_roe, u_roe, v_roe, w_roe, a_roe, h0_roe)
+    use FLINT_Lib_Thermodynamic
+    implicit none
+    integer, intent(in)   :: nsc
+    real(R8), intent(in)  :: dl(nsc), dr(nsc)
+    real(R8), intent(in)  :: dltot, drtot
+    real(R8), intent(in)  :: ul, vl, wl, ur, vr, wr
+    real(R8), intent(in)  :: pl, pr
+    real(R8), intent(out) :: h0l, h0r
+    real(R8), intent(out) :: rho_roe, u_roe, v_roe, w_roe, a_roe, h0_roe
+    ! Local 
+    integer  :: s, Til, Tir
+    real(R8) :: Rl, Rr, Tl, Tr, dTl, dTr
+    real(R8) :: inv_dltot, inv_drtot
+    real(R8) :: srL, srR, inv_sr
+    real(R8) :: cv_roe, sum_ei
+    real(R8) :: R_roe, T_roe
+    real(R8) :: gam_roe, vel2
+    real(R8) :: hl, hr, el, er, invW, d_roe
+
+    !------------------------------------------------
+    ! Precompute thermodynamics
+    Rl = f_Rtot(dl)
+    Rr = f_Rtot(dr)
+
+    inv_dltot = 1.d0 / dltot
+    inv_drtot = 1.d0 / drtot
+
+    Tl = pl * inv_dltot / Rl
+    Tr = pr * inv_drtot / Rr
+
+    Til = int(Tl)
+    Tir = int(Tr)
+    dTl = Tl - Til
+    dTr = Tr - Tir
+
+    srL = sqrt(dltot)
+    srR = sqrt(drtot)
+    inv_sr = 1.d0 / (srL + srR)
+
+    !------------------------------------------------
+    ! Roe flow averages
+    rho_roe = srL * srR
+
+    u_roe = (srR*ur + srL*ul) * inv_sr
+    v_roe = (srR*vr + srL*vl) * inv_sr
+    w_roe = (srR*wr + srL*wl) * inv_sr
+
+    R_roe = (srR*Rr + srL*Rl) * inv_sr
+    T_roe = (srR*Tr + srL*Tl) * inv_sr
+
+    !------------------------------------------------
+    ! Species loop
+    h0l = 0.d0
+    h0r = 0.d0
+    cv_roe = 0.d0
+    sum_ei = 0.d0
+
+    do s = 1, nsc
+
+      invW = Runiv / Wm_tab(s)
+
+      hl = h_tab(Til, s) + (h_tab(Til+1, s) - h_tab(Til, s)) * dTl
+      hr = h_tab(Tir, s) + (h_tab(Tir+1, s) - h_tab(Tir, s)) * dTr
+
+      el = hl - invW * Tl
+      er = hr - invW * Tr
+
+      h0l = h0l + hl * dl(s) * inv_dltot
+      h0r = h0r + hr * dr(s) * inv_drtot
+
+      d_roe = (srR*dr(s)*inv_drtot + srL*dl(s)*inv_dltot) * inv_sr
+
+      cv_roe = cv_roe + d_roe * ( &
+          0.5d0 * ( &
+            cp_tab(Til, s) + (cp_tab(Til+1, s)-cp_tab(Til, s))*dTl + &
+            cp_tab(Tir, s) + (cp_tab(Tir+1, s)-cp_tab(Tir, s))*dTr ) &
+          - invW )
+
+      sum_ei = sum_ei + d_roe * (srR*er + srL*el) * inv_sr
+
+    end do
+
+    !------------------------------------------------
+    ! Final scalars
+    h0l = h0l + 0.5d0*(ul*ul + vl*vl + wl*wl)
+    h0r = h0r + 0.5d0*(ur*ur + vr*vr + wr*wr)
+
+    h0_roe = (srR*h0r + srL*h0l) * inv_sr
+
+    gam_roe = 1.d0 + R_roe / cv_roe
+
+    vel2 = u_roe*u_roe + v_roe*v_roe + w_roe*w_roe
+
+    a_roe = sqrt( (gam_roe - 1.d0) * &
+          ( h0_roe - 0.5d0*vel2 + cv_roe*T_roe - sum_ei ) )
+
+  end subroutine roe_averages
 
 end module MOSE_Lib_Riemann_Roe

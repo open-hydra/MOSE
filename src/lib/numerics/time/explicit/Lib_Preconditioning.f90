@@ -148,7 +148,6 @@ contains
 
     process_all = .false.
 
-    !$omp do schedule(dynamic, 1) private(b)
     do b = 1, domain % nb
       if (.not. process_all .and. .not. is_local_block(b)) cycle
       !$omp do collapse(3) private(i, j, k, vel_mag, sound, rho, rhoi, R, mu, lambda, T, cp, &
@@ -170,12 +169,12 @@ contains
         if (model>0) then
           dx_min  = minval(domain%blk(b)%dl(i,j,k)%c(1:ndir))
 
+          cp = f_cp(domain%blk(b)%P(1:nsc,i,j,k),T,rho)
           call co_k_mi_lam_Wilke(rhoi,rho,T,mu,lambda)
 
           mu_eff_loc = mu
           k_eff_loc  = lambda
           if (model>1) then
-            cp = f_cp(domain%blk(b)%P(1:nsc,i,j,k),T,rho)
             call Eddy_Viscosity(mut=mu_turb_loc, &
                                 rans_variables=domain%blk(b)%P(nt:nt+nrans-1,i,j,k), &
                                 mul=mu, rho=rho, &
@@ -225,7 +224,6 @@ contains
                obj_prec%n_smooth_Ur)
 
     enddo
-    !$omp end do
 
   end subroutine Update_Derived_Variables
 

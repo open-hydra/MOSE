@@ -111,7 +111,7 @@ contains
       end if
     endif
     if (trim(obj_riemann%description) == 'HLLC-PC') then
-      if (obj_time_scheme%integration_variables /= 'prec') then
+      if (obj_time_scheme%integration_variables /= 'Preconditioned') then
         obj_riemann%error_message = '[ERROR] Preconditioned HLL solver selected. integration-variables must be set to "prec".'
       end if
     endif
