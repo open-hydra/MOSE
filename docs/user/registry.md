@@ -81,6 +81,8 @@
 | chemistry | frozen | frozen, finite-rate, equilibrium |  no | Chemistry model |
 | soot-generation | none | LL91, LIN, none |  no | Soot generation model |
 | rotational-frame | none | rigid-body, none |  no | Rotational frame model |
+| schmidt | 0.0 | >= 0 |  no | Laminar Schmidt number |
+| prandtl | 0.0 | >= 0 |  no | Laminar Prandtl number |
 
 ## MOSE-Chemistry
 
@@ -100,7 +102,6 @@
 |-----------|---------|---------|----------|-------------|
 | Prt | 0.85 | > 0 |  no | Turbulent Prandtl number |
 | Sct | 0.90 | > 0 |  no | Turbulent Schmidt number |
-| Sc | 0.7 | > 0 |  no | Schmidt number |
 
 ## MOSE-Rotating-Frame
 
