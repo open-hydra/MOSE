@@ -37,7 +37,7 @@ contains
     !> Compute internal face fluxes only (no residual zeroing).
     !> Assumes R(:) and beta(:) have been initialized via Zero_Residuals.
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_shock_detector, obj_rans, obj_soot
+    use MOSE_Config_Types_m, only: obj_shock_detector, obj_rans, obj_soot, obj_sim_param
     use MOSE_Mod_MPI, only: is_local_block
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
@@ -45,23 +45,24 @@ contains
     integer  :: b
     integer  :: SD_id
     logical  :: soot_enabled
-    real(R8) :: Sc, Sct, Prt
+    real(R8) :: Sc, Sct, Prt, Prl
 
     SD_id = obj_shock_detector%id
     soot_enabled = obj_soot%enabled
-    Sc  = obj_rans%Sc
+    Sc  = obj_sim_param%Sc
     Sct = obj_rans%Sct
     Prt = obj_rans%Prt
+    Prl = obj_sim_param%Prl
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
-      call Fluxes_blk ( domain % blk(b), SD_id, Sc, Sct, Prt, soot_enabled )
+      call Fluxes_blk ( domain % blk(b), SD_id, Sc, Sct, Prt, Prl, soot_enabled )
     enddo
 
   end subroutine Internal_Fluxes
 
 
-  subroutine Fluxes_blk ( blk, SD_id, Sc, Sct, Prt, soot_enabled )
+  subroutine Fluxes_blk ( blk, SD_id, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Advanced_Types_m, only: MOSE_block_type
     use MOSE_Global_m, only: model, gc, nprim, np
     use MOSE_Lib_Shock_Detector
@@ -72,7 +73,7 @@ contains
     type(MOSE_block_type), intent(inout) :: blk
     logical, intent(in)  :: soot_enabled
     integer, intent(in)  :: SD_id
-    real(R8), intent(in) :: Sc, Sct, Prt
+    real(R8), intent(in) :: Sc, Sct, Prt, Prl
     ! Local
     integer :: i, j, k, n(3)
 
@@ -133,7 +134,7 @@ contains
                             blk % R(:,i  ,j,k),           &
                             blk % R(:,i+1,j,k),           &
                             1, 2, 3,                &
-                            Sc, Sct, Prt, soot_enabled)
+                            Sc, Sct, Prt, Prl, soot_enabled)
       enddo; enddo; enddo
     endif
 
@@ -175,7 +176,7 @@ contains
                             blk % R(:,i,j  ,k),           &
                             blk % R(:,i,j+1,k),           &
                             2, 1, 3,                &
-                            Sc, Sct, Prt, soot_enabled)
+                            Sc, Sct, Prt, Prl, soot_enabled)
       enddo; enddo; enddo
     end if
 
@@ -217,7 +218,7 @@ contains
                             blk % R(:,i,j,k  ),           &
                             blk % R(:,i,j,k+1),           &
                             3, 1, 2,                &
-                            Sc, Sct, Prt, soot_enabled )
+                            Sc, Sct, Prt, Prl, soot_enabled )
       enddo; enddo; enddo
     endif
 

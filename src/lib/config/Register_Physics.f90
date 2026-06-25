@@ -26,6 +26,9 @@ contains
     call reg%add(section, 'chemistry', obj_chemistry%model, 'frozen', 'Chemistry model', 'frozen, finite-rate, equilibrium', .false.)
     call reg%add(section, 'soot-generation', obj_soot%model, 'none', 'Soot generation model', 'LL91, LIN, none', .false.)
     call reg%add(section, 'rotational-frame', obj_rot%model, 'none', 'Rotational frame model', 'rigid-body, none', .false.)
+    ! Laminar (molecular) transport closure
+    call reg%add(section, 'schmidt', obj_sim_param%Sc, '0.0', 'Laminar Schmidt number', '>= 0', .false.)
+    call reg%add(section, 'prandtl', obj_sim_param%Prl, '0.0', 'Laminar Prandtl number', '>= 0', .false.)
 
     !! ------------------------------------------------------
     !! Chemistry --------------------------------------------
@@ -49,7 +52,6 @@ contains
     section = trim(codename)//'-Turbulence'
     call reg%add(section, 'Prt', obj_rans%Prt, '0.85', 'Turbulent Prandtl number', '> 0', .false.)
     call reg%add(section, 'Sct', obj_rans%Sct, '0.90', 'Turbulent Schmidt number', '> 0', .false.)
-    call reg%add(section, 'Sc', obj_rans%Sc, '0.7', 'Schmidt number', '> 0', .false.)
     !call reg%add(section, 'k-coupling', obj_rans%k_energy_coupling, '.false.', 'Turbulent kinetic energy coupling', 'logical', .false.)
 
     

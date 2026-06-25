@@ -9,7 +9,7 @@ contains
 
   subroutine BC_Fluxes ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rans, obj_soot, obj_rot
+    use MOSE_Config_Types_m, only: obj_rans, obj_soot, obj_rot, obj_sim_param
     use MOSE_Global_m, only: model
     use MOSE_Mod_MPI, only: is_local_block
     use MOSE_Lib_RotatingFrame
@@ -36,12 +36,13 @@ contains
     real(R8) :: T0, g, pstat, rhot(nsc), visct(1:nrans)
     real(R8) :: r_fc(3)                              ! Face centre [m] (stationary-wall BCs)
     logical  :: RSM, soot_enabled
-    real(R8) :: Sc, Sct, Prt
+    real(R8) :: Sc, Sct, Prt, Prl
 
     RSM = obj_rans%RSM
-    Sc  = obj_rans%Sc
+    Sc  = obj_sim_param%Sc
     Sct = obj_rans%Sct
     Prt = obj_rans%Prt
+    Prl = obj_sim_param%Prl
     soot_enabled = obj_soot%enabled
 
     ! BC fluxes are computed in order of block and face type.
@@ -71,7 +72,7 @@ contains
               call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
               if (model>0) &
                 call BC_Connection_Visc ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Mg(1), domain % bc(i) % Pg, &
-                                          Sc, Sct, Prt, soot_enabled )
+                                          Sc, Sct, Prt, Prl, soot_enabled )
 
             case (200) ! periodic
               call BC_Rotational_Periodic_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )

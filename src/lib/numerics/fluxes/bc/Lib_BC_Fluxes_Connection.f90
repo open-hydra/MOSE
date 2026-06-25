@@ -104,13 +104,13 @@ contains
   end subroutine BC_Connection_Eul
 
 
-  subroutine BC_Connection_Visc ( Im, Jm, Km, Fm, Blk, Mg, Pg, Sc, Sct, Prt, soot_enabled )
+  subroutine BC_Connection_Visc ( Im, Jm, Km, Fm, Blk, Mg, Pg, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Lib_RANS
     use FLINT_Lib_Thermodynamic
     use MOSE_Lib_Diffusive
     implicit none
     integer, intent(in)  :: Im, Jm, Km, Fm
-    real(R8), intent(in) :: Sc, Sct, Prt
+    real(R8), intent(in) :: Sc, Sct, Prt, Prl
     logical, intent(in)  :: soot_enabled
     type(MOSE_tensor_3D_type), intent(in) :: Mg
     real(R8), intent(in)              :: Pg(nprim,6)
@@ -186,13 +186,13 @@ contains
 
     Prim = ( Prim_loc + Prim_ghost ) * 0.5d0
     call Compute_Diffusive_Flux ( Prim, Gradient_loc, Area, Normal, Waldis, Flux_loc, &
-                                  Sc, Sct, Prt, soot_enabled )
+                                  Sc, Sct, Prt, Prl, soot_enabled )
     call Compute_Diffusive_Flux ( Prim, Gradient_ghost, Area, Normal, Waldis, Flux_ghost, &
-                                  Sc, Sct, Prt, soot_enabled )
+                                  Sc, Sct, Prt, Prl, soot_enabled )
 
     ! Residual update
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) - 0.5d0 * modfm2 * (Flux_loc + Flux_ghost)
-    
+
     contains
 
       subroutine Visc_Variables ( Prim, Visc )

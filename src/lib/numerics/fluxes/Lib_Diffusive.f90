@@ -9,13 +9,13 @@ contains
 
   subroutine Diffusive_Flux ( normal, area, waldis1, waldis2, Prim1, Prim2, Prim3, Prim4, Prim5, &
                               Prim6, Prim7, Prim8, Prim9, Prim10, M1, M2, Res1, Res2, a, b, c, &
-                              Sc, Sct, Prt, soot_enabled )
+                              Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in)  :: a, b, c
     logical, intent(in)  :: soot_enabled
-    real(R8), intent(in) :: Sc, Sct, Prt
+    real(R8), intent(in) :: Sc, Sct, Prt, Prl
     real(R8), intent(in) :: normal(3), area, waldis1, waldis2
     real(R8), intent(in), dimension(nprim) :: Prim1, Prim2, Prim3, Prim4, Prim5, Prim6
     real(R8), intent(in), dimension(nprim) :: Prim7, Prim8, Prim9, Prim10
@@ -46,7 +46,7 @@ contains
     Gradient = matmul ( Gradient, M )
 
     Prim = 0.5d0 * ( Prim1 + Prim2 )
-    call Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, Flux, Sc, Sct, Prt, soot_enabled )
+    call Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, Flux, Sc, Sct, Prt, Prl, soot_enabled )
 
     Res1 = Res1 - Flux
     Res2 = Res2 + Flux
@@ -87,7 +87,7 @@ contains
   end subroutine Tangential_Gradient
 
 
-  subroutine Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, Flux, Sc, Sct, Prt, soot_enabled )
+  subroutine Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, Flux, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Global_m
     use MOSE_Lib_Fluid
     use MOSE_Lib_RANS
@@ -95,7 +95,7 @@ contains
     use FLINT_Lib_Thermodynamic
     implicit none
     real(R8), intent(in)  :: Prim(nprim), Gradient(nprim,3), area, normal(3), waldis
-    real(R8), intent(in)  :: Sc, Sct, Prt
+    real(R8), intent(in)  :: Sc, Sct, Prt, Prl
     logical, intent(in)   :: soot_enabled
     real(R8), intent(out) :: Flux(nprim)
     ! Local
@@ -113,7 +113,9 @@ contains
     Tint(2) = T_i + 1
     cp = f_cp_expr ( Prim(1:nsc), Tint, Tdiff, rho )
     call co_k_mi_lam_Wilke_expr ( Prim(1:nsc), rho, Tint, Tdiff, mil, kl )
-    
+    ! Optional unity/forced laminar Prandtl: override the mixture conductivity with k = mu*cp/Prl
+    if ( Prl > 0d0 ) kl = mil * cp / Prl
+
     ! Eddy viscosity
     mie = 0d0
     if (model==2) then
@@ -122,7 +124,17 @@ contains
                             walldist=waldis )
     end if
 
-    Dm (1:nsc) = ( mil/Sc + mie/Sct ) / rho ! binary coefficient computed from Schmidt = mi/rho*Dm
+    ! Species diffusion coefficients. Sc<=0 selects mixture-averaged multicomponent
+    ! diffusion (D_k from the binary-diffusion table), mirroring the Prl<=0 idiom above.
+    if (Sc <= 0d0) then
+      ! Mixture-averaged multicomponent: per-species laminar D_k from binary-diffusion table,
+      ! rescaled internally from the table reference pressure to the local pressure Prim(np).
+      call co_DS_expr ( Prim(1:nsc), rho, Tint, Tdiff, Prim(np), Dm )
+      if (mie > 0d0) Dm(1:nsc) = Dm(1:nsc) + mie/(rho*Sct) ! add turbulent (constant-Sct) part
+    else
+      ! Constant Schmidt: same coefficient for all species (Dm = mu/(rho*Sc))
+      Dm (1:nsc) = ( mil/Sc + mie/Sct ) / rho
+    end if
 
     kappa = kl + mie*cp/Prt ! Laminar + turbulent conductivity
 

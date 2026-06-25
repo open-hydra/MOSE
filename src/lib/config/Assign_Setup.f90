@@ -20,6 +20,7 @@ contains
     use MOSE_Mod_Soot,            only: Setup_Soot
     use MOSE_Mod_RANS,            only: Setup_RANS_Model
     use MOSE_Lib_RotatingFrame,   only: Setup_RotatingFrame
+    use FLINT_Lib_Thermodynamic,  only: dij_tab
     implicit none
 
     !! Setting simulation type
@@ -129,6 +130,11 @@ contains
     ! Transport
     if (model>0 .and. obj_transport%description=='Unavailable') &
     write(*,'(A)') '[ERROR] Transport properties are unavailable for the selected phase: cannot run Navier-Stokes simulation'
+    ! Species diffusion model
+    if (model>0 .and. obj_sim_param%Sc <= 0d0 .and. .not. allocated(dij_tab)) then
+      obj_transport%error_message = &
+        '[ERROR] Sc<=0 (multicomponent diffusion) requires a binary diffusion table (INPUT/diffusion.dat)'
+    end if
 
   end subroutine Assign_Setup
 
