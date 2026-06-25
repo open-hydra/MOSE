@@ -115,7 +115,7 @@ contains
     ! Count send and recv entries
     ns = 0; nr = 0
     do i = 1, domain%nbound
-      if (domain%bc(i)%type /= 101) cycle
+      if (domain%bc(i)%type /= 101 .and. domain%bc(i)%type /= 201) cycle
       bm = domain%bc(i)%b   ! destination block
       bs = domain%bc(i)%bs  ! source block
       if (.not. allocated(block_owner)) cycle
@@ -139,7 +139,7 @@ contains
     ! Fill send and recv lists
     ns = 0; nr = 0
     do i = 1, domain%nbound
-      if (domain%bc(i)%type /= 101) cycle
+      if (domain%bc(i)%type /= 101 .and. domain%bc(i)%type /= 201) cycle
       bm = domain%bc(i)%b
       bs = domain%bc(i)%bs
 
@@ -234,7 +234,7 @@ contains
     n = 0; ns = 0
     do i = 1, domain%nbound
       if (is_local_block(domain%bc(i)%b)) n = n + 1
-      if (domain%bc(i)%type == 101) then
+      if (domain%bc(i)%type == 101 .or. domain%bc(i)%type == 201) then
         if (is_local_block(domain%bc(i)%bs)) ns = ns + 1
       end if
     end do
@@ -256,7 +256,7 @@ contains
         n = n + 1
         domain%local_bc_idx(n) = i
       end if
-      if (domain%bc(i)%type == 101) then
+      if (domain%bc(i)%type == 101 .or. domain%bc(i)%type == 201) then
         if (is_local_block(domain%bc(i)%bs)) then
           ns = ns + 1
           domain%local_bs_idx(ns) = i

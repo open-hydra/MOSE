@@ -117,7 +117,7 @@ contains
     !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm, Bs)
     do ii = 1, domain % n_local_bc
       i  = domain % local_bc_idx(ii)
-      if (domain%bc(i)%type /= 101) cycle
+      if (domain%bc(i)%type /= 101 .and. domain%bc(i)%type /= 201) cycle
       Bs = domain % bc(i) % bs
       if (is_local_block(Bs)) cycle  ! already processed above
       Bm = domain % bc(i) % b
