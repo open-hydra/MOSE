@@ -37,7 +37,7 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
 | Riemann solvers | ~14 | ~6 in V&V | half never executed in CI |
 | Low-Mach (Mco) | floor | Gresho | ok |
 | IRS / multigrid / CFL-ramp | yes | implicit only | no dedicated check |
-| Turbulence | SA(+R/RC/comp), SST, Wilcox2006 | SA only | **SST & Wilcox2006 unvalidated** |
+| Turbulence | SA(+R/RC/comp), SST, Wilcox2006 | SA, SST, Wilcox2006 (flat plate) | RC/comp variants untested |
 | Chemistry | frozen, finite-rate, equilibrium | all (needs Cantera/Sundials) | can't run in CI |
 | Multi-block | core feature | implicit only | **no interface correctness test** |
 | Restart | core feature | none | untested |
@@ -63,8 +63,9 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
   (Monotonicity assertion is a possible future tightening.)
 
 ### Physics
-- ☐ **P1 — SST turbulent flat plate** + **P2 — Wilcox2006 flat plate**: clone the SA
-  flat-plate against the same NASA (CFL3D/FUN3D) reference. Closes turbulence gap.
+- ☑ **Turbulent flat plate, SA / SST / Wilcox2006** — already covered, one case per
+  model under `test/2D/viscous/flat-plate-turbulent/{SA,SST,Wilcox2006}/`, each
+  vs NASA CFL3D/FUN3D reference Cf. *No further turbulent flat-plate tests needed.*
 - ☐ **P3 — Couette / Poiseuille** (2D viscous, analytic): clean fast laminar-NS check
   independent of Blasius subtleties.
 - ☐ **P4 — 3D Euler verification**: 3D isentropic vortex or manufactured case (3D is
@@ -143,4 +144,5 @@ The current blocker is that only 2 cases are in CTest. Restructure before adding
 2. F1, F3, F4 (no reference data needed) — makes the pre-push hook meaningful.
 3. F5–F7, then N3/N4 (cheap, high coverage of numerics paths).
 4. N1/N2 order-of-accuracy (multi-grid, slower → tier 1).
-5. P1–P5 physics validation (tier 1/2).
+5. P3–P5 physics validation (tier 1/2). (Turbulent flat plate SA/SST/Wilcox2006
+   already exist; remaining turbulence gap is the SA RC/comp variants.)
