@@ -22,7 +22,7 @@ contains
       check = 0
       do d = 1, 3
         if ( Mod ( domain % Blk(b) % Dim(d), rap ) == 0 ) check = check + 1
-        if (d == 3) then
+        if (d > 1) then
           if ( domain % Blk(b) % Dim(d) == 1 ) check = check + 1
         endif
       enddo
@@ -70,7 +70,10 @@ contains
       j2d = j2-1
       k2d = k2-1
 
-      if ( fDim(3) == 1 ) then ! 2D
+      if ( fDim(2) == 1 .and. fDim(3) == 1 ) then ! 1D
+        cCons(:,i,j,k) = fCons(:,i2d,1,1) * fVol(i2d,1,1)  &
+                       + fCons(:,i2, 1,1) * fVol(i2, 1,1)
+      else if ( fDim(3) == 1 ) then ! 2D
         cCons(:,i,j,k) = fCons(:,i2d,j2d,1) * fVol(i2d,j2d,1)  &
                        + fCons(:,i2, j2d,1) * fVol(i2, j2d,1)  &
                        + fCons(:,i2d,j2, 1) * fVol(i2d,j2, 1)  &
@@ -97,6 +100,7 @@ contains
       i2 = 2*i
       j2 = 2*j
       k2 = 2*k
+      if ( fDim(2) == 1 ) j2 = 1
       if ( fDim(3) == 1 ) k2 = 1
       guess = fPrim(:, i2, j2, k2)
       call co_rotot_Rtot( guess(:), rho, Rgas )
@@ -126,7 +130,11 @@ contains
     coeffs(1:8) = [ a1, a2, a2, a2, a3, a3, a3, a4 ]
     rap = 2
     
-    if ( fDim(3) == 1 ) then ! 2D
+    if ( fDim(2) == 1 .and. fDim(3) == 1 ) then ! 1D
+      a1 = 3.d0/4.d0
+      a2 = 1.d0/4.d0
+      coeffs(1:8) = [ a1, a2, 0d0, 0d0, 0d0, 0d0, 0d0, 0d0 ]
+    else if ( fDim(3) == 1 ) then ! 2D
       a1 = 9.d0/16.d0
       a2 = 3.d0/16.d0
       a3 = 1.d0/16.d0
@@ -154,9 +162,14 @@ contains
       jp = Min (cDim(2), j+1)
       kp = Min (cDim(3), k+1)
 
+      if ( fDim(2) == 1 ) then
+        j2 = 1
+        j2d = 1
+      end if ! 1D
+
       if ( fDim(3) == 1 ) then
         k2 = 1
-        k2d = 1 
+        k2d = 1
       end if ! 2D
 
       id(1:6) = [ im, jm, km, ip, jp, kp ]
@@ -228,12 +241,16 @@ contains
 
       !$omp do collapse (2)
       do k = 0, fDim(3), 2-mod(fDim(3),2)
-      do j = 0, fDim(2), 2
+      do j = 0, fDim(2), 2-mod(fDim(2),2)
       do i = 0, fDim(1), 2
-        
+
         i2 = i / 2
         j2 = j / 2
         k2 = k / 2
+
+        if ( fDim(2) == 1 ) then ! 1D
+          j2 = j
+        end if
 
         if ( fDim(3) == 1 ) then ! 2D
           k2 = k
@@ -266,6 +283,7 @@ contains
       Ni = fIOfield % block(b)%Ni /2
       Nj = fIOfield % block(b)%Nj /2
       Nk = fIOfield % block(b)%Nk /2
+      Nj = Max ( 1, Nj ) ! 1D case
       Nk = Max ( 1, Nk ) ! 2D case
       cIOfield % block(b) % Ni = Ni
       cIOfield % block(b) % Nj = Nj

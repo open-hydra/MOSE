@@ -72,7 +72,7 @@ contains
         ! Shell
         if ( obj_time_scheme%time_accurate ) then
           if (obj_multigrid%MGL > 1 ) then
-            write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
+            write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(level)%time, simulation%domain(level)%dtglobal
           else
             write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
           endif
@@ -127,7 +127,7 @@ contains
         if ( mod (simulation%domain(level) % iter, obj_io%shell_diter) == 0d0 ) then
           if (obj_time_scheme%time_accurate) then
             if (obj_multigrid%MGL > 1 ) then
-              write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
+              write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(level)%time, simulation%domain(level)%dtglobal
             else
               write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
             endif
@@ -218,7 +218,7 @@ contains
         if ( mod (simulation%domain(level) % iter, obj_io%shell_diter) == 0d0 ) then
           if (obj_time_scheme%time_accurate) then
             if (obj_multigrid%MGL > 1 ) then
-              write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
+              write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(level)%time, simulation%domain(level)%dtglobal
             else
               write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
             endif
