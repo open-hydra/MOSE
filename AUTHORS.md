@@ -23,3 +23,9 @@
 - Marco Fabiani
 - Gianluca Cocirla
 - Andrea Giacomi
+
+## Contributors
+
+Automatically sourced from git history.
+
+- AlexFalco5
