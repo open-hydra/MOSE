@@ -67,12 +67,12 @@ Validation is performed with the wall skin-friction distribution, compared again
 
 <figure>
   {% include "vv/images/SWBLI-cf-sa.svg" %}
-  caption: Skin-friction coefficient $C_f$ distribution for the SA case, compared against SU2-SA, Wind-US-SA, and Schulein experimental data.
+  Skin-friction coefficient $C_f$ distribution for the SA case.
 </figure>
 
 <figure>
   {% include "vv/images/SWBLI-cf-sst.svg" %}
-  caption: Skin-friction coefficient $C_f$ distribution for the SST case, compared against SU2-SST, Wind-US-SST, and Schulein experimental data.
+  Skin-friction coefficient $C_f$ distribution for the SST case.
 </figure>
 
 MOSE reproduces the expected SWBLI behavior, including the negative-$C_f$ pocket associated with shock-induced separation and the recovery after reattachment. Overall agreement with the reference trends is good in both location and amplitude of the separation/reattachment signature for both turbulence models.
