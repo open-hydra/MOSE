@@ -1,0 +1,6 @@
+bin/
+OUTPUT/
+INPUT/
+input.ini
+field_full.tec
+field_restart.tec

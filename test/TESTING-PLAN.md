@@ -77,11 +77,13 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
   multi-block mesh; assert residual stays at machine-zero.
 - ☐ **I2 — Single-block vs multi-block equivalence**: same problem as 1 block and 2×2
   blocks; fields identical to round-off. Direct halo/interface-flux test.
-- ☐ **I3 — Restart round-trip**: N steps vs (N/2 → write → restart → N/2); identical.
+- ☑ **I3 — Restart round-trip**: N steps vs (N/2 → write → restart → N/2); match to
+  ~2e-15. *Done:* `test/fast/restart` (restart = `newrun=false`, reads OUTPUT/field.tec).
 - ☑ **I4 — Conservation invariant**: closed slip-wall box, shock-tube IC; total mass
   conserved to round-off (~2e-13). *Done:* `test/fast/conservation`. (Energy invariant
   is a possible future addition.)
-- ☐ **I5 — Serial vs OpenMP equivalence**: 1 vs 4 threads identical (MPI variant → nightly).
+- ☑ **I5 — Serial vs OpenMP equivalence**: 1 vs 4 threads bit-identical. *Done:*
+  `test/fast/openmp-equiv`. (MPI variant → nightly.)
 
 ---
 
@@ -98,11 +100,12 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F4 | Single- vs multi-block equivalence | identical field | ☐ | <3 s |
 | F5 | Riemann smoke matrix | no NaN, ρ,p>0 | ☑ `RiemannSmoke` | ~4 s |
 | F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
-| F6 | Restart round-trip | identical to uninterrupted run | ☐ | <3 s |
+| F6 | Restart round-trip | identical to uninterrupted run | ☑ `Restart` | ~1 s |
+| I5 | Serial vs OpenMP equivalence | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~1 s |
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
 
-Current `ctest -L fast`: **8 tests, ~27 s** (Sod79, Einfeldt91, Noh87, Toro99,
-PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation).
+Current `ctest -L fast`: **10 tests, ~43 s** (Sod79, Einfeldt91, Noh87, Toro99,
+PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation, OpenMPEquiv, Restart).
 
 These catch most regressions (metrics, interfaces, solver crashes, restart/IO,
 conservation) with no reference data or heavy dependencies.
