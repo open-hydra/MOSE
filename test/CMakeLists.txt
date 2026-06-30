@@ -68,16 +68,27 @@ mose_add_test(NAME PrandtlMeyer DIR 2D/euler/prandtl-meyer
 #  Additional fast tests defined in their own directories
 #  (added incrementally — see test/TESTING-PLAN.md, section 4)
 # ===========================================================================
-# Riemann smoke-matrix (F5): exercises every Riemann solver for positivity.
-if(EXISTS "${CMAKE_SOURCE_DIR}/test/fast/riemann-smoke/run.sh")
-    add_test(
-        NAME    RiemannSmoke
-        COMMAND bash -c "./run.sh"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/fast/riemann-smoke"
-    )
-    set_tests_properties(RiemannSmoke PROPERTIES
-        LABELS      "fast;numerics;1D"
-        TIMEOUT     120
-        ENVIRONMENT "${_MOSE_TEST_ENV}"
-    )
-endif()
+# Helper: register a self-contained fast test driven by its own run.sh.
+function(mose_add_fast_script NAME DIR)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/test/${DIR}/run.sh")
+        add_test(
+            NAME    ${NAME}
+            COMMAND bash -c "./run.sh"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${DIR}"
+        )
+        set_tests_properties(${NAME} PROPERTIES
+            LABELS      "${ARGN}"
+            TIMEOUT     120
+            ENVIRONMENT "${_MOSE_TEST_ENV}"
+        )
+    endif()
+endfunction()
+
+# Riemann smoke-matrix (F5): every shock-capturing solver stays positive.
+mose_add_fast_script(RiemannSmoke   fast/riemann-smoke  "fast;numerics;1D")
+
+# Numerics smoke (N4): limiter / time-scheme / reconstruction / int-var sweep.
+mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
+
+# Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
+mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")

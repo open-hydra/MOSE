@@ -55,9 +55,12 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
   missing test. Extend with a Riemann × limiter sweep.
 - ☐ **N2 — Method of Manufactured Solutions (NS)**: source-term forcing, grid refine,
   verify 2nd order on the *viscous* operator. Catches gradient/metric bugs N1 cannot.
-- ☐ **N3 — Riemann-solver smoke matrix**: coarse Sod, few steps, once per solver (all
-  14); assert positivity (ρ,p>0) and no NaN.
-- ☐ **N4 — Limiter sweep**: same shape, all 5 limiters; assert monotonicity at a shock.
+- ☑ **N3 — Riemann-solver smoke matrix**: coarse Sod, few steps, once per solver;
+  assert positivity (ρ,p>0) and no NaN. *Done:* `test/fast/riemann-smoke` (11
+  shock-capturing solvers; low-Mach family deferred to a Gresho smoke).
+- ☑ **N4 — Limiter / scheme sweep**: all 5 limiters + 3 time schemes + recon +
+  integration-variables; assert positivity. *Done:* `test/fast/numerics-smoke`.
+  (Monotonicity assertion is a possible future tightening.)
 
 ### Physics
 - ☐ **P1 — SST turbulent flat plate** + **P2 — Wilcox2006 flat plate**: clone the SA
@@ -74,8 +77,9 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
 - ☐ **I2 — Single-block vs multi-block equivalence**: same problem as 1 block and 2×2
   blocks; fields identical to round-off. Direct halo/interface-flux test.
 - ☐ **I3 — Restart round-trip**: N steps vs (N/2 → write → restart → N/2); identical.
-- ☐ **I4 — Conservation invariant**: closed reflecting box, perturbed IC; ∫ρ, ∫ρE
-  conserved to machine precision.
+- ☑ **I4 — Conservation invariant**: closed slip-wall box, shock-tube IC; total mass
+  conserved to round-off (~2e-13). *Done:* `test/fast/conservation`. (Energy invariant
+  is a possible future addition.)
 - ☐ **I5 — Serial vs OpenMP equivalence**: 1 vs 4 threads identical (MPI variant → nightly).
 
 ---
@@ -85,15 +89,19 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
 Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, assert
 **hard invariants** (no digitized references, no plotting, no Cantera). Target **< 60 s** total.
 
-| # | Test | Asserts | ~Cost |
-|---|---|---|---|
-| F1 | Freestream preservation (stretched multi-block) | residual ≈ machine-zero | <2 s |
-| F2 | Sod coarse (existing) | shock/contact positions, positivity | ~3 s |
-| F3 | Conservation in closed box | mass/energy conserved to round-off | <2 s |
-| F4 | Single- vs multi-block equivalence | identical field | <3 s |
-| F5 | Riemann smoke matrix (14 solvers, ~20 steps) | no NaN, ρ,p>0 | ~15 s |
-| F6 | Restart round-trip | identical to uninterrupted run | <3 s |
-| F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | <3 s |
+| # | Test | Asserts | Status | ~Cost |
+|---|---|---|---|---|
+| F1 | Freestream preservation (stretched multi-block) | residual ≈ machine-zero | ☐ | <2 s |
+| F2 | Sod coarse (existing) | shock/contact positions, positivity | ☑ `Sod79` | ~1 s |
+| F3 | Conservation in closed box | mass conserved to round-off | ☑ `Conservation` | <1 s |
+| F4 | Single- vs multi-block equivalence | identical field | ☐ | <3 s |
+| F5 | Riemann smoke matrix | no NaN, ρ,p>0 | ☑ `RiemannSmoke` | ~4 s |
+| F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
+| F6 | Restart round-trip | identical to uninterrupted run | ☐ | <3 s |
+| F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
+
+Current `ctest -L fast`: **8 tests, ~27 s** (Sod79, Einfeldt91, Noh87, Toro99,
+PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation).
 
 These catch most regressions (metrics, interfaces, solver crashes, restart/IO,
 conservation) with no reference data or heavy dependencies.
@@ -104,13 +112,18 @@ conservation) with no reference data or heavy dependencies.
 
 The current blocker is that only 2 cases are in CTest. Restructure before adding cases:
 
-1. ☐ **Wire every `verify.py` case into [`test/CMakeLists.txt`](CMakeLists.txt)** with
-   `LABELS`: `fast`, `validation`, `needs-cantera`, `needs-mpi`, `needs-sundials`.
-2. ☐ **Pre-push hook** → `ctest -L fast` (the F-suite only).
-3. ☐ **PR CI** → `ctest -LE "needs-cantera|needs-mpi|needs-sundials"`.
+1. ◐ **Wire cases into [`test/CMakeLists.txt`](CMakeLists.txt)** with `LABELS` via the
+   `mose_add_test()` / `mose_add_fast_script()` helpers. *Done:* the dependency-free
+   cases with proper exit codes (Sod79, Einfeldt91, Noh87, Toro99, PrandtlMeyer) plus
+   the new fast scripts. *Remaining:* the `verify.py` cases that don't yet exit non-zero
+   on failure (most 2-D/viscous cases) and the `needs-*` heavy cases.
+2. ☑ **Pre-push hook** → `ctest -L fast` ([`.githooks/pre-push`](../.githooks/pre-push)).
+3. ☑ **PR CI** → `ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi"`
+   ([`ctest.yml`](../.github/workflows/ctest.yml)).
 4. ☐ **Nightly / `workflow_dispatch`** → full suite with Cantera+Sundials+MPI enabled.
 5. ☐ Standardize on one verifier name (currently both `check.py` and `verify.py`) and a
-   common exit-code contract (0 = pass, non-zero = fail).
+   common exit-code contract (0 = pass, non-zero = fail) — needed before the remaining
+   `verify.py` cases can join tier 1.
 
 ---
 
