@@ -1,9 +1,13 @@
 # Turbulence Modelling
 
 MOSE provides Reynolds-Averaged Navier–Stokes (RANS) closures for
-turbulent flows.  Three families of eddy-viscosity models are
-available, ranging from a one-equation model to two-equation
-formulations.  All models are selected at run time via the input file.
+turbulent flows, selected at run time via the `turbulence` key in the
+`[MOSE-Physics]` section of the input file.  The eddy-viscosity models
+described in detail below range from the one-equation Spalart–Allmaras
+model (with several variants) to the two-equation Menter SST and
+Wilcox 2006 $k$–$\omega$ models.  A full Reynolds-stress closure
+(SSG–LRR) and an algebraic non-linear correction (QCR2000) are also
+available — see [Other models](#other-models).
 
 ---
 
@@ -264,8 +268,8 @@ where $\omega$ is small relative to the strain rate.
 
 ### Destruction with stress-limiter correction
 
-The $\omega$-destruction coefficient is modified by the Baerten
-correction:
+The $\omega$-destruction coefficient is modified by Wilcox's
+vortex-stretching function $f_\beta$:
 
 $$
 \beta = \beta_0\,f_\beta, \qquad
@@ -291,6 +295,32 @@ More permissive than SST:
 $$
 P_k = \min\!\bigl(\mu_t\,S^2,\;20\,\beta^\ast\,\rho\,\omega\,k\bigr)
 $$
+
+---
+
+## Other models
+
+### SSG–LRR (Reynolds-stress model)
+
+In addition to the eddy-viscosity closures above, MOSE provides the
+**SSG–LRR** differential Reynolds-stress model (`turbulence = SSGLRR`),
+which transports the six independent components of the Reynolds-stress
+tensor together with a length-scale variable instead of assuming the
+Boussinesq relation. It blends the Speziale–Sarkar–Gatski (SSG)
+pressure–strain model away from walls with the Launder–Reece–Rodi (LRR)
+model near walls. Being anisotropy-resolving, it captures secondary
+flows and strong streamline-curvature effects that the two-equation
+models miss, at the cost of the additional transport equations.
+
+### QCR2000 (non-linear constitutive correction)
+
+The **Quadratic Constitutive Relation** (Spalart, 2000) is an algebraic,
+non-linear correction to the Boussinesq stress rather than a standalone
+model. It is enabled as a suffix on a base model (e.g.
+`turbulence = SA-QCR2000`) and adds a quadratic dependence on the
+rotation tensor to the modelled stress, improving the prediction of
+anisotropy-driven secondary flows (corner flows, square ducts) while
+reusing the eddy viscosity of the underlying model.
 
 ---
 
@@ -332,3 +362,11 @@ injection or suction.
    2006.
 5. P. R. Spalart, M. L. Shur, "On the sensitization of turbulence models
    to rotation and curvature," *Aerosp. Sci. Technol.*, 1(5), 1997.
+6. P. R. Spalart, "Strategies for turbulence modelling and simulations,"
+   *Int. J. Heat Fluid Flow*, 21(3), 2000 (Quadratic Constitutive
+   Relation, QCR2000).
+7. C. G. Speziale, S. Sarkar, T. B. Gatski, "Modelling the pressure–strain
+   correlation of turbulence: an invariant dynamical systems approach,"
+   *J. Fluid Mech.*, 227, 1991 (SSG model); B. E. Launder, G. J. Reece,
+   W. Rodi, "Progress in the development of a Reynolds-stress turbulence
+   closure," *J. Fluid Mech.*, 68(3), 1975 (LRR model).

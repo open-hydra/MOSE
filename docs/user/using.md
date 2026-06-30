@@ -194,6 +194,6 @@ variables = p T u
 dtime = 1e-4
 ```
 
-Each probe writes a text file `OUTPUT/probe_exit.txt` with columns for time and the requested variables.
+Each probe writes a text file named after the probe — here `OUTPUT/exit.txt` — with columns for time and the requested variables.
 
 ---

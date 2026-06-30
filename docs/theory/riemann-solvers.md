@@ -111,9 +111,9 @@ intermediate state across the entire fan, leading to unconditional stability.
 **Key variants:**  
 - **HLLE:** Two-wave solver; very robust but highly dissipative  
 - **HLLC:** Three waves (contact explicitly resolved); sharp contacts, may oscillate at shocks  
-- **HLLC (PC):** Low-Mach preconditioned HLLC (steady)  
-- **HLLC+:** All-speed low-Mach shock-stable HLLC (Chen et al. 2020)  
-- **HLLE++, HLLC+:** Tramel variants with improved eigenvalue handling and shock detection  
+- **HLLC-PC:** Low-Mach preconditioned HLLC (steady)  
+- **HLLC+Chen:** All-speed low-Mach shock-stable HLLC (Chen et al. 2020)  
+- **HLLE++, HLLC+Tramel:** Tramel variants with improved eigenvalue handling and shock detection  
 
 The Harten–Lax–van Leer (HLL) solvers form a family of approximate Riemann solvers
 that compute the flux by integrating over a simplified wave structure. They avoid
@@ -192,9 +192,9 @@ $$
 - Can show oscillations at strong shocks (carbuncle)  
 - Requires stabilization for robustness  
 
-**Recommendation:** Use HLLC+ instead for adaptive shock-aware fallback.
+**Recommendation:** Use HLLC+Tramel instead for adaptive shock-aware fallback.
 
-### HLLC+ (Chen et al., 2020)
+### HLLC+Chen (Chen et al., 2020)
 
 A genuine **all-speed** HLLC (Chen, Lin, Li & Yan, *SIAM J. Sci. Comput.* 42(4),
 2020). It is the standard HLLC star flux plus a single correction term
@@ -230,7 +230,7 @@ $M=10^{-3}$ (peak velocity 0.995 vs exact 1.0, vs 0.91 for plain HLLC) and gave 
 Sod profile essentially identical to HLLC. **Recommendation:** excellent default
 for **reacting / low-Mach + shock** problems.
 
-### HLLC+ (Tramel, 2009)
+### HLLC+Tramel (Tramel, 2009)
 
 Hybrid solver that **adaptively blends HLLC and HLLE** using a shock-detection parameter.
 
@@ -303,7 +303,7 @@ is rotated back.
 complex shock orientations.
 
 **Comparison:**
-While HLLC+ uses shock detection in the original frame, the rotated variant
+While HLLC+Tramel uses shock detection in the original frame, the rotated variant
 senses shock proximity through the velocity-difference orientation, providing
 a complementary robustness mechanism for angled discontinuities.
 
@@ -524,7 +524,7 @@ where the shock-detection term $f_v = \sqrt{\frac{1}{2}(|\mathbf{v}_L|^2 + |\mat
 
 ## Shock Detection for Hybrid Solvers
 
-Several solvers (HLLC+, HLLE++) employ adaptive dissipation controlled by
+Several solvers (HLLC+Tramel, HLLE++) employ adaptive dissipation controlled by
 a shock-detection parameter $\beta \in [0,1]$. This parameter is computed from local pressure gradients using a **Jameson-type sensor**:
 
 $$
@@ -556,7 +556,7 @@ where $\phi = \max(s/\Delta, 0)$ and $\Delta = 20$ is a calibration parameter.
 | $\beta \approx 0.0$ | Strong shock | Use HLLE (maximum stability) |
 
 This adaptive approach **combines accuracy in smooth regions with robustness at shocks**,
-making hybrid solvers like HLLC+ ideal for general-purpose simulations.
+making hybrid solvers like HLLC+Tramel ideal for general-purpose simulations.
 
 ---
 
@@ -656,30 +656,30 @@ revisited per case rather than left at a single hard-coded value.
 
 ### Quick Reference
 
-**For most compressible-flow simulations:** Start with **HLLC+** (or **SLAU/SLAU2** for all-speed flows).
-HLLC+ balances accuracy, robustness, and cost.
+**For most compressible-flow simulations:** Start with **HLLC+Tramel** (or **SLAU/SLAU2** for all-speed flows).
+HLLC+Tramel balances accuracy, robustness, and cost.
 
 **By application:**
 
 | Flow Type | Recommended Solver | Reason |
 |---|---|---|
-| **Shock-dominated** (hypersonic, detonation) | HLLE, HLLC+, AUSM+M | Robust; AUSM+M/HLLC+Chen are carbuncle-stable |
+| **Shock-dominated** (hypersonic, detonation) | HLLE, HLLC+Tramel, AUSM+M | Robust; AUSM+M/HLLC+Chen are carbuncle-stable |
 | **All-speed (low Mach + shocks)** | **HLLC+Chen**, **AUSM+M**, SLAU2 | single solver across the whole Mach range |
 | **Smooth subsonic** (combustor, inlet) | SLAU2, AUSM+M | Low-Mach accuracy; SLAU2 best |
-| **Mixed subsonic/transonic** | HLLC+, AUSM+M | HLLC+ adaptive; AUSM+M all-speed |
-| **Boundary layers + shocks** | HLLC+, HLLC+Chen | shock-aware; HLLC+Chen preserves shear |
+| **Mixed subsonic/transonic** | HLLC+Tramel, AUSM+M | HLLC+Tramel adaptive; AUSM+M all-speed |
+| **Boundary layers + shocks** | HLLC+Tramel, HLLC+Chen | shock-aware; HLLC+Chen preserves shear |
 | **Very low Mach, time-accurate** | **LMRoe**, SLAU2, HLLC+Chen | flux-only low-Mach fix; time-accurate |
 | **Very low Mach, steady** | HLLC-PC, MiczekRoe, LMRoe | preconditioned / low-Mach; clean convergence |
 | **Vortex / acoustic-near-field preservation** | LMRoe, HLLC+Chen | removes the $\mathcal{O}(1/M)$ momentum dissipation |
-| **Unsteady shock interaction** | HLLC+ | Shock detection tracks transients |
+| **Unsteady shock interaction** | HLLC+Tramel | Shock detection tracks transients |
 | **Emergency (solver divergence)** | HLLE, LLF | Maximum stability; accept extra diffusion |
 
 ### Convergence Tips
 
-1. **Start robust, refine if needed:** Begin with HLLE or SLAU2, switch to HLLC+ after convergence behaves.
+1. **Start robust, refine if needed:** Begin with HLLE or SLAU2, switch to HLLC+Tramel after convergence behaves.
 2. **Monitor divergence:** If solver crashes, switch to HLLE (fallback).
 3. **Verify solution structure:** Check shock positions, contact discontinuities, and Mach numbers.
-4. **Mesh refinement:** Coarse meshes tolerate more dissipative solvers (HLLE); fine meshes benefit from HLLC+.
+4. **Mesh refinement:** Coarse meshes tolerate more dissipative solvers (HLLE); fine meshes benefit from HLLC+Tramel.
 
 ---
 

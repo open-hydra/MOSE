@@ -220,7 +220,7 @@ MOSE | Iter =      384 | Global iter =      384 | Density residual = 0.998459E-1
 |------|---------|
 | `OUTPUT/field.tec` | Full 2-D field data (ρ, u, v, p, T, M, etc.) at convergence |
 | `OUTPUT/exit.txt` | Probe data (Mach vs. probe location) from the exit boundary |
-| `OUTPUT/residuals-history.txt` | Convergence history |
+| `OUTPUT/residual-history.dat` | Convergence history |
 | `OUTPUT/diagnostic.tec` | Some diagnostic quantities |
 
 ---
@@ -257,6 +257,6 @@ Now that you understand the basic workflow:
 
 - **Prandtl–Meyer expansion:** [NACA Report 1135](https://ntrs.nasa.gov/citations/19930090976)
 - **Riemann solvers:** Toro, E. F. *Riemann Solvers and Numerical Methods for Fluid Dynamics* (3rd ed.)
-- **MUSCL reconstruction:** van Leer, B. "Towards the Ultimate Conservative Difference Scheme. II. Monotonicity and Conservation Combined in a Second-Order Scheme" (1974)
+- **MUSCL reconstruction:** van Leer, B. "Towards the Ultimate Conservative Difference Scheme. V. A Second-Order Sequel to Godunov's Method" (1979)
 
 ---

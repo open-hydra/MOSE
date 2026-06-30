@@ -121,7 +121,7 @@ Typical applications: turbomachinery (impellers, rotors), swirling jets, and pro
 | Framework | Cell-centred finite volume on structured multi-block hexahedral grids |
 | Reconstruction | MUSCL — first- and second-order accurate |
 | Flux limiters | van Leer · van Albada · minmod · MC · superbee |
-| Riemann solvers | HLLC · HLLE · SLAU · AUSM⁺-up · Godunov · Lax-Friedrichs |
+| Riemann solvers | HLLC / HLLC+ · HLLE / HLLE++ · SLAU / SLAU2 · AUSM+ / AUSM+M · LMRoe / MiczekRoe · Godunov (exact) · Lax-Friedrichs |
 | Diffusive fluxes | 10-point stencil with face-metric tensor mapping |
 
 ### Time integration
@@ -167,7 +167,7 @@ Typical applications: turbomachinery (impellers, rotors), swirling jets, and pro
 
 | Tool | Minimum version |
 |------|----------------|
-| CMake | 3.19 |
+| CMake | 3.23 |
 | Fortran compiler | GNU gfortran 11+ or Intel ifx/ifort |
 | C compiler | GCC or ICC (for C bindings) |
 | Python | 3.9+ (for validation scripts) |

@@ -4,13 +4,13 @@ This section documents the Verification & Validation (V&V) test suite for MOSE. 
 
 ## Test suite
 
-| Test | Dim | Mach | Physics | Verification | Solver(s) | Ref |
+| Test | Dim | Mach | Physics | Verification | Solver | Ref |
 |---|---|---|---|---|---|---|
 | [Sod Shock Tube](1D.md#sod-shock-tube) | 1D | subsonic–supersonic | Shock, contact, rarefaction | Analytical | SLAU | Sod (1978) |
 | [Einfeldt Double Rarefaction](1D.md#einfeldt-double-rarefaction) | 1D | subsonic | Near-vacuum, two rarefactions | Analytical | HLLE | Einfeldt et al. (1991) |
 | [Noh Implosion](1D.md#noh-implosion-problem) | 1D | supersonic | Strong shock, density jump | Analytical | HLLE | Noh (1987) |
 | [Toro Test 3](1D.md#toro-test-case-3) | 1D | subsonic–supersonic | Compound wave (shock + contact + shock) | Analytical | HLLE++ | Toro (1999) |
-| [Finite-Rate Reactive Shock Tube](1D-fer14.md) | 1D | subsonic–supersonic | Reactive shock tube, finite-rate chemistry | Digitized reference profiles (velocity, temperature) | HLLC+ | Ferrer et al. (2014) |
+| [Finite-Rate Reactive Shock Tube](1D-fer14.md) | 1D | subsonic–supersonic | Reactive shock tube, finite-rate chemistry | Digitized reference profiles (velocity, temperature) | HLLC+ Tramel | Ferrer et al. (2014) |
 | [Unity-Lewis Diffusion](1D-diffusion.md) | 1D | ~0 (diffusion) | Species + thermal diffusion, unity Lewis ($Le=1$) | Cantera low-Mach reference | HLLC | Forti/Ferrer; Cantera |
 | [Multicomponent Diffusion](1D-multicomponent-diffusion.md) | 1D | ~0 (diffusion) | Per-species mixture-averaged diffusion | Cantera low-Mach reference | HLLC | Forti/Ferrer; Cantera |
 | [Premixed Laminar Flame](1D-premixed-flame.md) | 1D | ~0 (deflagration) | Finite-rate chemistry, premixed CH$_4$/air flame structure | Cantera freely-propagating flame | HLLC | Cantera |
@@ -31,6 +31,5 @@ Each test case lives under `test/` and contains a `verify.py` script.  The scrip
 ```bash
 cd test/1D/<TestName>
 ./MOSE.sh solve
-python verify.py          # check errors and export figure
-python verify.py --plot   # as above, also display figure interactively
+python verify.py          # eventually check errors, write stats, and plot figures
 ```
