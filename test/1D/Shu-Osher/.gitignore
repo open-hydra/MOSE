@@ -1,0 +1,4 @@
+bin/
+OUTPUT/
+INPUT/phase.txt
+INPUT/thermo.dat

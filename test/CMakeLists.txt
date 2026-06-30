@@ -59,6 +59,11 @@ mose_add_test(NAME Toro99 DIR 1D/Tor99
               RUN "./MOSE.sh test" VERIFY verify.py
               LABELS "fast;validation;1D")
 
+# 1-D Shu-Osher (Mach-3 shock / sine interaction; convergence vs N=1600 ref)
+mose_add_test(NAME ShuOsher DIR 1D/Shu-Osher
+              RUN "./MOSE.sh solve" VERIFY verify.py
+              LABELS "fast;validation;numerics;1D")
+
 # 2-D steady Euler (analytic Prandtl-Meyer)
 mose_add_test(NAME PrandtlMeyer DIR 2D/euler/prandtl-meyer
               RUN "./MOSE.sh solve" VERIFY check.py

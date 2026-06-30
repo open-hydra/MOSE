@@ -70,7 +70,9 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
   independent of Blasius subtleties.
 - ☐ **P4 — 3D Euler verification**: 3D isentropic vortex or manufactured case (3D is
   currently source-term-only).
-- ☐ **P5 — Shu–Osher** (1D): smooth+shock interaction stressing high-order recon.
+- ☑ **P5 — Shu–Osher** (1D): Mach-3 shock / sine interaction. *Done:*
+  `test/1D/Shu-Osher` (hand-generated IC via `gen_ic.py`; convergence vs an N=1600
+  MOSE reference, 2.9 % L1 at N=200).
 
 ### Implementation / infrastructure (also serve as fast tests)
 - ☐ **I1 — Freestream preservation / GCL**: uniform flow on a stretched, curvilinear,
@@ -104,8 +106,9 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | I5 | Serial vs OpenMP equivalence | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~1 s |
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
 
-Current `ctest -L fast`: **10 tests, ~43 s** (Sod79, Einfeldt91, Noh87, Toro99,
-PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation, OpenMPEquiv, Restart).
+Current `ctest -L fast`: **11 tests, ~44 s** (Sod79, Einfeldt91, Noh87, Toro99,
+ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation, OpenMPEquiv,
+Restart).
 
 These catch most regressions (metrics, interfaces, solver crashes, restart/IO,
 conservation) with no reference data or heavy dependencies.
