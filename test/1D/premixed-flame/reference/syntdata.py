@@ -54,7 +54,7 @@ for phi in phis:
     rho = gas.density
 
     flame = ct.FreeFlame(gas, width=width)
-    flame.transport_model = "Mix"
+    flame.transport_model = "unity-Lewis-number"
     flame.set_refine_criteria(ratio=3,slope=0.05,curve=0.1)
     flame.solve(loglevel=1, auto=True)
 
@@ -86,6 +86,7 @@ for phi in phis:
         "x": flame.grid,
         "T": flame.T,
         "u": flame.velocity,
+        "rho": flame.density,
         "Mach": mach,
         "HRR": hrr
     }
