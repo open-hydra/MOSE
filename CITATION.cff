@@ -1,4 +1,4 @@
-cff-version: 0.1.0-alpha
+cff-version: 0.2.0
 title: "MOSE"
 authors:
   - family-names: "Grossi"
@@ -11,14 +11,6 @@ authors:
     given-names: "Alessandro"
   - family-names: "Falco"
     given-names: "Alex"
-  - family-names: "Passarani"
-    given-names: "Giacomo"
-  - family-names: "Fabiani"
-    given-names: "Marco"
-  - family-names: "Cocirla"
-    given-names: "Gianluca"
-  - family-names: "Giacomi"
-    given-names: "Andrea"
 license: GPL-3.0
 url: "https://github.com/open-hydra/MOSE"
 doi: "https://doi.org/10.5281/zenodo.20201352"

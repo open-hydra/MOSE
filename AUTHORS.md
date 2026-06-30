@@ -19,7 +19,3 @@
 - Vincenzo Barbato
 - Alessandro Montanari
 - Alex Falco
-- Giacomo Passarani
-- Marco Fabiani
-- Gianluca Cocirla
-- Andrea Giacomi
