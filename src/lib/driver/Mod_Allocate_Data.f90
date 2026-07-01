@@ -96,7 +96,7 @@ contains
     integer, intent(in)                  :: nijk(3)
     type(MOSE_block_type), intent(inout) :: blk
     ! Local
-    integer :: ni, nj, nk
+    integer :: ni, nj, nk, p, q
 
     ni = nijk(1) ; nj = nijk(2) ; nk = nijk(3)
 
@@ -123,9 +123,18 @@ contains
     ! Shock-detector flag with no ghost cells
     allocate( blk % beta ( 1:ni, 1:nj, 1:nk) )
 
-    ! Velocity gradient and related, no ghost cells
-    if ( obj_rans%SpalartShur ) then
+    ! Velocity gradient
+    if ( model > 1 ) then
       allocate( blk % vel_gradient ( 1-gc:ni+gc, 1-gc:nj+gc, 1-gc:nk+gc ) )
+      do q = 1, 3
+        do p = 1, 3
+          blk % vel_gradient(:,:,:) % c(p,q) = 0.0d0
+        end do
+      end do
+    end if
+
+    ! Rotation/curvature correction terms
+    if ( model > 1 ) then
       allocate( blk % rc_term1(ni, nj, nk) )
       allocate( blk % rc_term2(ni, nj, nk) )
     end if
