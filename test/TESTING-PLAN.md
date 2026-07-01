@@ -10,11 +10,13 @@ running on GitHub's CI runner.
 
 ## 1. State of play
 
-- **Only 2 cases are wired into CTest** (`Sod79`, `PrandtlMeyer`, via `check.py` in
-  [`test/CMakeLists.txt`](CMakeLists.txt)). The other ~18 cases ship a `verify.py`
-  but run only through [`test/test.sh`](test.sh) — they are **not** in CTest/CI.
-- **The pre-push hook** ([`.githooks/pre-push`](../.githooks/pre-push)) just calls
-  `ctest`, so it inherits those same 2 tests.
+- **All driving is through CTest** ([`test/CMakeLists.txt`](CMakeLists.txt)), with
+  tiers expressed as `LABELS`. The legacy `test/test.sh` runner has been removed —
+  cases run via `ctest` (whole suite or `-L fast`) or directly per-case via each
+  case's `MOSE.sh`.
+- **The pre-push hook** ([`.githooks/pre-push`](../.githooks/pre-push)) runs the fast
+  tier (`ctest -L fast`); **PR CI** ([`ctest.yml`](../.github/workflows/ctest.yml))
+  runs everything except the `needs-*` heavy-dependency labels.
 - **CI build is minimal** ([`.github/workflows/ctest.yml`](../.github/workflows/ctest.yml)):
   `USE_MPI=OFF`, `USE_TECIO=OFF`, `USE_SUNDIALS=OFF`, `USE_CANTERA=OFF`.
 
@@ -71,8 +73,12 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
 - ☐ **P4 — 3D Euler verification**: 3D isentropic vortex or manufactured case (3D is
   currently source-term-only).
 - ☑ **P5 — Shu–Osher** (1D): Mach-3 shock / sine interaction. *Done:*
-  `test/1D/Shu-Osher` (hand-generated IC via `gen_ic.py`; convergence vs an N=1600
-  MOSE reference, 2.9 % L1 at N=200).
+  `test/1D/Shu-Osher` (hand-generated IC via `gen_ic.py`). Two CTest entries:
+  `ShuOsher` (**fast**, single N=200 grid vs an N=1600 MOSE reference, 2.9 % L1) and
+  `ShuOsherConvergence` (**validation**, 4-grid Richardson study N=200/400/800/1600 —
+  the N=1600 solution is a study point — asserting a sane observed order (p ≈ 1.02)
+  and monotone L1 decrease vs the Richardson extrapolant, 3.55 → 2.83 → 1.46 → 0.72 %,
+  and producing the V&V figure).
 
 ### Implementation / infrastructure (also serve as fast tests)
 - ☐ **I1 — Freestream preservation / GCL**: uniform flow on a stretched, curvilinear,
@@ -105,6 +111,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F6 | Restart round-trip | identical to uninterrupted run | ☑ `Restart` | ~1 s |
 | I5 | Serial vs OpenMP equivalence | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~1 s |
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
+| F8 | Shu–Osher coarse (N=200) | L1 vs N=1600 ref < 5 %, finite | ☑ `ShuOsher` | ~2 s |
 
 Current `ctest -L fast`: **11 tests, ~44 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation, OpenMPEquiv,
@@ -112,6 +119,10 @@ Restart).
 
 These catch most regressions (metrics, interfaces, solver crashes, restart/IO,
 conservation) with no reference data or heavy dependencies.
+
+The 4-grid Shu–Osher Richardson study (`ShuOsherConvergence`) uses the N=1600
+solution and matplotlib, so it lives in the **validation** tier rather than the
+fast pre-push suite (~4 s for the three solved grids).
 
 ---
 

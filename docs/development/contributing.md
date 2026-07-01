@@ -181,7 +181,7 @@ Before submitting a PR, please verify:
 - [ ] Code compiles with `-std=f2008 -Wall -Wextra` without warnings
 - [ ] No line exceeds 132 characters
 - [ ] All new subroutines have `implicit none` and argument intents
-- [ ] Existing tests pass (`test/test.sh`)
+- [ ] Existing tests pass (`ctest` from the build directory; at minimum `ctest -L fast`)
 - [ ] New functionality has at least one test case
 - [ ] Documentation updated if user-facing behaviour changed
 - [ ] Commit messages follow the convention above

@@ -60,9 +60,14 @@ mose_add_test(NAME Toro99 DIR 1D/Tor99
               LABELS "fast;validation;1D")
 
 # 1-D Shu-Osher (Mach-3 shock / sine interaction; convergence vs N=1600 ref)
+#   fast tier : single coarse grid (N=200) vs the reference
 mose_add_test(NAME ShuOsher DIR 1D/Shu-Osher
               RUN "./MOSE.sh solve" VERIFY verify.py
               LABELS "fast;validation;numerics;1D")
+#   validation tier : 3-grid study (N=200/400/800), monotone convergence + figure
+mose_add_test(NAME ShuOsherConvergence DIR 1D/Shu-Osher
+              RUN "./MOSE.sh test" VERIFY convergence.py
+              LABELS "validation;numerics;1D")
 
 # 2-D steady Euler (analytic Prandtl-Meyer)
 mose_add_test(NAME PrandtlMeyer DIR 2D/euler/prandtl-meyer

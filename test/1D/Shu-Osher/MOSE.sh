@@ -54,6 +54,8 @@ if [[ $1 == solve ]]; then
   cd INPUT
   ln -sf ../../../common/Air/phase.txt phase.txt
   ln -sf ../../../common/Air/thermo.dat thermo.dat
+  ln -sf ic_x1.tec ic.tec        # coarse grid (N=200) for the fast single-grid check
+  ln -sf bc_x1.txt bc.txt
   cd ..
   mkdir -p OUTPUT bin
   ulimit -s unlimited
@@ -66,6 +68,29 @@ if [[ $1 == solve ]]; then
     $LOCAL 2>errors_file >logfile &
     echo $! > .ID
   fi
+fi
+
+if [[ $1 == test ]]; then
+  # Grid-convergence study: run the staged meshes (ic_x1/x2/x4 -> N=200/400/800)
+  # and leave OUTPUT/field_x{r}.tec for convergence.py to compare vs the
+  # resolved reference (reference/reference.dat, N=1600).
+  cd INPUT
+  ln -sf ../../../common/Air/phase.txt phase.txt
+  ln -sf ../../../common/Air/thermo.dat thermo.dat
+  cd ..
+  mkdir -p OUTPUT bin
+  ulimit -s unlimited
+  export KMP_STACKSIZE=100M
+  export OMP_NUM_THREADS=$NTHREADS
+  if [[ "$MASTER" -nt "$LOCAL" ]]; then cp $MASTER $LOCAL; fi
+  for r in 1 2 4; do
+    cd INPUT
+    ln -sf ic_x$r.tec ic.tec
+    ln -sf bc_x$r.txt bc.txt
+    cd ..
+    $LOCAL
+    mv OUTPUT/field.tec OUTPUT/field_x$r.tec
+  done
 fi
 
 if [[ $1 == kill ]]; then

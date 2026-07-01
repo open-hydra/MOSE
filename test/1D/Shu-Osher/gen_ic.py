@@ -11,12 +11,18 @@ BLOCK layout MOSE reads for the 1-D test cases (nodal coordinates, cell-centred
 state, variable order x y z rho u v w p). Values are written one per line in
 list-directed-readable form.
 
-Usage:  python gen_ic.py [N]      # default N = 200
+Usage:  python gen_ic.py [N] [tag]
+    N     number of cells               (default 200)
+    tag   if given, write ic_x<tag>.tec / bc_x<tag>.txt instead of the
+          default ic.tec / bc.txt       (used to stage the convergence grids)
 """
 import sys
 from math import sin
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 200
+TAG = sys.argv[2] if len(sys.argv) > 2 else ""
+IC_FILE = f"INPUT/ic_x{TAG}.tec" if TAG else "INPUT/ic.tec"
+BC_FILE = f"INPUT/bc_x{TAG}.txt" if TAG else "INPUT/bc.txt"
 XMIN, XMAX = -5.0, 5.0
 
 I, J, K = N + 1, 2, 2
@@ -37,7 +43,7 @@ def w(fh, v):
 
 
 # ---- ic.tec ---------------------------------------------------------------
-with open("INPUT/ic.tec", "w") as fh:
+with open(IC_FILE, "w") as fh:
     fh.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
     fh.write(f' ZONE  T = B1-IG, I={I}, J={J}, K={K}, DATAPACKING=BLOCK, '
              'VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED), SOLUTIONTIME=0.0\n')
@@ -64,7 +70,7 @@ with open("INPUT/ic.tec", "w") as fh:
 
 # ---- bc.txt : transmissive (extrapolation) ends, mirrors Sod layout -------
 # faces: 1=imin 2=imax 3=jmin 4=jmax 5=kmin 6=kmax
-with open("INPUT/bc.txt", "w") as fh:
+with open(BC_FILE, "w") as fh:
     def line(i, j, k, face, typ):
         fh.write(f"{1:8d}{i:8d}{j:8d}{k:8d}{face:8d}{typ:8d}\n")
     line(1, 1, 1, 1, 400)                     # imin (cell i=1)
@@ -78,4 +84,4 @@ with open("INPUT/bc.txt", "w") as fh:
     for i in range(1, N + 1):                 # kmax (degenerate)
         line(i, 1, 1, 6, 0)
 
-print(f"wrote INPUT/ic.tec and INPUT/bc.txt for N={N} cells (x in [{XMIN},{XMAX}])")
+print(f"wrote {IC_FILE} and {BC_FILE} for N={N} cells (x in [{XMIN},{XMAX}])")
