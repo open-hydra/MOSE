@@ -15,6 +15,8 @@ This section documents the Verification & Validation (V&V) test suite for MOSE. 
 | [Unity-Lewis Diffusion](1D-diffusion.md) | 1D | ~0 (diffusion) | Species + thermal diffusion, unity Lewis ($Le=1$) | Cantera low-Mach reference | HLLC | Forti/Ferrer; Cantera |
 | [Multicomponent Diffusion](1D-multicomponent-diffusion.md) | 1D | ~0 (diffusion) | Per-species mixture-averaged diffusion | Cantera low-Mach reference | HLLC | Forti/Ferrer; Cantera |
 | [Premixed Laminar Flame](1D-premixed-flame.md) | 1D | ~0 (deflagration) | Finite-rate chemistry, premixed CH$_4$/air flame structure | Cantera freely-propagating flame | HLLC | Cantera |
+| [Isentropic Vortex](2D-isentropic-vortex.md) | 2D | ~1.2 | Smooth vortex convection, order of accuracy | Exact solution + Richardson-style grid refinement | HLLC | Shu (1998) |
+| [Viscous Manufactured Solution](2D-mms.md) | 2D | ~0.47 | Viscous order of accuracy (gradients, metrics) | Manufactured solution + grid refinement | HLLC | Roache (2002) |
 | [Woodward-Colella Step](2D-woodward-colella.md) | 2D | 3.0 | Oblique shock, expansion fan, interactions | OpenFOAM reference | HLLE | Woodward & Colella (1984) |
 | [Oblique Shock](2D-oblique-shock.md) | 2D | 4.0 | Oblique shock, post-shock instabilities | Analytical | HLLC, HLLC+, HLLE, SLAU | oblique shock theory |
 | [Hypersonic Cylinder](2D-hypersonic-cylinder.md) | 2D | 8.1 | Bow shock, carbuncle | Analytical | HLLC, HLLC+, HLLE, SLAU | normal shock theory |

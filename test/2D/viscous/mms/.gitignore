@@ -1,0 +1,8 @@
+bin/
+OUTPUT/
+fromATLAStoSolver/
+INPUT/phase.txt
+INPUT/thermo.dat
+INPUT/ic.tec
+INPUT/bc.txt
+mms_fortran.f90

@@ -52,11 +52,25 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
 ## 3. Proposed new tests
 
 ### Numerics (biggest gap: order-of-accuracy verification)
-- ☐ **N1 — Isentropic vortex convection** (2D, smooth, periodic): convect one period,
-  grid-refine 32²/64²/128², **measure observed order** (→2 with MUSCL). Highest-value
-  missing test. Extend with a Riemann × limiter sweep.
-- ☐ **N2 — Method of Manufactured Solutions (NS)**: source-term forcing, grid refine,
+- ☑ **N1 — Isentropic vortex convection** (2D, smooth, periodic): convect one period,
+  grid-refine 32²/64²/128², **measure observed order** (→2 with MUSCL). *Done:*
+  `test/2D/euler/isentropic-vortex` (`IsentropicVortex`, validation tier). Normalised
+  L2 density error 2.56 → 0.56 → 0.17 %, observed order 2.18 then 1.75 (≈2). Meshes/ICs/BCs
+  pre-generated with GRIB + `build_ic.py` + ATLAS BCB (periodic). *Possible extension:*
+  a Riemann × limiter sweep.
+- ☑ **N2 — Method of Manufactured Solutions (NS)**: source-term forcing, grid refine,
   verify 2nd order on the *viscous* operator. Catches gradient/metric bugs N1 cannot.
+  *Done:* `test/2D/viscous/mms` (`MMSViscous`, validation tier). A smooth periodic
+  field is made an exact steady NS solution by an analytic source (derived with
+  sympy, FD-checked) injected by a dedicated driver `MOSE_mms`
+  ([`src/app/mms.f90`](../src/app/mms.f90), a build variant of `main.f90` whose
+  external callback adds the source). Constant `mu=10` (flat transport table),
+  `Pr=0.72`, `Re~5` (viscous ~20% of convective), mean `M~0.47` (high enough to
+  avoid low-Mach accuracy degradation). On 32/64/128 every primitive (rho,u,v,p)
+  converges at ~2nd order in both L2 and Linf (rho L2 0.059 → 0.013 → 0.0028 %,
+  order ~2.2). CTest runs the fast 32/64 subset (single-threaded); the full
+  32/64/128 study makes the V&V figure. Periodic meshes/ICs pre-generated
+  (GRIB + `build_ic.py`); the periodic `bc.txt` (topology-only) is shared with N1.
 - ☑ **N3 — Riemann-solver smoke matrix**: coarse Sod, few steps, once per solver;
   assert positivity (ρ,p>0) and no NaN. *Done:* `test/fast/riemann-smoke` (11
   shock-capturing solvers; low-Mach family deferred to a Gresho smoke).

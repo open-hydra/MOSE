@@ -74,6 +74,20 @@ mose_add_test(NAME PrandtlMeyer DIR 2D/euler/prandtl-meyer
               RUN "./MOSE.sh solve" VERIFY check.py
               LABELS "fast;validation;2D")
 
+# 2-D isentropic-vortex convection (N1): order-of-accuracy on 32/64/128 grids
+mose_add_test(NAME IsentropicVortex DIR 2D/euler/isentropic-vortex
+              RUN "./MOSE.sh test" VERIFY verify.py
+              LABELS "validation;numerics;2D")
+
+# 2-D viscous Method of Manufactured Solutions (N2): order-of-accuracy of the
+# *viscous* operator. Uses the MOSE_mms driver (analytic manufactured source).
+# CTest is single-threaded, so it runs the fast 32/64 subset ("testfast"); the
+# full 32/64/128 study ("test") is used offline to make the V&V figure.
+mose_add_test(NAME MMSViscous DIR 2D/viscous/mms
+              RUN "./MOSE.sh testfast" VERIFY verify.py
+              LABELS "validation;numerics;2D"
+              TIMEOUT 900)
+
 # ===========================================================================
 #  Additional fast tests defined in their own directories
 #  (added incrementally — see test/TESTING-PLAN.md, section 4)
