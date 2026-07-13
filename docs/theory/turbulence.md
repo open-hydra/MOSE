@@ -185,6 +185,23 @@ $$
 
 This prevents unbounded growth of $k$ in stagnation regions.
 
+!!! note "$\omega$-production uses the *limited* $P_k$"
+    Per the NASA Turbulence-Modelling-Resource SST-2003 specification, the
+    $\omega$-equation production is
+
+    $$
+    P_\omega = \frac{\alpha}{\nu_t}\,\tilde P_k
+             = \frac{\gamma\,\rho}{\mu_t}\,\tilde P_k, \qquad
+    \tilde P_k = \min\!\bigl(\mu_t S^2,\;10\,\beta^\ast\rho\,\omega\,k\bigr),
+    $$
+
+    i.e. it is built from the **same limited** production $\tilde P_k$ used in
+    the $k$-equation, *not* the unlimited $\gamma\rho S^2$.  (The unlimited form
+    that appears in the original 2003 paper is a typographical error, corrected
+    on the TMR page.)  MOSE therefore applies the production limiter first and
+    forms $P_\omega$ from the limited value; this matches the reference SST-2003
+    codes (e.g. SU2's default `V2003`).
+
 ### Eddy viscosity
 
 $$
@@ -227,8 +244,15 @@ $$
 
 $$
 k_\text{wall} = 0, \qquad
-\omega_\text{wall} = \frac{6\,\nu}{0.075\,y^2}
+\omega_\text{wall} = 10\,\frac{6\,\nu}{\beta_1\,y^2} = \frac{800\,\nu}{y^2}
 $$
+
+with $\beta_1 = 0.075$.  The factor of 10 over the analytical near-wall limit
+$6\nu/(\beta_1 y^2)$ is Menter's recommended over-specification, which forces
+the correct $\omega$ behaviour in the first off-wall cell.  Note that this
+value grows as $1/y^2$ under grid refinement and is the origin of the
+near-wall stiffness handled by the [point-implicit source
+treatment](#numerical-treatment-of-the-source-terms).
 
 ### Energy coupling *(optional)*
 
@@ -346,6 +370,125 @@ This design allows switching models at run time without recompilation.
 An optional correction (`blowing_corr`) modifies the wall boundary-layer
 treatment for SST and Wilcox 2006 models in the presence of wall
 injection or suction.
+
+---
+
+## Freestream and inlet values ($k$, $\omega$, $\tilde\nu$)
+
+For the two-equation models the freestream/inlet values of $k$ and $\omega$
+must be chosen consistently — the destruction of $k$ scales with $\omega$
+($D_k = \beta^\ast\rho\,\omega\,k$), so an $\omega$ that is set too low
+starves the $k$-equation of dissipation and lets $k$ grow without bound.
+The recommended (NASA Turbulence-Modelling-Resource) freestream values are
+built from a turbulence intensity $Tu$ and an eddy-to-molecular viscosity
+ratio $\mu_t/\mu$:
+
+$$
+k_\infty = \tfrac{3}{2}\,\bigl(Tu\,U_\infty\bigr)^2, \qquad
+\omega_\infty = \frac{\rho_\infty\,k_\infty}{\mu\,(\mu_t/\mu)}
+             = \frac{k_\infty}{\nu_\infty\,(\mu_t/\mu)} .
+$$
+
+Typical verification values are $Tu \approx 0.04\%\!-\!1\%$ and
+$\mu_t/\mu \approx 0.009\!-\!1$ (smaller $\mu_t/\mu$ ⇒ larger $\omega_\infty$
+⇒ more near-wall dissipation and a more robust start-up).  For example, a
+Mach-5 stream at $p=4000$ Pa, $T=68.3$ K ($\rho=0.204$ kg m⁻³,
+$U_\infty=828$ m s⁻¹, $\nu_\infty=5.8\times10^{-5}$ m² s⁻¹) with
+$Tu=0.04\%$, $\mu_t/\mu=0.009$ gives $k_\infty\approx0.16$ m² s⁻²,
+$\omega_\infty\approx3\times10^{5}$ s⁻¹.  Values orders of magnitude below
+this (e.g. $\omega_\infty=100$ s⁻¹) are a frequent cause of $k$ runaway.
+
+The same values are set for both the initial condition (`[ICB-Block*]`) and
+the inflow (`[inflow]`) in the input file.
+
+---
+
+## Numerical treatment of the source terms
+
+### Point-implicit (Patankar) destruction
+
+The turbulence source terms are added to the residual and advanced with the
+same explicit Runge–Kutta step as the mean flow.  The **destruction** terms,
+however, are stiff near walls — for $k$–$\omega$ models the wall value
+$\omega_\text{wall}=6\nu/(\beta_1 y^2)$ grows like $1/y^2$, so on a fine
+near-wall grid the explicit stability limit $\Delta t < 1/(\beta\,\omega)$ is
+easily violated and $k$/$\omega$ diverge while the mean flow stays healthy
+(typically at a multigrid fine-grid transition).
+
+To remove this restriction MOSE treats the destruction terms
+**point-implicitly**.  Writing the update for a conserved turbulence
+variable $q=\rho\phi$ as $q^{n+1}=q^n+\Delta t\,S(q)$ and linearising only
+the (stabilising) destruction part $D$,
+
+$$
+\Delta q = \Delta t\,\bigl[S^n - d\,\Delta q\bigr]
+\;\Longrightarrow\;
+\Delta q = \frac{\Delta t\,S^n}{1 + \Delta t\,d}, \qquad
+d \equiv \frac{\partial D}{\partial q}\ge 0 .
+$$
+
+In practice the net source increment is simply divided by $(1+\Delta t\,d)$,
+using the local time step $\Delta t$.  The destruction Jacobians are
+
+| Model | Equation | $d = \partial D/\partial q$ |
+|-------|----------|------------------------------|
+| SST / Wilcox | $k$ | $\beta^\ast\,\omega$ |
+| SST / Wilcox | $\omega$ | $2\,\beta\,\omega$ |
+| SA | $\tilde\nu$ | $2\,c_{w1}\,f_w\,\tilde\nu/y^2$ |
+
+Because the factor multiplies only the *increment*, it vanishes at
+convergence ($\Delta q\to0$) and therefore **does not change the converged,
+zero-residual solution** — it only enlarges the stable time step. This makes
+SST/Wilcox run at the mean-flow CFL independent of near-wall spacing.
+
+!!! warning "Effect on time-accurate (URANS) runs"
+    For **steady** computations (local time-stepping) the treatment is exact:
+    at convergence the residual is zero, so the factor has no effect on the
+    result.
+
+    For **time-accurate** runs it *does* enter the solution.  Dividing the
+    destruction increment by $(1+\Delta t\,d)$ is a backward-Euler
+    linearisation, so it formally reduces the turbulence **source** to
+    first-order in time wherever $\Delta t\,d$ is not small — i.e. near walls,
+    where $d\approx\beta\,\omega_\text{wall}\propto 1/y^2$ and
+    $\Delta t\,d\gg 1$ even at a modest CFL.  Note that:
+
+    - only the turbulence *destruction* is affected — the mean-flow equations
+      and the turbulence production/diffusion/convection retain the full
+      Runge–Kutta order;
+    - the terms made implicit are exactly the *stiff, fast* ones, whose
+      near-wall relaxation time is far shorter than any resolved URANS scale,
+      so the physically relevant (resolved-scale) accuracy is essentially
+      unchanged — the first-order error lives only in the unresolved fast
+      transient.
+
+    Disabling `point-implicit` for a URANS run does **not** recover accuracy
+    for free: the explicit near-wall $\omega$ source then violates its
+    stability limit and diverges.  To genuinely verify temporal convergence,
+    set `point-implicit = .false.` **and** reduce $\Delta t$ until
+    $\Delta t\,\beta\,\omega_\text{wall} < 1$ in the first off-wall cell
+    (usually impractically small).  For production URANS the recommendation is
+    to leave the treatment enabled.
+
+The treatment is enabled by default and controlled by
+
+```ini
+[MOSE-Turbulence]
+point-implicit = .true.   ; (default) point-implicit turbulence destruction
+```
+
+### Relation to under-relaxation
+
+Point-implicit damping is a *physically weighted, automatic* form of
+under-relaxation: the effective relaxation factor $1/(1+\Delta t\,d)$ is
+large (≈1) where the source is mild and small only where the destruction is
+stiff, and it scales with the local time step.  A constant global
+under-relaxation factor on the turbulence update achieves a similar
+stabilising effect but is blunter — it slows convergence everywhere, must be
+hand-tuned per case/grid, and (if applied to the whole update rather than the
+increment) can bias the transient.  Point-implicit treatment is therefore the
+preferred technique; global under-relaxation remains a valid, simpler
+fallback when a model's destruction Jacobian is not readily available.
 
 ---
 

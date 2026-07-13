@@ -102,6 +102,7 @@
 |-----------|---------|---------|----------|-------------|
 | Prt | 0.85 | > 0 |  no | Turbulent Prandtl number |
 | Sct | 0.90 | > 0 |  no | Turbulent Schmidt number |
+| point-implicit | .true. | logical |  no | Point-implicit (Patankar) treatment of turbulence destruction source terms |
 
 ## MOSE-Rotating-Frame
 

@@ -284,6 +284,7 @@ module MOSE_Config_Types_m
     character(len=llen) :: model
     logical :: SAcomp, SpalartShur, SAR
     logical :: QCR2000, blowing_corr, k_energy_coupling
+    logical :: point_implicit  ! Point-implicit (Patankar) treatment of turbulence destruction source terms
     ! Useful variables
     logical :: RSM, SD
   end type rans_t

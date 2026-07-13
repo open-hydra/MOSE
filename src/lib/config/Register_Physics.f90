@@ -52,6 +52,7 @@ contains
     section = trim(codename)//'-Turbulence'
     call reg%add(section, 'Prt', obj_rans%Prt, '0.85', 'Turbulent Prandtl number', '> 0', .false.)
     call reg%add(section, 'Sct', obj_rans%Sct, '0.90', 'Turbulent Schmidt number', '> 0', .false.)
+    call reg%add(section, 'point-implicit', obj_rans%point_implicit, '.true.', 'Point-implicit (Patankar) treatment of turbulence destruction source terms', 'logical', .false.)
     !call reg%add(section, 'k-coupling', obj_rans%k_energy_coupling, '.false.', 'Turbulent kinetic energy coupling', 'logical', .false.)
 
     

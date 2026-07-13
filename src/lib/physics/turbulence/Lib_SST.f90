@@ -36,7 +36,7 @@ contains
       
     SpalartShur       = obj_rans%SpalartShur
     k_energy_coupling = obj_rans%k_energy_coupling
-  
+
     if ( SpalartShur ) then
       call Compute_Velocity_Gradient ( domain )
       call Compute_RC_Terms ( domain )
@@ -53,15 +53,17 @@ contains
                      domain % blk(b) % vel_gradient, &
                      domain % blk(b) % rc_term1,     &
                      domain % blk(b) % rc_term2,     &
+                     domain % blk(b) % dtlocal,      &
                      domain % blk(b) % dim,          &
-                     SpalartShur, k_energy_coupling )
-    
+                     SpalartShur, k_energy_coupling, &
+                     obj_rans%point_implicit )
+
     end do
 
   end subroutine SST_Source_Terms
 
 
-  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, n, SpalartShur, k_energy_coupling )
+  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, point_implicit )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -69,7 +71,7 @@ contains
     use MOSE_Lib_RotatingFrame, only: obj_rot
     implicit none
     integer, intent(in) :: n(3)
-    logical, intent(in) :: SpalartShur, k_energy_coupling
+    logical, intent(in) :: SpalartShur, k_energy_coupling, point_implicit
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
@@ -77,14 +79,15 @@ contains
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
+    real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
     ! Local
     integer :: i, j, k, ii, jj
     real(R8) :: rho, Rgas, mil, kap, ome, dist, Gradvel(3,3), Divel, Sij(3,3), S, Wij(3,3), diag, mi_t, F(2)
     real(R8) :: vort(3), O, rstar, D, rtilde, frot, fr1
-    real(R8) :: Tij(3,3), Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2)
+    real(R8) :: Tij(3,3), Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2), fk, fw
 
     !$omp do collapse (3) private ( rho, Rgas, mil, kap, ome, dist, Gradvel, Divel, Sij, S, Wij, diag, mi_t, F ), &
-    !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, i, j, k, ii, jj )
+    !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj )
     
     do k = 1, n(3)
     do j = 1, n(2)
@@ -173,10 +176,18 @@ contains
       Diss(2) = beta*rho*ome**2
 
       ! Source terms
-      Source(1) = Prod(1) - Diss(1) 
+      Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
-      
-      Res(nt:nt+1,i,j,k) = Res(nt:nt+1,i,j,k) - Source * Volume(i,j,k)
+
+      ! Point-implicit (Patankar) treatment of the destruction terms.
+      fk = 1d0 ; fw = 1d0
+      if ( point_implicit ) then
+        fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
+        fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
+      end if
+
+      Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
+      Res(nt+1,i,j,k) = Res(nt+1,i,j,k) - Source(2) * Volume(i,j,k) * fw
       if ( k_energy_coupling ) Res(np,i,j,k) = Res(np,i,j,k) + Source(1) * Volume(i,j,k)
 
     enddo ; enddo ; enddo ! (i, j, k) loop
