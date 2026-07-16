@@ -12,13 +12,13 @@ Usage:
 Exit code 0 = pass (RMS relative error below tolerance), 1 = fail.
 """
 
-# ---- model-specific configuration -------------------------------------------
+# ---- configuration ----------------------------------------------------------
 MODEL        = "SST"
 REF_MATCH    = ["FUN3D"]     # substrings (all must be in the zone label)
 TOLERANCE    = 8.0          # percent RMS relative error
-MARKER       = "bs"
 MU           = 1.1858685985e-5 # laminar viscosity [Pa.s] (mil)
 X_LO         = 0.02            # lower x bound for the error metric [m]
+LABEL_FS     = 15
 # -----------------------------------------------------------------------------
 
 import argparse
@@ -28,9 +28,17 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import matplotlib as mpl
 from scipy.interpolate import interp1d
 import warnings
 warnings.filterwarnings("ignore")
+
+mpl.rcParams.update({
+    "figure.facecolor": "none",
+    "axes.facecolor": "none",
+    "savefig.facecolor": "none",
+    "svg.fonttype": "none",
+})
 
 root = Path(__file__).resolve().parent
 for parent in [root, *root.parents]:
@@ -48,6 +56,14 @@ except ModuleNotFoundError:
 parser = argparse.ArgumentParser(description=f"{MODEL} flat-plate validation")
 parser.add_argument("--plot", action="store_true", help="show interactive figure")
 args = parser.parse_args()
+
+
+def style(ax, xlabel, ylabel):
+    ax.set_xlabel(xlabel, fontsize=LABEL_FS)
+    ax.set_ylabel(ylabel, fontsize=LABEL_FS)
+    ax.tick_params(labelsize=LABEL_FS - 2)
+    ax.legend(loc="best", fontsize=LABEL_FS - 2)
+    ax.grid(True, alpha=0.3)
 
 
 def read_cf_dat(path):
@@ -130,11 +146,10 @@ try:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(x_m, Cf_m, MARKER, ms=5, label=f"MOSE {MODEL}")
-    ax.plot(x_r[x_r > 0], cf_r[x_r > 0], "k-", lw=2.5, label=ref_label)
+    ax.plot(x_m, Cf_m, "bd-", ms=12, markevery=5, label=f"MOSE", color="#0072B2", linewidth=4.0)
+    ax.plot(x_r[x_r > 0], cf_r[x_r > 0], label=ref_label, color="#E69F00", linestyle="--", linewidth=4.0)
     ax.set_xlim(0.0, 1.8); ax.set_ylim(0.002, 0.006)
-    ax.set_xlabel(r"$x$ [m]"); ax.set_ylabel(r"$C_f$")
-    ax.legend(loc="best"); ax.grid(True, alpha=0.3)
+    style(ax, r"$x$  [m]", r"$C_f$")
     fig.tight_layout()
     os.makedirs("OUTPUT", exist_ok=True)
     if args.plot:
