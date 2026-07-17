@@ -870,7 +870,7 @@ contains
   end subroutine BC_Symmetry_Metrics
 
 
-  subroutine BC_Connect_Metrics ( Im, Jm, Km, Fm, blkm, Is, Js, Ks, Fs, blks, d11s, d12s, d21s, d22s, Mg, dlg, volg )
+  subroutine BC_Connect_Metrics ( Im, Jm, Km, Fm, blkm, Is, Js, Ks, Fs, blks, d11s, d12s, d21s, d22s, Mg, dlg, volg, periodic )
     implicit none
     integer, intent(in)                  :: Im, Jm, Km, Fm, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s
     type(MOSE_block_type), intent(in)    :: blks
@@ -878,11 +878,13 @@ contains
     type(MOSE_tensor_3D_type), intent(out) :: Mg(2)
     type(MOSE_vector_3D_type), intent(out) :: dlg(2)
     real(R8), intent(out)                  :: volg(2)
+    logical, intent(in)                    :: periodic
     ! Local
     integer      :: g, Is1, Js1, Ks1
-    integer      :: II, JJ, KK, III, JJJ, KKK      
+    integer      :: II, JJ, KK, III, JJJ, KKK
     integer      :: guidem(6,3), guides(6,3), guidem2(6,3), guides2(6,3)
     type(MOSE_vector_3D_type), dimension(0:gc) :: N1, N2, N3, N4, N5, N6, N7, N8
+    type(MOSE_vector_3D_type) :: T
     
     ! ---------------------------------------------------------------------------------------------
     ! Preliminary definitions
@@ -936,6 +938,35 @@ contains
         N8(0)%c = blkm%node(Im  ,Jm  ,Km  ) % c
     end select
 
+    T%c = 0._R8
+    if (periodic) then
+      Is1 = Is + gc*guides(Fs,1) - guides2(Fs,1)
+      Js1 = Js + gc*guides(Fs,2) - guides2(Fs,2)
+      Ks1 = Ks + gc*guides(Fs,3) - guides2(Fs,3)
+      select case(Fs)
+        case(1:2)
+          II=Is1
+          JJ=(2*Js1+d11s+d21s)/2
+          KK=(2*Ks1+d12s+d22s)/2
+        case(3:4)
+          II=(2*Is1+d11s+d21s)/2
+          JJ=Js1
+          KK=(2*Ks1+d12s+d22s)/2
+        case(5:6)
+          II=(2*Is1+d11s+d21s)/2
+          JJ=(2*Js1+d12s+d22s)/2
+          KK=Ks1
+      end select
+      select case(Fm)
+        case(1) ; T%c = N4(0)%c - blks%node(II,JJ,KK)%c
+        case(2) ; T%c = N8(0)%c - blks%node(II,JJ,KK)%c
+        case(3) ; T%c = N6(0)%c - blks%node(II,JJ,KK)%c
+        case(4) ; T%c = N8(0)%c - blks%node(II,JJ,KK)%c
+        case(5) ; T%c = N7(0)%c - blks%node(II,JJ,KK)%c
+        case(6) ; T%c = N8(0)%c - blks%node(II,JJ,KK)%c
+      end select
+    end if
+
     do g = 1, gc
 
       ! connected cell node index
@@ -959,17 +990,17 @@ contains
           KK=Ks1
       end select
       if (Fm == 1) then
-          N4(g)%c = blks%node(ii,jj,kk)%c
+          N4(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 2) then
-          N8(g)%c = blks%node(ii,jj,kk)%c
+          N8(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 3) then
-          N6(g)%c = blks%node(ii,jj,kk)%c
+          N6(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 4) then
-          N8(g)%c = blks%node(ii,jj,kk)%c
+          N8(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 5) then
-          N7(g)%c = blks%node(ii,jj,kk)%c
+          N7(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 6) then
-          N8(g)%c = blks%node(ii,jj,kk)%c
+          N8(g)%c = blks%node(ii,jj,kk)%c + T%c
       endif
 
       ! update the remaining 3 indexes (only necessary in the corners, but for good measure)
@@ -989,17 +1020,17 @@ contains
           KKK=KK
       end select
       if (Fm == 1) then
-        N2(g)%c = blks%node(iii,jjj,kkk)%c
+        N2(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 2) then
-        N6(g)%c = blks%node(iii,jjj,kkk)%c
+        N6(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 3) then
-        N2(g)%c = blks%node(iii,jjj,kkk)%c
+        N2(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 4) then
-        N4(g)%c = blks%node(iii,jjj,kkk)%c
+        N4(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 5) then
-        N3(g)%c = blks%node(iii,jjj,kkk)%c
+        N3(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 6) then
-        N4(g)%c = blks%node(iii,jjj,kkk)%c
+        N4(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       endif
 
       ! node i1,i2-1 update
@@ -1018,17 +1049,17 @@ contains
           KKK=KK
       end select
       if (Fm == 1) then
-        N3(g)%c = blks%node(iii,jjj,kkk)%c
+        N3(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 2) then
-        N7(g)%c = blks%node(iii,jjj,kkk)%c
+        N7(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 3) then
-        N5(g)%c = blks%node(iii,jjj,kkk)%c
+        N5(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 4) then
-        N7(g)%c = blks%node(iii,jjj,kkk)%c
+        N7(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 5) then
-        N5(g)%c = blks%node(iii,jjj,kkk)%c
+        N5(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 6) then
-        N6(g)%c = blks%node(iii,jjj,kkk)%c
+        N6(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       endif
 
       ! node i1-1,i2-1 update
@@ -1047,17 +1078,17 @@ contains
           KKK=KK
       end select
       if (Fm == 1) then
-        N1(g)%c = blks%node(iii,jjj,kkk)%c
+        N1(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 2) then
-        N5(g)%c = blks%node(iii,jjj,kkk)%c
+        N5(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 3) then
-        N1(g)%c = blks%node(iii,jjj,kkk)%c
+        N1(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 4) then
-        N3(g)%c = blks%node(iii,jjj,kkk)%c
+        N3(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 5) then
-        N1(g)%c = blks%node(iii,jjj,kkk)%c
+        N1(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 6) then
-        N2(g)%c = blks%node(iii,jjj,kkk)%c
+        N2(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       endif
 
       ! compute metric variables

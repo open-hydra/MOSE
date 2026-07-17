@@ -172,7 +172,7 @@ contains
 
       select case( domain % bc(i) % type)
 
-        case (101) ! block connection
+        case (101,201) ! block connection
           bs = domain % bc(i) % bs
           if (.not. is_local_block(bs)) cycle  ! inter-rank already handled by exchange_ghost_R
           is = domain % bc(i) % is
