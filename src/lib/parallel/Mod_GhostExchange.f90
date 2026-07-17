@@ -433,7 +433,8 @@ contains
     do i = 2, n
       tmp = list(i)
       j = i - 1
-      do while (j >= 1 .and. list(j)%remote_rank > tmp%remote_rank)
+      do while (j >= 1)
+        if (list(j)%remote_rank <= tmp%remote_rank) exit
         list(j+1) = list(j)
         j = j - 1
       end do
