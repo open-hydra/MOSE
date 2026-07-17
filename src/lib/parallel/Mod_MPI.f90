@@ -89,27 +89,49 @@ contains
 
   !> Partition nb blocks across MPI ranks using greedy load balancing.
   !> blk_ncells(b) = total number of cells in block b.
+  !> Blocks are walked largest-first (LPT), so the balance depends only on the cell
+  !> counts and not on the order the blocks appear in the mesh file.
   subroutine partition_blocks(nb, blk_ncells)
     integer, intent(in) :: nb
     integer, intent(in) :: blk_ncells(nb)
     ! Local
-    integer :: b, r, nloc
-    integer, allocatable :: rank_load(:)
+    integer :: b, i, j, r, nloc, tmp
+    integer, allocatable :: rank_load(:), order(:)
 
     if (allocated(block_owner)) deallocate(block_owner)
     if (allocated(rank_load)) deallocate(rank_load)
     allocate(block_owner(nb))
     allocate(rank_load(0:mpi_size_-1))
+    allocate(order(nb))
     rank_load = 0
 
-    ! Greedy: assign each block to the rank with the least load
-    r = 0
+    ! Order blocks by descending cell count (insertion sort: nb is small).
+    ! Ties keep mesh order, so the result is reproducible.
     do b = 1, nb
+      order(b) = b
+    end do
+    do i = 2, nb
+      tmp = order(i)
+      j = i - 1
+      do while (j >= 1)
+        if (blk_ncells(order(j)) >= blk_ncells(tmp)) exit
+        order(j+1) = order(j)
+        j = j - 1
+      end do
+      order(j+1) = tmp
+    end do
+
+    ! Greedy: assign each block, largest first, to the rank with the least load
+    do i = 1, nb
+      b = order(i)
       r = minloc(rank_load, dim=1) - 1   ! rank with minimum load (0-indexed)
       block_owner(b) = r
       rank_load(r) = rank_load(r) + blk_ncells(b)
     end do
-    
+    deallocate(order)
+
+    call report_partition_balance(nb, blk_ncells, rank_load)
+
     ! Build local block list
     nloc = count(block_owner == mpi_rank_)
     n_local_blocks = nloc
@@ -125,6 +147,32 @@ contains
 
     deallocate(rank_load)
   end subroutine partition_blocks
+
+
+  subroutine report_partition_balance(nb, blk_ncells, rank_load)
+    integer, intent(in) :: nb
+    integer, intent(in) :: blk_ncells(nb)
+    integer, intent(in) :: rank_load(0:)
+    ! Local
+    real(R8) :: ideal, eff
+
+    if (mpi_rank_ /= 0) return
+    if (mpi_size_ <= 1) return
+
+    ideal = real(sum(blk_ncells), R8) / real(mpi_size_, R8)
+    eff   = ideal / real(maxval(rank_load), R8) * 100.0_R8
+
+    write(*,'(A,I0,A,I0,A,F5.1,A)') '  MPI partition: ', nb, ' blocks over ', &
+      mpi_size_, ' ranks, balance ', eff, '% of ideal'
+
+    if (mpi_size_ > nb) then
+      write(*,'(A,I0,A,I0,A)') '  WARNING: blocks are indivisible - only ', nb, &
+        ' of ', mpi_size_, ' ranks have work, the rest idle. Reduce ranks or split the mesh.'
+    else if (real(maxval(blk_ncells), R8) > ideal) then
+      write(*,'(A,I0,A)') '  NOTE: balance is capped by the largest block (', &
+        maxval(blk_ncells), ' cells); only a finer mesh split can improve it.'
+    end if
+  end subroutine report_partition_balance
 
 
   !> MPI_ALLREDUCE with MPI_SUM for a scalar real(R8).
