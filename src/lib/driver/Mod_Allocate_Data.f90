@@ -149,16 +149,18 @@ contains
 
   subroutine deallocate_remote_computation_data(domain)
     use MOSE_Advanced_Types_m
-    use MOSE_Mod_MPI, only: is_local_block, mpi_is_root
+    use MOSE_Mod_MPI, only: is_local_block, mpi_is_root, mpi_size_, block_owner
 
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     integer :: b, d, i, c
     logical, allocatable :: needs_remote_P(:)
 
+    call check_donors_are_colocated(domain)
+
     ! Build mask of remote blocks whose P (and dir) must be kept:
     !  - chimera (102): donorID(:,1) can reference remote blocks
-    !  - manifold (202): bc%bs can be remote
+    !  - manifold (501): bc%bs can be remote
     allocate(needs_remote_P(domain%nb))
     needs_remote_P = .false.
     do i = 1, domain%nbound
@@ -170,7 +172,7 @@ contains
               if (.not. is_local_block(b)) needs_remote_P(b) = .true.
             end do
           end if
-        case (202) ! manifold
+        case (501) ! manifold
           b = domain%bc(i)%bs
           if (b > 0 .and. .not. is_local_block(b)) needs_remote_P(b) = .true.
       end select
@@ -214,6 +216,49 @@ contains
     deallocate(needs_remote_P)
 
   end subroutine deallocate_remote_computation_data
+
+
+  subroutine check_donors_are_colocated(domain)
+    use MOSE_Advanced_Types_m
+    use MOSE_Mod_MPI, only: mpi_size_, block_owner, mpi_abort_all
+
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    integer :: i, bm, bs
+
+    if (mpi_size_ <= 1) return
+    if (.not. allocated(block_owner)) return
+
+    do i = 1, domain%nbound
+      bm = domain%bc(i)%b
+      select case (domain%bc(i)%type)
+        case (501)
+          bs = domain%bc(i)%bs
+          call abort_if_split(bm, bs, 'manifold (501)')
+      end select
+    end do
+
+  end subroutine check_donors_are_colocated
+
+
+  subroutine abort_if_split(bm, bs, what)
+    use MOSE_Mod_MPI, only: block_owner, mpi_abort_all
+
+    implicit none
+    integer, intent(in) :: bm, bs
+    character(len=*), intent(in) :: what
+    character(len=512) :: msg
+
+    if (bs <= 0 .or. bs > size(block_owner)) return
+    if (bm <= 0 .or. bm > size(block_owner)) return
+    if (block_owner(bs) == block_owner(bm)) return
+
+    write(msg,'(A,A,I0,A,I0,A,I0,A,I0,A)') trim(what), &
+      ': donor block ', bs, ' (rank ', block_owner(bs), ') is split from block ', bm, &
+      ' (rank ', block_owner(bm), '). Donor P is not refreshed across ranks; co-locate the blocks or use fewer ranks.'
+    call mpi_abort_all(trim(msg))
+
+  end subroutine abort_if_split
 
 
 end module MOSE_Mod_Allocate_Data
