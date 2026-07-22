@@ -91,6 +91,7 @@ module MOSE_Advanced_Types_m
     integer, dimension(:), allocatable               :: local_bc_idx
     integer                                          :: n_local_bs = 0
     integer, dimension(:), allocatable               :: local_bs_idx
+    integer                                          :: mg_level = 1     ! Multigrid level of this domain (selects exchange schedules)
   end type MOSE_domain_type
 
   type :: MOSE_simulation_type

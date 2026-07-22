@@ -14,7 +14,8 @@ contains
                                        exchange_ghost_P_post_send, exchange_ghost_P_wait_unpack, &
                                        exchange_ghost_P_wait_send, &
                                        exchange_ghost_chimera_begin, exchange_ghost_chimera_end, &
-                                       Ghost_Interrank, exchange_ghost_Pg, ghost_sched
+                                       Ghost_Interrank, exchange_ghost_Pg, ghost_sched, &
+                                       set_active_mg_level
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
@@ -26,6 +27,7 @@ contains
     ! Chimera donor cells travel in their own non-blocking exchange, started
     ! here so it overlaps with the local BC processing below.
     !$omp single
+    call set_active_mg_level(domain%mg_level)
     call exchange_ghost_P_post_recv(domain)
     call exchange_ghost_chimera_begin(domain)
     !$omp end single
