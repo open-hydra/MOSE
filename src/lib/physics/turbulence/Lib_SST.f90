@@ -251,13 +251,16 @@ contains
 
   subroutine SST_Set_Wall_Values ( mi_l, rkw, dist )
     use MOSE_Global_m
+    use MOSE_Config_Types_m, only: obj_rans
     implicit none
     real(R8), intent(out), dimension(nRANS)  :: rkw              ! : [ rho*k rho*w ] at wall
     real(R8), intent(in)                     :: mi_l             ! : laminar viscosity at wall
     real(R8), intent(in)                     :: dist             ! : cell center distance from wall
-    
+
     rkw(1) = 0d0 ! Solid surface condition on k
-    rkw(2) = 8d2 * mi_l / ( dist**2 ) ! approximate BC for smooth surface (Menter kw-SST)
+    ! Smooth-surface BC: omega_wall = C*mi_l/dist**2, with C set by omega-wall-bc
+    ! (800 = Menter practical, 80 = asymptotic y->0 limit). See Setup_RANS_Model.
+    rkw(2) = obj_rans%omega_wall_coef * mi_l / ( dist**2 )
 
   end subroutine SST_Set_Wall_Values
 

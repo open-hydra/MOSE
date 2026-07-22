@@ -44,6 +44,20 @@ contains
       obj_rans%blowing_corr = .true.
     end if
 
+    ! Omega wall condition (k-omega models): omega_wall = C * mi_l / dist**2.
+    ! 'practical'  -> C = 60/beta_1 = 800 : Menter's robust form, meant for meshes
+    !                 that do not resolve the viscous sublayer.
+    ! 'asymptotic' -> C =  6/beta_1 =  80 : exact y->0 limit of the omega equation,
+    !                 the consistent choice on a wall-resolved (y+ < 1) mesh.
+    select case ( trim(obj_rans%omega_wall_bc) )
+    case ( 'practical' )
+      obj_rans%omega_wall_coef = 8d2
+    case ( 'asymptotic' )
+      obj_rans%omega_wall_coef = 8d1
+    case default
+      error stop ( 'Error: omega-wall-bc must be "practical" or "asymptotic".' )
+    end select
+
     obj_rans%description = 'RANS model: '//trim(obj_rans%model)
 
     ! Setting RANS or NS model
