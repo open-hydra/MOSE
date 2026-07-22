@@ -13,6 +13,7 @@ contains
     use MOSE_Mod_GhostExchange, only: exchange_ghost_P_post_recv, exchange_ghost_P_pack, &
                                        exchange_ghost_P_post_send, exchange_ghost_P_wait_unpack, &
                                        exchange_ghost_P_wait_send, &
+                                       exchange_ghost_chimera_begin, exchange_ghost_chimera_end, &
                                        Ghost_Interrank, exchange_ghost_Pg, ghost_sched
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
@@ -22,8 +23,11 @@ contains
 
 
     ! MPI: post persistent receives, pack buffer in parallel, then post sends
+    ! Chimera donor cells travel in their own non-blocking exchange, started
+    ! here so it overlaps with the local BC processing below.
     !$omp single
     call exchange_ghost_P_post_recv(domain)
+    call exchange_ghost_chimera_begin(domain)
     !$omp end single
 
     ! Pack send buffer in parallel over face groups
@@ -67,7 +71,8 @@ contains
         case(0,401:407,420) ! inlet/outlet/extrapolation: zero-gradient
           call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(102)
-          call Ghost_Chimera ( domain % nb, domain % blk, domain % bc(i) )
+          ! Chimera: processed after the donor-cell MPI exchange completes (below)
+          continue
         case default
           call Ghost_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
       end select
@@ -91,7 +96,7 @@ contains
                                       domain % blk(Bs), domain % bc(i) % Pg )
     enddo
 
-    ! Compute Pg for chimera (102) and Q2D (410) connections where Bm is local.
+    ! Compute Pg for Q2D (410) connections where Bm is local.
     !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm)
     do ii = 1, domain % n_local_bc
       i = domain % local_bc_idx(ii)
@@ -101,17 +106,39 @@ contains
       Km = domain % bc(i) % k
       Fm = domain % bc(i) % f
       select case (domain % bc(i) % type)
-        case(102) ! chimera
-          call Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
         case(410)
           call Fill_BC_Ghost_Q2D ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
       end select
     enddo
 
-    ! MPI: wait for P receives to complete
+    ! MPI: wait for P receives to complete; unpack chimera donor cells into
+    ! the kept-alive P arrays of remote donor blocks
     !$omp single
     call exchange_ghost_P_wait_unpack(domain)
+    call exchange_ghost_chimera_end(domain)
     !$omp end single
+
+    ! Chimera ghost fill: all donor data (local and remote) is now current
+    !$omp do schedule (dynamic) private(ii, i)
+    do ii = 1, domain % n_local_bc
+      i = domain % local_bc_idx(ii)
+      if (domain % bc(i) % type /= 102) cycle
+      call Ghost_Chimera ( domain % nb, domain % blk, domain % bc(i) )
+    enddo
+
+    ! Chimera Pg(:,3:6): reads the ghost columns written just above, so it
+    ! must stay a separate loop (implicit barrier in between)
+    !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm)
+    do ii = 1, domain % n_local_bc
+      i = domain % local_bc_idx(ii)
+      if (domain % bc(i) % type /= 102) cycle
+      Bm = domain % bc(i) % b
+      Im = domain % bc(i) % i
+      Jm = domain % bc(i) % j
+      Km = domain % bc(i) % k
+      Fm = domain % bc(i) % f
+      call Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
+    enddo
 
     ! Process INTER-RANK type-1 entries (Bm local, Bs remote)
     !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm, Bs)
@@ -338,12 +365,14 @@ contains
       Is = bc % donorID(c,2)
       Js = bc % donorID(c,3)
       Ks = bc % donorID(c,4)
-      consi(1:np) = prim2cons ( blk(Bs) % P (1:np,Is,Js,Ks) )
+      consi(1:np)       = prim2cons ( blk(Bs) % P (1:np,Is,Js,Ks) )   ! flow: conservative blend
+      consi(np+1:nprim) = blk(Bs) % P (np+1:nprim,Is,Js,Ks)           ! soot/passive/RANS: primitive blend
       consg = consg + consi * bc % volume_fraction(c)
     enddo
-    blk(Bm) % P (1:np,Ig,Jg,Kg) = cons2prim ( consg(1:np), temperature )
+    blk(Bm) % P (1:np,Ig,Jg,Kg)       = cons2prim ( consg(1:np), temperature )
+    blk(Bm) % P (np+1:nprim,Ig,Jg,Kg) = consg(np+1:nprim)
     bc % Pg (:,1) = blk(Bm) % P (:, Ig,Jg,Kg)
-          
+
     ! Second row of ghost cell coordinates
     consg = 0.d0
     do c = bc % ni(1)+1, sum ( bc % ni )
@@ -351,10 +380,12 @@ contains
       Is = bc % donorID(c,2)
       Js = bc % donorID(c,3)
       Ks = bc % donorID(c,4)
-      consi(1:np) = prim2cons ( blk(Bs) % P (1:np,Is,Js,Ks) )
+      consi(1:np)       = prim2cons ( blk(Bs) % P (1:np,Is,Js,Ks) )   ! flow: conservative blend
+      consi(np+1:nprim) = blk(Bs) % P (np+1:nprim,Is,Js,Ks)           ! soot/passive/RANS: primitive blend
       consg = consg + consi * bc % volume_fraction(c)
     enddo
-    blk(Bm) % P (1:np,Ig2,Jg2,Kg2) = cons2prim ( consg(1:np), temperature )
+    blk(Bm) % P (1:np,Ig2,Jg2,Kg2)       = cons2prim ( consg(1:np), temperature )
+    blk(Bm) % P (np+1:nprim,Ig2,Jg2,Kg2) = consg(np+1:nprim)
     bc % Pg (:,2) = blk(Bm) % P (:,Ig2,Jg2,Kg2)
     
   end subroutine Ghost_Chimera
