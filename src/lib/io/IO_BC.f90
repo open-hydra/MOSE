@@ -145,6 +145,7 @@ contains
     ! Local
     integer :: cc, i, s, nnozzle, nmanifold
     integer :: unitfile, ios, cios, ip
+    integer :: nzero_chim
     character(len=32) :: p0file
     character(len=32) :: alpha_tok, beta_tok
     character(len=256) :: q2d_line
@@ -183,6 +184,7 @@ contains
 
     ! Counter for number of cells per face in each block
     n_bf = 0
+    nzero_chim = 0
 
     ! Read file
     do i = 1, size(bc)
@@ -218,6 +220,10 @@ contains
           do s = bc(i)%ni(1)+1, bc(i)%ni(1)+bc(i)%ni(2)
             read( unitfile,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
           enddo
+          if (sum(bc(i)%volume_fraction(1:bc(i)%ni(1))) < 0.5d0 .or. &
+              sum(bc(i)%volume_fraction(bc(i)%ni(1)+1:sum(bc(i)%ni))) < 0.5d0) then
+            nzero_chim = nzero_chim + 1
+          endif
           allocate ( bc(i) % Pg (nprim, 6) )
 
         ! ─────────────────────────────────────────────────────────────────────
@@ -420,6 +426,17 @@ contains
     if (nwall > 0) obj_io % write_wall = .true.
 
     close( unitfile )
+
+    if (nzero_chim > 0) then
+      block
+        use MOSE_Mod_MPI, only: mpi_abort_all
+        character(len=256) :: msg
+        write(msg,'(I0,A,I0,A)') nzero_chim, ' chimera entries in the level-', level, &
+          ' BC file have donor volume fractions summing to ~0 (no donors found by the BC '// &
+          'builder). Their ghost states would be garbage; fix the BC file before running.'
+        call mpi_abort_all(trim(msg))
+      end block
+    endif
 
   end subroutine Read_BCfile
 

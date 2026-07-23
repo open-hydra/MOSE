@@ -54,11 +54,11 @@ contains
       !$omp do schedule (dynamic) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks)
       do i = 1, domain % nbound
         select case ( domain % bc(i) % type )
-          case(101) ! block connection
+          case(101,201) ! block connection
             Bm = domain % bc(i) % b
-            Im = domain % bc(i) % i 
-            Jm = domain % bc(i) % j 
-            Km = domain % bc(i) % k 
+            Im = domain % bc(i) % i
+            Jm = domain % bc(i) % j
+            Km = domain % bc(i) % k
             Fm = domain % bc(i) % f
             Bs = domain % bc(i) % bs
             Is = domain % bc(i) % is
@@ -81,11 +81,11 @@ contains
       Km = domain % bc(i) % k 
       Fm = domain % bc(i) % f
       select case ( domain % bc(i) % type )
-        case(101) ! block connection
+        case(101,201) ! block connection
           Bs = domain % bc(i) % bs
-          Is = domain % bc(i) % is 
-          Js = domain % bc(i) % js 
-          Ks = domain % bc(i) % ks 
+          Is = domain % bc(i) % is
+          Js = domain % bc(i) % js
+          Ks = domain % bc(i) % ks
           Fs = domain % bc(i) % fs
           d11s = domain % bc(i) % d11
           d12s = domain % bc(i) % d12
@@ -93,7 +93,8 @@ contains
           d22s = domain % bc(i) % d22
           call BC_Connect_Metrics ( Im, Jm, Km, Fm, domain % blk(Bm), &
                                     Is, Js, Ks, Fs, domain % blk(Bs), d11s, d12s, d21s, d22s, &
-                                    domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg)
+                                    domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg, &
+                                    periodic = (domain % bc(i) % type == 201) )
         case(300) ! symmetry
           call BC_Symmetry_Metrics ( Im, Jm, Km, Fm, domain % blk(Bm), &
                                      domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg )

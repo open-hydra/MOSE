@@ -103,15 +103,20 @@ contains
 
   !> Find the cell indexes related to the probe starting from space coords
   subroutine Place (self, domain)
+    use MOSE_Mod_MPI, only: is_local_block, mpi_size_, mpi_rank_, &
+                            mpi_allreduce_min_r8, mpi_allreduce_sum_r8_array
     implicit none
     class(obj_probe)                   :: self
     type(MOSE_domain_type), intent(in) :: domain
     ! Local
     integer :: i, j, k, b
-    real(8) :: d0, d
+    real(8) :: d0, d, dglob, claim, winner
+    real(8) :: packed(4)
 
     d0 = huge(1d0)
+    self%ilocation = 0
     do b = 1, domain%nb
+      if (.not. is_local_block(b)) cycle
       do k = 0, domain%blk(b)%dim(3); do j = 0, domain%blk(b)%dim(2); do i = 1, domain%blk(b)%dim(1)
         d = norm2(self%location%c-domain%blk(b)%node(i,j,k)%c)
         if (d<d0) then
@@ -120,6 +125,17 @@ contains
         endif
       enddo; enddo; enddo
     enddo
+
+    if (mpi_size_ > 1) then
+      call mpi_allreduce_min_r8(d0, dglob)
+      claim = huge(1d0)
+      if (d0 == dglob) claim = real(mpi_rank_, 8)
+      call mpi_allreduce_min_r8(claim, winner)
+      packed = 0.d0
+      if (real(mpi_rank_, 8) == winner) packed = real(self%ilocation, 8)
+      call mpi_allreduce_sum_r8_array(packed, 4)
+      self%ilocation = nint(packed)
+    endif
 
   end subroutine Place
 

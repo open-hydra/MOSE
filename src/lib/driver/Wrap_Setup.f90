@@ -25,7 +25,8 @@ contains
     use MOSE_IO_Wall,              only: Initialize_Wall_File
     use MOSE_Lib_Ghost,            only: Fill_Ghost_Cell
     use MOSE_Mod_MPI,              only: mpi_is_root, partition_blocks
-    use MOSE_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index
+    use MOSE_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index, &
+                                         allocate_exchange_schedules
     implicit none
     type(MOSE_simulation_type), intent(inout) :: simulation
     ! Local
@@ -70,10 +71,14 @@ contains
     call Setup_BC ( simulation%domain )
     if (mpi_is_root) call Check_BC ()
 
-    ! MPI: partition blocks and build ghost cell communication schedule
+    ! MPI: partition blocks once on finest-level cell counts (restriction and
+    ! prolongation are block-local, so a block must live on the same rank at
+    ! every level), then build per-level ghost/chimera communication schedules.
+    call partition_blocks(simulation%domain(1)%nb, &
+      [(product(simulation%domain(1)%blk(ios)%dim(1:3)), ios=1, simulation%domain(1)%nb)])
+    call allocate_exchange_schedules(obj_multigrid%MGL)
     do m = 1, obj_multigrid%MGL
-      call partition_blocks(simulation%domain(m)%nb, &
-        [(product(simulation%domain(m)%blk(ios)%dim(1:3)), ios=1, simulation%domain(m)%nb)])
+      simulation%domain(m)%mg_level = m
       call build_ghost_schedule(simulation%domain(m))
       call build_local_bc_index(simulation%domain(m))
     end do

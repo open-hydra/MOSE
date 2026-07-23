@@ -14,7 +14,8 @@ contains
                                        exchange_ghost_P_post_send, exchange_ghost_P_wait_unpack, &
                                        exchange_ghost_P_wait_send, &
                                        exchange_ghost_chimera_begin, exchange_ghost_chimera_end, &
-                                       Ghost_Interrank, exchange_ghost_Pg, ghost_sched
+                                       Ghost_Interrank, exchange_ghost_Pg, ghost_sched, &
+                                       set_active_mg_level
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
@@ -26,6 +27,7 @@ contains
     ! Chimera donor cells travel in their own non-blocking exchange, started
     ! here so it overlaps with the local BC processing below.
     !$omp single
+    call set_active_mg_level(domain%mg_level)
     call exchange_ghost_P_post_recv(domain)
     call exchange_ghost_chimera_begin(domain)
     !$omp end single
@@ -366,11 +368,12 @@ contains
       Js = bc % donorID(c,3)
       Ks = bc % donorID(c,4)
       consi(1:np)       = prim2cons ( blk(Bs) % P (1:np,Is,Js,Ks) )   ! flow: conservative blend
-      consi(np+1:nprim) = blk(Bs) % P (np+1:nprim,Is,Js,Ks)           ! soot/passive/RANS: primitive blend
+      consi(np+1:nprim) = blk(Bs) % P (np+1:nprim,Is,Js,Ks) &        ! soot/passive/RANS: density-weighted blend
+                        * sum ( blk(Bs) % P (1:nsc,Is,Js,Ks) )
       consg = consg + consi * bc % volume_fraction(c)
     enddo
     blk(Bm) % P (1:np,Ig,Jg,Kg)       = cons2prim ( consg(1:np), temperature )
-    blk(Bm) % P (np+1:nprim,Ig,Jg,Kg) = consg(np+1:nprim)
+    blk(Bm) % P (np+1:nprim,Ig,Jg,Kg) = consg(np+1:nprim) / sum ( consg(1:nsc) )
     bc % Pg (:,1) = blk(Bm) % P (:, Ig,Jg,Kg)
 
     ! Second row of ghost cell coordinates
@@ -381,11 +384,12 @@ contains
       Js = bc % donorID(c,3)
       Ks = bc % donorID(c,4)
       consi(1:np)       = prim2cons ( blk(Bs) % P (1:np,Is,Js,Ks) )   ! flow: conservative blend
-      consi(np+1:nprim) = blk(Bs) % P (np+1:nprim,Is,Js,Ks)           ! soot/passive/RANS: primitive blend
+      consi(np+1:nprim) = blk(Bs) % P (np+1:nprim,Is,Js,Ks) &        ! soot/passive/RANS: density-weighted blend
+                        * sum ( blk(Bs) % P (1:nsc,Is,Js,Ks) )
       consg = consg + consi * bc % volume_fraction(c)
     enddo
     blk(Bm) % P (1:np,Ig2,Jg2,Kg2)       = cons2prim ( consg(1:np), temperature )
-    blk(Bm) % P (np+1:nprim,Ig2,Jg2,Kg2) = consg(np+1:nprim)
+    blk(Bm) % P (np+1:nprim,Ig2,Jg2,Kg2) = consg(np+1:nprim) / sum ( consg(1:nsc) )
     bc % Pg (:,2) = blk(Bm) % P (:,Ig2,Jg2,Kg2)
     
   end subroutine Ghost_Chimera
