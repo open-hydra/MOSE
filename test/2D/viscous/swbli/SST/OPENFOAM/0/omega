@@ -1,0 +1,58 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// NASA TMR freestream for SST:
+//   omega_inf = 1e-6 * rho_inf * a_inf^2 / mu_inf = 472.2 1/s
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform 1215.8;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 1215.8;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bottomWall
+    {
+        // omegaWallFunction carries Menter's viscous-sublayer form
+        // omega_w = 6*nu/(beta1*y^2), so it is valid on this resolved mesh
+        type            omegaWallFunction;
+        beta1           0.0075;   // => omega_w = 6*nu/(0.0075*y^2) = 800*nu/y^2
+                                  //    == MOSE Menter practical BC (60*nu/(0.075*y^2))
+        value           uniform 1215.8;
+    }
+    topWall
+    {
+        type            omegaWallFunction;
+        beta1           0.0075;   // => omega_w = 6*nu/(0.0075*y^2) = 800*nu/y^2
+                                  //    == MOSE Menter practical BC (60*nu/(0.075*y^2))
+        value           uniform 1215.8;
+    }
+    symTop
+    {
+        type            symmetry;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

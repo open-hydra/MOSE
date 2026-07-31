@@ -1,0 +1,53 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      nut;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// chi = nuTilda/nu = 3  ->  fv1 = 0.070  ->  nut = 0.07*1.74e-4 = 1.2e-5
+
+dimensions      [0 2 -1 0 0 0 0];
+
+internalField   uniform 8.21e-12;
+
+boundaryField
+{
+    inlet
+    {
+        type            calculated;
+        value           uniform 8.21e-12;
+    }
+    outlet
+    {
+        type            calculated;
+        value           uniform 8.21e-12;
+    }
+    bottomWall
+    {
+        // wall-resolved mesh (y+ ~ 0.3): no wall function
+        type            fixedValue;
+        value           uniform 0;
+    }
+    topWall
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+    symTop
+    {
+        type            symmetry;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

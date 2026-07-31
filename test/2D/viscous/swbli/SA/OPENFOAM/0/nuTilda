@@ -1,0 +1,52 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      nuTilda;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Freestream: nuTilda = 3*nu_inf = 3 * (1.1858686e-5 / 0.20406) = 1.74e-4
+// (standard fully-turbulent SA inflow; see README for the MOSE difference)
+
+dimensions      [0 2 -1 0 0 0 0];
+
+internalField   uniform 4.9005e-06;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 4.9005e-06;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bottomWall
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+    topWall
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+    symTop
+    {
+        type            symmetry;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

@@ -1,0 +1,49 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      T;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 0 1 0 0 0];
+
+internalField   uniform 68.3;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 68.3;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bottomWall
+    {
+        type            fixedValue;   // isothermal wall (MOSE: T = 300 K)
+        value           uniform 300;
+    }
+    topWall
+    {
+        type            fixedValue;   // isothermal wall (MOSE: T = 300 K)
+        value           uniform 300;
+    }
+    symTop
+    {
+        type            symmetry;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

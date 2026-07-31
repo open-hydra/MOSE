@@ -1,0 +1,10 @@
+bin/
+OUTPUT/
+fromATLAStoSolver/
+INPUT/phase.txt
+INPUT/thermo.dat
+INPUT/transport.dat
+logfile
+errors_file
+.ID
+mesh.p3d
