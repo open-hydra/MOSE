@@ -8,10 +8,12 @@ module MOSE_IO_Solution
   
   !> Abstract interface relative to the finite-rate reactions source procedure
   abstract interface
-    subroutine r_solution_if ( IOfield )
+    subroutine r_solution_if ( IOfield, zone_mask, dims_only )
       use Lib_ORION_data
       implicit none
       type(ORION_data), intent(inout) :: IOfield
+      logical, intent(in), optional   :: zone_mask(:)  !< read variable data only for these blocks
+      logical, intent(in), optional   :: dims_only     !< read block dimensions, no data
     end subroutine r_solution_if
 
     subroutine w_solution_if ( domain, IOfield, file )
@@ -94,7 +96,13 @@ contains
 
   end subroutine Setup_Input_Solution
 
-  subroutine Read_vtk_tec ( IOfield )
+  !> \brief Read the initial/restart field into IOfield.
+  !> \details With no optional argument the whole file is read.  `dims_only`
+  !>          reads block dimensions only and `zone_mask` restricts variable
+  !>          data to the selected blocks, which lets an MPI run partition the
+  !>          domain before committing memory.  Both are honoured on the szplt
+  !>          path only -- callers must check `Ic_Supports_Zone_Filter` first.
+  subroutine Read_vtk_tec ( IOfield, zone_mask, dims_only )
     use MOSE_Config_Types_m, only: obj_sim_param, obj_io
     use MOSE_Parameters_m
     use Lib_ORION_data
@@ -103,6 +111,8 @@ contains
     use strings, only: parse
     implicit none
     type(ORION_data), intent(inout) :: IOfield
+    logical, intent(in), optional   :: zone_mask(:)
+    logical, intent(in), optional   :: dims_only
     ! Local
     integer         :: error
     character(clen) :: format(2)
@@ -120,7 +130,8 @@ contains
     select case(trim(format(1)))
     case('tecplot')
       IOfield%tec%format = trim(format(2))
-      error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit))
+      error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit), &
+                                             zone_mask=zone_mask,dims_only=dims_only)
     case('vtk')
       IOfield%tec%format = trim(format(2))
       error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4),vtspath='INPUT/vtk/field',time=obj_io%IOtime)
@@ -131,6 +142,19 @@ contains
   end subroutine Read_vtk_tec
 
 
+  !> \brief Can Read_IC report block dimensions without reading the field?
+  !> \details Only szplt can: it carries a zone index, so `tecZoneGetIJK`
+  !>          answers from the header.  ASCII formats have to be parsed from
+  !>          the top, so there a dimension query costs a full read.
+  logical function Ic_Supports_Zone_Filter()
+    use MOSE_Config_Types_m, only: obj_io
+    implicit none
+
+    Ic_Supports_Zone_Filter = ( index(obj_io%nameinit,'.szplt') > 0 )
+
+  end function Ic_Supports_Zone_Filter
+
+
   !> Output setup
   subroutine Setup_Output_Solution ( IOfield )
     use IR_Precision
@@ -138,6 +162,7 @@ contains
     use MOSE_Global_m
     use MOSE_Parameters_m
     use Lib_ORION_data
+    use MOSE_Mod_MPI, only: mpi_is_root
     use strings, only: parse
     implicit none
     type(ORION_data), intent(inout) :: IOfield(obj_multigrid%MGL)
@@ -228,19 +253,27 @@ contains
       enddo
     enddo
 
-    ! Reallocate IOfield vars if the number of variables read into the backup file is different from the solution one
-    ! The reallocation is performed after reading the ICs and before the first solution is written!
+    ! Size the output arrays.  The set of variables written is not the set
+    ! read (T is always added, thermo/transport optionally), so this always
+    ! reshapes.
+    !
+    ! Root only: it is the only rank that fills or writes IOfield, and sizing
+    ! these arrays everywhere would put the whole domain back on every rank,
+    ! ~(Onvar+ndir)*8 bytes per cell.  The others keep an empty carrier, so
+    ! size(vars,1) still reports the variable count.
     do m = 1, obj_multigrid%MGL
-      if ( obj_io%Onvar /= Size(IOfield(m)%block(1)%vars,1) ) then
-        do b = 1, Size ( IOfield(m)%block )
-          IOfield(m)%block(b)%name = 'Block'//trim(str(.true.,b))
-          deallocate ( IOfield(m)%block(b)%vars )
+      do b = 1, Size ( IOfield(m)%block )
+        if ( allocated(IOfield(m)%block(b)%vars) ) deallocate ( IOfield(m)%block(b)%vars )
+        if ( mpi_is_root ) then
           allocate( IOfield(m)%block(b)%vars(1:obj_io%Onvar, &
                                              1:IOfield(m)%block(b)%Ni, &
                                              1:IOfield(m)%block(b)%Nj, &
                                              1:IOfield(m)%block(b)%Nk) )
-        enddo
-      endif
+        else
+          allocate( IOfield(m)%block(b)%vars(1:obj_io%Onvar,1:0,1:0,1:0) )
+          if ( allocated(IOfield(m)%block(b)%mesh) ) deallocate ( IOfield(m)%block(b)%mesh )
+        endif
+      enddo
     enddo
 
   end subroutine Setup_Output_Solution
