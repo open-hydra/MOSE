@@ -40,6 +40,10 @@ contains
     call reg%add(section, 'ode-solver', obj_chemistry%ode_name, 'H-radau5', 'ODE solver for chemistry', 'H-radau5, sdirk4b, ros4', .false.)
     ! ODE solver parameters
     call reg%add(section, 'ode-max-steps', obj_chemistry%max_ode_steps, '100000', 'Maximum ODE integration steps', '> 0', .false.)
+    ! Only ONERA-7 and Frolov_nopressure ship an analytical Jacobian, and only
+    ! the Hairer solvers can use one; anything else falls back to finite
+    ! differences.
+    call reg%add(section, 'ode-analytical-jacobian', obj_chemistry%analytical_jacobian, '.false.', 'Use the mechanism analytical Jacobian instead of finite differences', 'logical', .false.)
     call reg%add(section, 'ode-relative-tol-species', obj_chemistry%RT(1:nsc), '1e-5', 'ODE relative tolerance for species', '> 0', .false.)
     call reg%add(section, 'ode-relative-tol-temperature', obj_chemistry%RT(nsc+1), '1e-5', 'ODE relative tolerance for temperature', '> 0', .false.)
     call reg%add(section, 'ode-absolute-tol-species', obj_chemistry%AT(1:nsc), '1e-5', 'ODE absolute tolerance for species', '> 0', .false.)

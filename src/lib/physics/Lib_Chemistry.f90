@@ -13,6 +13,7 @@ contains
     use MOSE_Config_Types_m,      only: obj_chemistry
     use MOSE_Global_m,            only: nsc
     use FLINT_Lib_Chemistry_wdot, only: Assign_Mechanism
+    use FLINT_Lib_Chemistry_rhs,  only: set_analytical_jacobian
     use FLINT_CEA_setup,          only: CEA_initialize_global
     use oslo,                     only: Setup_ODEsolver
     use strings,                  only: parse
@@ -35,6 +36,10 @@ contains
     elseif (obj_chemistry%model=='finite-rate') then
    
       call Assign_Mechanism(obj_chemistry%mechanism_name)
+      ! Must follow Assign_Mechanism: it resolves against the mechanism just
+      ! selected, and falls back to finite differences if that one has no
+      ! analytical Jacobian.
+      call set_analytical_jacobian(obj_chemistry%analytical_jacobian)
       obj_chemistry%iopt = 0
       obj_chemistry%iopt(1) = obj_chemistry%max_ode_steps
       call Setup_ODEsolver(N=(nsc+1),solver=obj_chemistry%ode_name,RT=obj_chemistry%RT,AT=obj_chemistry%AT,iopt=obj_chemistry%iopt)
@@ -96,7 +101,7 @@ contains
 
     lz = nsc + 1 ! Z vector length: number of species + temperature.
 
-    !$omp do collapse (3) schedule (dynamic) private(i,j,k,s,Z,dtchem,t0,err,rho)
+    !$omp do collapse (3) schedule (dynamic, 64) private(i,j,k,s,Z,dtchem,t0,err,rho)
     do k = 1, n(3); do j = 1, n(2); do i = 1, n(1)
 
       rho = sum( P(1:nsc,i,j,k) )
@@ -106,8 +111,9 @@ contains
       dtchem   = dt(i,j,k)
       t0 = 0d0
 
-      ! ODE integration according to selected method
-      call Run_ODESolver ( lz, t0, dtchem, Z, rhs_native, err )
+      ! ODE integration according to selected method.  IJAC_chem is 0 unless
+      ! an analytical Jacobian was both asked for and available.
+      call Run_ODESolver ( lz, t0, dtchem, Z, rhs_native, jac_native, IJAC_chem, err )
 
       ! New state from ODE integration in dtchem
       do s = 1, nsc
@@ -134,7 +140,7 @@ contains
     real(R8) :: rho, temp, teq, yeq(nsc), departure
     integer :: i, j, k, s
 
-    !$omp do collapse (3) schedule (dynamic) &
+    !$omp do collapse (3) schedule (dynamic, 64) &
     !$omp private(i,j,k,s,rho,temp,teq,yeq,departure)
     do k = 1, n(3); do j = 1, n(2); do i = 1, n(1)
 
