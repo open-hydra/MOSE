@@ -26,12 +26,12 @@ contains
     use MOSE_Mod_Multigrid,  only: Prolongation
     use MOSE_Read_Ini,       only: Read_Inifile_Runtime
     use MOSE_Mod_MPI,        only: mpi_is_root
+    use MOSE_Mod_Timers,     only: timer_summary
     use IR_precision
     implicit none
     type(MOSE_simulation_type), intent(inout) :: simulation
     ! Local
     character(len=llen) :: solfile, dgsfile, wallfile, mgsol, mgwall
-    real(R8) :: sim_time
     integer  :: m, level
 
     level = obj_multigrid%MG_level
@@ -83,14 +83,10 @@ contains
             write (*,RANS_shell_format) obj_sim_param%iter_from_call, obj_sim_param%iter_general, obj_sim_param%residuotot(1)
           endif
         endif
-
-        ! Calculate time at end of simulation
-        call Cpu_Time ( obj_sim_param%cputime(2) )
-
-        sim_time = ( obj_sim_param%cputime(2) - obj_sim_param%cputime(1) ) / obj_sim_param%nthreads
-        write(*,*)
-        write(*,*) '  Time of operation was', sim_time/60, 'min'
       end if
+
+      ! Timing summary (collective — every rank contributes its accumulators)
+      call timer_summary()
 
       ! Write output solution (collective — all ranks participate in gather)
       call Write_Solution ( simulation%domain(1), simulation%IOfield(1), solfile )

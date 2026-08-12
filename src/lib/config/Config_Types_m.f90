@@ -26,7 +26,6 @@ module MOSE_Config_Types_m
     real(R8)        :: time_from_call
     real(R8), allocatable :: residuotot(:)
     integer         :: nthreads         ! Number of threads for simulation
-    real(R8)        :: cputime(2)       ! Simulation time duration
     integer         :: TODO             ! Decide solve and/or postprocess
     logical         :: HYDRA_time_accurate = .false.
     logical         :: HYDRA_postprocess   = .false.
@@ -50,6 +49,7 @@ module MOSE_Config_Types_m
     character(len=llen)  :: sol_variables, wall_variables   ! Variables to be printed in solution and wall files
     integer              :: shell_diter  ! Shell update
     integer              :: ini_diter    ! input.ini update
+    integer              :: timer_diter  ! Wall-clock timing report (0 = off)
     ! Useful variables
     character(len=llen)  :: nameinit  ! Initial file name
     logical              :: write_thermo, write_transport, write_composition
@@ -239,6 +239,7 @@ module MOSE_Config_Types_m
     character(len=llen)   :: model
     character(llen)       :: ode_name
     integer               :: max_ode_steps
+    logical               :: analytical_jacobian
     character(llen)       :: exclude_blocks_str
     integer               :: iopt(3)
     real(R8), allocatable :: RT(:), AT(:)
