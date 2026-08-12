@@ -13,20 +13,21 @@ contains
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
-    integer :: b, i, j, k, n(3)
+    integer :: b, j, k, n(3)
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
       n = domain % blk(b) % dim
 
-      !$omp do collapse (3)
+      ! R(:,1:n1,j,k) is contiguous: zeroing it as one array store per (j,k)
+      ! is a single large memset instead of n1 short ones.
+      !$omp do collapse (2)
       do k = 1, n(3)
       do j = 1, n(2)
-      do i = 1, n(1)
-        domain % blk(b) % R(:,i,j,k) = 0.0_R8
-        domain % blk(b) % beta(i,j,k) = 1.0_R8
-      enddo; enddo; enddo
+        domain % blk(b) % R(:,1:n(1),j,k)  = 0.0_R8
+        domain % blk(b) % beta(1:n(1),j,k) = 1.0_R8
+      enddo; enddo
 
     enddo
 
@@ -76,6 +77,12 @@ contains
     real(R8), intent(in) :: Sc, Sct, Prt, Prl
     ! Local
     integer :: i, j, k, n(3)
+    !> Four-cell stencil of cell lengths for the Convective_Flux call.  Filled
+    !> by explicit stores: `blk % dl(i-1:i+2,j,k) % c(d)` is a strided section
+    !> of a derived type, which the compiler would copy to a temporary on every
+    !> face.  Per-thread already — Fluxes_blk runs inside an orphaned parallel
+    !> region.
+    real(R8) :: dl4(-1:2)
 
     n = blk % dim
 
@@ -95,12 +102,18 @@ contains
     end select
 
     ! -----------------------------------------------------------------
-    ! Convective and diffusive fluxes computation
-    !$omp do collapse (2)
+    ! Convective and diffusive fluxes computation.
+    !
+    ! The directional face loops take schedule(runtime): the split is tunable
+    ! from OMP_SCHEDULE (`guided` is worth trying on chemistry-imbalanced
+    ! meshes) and defaults to static when it is unset.
+    !$omp do collapse (2) schedule(runtime)
     do k = 1, n(3)
     do j = 1, n(2)
     do i = 1, n(1) - 1
-      call Convective_Flux ( blk % dl(i-1:i+2,j,k) % c(1), &
+      dl4(-1) = blk % dl(i-1,j,k) % c(1) ; dl4(0) = blk % dl(i  ,j,k) % c(1)
+      dl4( 1) = blk % dl(i+1,j,k) % c(1) ; dl4(2) = blk % dl(i+2,j,k) % c(1)
+      call Convective_Flux ( dl4,                          &
                              blk % dir(1) % f(i,j,k) % N,  &
                              blk % dir(1) % f(i,j,k) % A,  &
                              blk % P(:,i-1:i+2,j,k),       &
@@ -111,7 +124,7 @@ contains
     enddo; enddo; enddo
 
     if (model>0)  then
-    !$omp do collapse (2)
+    !$omp do collapse (2) schedule(runtime)
       do k = 1, n(3)
       do j = 1, n(2)
       do i = 1, n(1) - 1
@@ -138,11 +151,13 @@ contains
       enddo; enddo; enddo
     endif
 
-    !$omp do collapse (2)
+    !$omp do collapse (2) schedule(runtime)
     do k = 1, n(3)
     do i = 1, n(1)
     do j = 1, n(2) - 1
-      call Convective_Flux ( blk % dl(i,j-1:j+2,k) % c(2), &
+      dl4(-1) = blk % dl(i,j-1,k) % c(2) ; dl4(0) = blk % dl(i,j  ,k) % c(2)
+      dl4( 1) = blk % dl(i,j+1,k) % c(2) ; dl4(2) = blk % dl(i,j+2,k) % c(2)
+      call Convective_Flux ( dl4,                          &
                              blk % dir(2) % f(i,j,k) % N,  &
                              blk % dir(2) % f(i,j,k) % A,  &
                              blk % P(:,i,j-1:j+2,k),       &
@@ -153,7 +168,7 @@ contains
     enddo; enddo; enddo
 
     if (model>0) then
-      !$omp do collapse (2)
+      !$omp do collapse (2) schedule(runtime)
       do k = 1, n(3)
       do i = 1, n(1)
       do j = 1, n(2) - 1
@@ -180,11 +195,13 @@ contains
       enddo; enddo; enddo
     end if
 
-    !$omp do collapse (2)
+    !$omp do collapse (2) schedule(runtime)
     do j = 1, n(2)
     do i = 1, n(1)
     do k = 1, n(3) - 1
-      call Convective_Flux ( blk % dl(i,j,k-1:k+2) % c(3), &
+      dl4(-1) = blk % dl(i,j,k-1) % c(3) ; dl4(0) = blk % dl(i,j,k  ) % c(3)
+      dl4( 1) = blk % dl(i,j,k+1) % c(3) ; dl4(2) = blk % dl(i,j,k+2) % c(3)
+      call Convective_Flux ( dl4,                          &
                              blk % dir(3) % f(i,j,k) % N,  &
                              blk % dir(3) % f(i,j,k) % A,  &
                              blk % P(:,i,j,k-1:k+2),       &
@@ -195,7 +212,7 @@ contains
     enddo; enddo; enddo
 
     if (model>0) then
-      !$omp do collapse (2)
+      !$omp do collapse (2) schedule(runtime)
       do j = 1, n(2)
       do i = 1, n(1)
       do k = 1, n(3) - 1

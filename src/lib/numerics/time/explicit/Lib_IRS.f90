@@ -140,7 +140,7 @@ contains
   subroutine Ghost_Residual_Extrapolation ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Parameters_m, only: guide
-    use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Mod_MPI, only: is_local_block, mpi_size_
     use MOSE_Mod_GhostExchange, only: exchange_ghost_R
     implicit none
     type(MOSE_domain_type) :: domain
@@ -148,10 +148,14 @@ contains
     integer :: ii, i, ig, jg, kg
     integer :: bm, im, jm, km, fm, bs, is, js, ks
 
-    ! MPI: exchange residual data for inter-rank type-1 connections
-    !$omp single
-    call exchange_ghost_R(domain)
-    !$omp end single
+    ! MPI: exchange residual data for inter-rank type-1 connections.
+    ! exchange_ghost_R is a no-op on one rank; skipping it also skips the
+    ! !$omp single barrier, once per direction per stage.
+    if (mpi_size_ > 1) then
+      !$omp single
+      call exchange_ghost_R(domain)
+      !$omp end single
+    end if
 
     ! BC array processing — iterate only over local BC entries
     !$omp do private ( ii, i, bm, im, jm, km, fm, bs, is, js, ks, ig, jg, kg )
