@@ -724,12 +724,15 @@ contains
     cv_roe = 0.d0
     sum_ei = 0.d0
 
+    ! Table reads go through the species-contiguous companions: tabT(s,T) holds
+    ! exactly tab(T,s), so the values are unchanged, but s is now the fast index
+    ! and the loop loads unit-stride instead of gathering with stride Tmax-Tmin.
     do s = 1, nsc
 
-      invW = Runiv / Wm_tab(s)
+      invW = Ri_tab(s)   ! = Runiv/Wm_tab(s), precomputed once in the FLINT loader
 
-      hl = h_tab(Til, s) + (h_tab(Til+1, s) - h_tab(Til, s)) * dTl
-      hr = h_tab(Tir, s) + (h_tab(Tir+1, s) - h_tab(Tir, s)) * dTr
+      hl = h_tabT(s, Til) + (h_tabT(s, Til+1) - h_tabT(s, Til)) * dTl
+      hr = h_tabT(s, Tir) + (h_tabT(s, Tir+1) - h_tabT(s, Tir)) * dTr
 
       el = hl - invW * Tl
       er = hr - invW * Tr
@@ -741,8 +744,8 @@ contains
 
       cv_roe = cv_roe + d_roe * ( &
           0.5d0 * ( &
-            cp_tab(Til, s) + (cp_tab(Til+1, s)-cp_tab(Til, s))*dTl + &
-            cp_tab(Tir, s) + (cp_tab(Tir+1, s)-cp_tab(Tir, s))*dTr ) &
+            cp_tabT(s, Til) + (cp_tabT(s, Til+1)-cp_tabT(s, Til))*dTl + &
+            cp_tabT(s, Tir) + (cp_tabT(s, Tir+1)-cp_tabT(s, Tir))*dTr ) &
           - invW )
 
       sum_ei = sum_ei + d_roe * (srR*er + srL*el) * inv_sr
