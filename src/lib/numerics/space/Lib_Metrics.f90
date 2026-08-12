@@ -378,6 +378,8 @@ contains
 
   
   subroutine Compute_Yn ( blk, bc, nb, nbound )
+    use MOSE_Lib_KDTree, only: kdtree_t, kdtree_build, kdtree_free
+    use MOSE_Mod_MPI,    only: is_local_block, mpi_is_root
     implicit none
     integer, intent(in)                                  :: nb, nbound
     type(MOSE_block_type), dimension(nb), intent(inout)  :: blk
@@ -387,6 +389,13 @@ contains
     real(R8) :: x1, x2, x3, x4, y1, y2, y3, y4, z1, z2, z3, z4
     integer :: Fm, Bm, Im, Jm, Km, l, b, nwall
     integer :: i1, j1, k1, i2, j2, k2, i3, j3, k3, i4, j4, k4
+    logical, dimension(nb) :: needs_yn
+    type(kdtree_t) :: wall_tree
+
+    ! Validation switch: checks every yn against a brute-force scan, roughly
+    ! doubling setup cost.  Keep .false. in production.
+    logical, parameter  :: DEBUG_KDTREE = .false.
+    real(R8), parameter :: KDTREE_TOL   = 1.0e-10_R8
 
     nwall=0
     
@@ -470,24 +479,66 @@ contains
     enddo
 
     ! After bc processing nwall is the viscous face counter.
-    ! Compute distance in block b using viscous face coordinates facex, facey, facez.
+    !
+    ! Blocks needing yn here: the locally-owned ones, the remote sources of a
+    ! local block-connection BC (Yn_Connection reads blk(Bs)%yn), and on root
+    ! all of them, for the eddy viscosity it assembles for the solution file.
+    ! The rest keep the zero First_Touch_Block wrote and are read by no one.
+    needs_yn = .false.
     do b = 1, nb
-      call Wall_Distance_Blk ( blk(b), facex, facey, facez, nwall )
+      if ( is_local_block(b) ) needs_yn(b) = .true.
+    enddo
+    do l = 1, nbound
+      if ( (bc(l)%type == 101 .or. bc(l)%type == 201) .and. is_local_block(bc(l)%b) ) &
+        needs_yn(bc(l)%bs) = .true.
+    enddo
+    if ( mpi_is_root ) needs_yn = .true.
+
+    ! No wall anywhere in the domain: leave behind the same sentinel the
+    ! brute-force scan did, rather than the k-d tree's huge().
+    if ( nwall == 0 ) then
+      do b = 1, nb
+        if (.not. needs_yn(b)) cycle
+        blk(b) % yn ( 1:blk(b)%dim(1), 1:blk(b)%dim(2), 1:blk(b)%dim(3) ) = 1d8
+      enddo
+      return
+    end if
+
+    ! One k-d tree over the wall-face centroids, shared by every block and
+    ! thread: O(log nwall) per cell instead of a full scan, same distance to
+    ! the last bit.
+    call kdtree_build ( wall_tree, facex, facey, facez, nwall )
+
+    ! Compute distance in block b by querying the shared k-d tree.
+    do b = 1, nb
+      if (.not. needs_yn(b)) cycle
+      call Wall_Distance_Blk ( blk(b), wall_tree )
     enddo
 
+    ! Validation, off unless DEBUG_KDTREE: prints max |tree - brute| per block
+    ! and aborts past KDTREE_TOL.
+    if ( DEBUG_KDTREE ) then
+      do b = 1, nb
+        if (.not. needs_yn(b)) cycle
+        call Validate_Tree_Yn ( blk(b), facex, facey, facez, nwall, b )
+      enddo
+    end if
+
+    call kdtree_free ( wall_tree )
+
     contains
-      
-      subroutine Wall_Distance_Blk ( blk, fx, fy, fz, nwall )
+
+      subroutine Wall_Distance_Blk ( blk, tree )
+        use MOSE_Lib_KDTree, only: kdtree_t, kdtree_nearest
         implicit none
-        type(MOSE_block_type), intent(inout)       :: blk
-        integer, intent(in)                        :: nwall
-        real(R8), intent(in), dimension(nwall) :: fx, fy, fz
+        type(MOSE_block_type), intent(inout) :: blk
+        type(kdtree_t), intent(in)           :: tree
         ! Local
-        integer :: l, i, j, k
-        real(R8) :: center(3), dummy
+        integer :: i, j, k
+        real(R8) :: center(3), dist
 
         !$omp parallel
-        !$omp do collapse(3) private(i, j, k, l, center, dummy)
+        !$omp do collapse(3) private(i, j, k, center, dist)
         do k = 1, blk % dim(3)
         do j = 1, blk % dim(2)
         do i = 1, blk % dim(1)
@@ -498,19 +549,64 @@ contains
                               blk % node(i-1,j  ,k  ) % c + blk % node(i-1,j-1,k  ) % c + &
                               blk % node(i-1,j-1,k-1) % c + blk % node(i-1,j  ,k-1) % c )
 
-          ! Minimum distance initialization.
-          blk % yn (i,j,k) = 1d8
-
-          ! Wall face vector processing.
-          do l = 1, nwall
-            dummy = sqrt( (center(1) - fx(l))**2 + (center(2) - fy(l))**2 + (center(3) - fz(l))**2 )
-            blk % yn(i,j,k) = min ( dummy, blk % yn(i,j,k) )
-          enddo
+          ! Nearest wall-face centroid via the k-d tree.
+          call kdtree_nearest ( tree, center(1), center(2), center(3), dist )
+          blk % yn (i,j,k) = dist
 
         enddo; enddo; enddo
         !$omp end parallel
 
       end subroutine Wall_Distance_Blk
+
+
+      !> Brute-force check of the k-d tree result: recompute each cell's
+      !> nearest-wall distance against the full face list, compare with
+      !> `blk%yn`, and abort past KDTREE_TOL.
+      subroutine Validate_Tree_Yn ( blk, fx, fy, fz, nwall_, b_id )
+        use MOSE_Mod_MPI, only: mpi_rank_
+        implicit none
+        type(MOSE_block_type), intent(in)           :: blk
+        integer, intent(in)                         :: nwall_
+        real(R8), intent(in), dimension(nwall_)     :: fx, fy, fz
+        integer, intent(in)                         :: b_id
+        ! Local
+        integer :: i, j, k, ll
+        real(R8) :: center(3), dbrute, dummy, err, max_err
+
+        max_err = 0d0
+
+        !$omp parallel
+        !$omp do collapse(3) private(i, j, k, ll, center, dbrute, dummy, err) &
+        !$omp             reduction(max:max_err)
+        do k = 1, blk % dim(3)
+        do j = 1, blk % dim(2)
+        do i = 1, blk % dim(1)
+
+          center = 1d0/8d0 * ( blk % node(i  ,j  ,k  ) % c + blk % node(i  ,j-1,k  ) % c + &
+                              blk % node(i  ,j-1,k-1) % c + blk % node(i  ,j  ,k-1) % c + &
+                              blk % node(i-1,j  ,k  ) % c + blk % node(i-1,j-1,k  ) % c + &
+                              blk % node(i-1,j-1,k-1) % c + blk % node(i-1,j  ,k-1) % c )
+
+          dbrute = 1d8
+          do ll = 1, nwall_
+            dummy = sqrt( (center(1) - fx(ll))**2 + (center(2) - fy(ll))**2 + (center(3) - fz(ll))**2 )
+            if (dummy < dbrute) dbrute = dummy
+          enddo
+
+          err = abs( blk % yn(i,j,k) - dbrute )
+          if (err > max_err) max_err = err
+
+        enddo; enddo; enddo
+        !$omp end parallel
+
+        write(*,'(A,I0,A,I0,A,ES12.5)') &
+          ' [KDTREE] rank ', mpi_rank_, '  block ', b_id, '  max |tree - brute| = ', max_err
+        if (max_err > KDTREE_TOL) then
+          write(*,'(A,ES12.5,A)') ' [KDTREE] ERROR: exceeds tolerance ', KDTREE_TOL, '. Aborting.'
+          stop
+        end if
+
+      end subroutine Validate_Tree_Yn
 
   end subroutine Compute_Yn
   

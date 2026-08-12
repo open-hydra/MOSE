@@ -51,7 +51,7 @@ contains
       
       !$omp parallel
       ! Set wall-distance in connected cells
-      !$omp do schedule (dynamic) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks)
+      !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks)
       do i = 1, domain % nbound
         select case ( domain % bc(i) % type )
           case(101,201) ! block connection
@@ -73,12 +73,15 @@ contains
     
     !$omp parallel
     ! Create the nodes for gc layers of ghost cell
-    !$omp do schedule (dynamic) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
+    !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
     do i = 1, domain % nbound
       Bm = domain % bc(i) % b
-      Im = domain % bc(i) % i 
-      Jm = domain % bc(i) % j 
-      Km = domain % bc(i) % k 
+      ! Ghost metrics land in blk(Bm) and bc(i), read only by the rank owning
+      ! Bm, so a non-owning rank needs no blk(Bm)%M/dl/vol at all.
+      if (.not. is_local_block(Bm)) cycle
+      Im = domain % bc(i) % i
+      Jm = domain % bc(i) % j
+      Km = domain % bc(i) % k
       Fm = domain % bc(i) % f
       select case ( domain % bc(i) % type )
         case(101,201) ! block connection
