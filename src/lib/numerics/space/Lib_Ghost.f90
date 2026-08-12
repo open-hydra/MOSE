@@ -16,36 +16,45 @@ contains
                                        exchange_ghost_chimera_begin, exchange_ghost_chimera_end, &
                                        Ghost_Interrank, exchange_ghost_Pg, ghost_sched, &
                                        set_active_mg_level
+    use MOSE_Mod_Timers, only: timer_comm_begin, timer_comm_end
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: ii, i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s
     integer :: fg
+    logical :: mpi_on
 
+    ! On a single rank the exchange has nothing to do, and running it anyway
+    ! costs a chain of empty !$omp single regions, each one a barrier.  The
+    ! test is uniform over the team, so the worksharing constructs it guards
+    ! are still encountered by every thread.
+    mpi_on = mpi_size_ > 1
 
-    ! MPI: post persistent receives, pack buffer in parallel, then post sends
-    ! Chimera donor cells travel in their own non-blocking exchange, started
-    ! here so it overlaps with the local BC processing below.
-    !$omp single
-    call set_active_mg_level(domain%mg_level)
-    call exchange_ghost_P_post_recv(domain)
-    call exchange_ghost_chimera_begin(domain)
-    !$omp end single
+    if (mpi_on) then
+      ! MPI: post persistent receives, pack buffer in parallel, then post sends
+      ! Chimera donor cells travel in their own non-blocking exchange, started
+      ! here so it overlaps with the local BC processing below.
+      !$omp single
+      call set_active_mg_level(domain%mg_level)
+      call exchange_ghost_P_post_recv(domain)
+      call exchange_ghost_chimera_begin(domain)
+      !$omp end single
 
-    ! Pack send buffer in parallel over face groups
-    !$omp do schedule(static) private(fg)
-    do fg = 1, ghost_sched%n_send_faces
-      call exchange_ghost_P_pack(domain, fg, fg)
-    end do
+      ! Pack send buffer in parallel over face groups
+      !$omp do schedule(static) private(fg)
+      do fg = 1, ghost_sched%n_send_faces
+        call exchange_ghost_P_pack(domain, fg, fg)
+      end do
 
-    ! Post sends (must wait for all packing to complete — implicit barrier from !$omp do)
-    !$omp single
-    call exchange_ghost_P_post_send(domain)
-    !$omp end single nowait
+      ! Post sends (must wait for all packing to complete — implicit barrier from !$omp do)
+      !$omp single
+      call exchange_ghost_P_post_send(domain)
+      !$omp end single nowait
+    end if
 
     ! Process LOCAL BC entries while MPI communication is in flight
     ! Uses pre-filtered local_bc_idx to avoid scanning all nbound entries
-    !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs)
+    !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs)
     do ii = 1, domain % n_local_bc
       i  = domain % local_bc_idx(ii)
       Bm = domain % bc(i) % b
@@ -82,7 +91,7 @@ contains
 
     ! Compute Pg(:,3:6) for type-1 connections where source block is local.
     ! This only reads local blk%P data, so it can run before the MPI exchange.
-    !$omp do schedule (dynamic) private(ii, i, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
+    !$omp do schedule (dynamic, 64) private(ii, i, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
     do ii = 1, domain % n_local_bs
       i  = domain % local_bs_idx(ii)
       Bs = domain % bc(i) % bs
@@ -99,7 +108,7 @@ contains
     enddo
 
     ! Compute Pg for Q2D (410) connections where Bm is local.
-    !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm)
+    !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
     do ii = 1, domain % n_local_bc
       i = domain % local_bc_idx(ii)
       Bm = domain % bc(i) % b
@@ -114,14 +123,20 @@ contains
     enddo
 
     ! MPI: wait for P receives to complete; unpack chimera donor cells into
-    ! the kept-alive P arrays of remote donor blocks
-    !$omp single
-    call exchange_ghost_P_wait_unpack(domain)
-    call exchange_ghost_chimera_end(domain)
-    !$omp end single
+    ! the kept-alive P arrays of remote donor blocks.  What is timed here is
+    ! the communication the local BC work did not hide, plus the wait on
+    ! slower neighbours.
+    if (mpi_on) then
+      !$omp single
+      call timer_comm_begin()
+      call exchange_ghost_P_wait_unpack(domain)
+      call exchange_ghost_chimera_end(domain)
+      call timer_comm_end()
+      !$omp end single
+    end if
 
     ! Chimera ghost fill: all donor data (local and remote) is now current
-    !$omp do schedule (dynamic) private(ii, i)
+    !$omp do schedule (dynamic, 64) private(ii, i)
     do ii = 1, domain % n_local_bc
       i = domain % local_bc_idx(ii)
       if (domain % bc(i) % type /= 102) cycle
@@ -130,7 +145,7 @@ contains
 
     ! Chimera Pg(:,3:6): reads the ghost columns written just above, so it
     ! must stay a separate loop (implicit barrier in between)
-    !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm)
+    !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
     do ii = 1, domain % n_local_bc
       i = domain % local_bc_idx(ii)
       if (domain % bc(i) % type /= 102) cycle
@@ -143,25 +158,27 @@ contains
     enddo
 
     ! Process INTER-RANK type-1 entries (Bm local, Bs remote)
-    !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm, Bs)
-    do ii = 1, domain % n_local_bc
-      i  = domain % local_bc_idx(ii)
-      if (domain%bc(i)%type /= 101 .and. domain%bc(i)%type /= 201) cycle
-      Bs = domain % bc(i) % bs
-      if (is_local_block(Bs)) cycle  ! already processed above
-      Bm = domain % bc(i) % b
-      Im = domain % bc(i) % i
-      Jm = domain % bc(i) % j
-      Km = domain % bc(i) % k
-      Fm = domain % bc(i) % f
-      call Ghost_Interrank(Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg)
-    enddo
+    if (mpi_on) then
+      !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, Bs)
+      do ii = 1, domain % n_local_bc
+        i  = domain % local_bc_idx(ii)
+        if (domain%bc(i)%type /= 101 .and. domain%bc(i)%type /= 201) cycle
+        Bs = domain % bc(i) % bs
+        if (is_local_block(Bs)) cycle  ! already processed above
+        Bm = domain % bc(i) % b
+        Im = domain % bc(i) % i
+        Jm = domain % bc(i) % j
+        Km = domain % bc(i) % k
+        Fm = domain % bc(i) % f
+        call Ghost_Interrank(Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg)
+      enddo
 
-    ! Wait for P sends to complete before reusing buffers
-    !$omp single
-    call exchange_ghost_P_wait_send(domain)
-    call exchange_ghost_Pg(domain)
-    !$omp end single
+      ! Wait for P sends to complete before reusing buffers
+      !$omp single
+      call exchange_ghost_P_wait_send(domain)
+      call exchange_ghost_Pg(domain)
+      !$omp end single
+    end if
 
   end subroutine Fill_Ghost_Cell
 
