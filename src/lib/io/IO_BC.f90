@@ -191,7 +191,10 @@ contains
 
       ! ── First line: block, ijk, face, ATLAS BC ID ─────────────────────────
       read( unitfile,*,iostat=ios ) bc(i)%b, bc(i)%i, bc(i)%j, bc(i)%k, bc(i)%f, bc(i)%type
-      if (ios/=0) write(*,'(A)') '  Error in BC file'
+      if (ios/=0) then
+        write(*,'(A,I9)') '[ERROR] reading BC file, bc number:',i
+        stop
+      endif
 
       ! n_bf update
       n_bf( bc(i) % b, bc(i) % f ) = n_bf( bc(i) % b, bc(i) % f ) + 1
