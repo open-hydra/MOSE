@@ -24,6 +24,8 @@ contains
     integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, ig, jg, kg
     real(R8) :: Normal(3), Area, Dist, M(3,3), Prim(nprim), rho, Rgas, T, rho_wall, dl
     real(R8) :: Prim_wall(nprim), mil, kl, Gradient(nprim,3), Stress(3), Flux(nprim)
+    integer  :: vgrad_i
+    real(R8) :: gvec1, gvec2, gvec3, VelGrad(3,3)
 
     call Compute_Modfm ( fm, modfm, modfm1, modfm2, modfm3 )
     call Face_Index ( Fm, dir, Im, Jm, Km, Face_i, Face_j, Face_k )
@@ -65,10 +67,24 @@ contains
     end if
 
     ! Transformation
-    Gradient = matmul ( Gradient, M )
+
+    !> Computational -> physical transform.  Explicit loop, not
+    !> `Gradient = matmul(Gradient,M)`: Gradient aliases itself there, so the
+    !> compiler would build the result in a temporary on every face.
+    do vgrad_i = 1, nprim
+      gvec1 = Gradient(vgrad_i,1) ; gvec2 = Gradient(vgrad_i,2) ; gvec3 = Gradient(vgrad_i,3)
+      Gradient(vgrad_i,1) = gvec1*M(1,1) + gvec2*M(2,1) + gvec3*M(3,1)
+      Gradient(vgrad_i,2) = gvec1*M(1,2) + gvec2*M(2,2) + gvec3*M(3,2)
+      Gradient(vgrad_i,3) = gvec1*M(1,3) + gvec2*M(2,3) + gvec3*M(3,3)
+    end do
+    !> Contiguous copy of the velocity-gradient rows: passing the strided
+    !> section directly makes each consumer build its own temporary.
+    VelGrad(1,1)=Gradient(nu,1); VelGrad(1,2)=Gradient(nu,2); VelGrad(1,3)=Gradient(nu,3)
+    VelGrad(2,1)=Gradient(nv,1); VelGrad(2,2)=Gradient(nv,2); VelGrad(2,3)=Gradient(nv,3)
+    VelGrad(3,1)=Gradient(nw,1); VelGrad(3,2)=Gradient(nw,2); VelGrad(3,3)=Gradient(nw,3)
 
     ! Stress vector
-    Stress = Stress_Vector ( Gradient(nu:nw,:), Normal, mil, 0d0, Prim(nt:) )
+    Stress = Stress_Vector ( VelGrad, Normal, mil, 0d0, Prim(nt:) )
 
     ! Fluxes
     Flux = 0.0d0 
@@ -78,7 +94,7 @@ contains
     if (model==2) then
       call RANS_Diffusive_Flux ( flux=Flux(nt:nprim), &
                                  rans_variables=Prim_Wall(nt:nprim), &
-                                 vel_gradient=Gradient(nu:nw,:), &
+                                 vel_gradient=VelGrad, &
                                  rans_gradient=Gradient(nt:nprim,:), &
                                  mul=mil, rho=rho_wall, &
                                  area=area, normal=normal, dist=dist )

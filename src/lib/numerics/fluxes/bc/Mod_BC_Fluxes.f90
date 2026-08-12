@@ -54,7 +54,7 @@ contains
         lower = upper + 1                   ! Update lower bound
         upper = upper + domain % n_bf(b,f)  ! Upper bound: add number of cells on face f of block b
 
-        !$omp do schedule ( dynamic ) private(i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, rhot, visct, T0, g, pstat, r_fc)
+        !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, rhot, visct, T0, g, pstat, r_fc)
         do i = lower, upper
           Bm = domain % bc(i) % b
           if (.not. is_local_block(Bm)) cycle

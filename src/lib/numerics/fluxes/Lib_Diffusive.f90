@@ -23,6 +23,8 @@ contains
     real(R8), intent(inout), dimension(nprim) :: Res1, Res2
     ! Local
     real(R8) :: rho1, Rgas, T1, rho2, T2, Gradient(nprim,3), Prim(nprim), M(3,3), waldis, Flux(nprim)
+    integer  :: v
+    real(R8) :: g1, g2, g3
 
     ! Gradient in the same direction of the face: 1 and 2
     call co_rotot_Rtot ( Prim1(1:nsc), rho1, Rgas )
@@ -43,7 +45,17 @@ contains
     call Tangential_Gradient ( Prim7, Prim8, Prim9, Prim10, Gradient(:,c) )
     
     M = 0.5d0 * ( M1 + M2 )
-    Gradient = matmul ( Gradient, M )
+
+    !> Transform the gradients from computational to physical space.
+    !> Explicit loop, not `Gradient = matmul(Gradient,M)`: Gradient aliases
+    !> itself there, so the compiler must build the whole (nprim,3) result in a
+    !> temporary on every face.
+    do v = 1, nprim
+      g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
+      Gradient(v,1) = g1*M(1,1) + g2*M(2,1) + g3*M(3,1)
+      Gradient(v,2) = g1*M(1,2) + g2*M(2,2) + g3*M(3,2)
+      Gradient(v,3) = g1*M(1,3) + g2*M(2,3) + g3*M(3,3)
+    end do
 
     Prim = 0.5d0 * ( Prim1 + Prim2 )
     call Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, Flux, Sc, Sct, Prt, Prl, soot_enabled )
@@ -102,6 +114,14 @@ contains
     integer :: s, T_i, Tint(2)
     real(R8) :: rho, Rgas, T, Tdiff, cp, mil, kl, mie, kappa
     real(R8) :: Dm(nsc), stress(3), DiffHFlux, DmGradYi
+    !> Contiguous copy of the velocity-gradient rows, shared by the three
+    !> consumers below.  Passing `Gradient(nu:nw,:)` directly is a strided
+    !> section, so each consumer would build its own temporary instead.
+    real(R8) :: VelGrad(3,3)
+
+    VelGrad(1,1) = Gradient(nu,1) ; VelGrad(1,2) = Gradient(nu,2) ; VelGrad(1,3) = Gradient(nu,3)
+    VelGrad(2,1) = Gradient(nv,1) ; VelGrad(2,2) = Gradient(nv,2) ; VelGrad(2,3) = Gradient(nv,3)
+    VelGrad(3,1) = Gradient(nw,1) ; VelGrad(3,2) = Gradient(nw,2) ; VelGrad(3,3) = Gradient(nw,3)
 
     ! Thermodynamic and transport properties at the interface
     call co_rotot_Rtot ( Prim(1:nsc), rho, Rgas )
@@ -120,7 +140,7 @@ contains
     mie = 0d0
     if (model==2) then
       call Eddy_Viscosity ( mut=mie, rans_variables=Prim(nt:nprim), &
-                            mul=mil, rho=rho, vel_gradient=Gradient(nu:nw,:), &
+                            mul=mil, rho=rho, vel_gradient=VelGrad, &
                             walldist=waldis )
     end if
 
@@ -138,7 +158,7 @@ contains
 
     kappa = kl + mie*cp/Prt ! Laminar + turbulent conductivity
 
-    Stress = stress_vector ( Gradient(nu:nw,:), normal, mil, mie, prim(nt:) ) ! Stress tensor in cartesian components
+    Stress = stress_vector ( VelGrad, normal, mil, mie, prim(nt:) ) ! Stress tensor in cartesian components
 
     ! Fluxes computation
     DiffHFlux = 0.0d0
@@ -165,7 +185,7 @@ contains
     if (model==2) then
       call RANS_Diffusive_Flux ( flux=Flux(nt:nprim), &
                                  rans_variables=Prim(nt:nprim), &
-                                 vel_gradient=Gradient(nu:nw,:), &
+                                 vel_gradient=VelGrad, &
                                  rans_gradient=Gradient(nt:nprim,:), &
                                  mul=mil, rho=rho, &
                                  area=area, normal=normal, dist=waldis )
