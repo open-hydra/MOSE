@@ -51,6 +51,8 @@ contains
       dgsfile  = '/'//trim(MOSE_phase_prefix)//'diagnostic'
     else
       solfile  = '/'//trim(MOSE_phase_prefix)//'field-level'//trim(str(.true.,level))
+      wallfile = '/'//trim(MOSE_phase_prefix)//'wall-level'//trim(str(.true.,level))
+      dgsfile  = '/'//trim(MOSE_phase_prefix)//'diagnostic-level'//trim(str(.true.,level))
       mgsol    = '/'//trim(MOSE_phase_prefix)//'field-prolongated'
       mgwall   = '/'//trim(MOSE_phase_prefix)//'wall-prolongated'
     endif

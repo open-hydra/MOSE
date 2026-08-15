@@ -123,6 +123,8 @@ contains
 
     ! Determine simulation control flags on root, then broadcast to all ranks
     if (mpi_is_root) then
+      endsim = .false.
+      endmg  = .false.
       if (level == 1) then
         endsim = ( obj_sim_param%iter_from_call >= domain(1) % itermax ) &
             .or. ( obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &

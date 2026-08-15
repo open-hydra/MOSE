@@ -14,7 +14,7 @@
 
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
-| ini-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw |  no | Initial condition (INPUT/ic.*) format |
+| ic-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw |  no | Initial condition (INPUT/ic.*) format |
 | sol-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw |  no | Solution (OUTPUT/field.*) format |
 | sol-diter | 1000000000 | > 0 |  no | Solution output iter frequency |
 | sol-dtime | 1e30 | > 0 |  no | Solution output time frequency |
