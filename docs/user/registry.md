@@ -24,6 +24,7 @@
 | res-diter | 1 | > 0 |  no | Residual history iter frequency |
 | shell-diter | 1 | > 0 |  no | Shell update iter frequency |
 | ini-diter | 10000 | > 0 |  no | input.ini update iter frequency |
+| timer-diter | 0 | >= 0 |  no | Wall-clock timing report iter frequency (0 = off) |
 
 ## MOSE-Probes
 
@@ -91,6 +92,7 @@
 | exclude-blocks | none |  |  no | Blocks to exclude from chemistry |
 | ode-solver | H-radau5 | H-radau5, sdirk4b, ros4 |  no | ODE solver for chemistry |
 | ode-max-steps | 100000 | > 0 |  no | Maximum ODE integration steps |
+| ode-analytical-jacobian | .false. | logical |  no | Use the mechanism analytical Jacobian instead of finite differences |
 | ode-relative-tol-species | 1e-5 | > 0 |  no | ODE relative tolerance for species |
 | ode-relative-tol-temperature | 1e-5 | > 0 |  no | ODE relative tolerance for temperature |
 | ode-absolute-tol-species | 1e-5 | > 0 |  no | ODE absolute tolerance for species |

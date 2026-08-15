@@ -69,11 +69,28 @@ ulimit -s unlimited
 ./bin/MOSE
 ```
 
+An MPI build is launched through the usual job launcher, with each rank running
+its own OpenMP threads:
+
+```bash
+export OMP_NUM_THREADS=10
+export OMP_PLACES=cores I_MPI_PIN_DOMAIN=omp
+ulimit -s unlimited
+mpirun -n 8 ./bin/MOSE
+```
+
 !!! warning
     MOSE may require a large stack size. Always run `ulimit -s unlimited` (or set `export KMP_STACKSIZE=100M` for Intel compilers) before launching the solver.
 
 !!! tip
     A basic script like `MOSE.sh` is recommended to ensure the simulation is launched smoothly.
+
+!!! tip "How many ranks, how many threads?"
+    The split matters — the same cores can be more than 2× slower in a bad
+    layout. As a rule, put at least one MPI rank on every socket and keep each
+    rank's threads inside one socket. See
+    [Parallel Execution](parallel.md) for the full rule and the measured
+    scaling.
 
 ---
 
@@ -149,8 +166,43 @@ MOSE | Iter =      200 | Global iter =      200 | Density residual = 0.231340E-0
 MOSE | Iter =      300 | Global iter =      300 | Density residual = 0.221740E-08
 MOSE | Iter =      384 | Global iter =      384 | Density residual = 0.998459E-10
 
-   Time of operation was   7.9302149999999988E-002 min
+ =========================================================================================
+ Timing
+ =========================================================================================
+   Iterations                     384
+   Solver                          4.75813E+00 s
+   Solver per iteration            1.23910E-02 s
+   Elapsed                         4.79402E+00 s
+ =========================================================================================
 ```
+
+### Timing
+
+Every run closes with the block above. `Solver` is the time spent inside the
+iteration loop and is the figure to quote when timing the code; `Elapsed` adds
+what happens between iterations, which is dominated by solution output. On more
+than one rank the block also reports load imbalance and the fraction of time
+blocked on halo exchanges and on collectives.
+
+For a running report rather than a single summary, set `timer-diter` in
+`[MOSE-IO]` to the number of iterations between reports:
+
+```ini
+[MOSE-IO]
+timer-diter = 100
+```
+
+```
+ MOSE Timing | Level 1 | Iter 100 | 100 iters | wall/iter  9.2450E-01 s | rank min  9.1120E-01 avg  9.1934E-01 | imbalance     0.6 % | exchange wait     3.1 % | collective wait     0.9 %
+ MOSE Ranks  | compute/iter max  8.8600E-01 s (rank 3) | min  8.6010E-01 s (rank 7) | mean  8.7412E-01 s | spread     1.4 %
+```
+
+Times are the **maximum** over the ranks — the critical path, which is what
+sets the time to solution. `imbalance` is how far the slowest rank is above the
+mean; a large `compute/iter` spread with a small `imbalance` means the ranks are
+unevenly loaded and the fast ones are absorbing it in the exchange wait.
+Reporting is off by default (`timer-diter = 0`) and costs a handful of clock
+reads per iteration when on.
 
 ## Output
 

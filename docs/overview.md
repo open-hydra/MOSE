@@ -137,8 +137,14 @@ Typical applications: turbomachinery (impellers, rotors), swirling jets, and pro
 | Mode | Details |
 |------|---------|
 | Shared memory | OpenMP thread-level parallelism within a block |
-| Distributed memory | MPI domain decomposition across blocks |
-| Hybrid | OpenMP + MPI combined runs on HPC clusters |
+| Distributed memory | MPI domain decomposition across blocks, halo exchange with persistent requests |
+| Hybrid | OpenMP + MPI combined runs on HPC clusters — the recommended mode beyond one socket |
+
+Measured strong scaling on a 6.8 M-cell case, with the processor clock held
+constant: **above 95 % parallel efficiency up to half a node, 87–89 % from one
+to three full nodes**, and 99–101 % of ideal when crossing node boundaries at a
+fixed per-node layout. Efficiency depends strongly on how ranks and threads are
+placed — see [Parallel Execution](user/parallel.md).
 
 ---
 

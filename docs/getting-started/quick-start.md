@@ -211,7 +211,14 @@ MOSE | Iter =      200 | Global iter =      200 | Density residual = 0.231340E-0
 MOSE | Iter =      300 | Global iter =      300 | Density residual = 0.221740E-08
 MOSE | Iter =      384 | Global iter =      384 | Density residual = 0.998459E-10
 
-   Time of operation was   7.9302149999999988E-002 min
+ =========================================================================================
+ Timing
+ =========================================================================================
+   Iterations                     384
+   Solver                          4.75813E+00 s
+   Solver per iteration            1.23910E-02 s
+   Elapsed                         4.79402E+00 s
+ =========================================================================================
 ```
 
 ### Output Files
