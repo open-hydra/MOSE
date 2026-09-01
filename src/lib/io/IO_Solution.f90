@@ -180,7 +180,7 @@ contains
       obj_io%ORANSname=" ru'u' rv'v' rw'w' ru'v' ru'w' rv'w' omega"
     end if
     do i = 1, nsc
-      obj_io%Ovarnames = trim(obj_io%Ovarnames)//'"rho('//trim(str(.true.,i))//')"'
+      obj_io%Ovarnames = trim(obj_io%Ovarnames)//' "rho('//trim(str(.true.,i))//')"'
     enddo
     obj_io%Ovarnames = trim(obj_io%Ovarnames)//' "u" "v" "w" "p"'
     ! Soot Variables
@@ -193,7 +193,7 @@ contains
     !Passive scalars
     if (npass>0) then
       do i = 1, npass
-        obj_io%Ovarnames = trim(obj_io%Ovarnames)//'"Pass('//trim(str(.true.,i))//')"'
+        obj_io%Ovarnames = trim(obj_io%Ovarnames)//' "Pass('//trim(str(.true.,i))//')"'
       enddo
     endif 
    
