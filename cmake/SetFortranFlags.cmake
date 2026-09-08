@@ -31,11 +31,60 @@ ELSE()
     MESSAGE(FATAL_ERROR "CMAKE_BUILD_TYPE not valid, choices are DEBUG, RELEASE, or TESTING")
 ENDIF(BT STREQUAL "RELEASE")
 
+# Intel IPO needs two more things that CMake will not arrange on its own, and
+# both have to be re-established on *every* configure: the archiver is carried
+# in plain (non-cache) variables that CMakeFortranCompiler.cmake resets to GNU
+# ar each time project() runs.  Wrapped in a macro so it can also be applied on
+# the early-return path below, where the flags are already cached and the rest
+# of this file is skipped.  A macro, not a function: it must set variables in
+# the caller's scope.
+MACRO(SET_IPO_ARCHIVER)
+IF(CMAKE_Fortran_FLAGS_RELEASE MATCHES "(^| )[-/]Q?ipo( |$)")
+
+    # 1. The link line must carry -ipo too: IPO objects hold IR, not ELF, so the
+    #    real optimisation and code generation happen at link time.
+    SET(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -ipo"
+        CACHE STRING "Set the CMAKE_EXE_LINKER_FLAGS_RELEASE flags" FORCE)
+
+    # 2. An IPO-aware archiver.  GNU ar/ranlib cannot index IR objects ("archive
+    #    has no index" / "file format not recognized") and xiar merely forwards to
+    #    ar, so both fail.  oneAPI ships llvm-ar/llvm-ranlib beside the compiler.
+    GET_FILENAME_COMPONENT(_ipo_bindir "${CMAKE_Fortran_COMPILER}" DIRECTORY)
+    FIND_PROGRAM(IPO_AR     NAMES llvm-ar     HINTS "${_ipo_bindir}/compiler" "${_ipo_bindir}")
+    FIND_PROGRAM(IPO_RANLIB NAMES llvm-ranlib HINTS "${_ipo_bindir}/compiler" "${_ipo_bindir}")
+
+    IF(IPO_AR AND IPO_RANLIB)
+        SET(CMAKE_AR     "${IPO_AR}"     CACHE FILEPATH "Archiver used for IPO objects" FORCE)
+        SET(CMAKE_RANLIB "${IPO_RANLIB}" CACHE FILEPATH "Ranlib used for IPO objects"   FORCE)
+        # CMakeFindBinUtils has already left plain variables of the same names in
+        # this scope, and a plain variable shadows the cache entry when CMake
+        # expands <CMAKE_AR>/<CMAKE_RANLIB> in the archive rules.  Setting only
+        # the cache leaves the generated link.txt still calling /usr/bin/ar, which
+        # produces an unindexed archive ("archive has no index").  Set both; these
+        # propagate to every subdirectory added after this point.
+        SET(CMAKE_AR     "${IPO_AR}")
+        SET(CMAKE_RANLIB "${IPO_RANLIB}")
+        MESSAGE(STATUS "IPO                : enabled (archiver ${IPO_AR})")
+    ELSE()
+        MESSAGE(WARNING "IPO was requested and -ipo compiles, but no llvm-ar/llvm-ranlib "
+                        "was found next to ${CMAKE_Fortran_COMPILER}. Disabling IPO: a "
+                        "static library of IPO objects cannot be indexed by GNU ar. "
+                        "Re-run with -DUSE_IPO=OFF to silence this.")
+        STRING(REGEX REPLACE "(^| )([-/]Q?ipo)( |$)" " " CMAKE_Fortran_FLAGS_RELEASE
+               "${CMAKE_Fortran_FLAGS_RELEASE}")
+        SET(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE}"
+            CACHE STRING "Set the CMAKE_Fortran_FLAGS_RELEASE flags" FORCE)
+    ENDIF()
+ENDIF()
+ENDMACRO(SET_IPO_ARCHIVER)
+
 #########################################################
 # If the compiler flags have already been set, return now
 #########################################################
 
 IF(CMAKE_Fortran_FLAGS_RELEASE AND CMAKE_Fortran_FLAGS_TESTING AND CMAKE_Fortran_FLAGS_DEBUG)
+    # The flags are cached, but the archiver is not -- redo it before bailing out.
+    SET_IPO_ARCHIVER()
     RETURN ()
 ENDIF(CMAKE_Fortran_FLAGS_RELEASE AND CMAKE_Fortran_FLAGS_TESTING AND CMAKE_Fortran_FLAGS_DEBUG)
 
@@ -216,45 +265,7 @@ IF(USE_IPO)
                     )
 ENDIF(USE_IPO)
 
-# Intel IPO needs two more things that CMake will not arrange on its own.
-IF(CMAKE_Fortran_FLAGS_RELEASE MATCHES "(^| )[-/]Q?ipo( |$)")
-
-    # 1. The link line must carry -ipo too: IPO objects hold IR, not ELF, so the
-    #    real optimisation and code generation happen at link time.
-    SET(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -ipo"
-        CACHE STRING "Set the CMAKE_EXE_LINKER_FLAGS_RELEASE flags" FORCE)
-
-    # 2. An IPO-aware archiver.  GNU ar/ranlib cannot index IR objects ("archive
-    #    has no index" / "file format not recognized") and xiar merely forwards to
-    #    ar, so both fail.  oneAPI ships llvm-ar/llvm-ranlib beside the compiler.
-    GET_FILENAME_COMPONENT(_ipo_bindir "${CMAKE_Fortran_COMPILER}" DIRECTORY)
-    FIND_PROGRAM(IPO_AR     NAMES llvm-ar     HINTS "${_ipo_bindir}/compiler" "${_ipo_bindir}")
-    FIND_PROGRAM(IPO_RANLIB NAMES llvm-ranlib HINTS "${_ipo_bindir}/compiler" "${_ipo_bindir}")
-
-    IF(IPO_AR AND IPO_RANLIB)
-        SET(CMAKE_AR     "${IPO_AR}"     CACHE FILEPATH "Archiver used for IPO objects" FORCE)
-        SET(CMAKE_RANLIB "${IPO_RANLIB}" CACHE FILEPATH "Ranlib used for IPO objects"   FORCE)
-        # CMakeFindBinUtils has already left plain variables of the same names in
-        # this scope, and a plain variable shadows the cache entry when CMake
-        # expands <CMAKE_AR>/<CMAKE_RANLIB> in the archive rules.  Setting only
-        # the cache leaves the generated link.txt still calling /usr/bin/ar, which
-        # produces an unindexed archive ("archive has no index").  Set both; these
-        # propagate to every subdirectory added after this point.
-        SET(CMAKE_AR     "${IPO_AR}")
-        SET(CMAKE_RANLIB "${IPO_RANLIB}")
-        MESSAGE(STATUS "IPO                : enabled (archiver ${IPO_AR})")
-    ELSE()
-        MESSAGE(WARNING "IPO was requested and -ipo compiles, but no llvm-ar/llvm-ranlib "
-                        "was found next to ${CMAKE_Fortran_COMPILER}. Disabling IPO: a "
-                        "static library of IPO objects cannot be indexed by GNU ar. "
-                        "Re-run with -DUSE_IPO=OFF to silence this.")
-        STRING(REGEX REPLACE "(^| )([-/]Q?ipo)( |$)" " " CMAKE_Fortran_FLAGS_RELEASE
-               "${CMAKE_Fortran_FLAGS_RELEASE}")
-        SET(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE}"
-            CACHE STRING "Set the CMAKE_Fortran_FLAGS_RELEASE flags" FORCE)
-    ENDIF()
-
-ENDIF()
+SET_IPO_ARCHIVER()
 
 # Fast math (breaks strict IEEE 754 -- verify numerics are unaffected)
 # WARNING: may change floating-point results; disable if results diverge
