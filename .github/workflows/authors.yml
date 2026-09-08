@@ -2,15 +2,14 @@ name: Authors
 
 on:
   push:
-    branches:
+    branches-ignore:
+      # main is protected: AUTHORS.md reaches it through a pull request, having
+      # already been regenerated and committed on the contributor's branch.
       - main
-  pull_request:
-  schedule:
-    - cron: "0 3 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   authors:
@@ -20,29 +19,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # generate-authors.py reads the whole history via `git shortlog --all`.
           fetch-depth: 0
+          # Check out the branch itself, not the detached push SHA, so the
+          # regenerated file can be committed back onto it.
+          ref: ${{ github.ref_name }}
+          # A push made with GITHUB_TOKEN does not start any workflow run.
+          # That is harmless while merging requires no status checks: the bot's
+          # commit simply gets none. If CTest is ever made a *required* check,
+          # it would never report on that commit and the pull request would be
+          # stuck, so add a GitHub App token or fine-grained PAT (Contents:
+          # write) as the AUTHORS_TOKEN secret at the same time.
+          token: ${{ secrets.AUTHORS_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Setup Conda (base)
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          auto-activate-base: true
-          activate-environment: base
-          python-version: "3.12"
+          python-version: "3.x"
+
+      - name: Install Python dependencies
+        run: pip install pyyaml
 
       - name: Generate AUTHORS.md
-        shell: bash -el {0}
-        run: |
-          conda activate base
-          python -m pip install --quiet pyyaml
-          python scripts/generate-authors.py
+        run: python scripts/generate-authors.py
 
-      - name: Create or update PR for AUTHORS.md
-        if: github.event_name != 'pull_request'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: update AUTHORS.md"
-          title: "chore: update AUTHORS.md"
-          body: "Automated update of AUTHORS.md"
-          branch: "ci/update-authors"
-          delete-branch: true
+      - name: Commit AUTHORS.md if it changed
+        env:
+          HAS_AUTHORS_TOKEN: ${{ secrets.AUTHORS_TOKEN != '' }}
+        run: |
+          if git diff --quiet -- AUTHORS.md; then
+            echo "AUTHORS.md is already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add AUTHORS.md
+          git commit -m "chore: update AUTHORS.md"
+
+          # Rebase in case the contributor pushed again while this job ran.
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+          if [ "${HAS_AUTHORS_TOKEN}" != "true" ]; then
+            echo "::notice::AUTHORS.md was pushed with GITHUB_TOKEN, so no checks ran for that commit. Fine while no status check is required to merge. If you make one required, add an AUTHORS_TOKEN secret (GitHub App token, or fine-grained PAT with Contents: write) or pull requests will hang."
+          fi
