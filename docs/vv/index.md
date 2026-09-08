@@ -25,6 +25,7 @@ This section documents the Verification & Validation (V&V) test suite for MOSE. 
 | [Laminar Flat Plate](2D-flat-plate-laminar.md) | 2D | 0.2 | Laminar boundary layer, viscous effects | Blasius similarity | HLLC | Blasius (1908) |
 | [Turbulent Flat Plate](2D-flat-plate-turbulent.md) | 2D | 0.2 | Turbulent boundary layer, turbulence models | NASA solver comparison (CFL3D, FUN3D) | HLLC | NASA |
 | [Shock Wave-Boundary Layer Interaction](2D-swbli.md) | 2D | 5.0 | Shock-boundary-layer interaction, separation/reattachment | Schulein/SU2/Wind-US + same-grid OpenFOAM code-to-code | HLLC (SA, SST) | Schulein + code-to-code |
+| [HyShot II Scramjet Combustor](3D-hyshotII.md) | 3D | 2.65 | Reacting scramjet combustor: sonic H$_2$ injection, shock train, finite-rate chemistry, chimera overset | HyShot II experiment (wall pressure, with uncertainty) + TAU S-A RANS | HLLC (SA) | Karl (2011); Chapuis et al. (2013) |
 | [Rotating Frame](rotating-frame.md) | 3D | low Mach | Coriolis and centrifugal source terms | Analytical / balance | Euler | rotating-frame theory |
 
 ## Running the tests

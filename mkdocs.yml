@@ -127,6 +127,7 @@ nav:
     - Laminar Flat Plate: vv/2D-flat-plate-laminar.md
     - Turbulent Flat Plate: vv/2D-flat-plate-turbulent.md
     - Shock Boundary Layer Interaction: vv/2D-swbli.md
+    - HyShot II Scramjet Combustor: vv/3D-hyshotII.md
     - Rotating Frame: vv/rotating-frame.md
 
   - Developer Guide:
