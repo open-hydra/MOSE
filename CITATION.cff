@@ -1,17 +1,34 @@
-cff-version: 0.2.0
-title: "MOSE"
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "MOSE: Multipurpose Open Solver for ideal-gas Equations"
+abstract: "An open-source compressible flow solver for the Euler and
+  Navier-Stokes equations on multi-block structured grids, written in modern
+  Fortran, with RANS turbulence closures, equilibrium and finite-rate chemistry, 
+  and rotating reference frame capabilities.
+type: software
+version: 0.2.0
+date-released: 2026-09-09
 authors:
   - family-names: "Grossi"
     given-names: "Marco"
-  - family-names: "Sereno"
-    given-names: "Alessio"
-  - family-names: "Barbato"
-    given-names: "Vincenzo"
-  - family-names: "Montanari"
-    given-names: "Alessandro"
+    affiliation: "Sapienza University of Rome"
+    orcid: "https://orcid.org/0000-0002-8487-1932"
   - family-names: "Falco"
     given-names: "Alex"
-license: GPL-3.0
-url: "https://github.com/open-hydra/MOSE"
-doi: "https://doi.org/10.5281/zenodo.20201352"
-type: software
+    affiliation: "Sapienza University of Rome"
+  - family-names: "Montanari"
+    given-names: "Alessandro"
+    affiliation: "Sapienza University of Rome"
+contact:
+  - family-names: "Grossi"
+    given-names: "Marco"
+license: GPL-3.0-only
+repository-code: "https://github.com/open-hydra/MOSE"
+url: "https://open-hydra.github.io/MOSE/"
+doi: "10.5281/zenodo.20201352"
+keywords:
+  - computational fluid dynamics
+  - compressible flow
+  - Navier-Stokes
+  - finite-rate chemistry
+  - Fortran
