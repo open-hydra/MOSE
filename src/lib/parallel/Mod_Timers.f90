@@ -70,12 +70,18 @@ contains
 
 
   !> Mark the start of the solver loop, i.e. the end of set-up.
+  !> Clears the window accumulators as well as the run totals.
   subroutine timer_run_begin()
     t_run_beg  = timer_wtime()
     t_run_iter = 0.0_R8
     t_run_comm = 0.0_R8
     t_run_sync = 0.0_R8
     n_run      = 0
+
+    t_iter_acc = 0.0_R8
+    t_comm_acc = 0.0_R8
+    t_sync_acc = 0.0_R8
+    n_iter_acc = 0
   end subroutine timer_run_begin
 
 
