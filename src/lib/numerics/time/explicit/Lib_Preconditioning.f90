@@ -178,7 +178,8 @@ contains
                                 rans_variables=domain%blk(b)%P(nt:nt+nrans-1,i,j,k), &
                                 mul=mu, rho=rho, &
                                 vel_gradient=domain%blk(b)%vel_gradient(i,j,k)%c, &
-                                walldist=domain%blk(b)%yn(i,j,k))
+                                walldist=domain%blk(b)%yn(i,j,k), &
+                                k_rough=domain%blk(b)%k_rough(i,j,k))
             mu_eff_loc = mu_eff_loc + mu_turb_loc
             k_eff_loc  = k_eff_loc  + mu_turb_loc * cp / obj_rans%Prt
 

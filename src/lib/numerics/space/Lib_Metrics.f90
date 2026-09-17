@@ -385,7 +385,7 @@ contains
     type(MOSE_block_type), dimension(nb), intent(inout)  :: blk
     type(MOSE_bc_type), dimension(nbound), intent(in)    :: bc
     ! Local
-    real(R8), dimension(nbound) :: facex, facey, facez
+    real(R8), dimension(nbound) :: facex, facey, facez, facekr
     real(R8) :: x1, x2, x3, x4, y1, y2, y3, y4, z1, z2, z3, z4
     integer :: Fm, Bm, Im, Jm, Km, l, b, nwall
     integer :: i1, j1, k1, i2, j2, k2, i3, j3, k3, i4, j4, k4
@@ -473,6 +473,9 @@ contains
         facex(nwall) = 0.25d0*( x1 + x2 + x3 + x4 )
         facey(nwall) = 0.25d0*( y1 + y2 + y3 + y4 )
         facez(nwall) = 0.25d0*( z1 + z2 + z3 + z4 )
+
+        ! Face sand-grain roughness, inherited by the cells it is nearest to.
+        facekr(nwall) = bc(l) % k_rough
       
       endif
     
@@ -512,7 +515,7 @@ contains
     ! Compute distance in block b by querying the shared k-d tree.
     do b = 1, nb
       if (.not. needs_yn(b)) cycle
-      call Wall_Distance_Blk ( blk(b), wall_tree )
+      call Wall_Distance_Blk ( blk(b), wall_tree, facekr(1:nwall) )
     enddo
 
     ! Validation, off unless DEBUG_KDTREE: prints max |tree - brute| per block
@@ -528,17 +531,18 @@ contains
 
     contains
 
-      subroutine Wall_Distance_Blk ( blk, tree )
+      subroutine Wall_Distance_Blk ( blk, tree, face_kr )
         use MOSE_Lib_KDTree, only: kdtree_t, kdtree_nearest
         implicit none
         type(MOSE_block_type), intent(inout) :: blk
         type(kdtree_t), intent(in)           :: tree
+        real(R8), intent(in)                 :: face_kr(:)   ! Roughness of each wall face, by original face index
         ! Local
-        integer :: i, j, k
+        integer :: i, j, k, iface
         real(R8) :: center(3), dist
 
         !$omp parallel
-        !$omp do collapse(3) private(i, j, k, center, dist)
+        !$omp do collapse(3) private(i, j, k, center, dist, iface)
         do k = 1, blk % dim(3)
         do j = 1, blk % dim(2)
         do i = 1, blk % dim(1)
@@ -550,8 +554,9 @@ contains
                               blk % node(i-1,j-1,k-1) % c + blk % node(i-1,j  ,k-1) % c )
 
           ! Nearest wall-face centroid via the k-d tree.
-          call kdtree_nearest ( tree, center(1), center(2), center(3), dist )
+          call kdtree_nearest ( tree, center(1), center(2), center(3), dist, iface )
           blk % yn (i,j,k) = dist
+          blk % k_rough (i,j,k) = face_kr(iface)
 
         enddo; enddo; enddo
         !$omp end parallel
@@ -625,6 +630,7 @@ contains
     Kg = Km - guide(Fm,3)
 
     blkm % yn(Ig,Jg,Kg) = blks % yn(Is,Js,Ks)
+    blkm % k_rough(Ig,Jg,Kg) = blks % k_rough(Is,Js,Ks)
 
   end subroutine Yn_Connection
 
@@ -1231,17 +1237,14 @@ contains
 
   end subroutine BC_Connect_Metrics
 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
   function Is_Wall(type) result (ans)
       implicit none
       integer, intent(in) :: type
       logical :: ans
 
       select case (type)
-        case (301, 302, 303, 304)  ! wall BCs
+        case (301, 302, 503, 504, 505)  ! wall BCs (heat flux, T, GSI)
           ans = .true.
         case default
           ans = .false.

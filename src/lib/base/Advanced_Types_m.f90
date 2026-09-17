@@ -18,6 +18,7 @@ module MOSE_Advanced_Types_m
     type(MOSE_vector_3D_type), allocatable :: dl(:,:,:)        ! Average cell length (in i/j/k direction). eg: dl%c(1) is sqrt(dx**2+dy**2+dz**2) of the cell in the i direction
     type(MOSE_d_metrics_type)              :: dir(3)           ! Direction object. Contains: i-faces, j-faces, k-faces; eg: dir(1)%face(i,j,k)%n
     real(R8), allocatable                  :: yn(:,:,:)        ! Nearest wall distance
+    real(R8), allocatable                  :: k_rough(:,:,:)   ! Sand-grain roughness height of the nearest wall face [m]
   end type block_type
 
   type :: bc_type
@@ -53,18 +54,21 @@ module MOSE_Advanced_Types_m
   end type MOSE_block_type
 
   type, extends(bc_type) :: MOSE_bc_type
-    real(R8)                            :: qw, Tw, Taw, hg, qrad             ! BC viscous wall specifications   
-    real(R8)                            :: T0, p0, alpha, beta, mach, pamb   ! BC 4 (inflow/outflow) specifications
-    real(R8)                            :: mdot, un                          ! BC 4 (inflow/outflow) specifications
-    real(R8)                            :: rel_fac                           ! BC 4 (inflow/outflow) specifications
-    real(R8), allocatable               :: ci(:)                             ! BC 4 (inflow/outflow) specifications
-    real(R8)                            :: SF                                ! BC ? specifications
-    real(R8)                            :: aCoeff, n, pRef, Taf, haf         ! BC 14 specification (SRM grain)
-    ! Extended fields from ATLAS output format
-    real(R8)                            :: k_rough  = 0.0_R8                 ! Surface roughness height [m]  (wall BCs 301-304)
-    real(R8)                            :: eps_wall = 0.0_R8                 ! Wall emissivity               (wall BCs 301, 302)
-    real(R8)                            :: rhoGrain = 0.0_R8                 ! SRM grain density [kg/m3]     (SRM BC 501)
-    real(R8)                            :: SF_geo   = 1.0_R8                 ! SRM geometric scale factor    (SRM BC 501)
+    real(R8)                            :: qw, Tw, qrad                      ! BC viscous wall specifications   
+    real(R8)                            :: T0, p0, alpha, beta, mach, pamb   ! BC 400 (inflow/outflow) specifications
+    real(R8)                            :: mdot, un                          ! BC 400 (inflow/outflow) specifications
+    real(R8)                            :: rel_fac                           ! BC 400 (inflow/outflow) specifications
+    real(R8), allocatable               :: ci(:)                             ! BC 400 (inflow/outflow) specifications
+    real(R8)                            :: k_rough  = 0.0_R8                 ! Surface roughness height [m]  (wall BCs 301-302)
+    real(R8)                            :: eps_wall = 0.0_R8                 ! Wall emissivity               (wall BCs 301-302. 503-506)
+    real(R8)                            :: cp_wall  = 0.0_R8                 ! Material specific heat capacity   (GSI melting wall 503)
+    real(R8)                            :: Ti_wall  = 0.0_R8                 ! Material initial temperature      (GSI melting wall 503)
+    real(R8)                            :: dh_wall  = 0.0_R8                 ! Material heat of fusion           (GSI melting wall 503)
+    integer                             :: GSI_surf_reac_id = 0              ! GSI reactions ID                  (GSI 505/506)
+    integer                             :: GSI_pyro_model_id = 0             ! GSI pyrolysis model ID            (GSI 504/506)
+    real(R8)                            :: aCoeff, n, pRef, Taf, SF          ! SRM specification             (SRM BC 502)
+    real(R8)                            :: rhoGrain = 0.0_R8                 ! SRM grain density [kg/m3]     (SRM BC 502)
+    real(R8)                            :: SF_geo   = 1.0_R8                 ! SRM geometric scale factor    (SRM BC 502)
     real(R8)                            :: psub     = 0.0_R8                 ! Nozzle subsonic  pressure     (nozzle BC 420)
     real(R8)                            :: psup     = 0.0_R8                 ! Nozzle supersonic pressure    (nozzle BC 420)
     type(time_series_type)              :: p0time

@@ -132,6 +132,8 @@ contains
                             blk % dir(1) % f(i,j,k) % A,  &
                             blk % yn(i  ,j,k),            &
                             blk % yn(i+1,j,k),            &
+                            blk % k_rough(i  ,j,k),       &
+                            blk % k_rough(i+1,j,k),       &
                             blk % P(:,i  ,j,k),           &
                             blk % P(:,i+1,j,k),           &
                             blk % P(:,i  ,j-1,k),         &
@@ -176,6 +178,8 @@ contains
                             blk % dir(2) % f(i,j,k) % A,  &
                             blk % yn(i,j  ,k),            &
                             blk % yn(i,j+1,k),            &
+                            blk % k_rough(i,j  ,k),       &
+                            blk % k_rough(i,j+1,k),       &
                             blk % P(:,i,j  ,k),           &
                             blk % P(:,i,j+1,k),           &
                             blk % P(:,i-1,j  ,k),         &
@@ -220,6 +224,8 @@ contains
                             blk % dir(3) % f(i,j,k) % A,  &
                             blk % yn(i,j,k  ),            &
                             blk % yn(i,j,k+1),            &
+                            blk % k_rough(i,j,k  ),       &
+                            blk % k_rough(i,j,k+1),       &
                             blk % P(:,i,j,k  ),           &
                             blk % P(:,i,j,k+1),           &
                             blk % P(:,i-1,j,k  ),         &

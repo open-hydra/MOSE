@@ -112,7 +112,7 @@ contains
           ! Note: approximate mit for 2 equation models. 
           ! velocity gradient assumed 0 and small distance from wall
           call Eddy_Viscosity ( mut=mie, rans_variables=rans_, mul=mil, rho=rho, &
-                                vel_gradient=dummy, walldist=1d-6 )
+                                vel_gradient=dummy, walldist=1d-6, k_rough=0d0 )
         endif
         mi = mie + mil
 

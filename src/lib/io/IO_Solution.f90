@@ -334,7 +334,8 @@ contains
               vel_gradient = matmul ( vel_gradient + 1d-40, domain%blk(b)%m(i,j,k)%c )
               call Eddy_Viscosity ( mut=mut, rans_variables=domain%blk(b)%p(nt:,i,j,k), &
                                     mul=mu, rho=rho, vel_gradient=vel_gradient, &
-                                    walldist=domain%blk(b)%yn(i,j,k))
+                                    walldist=domain%blk(b)%yn(i,j,k), &
+                                    k_rough=domain%blk(b)%k_rough(i,j,k))
               pv = pv +1; IOfield%block(b)%vars(nprim+pv,i,j,k) = mut
             end if
           endif

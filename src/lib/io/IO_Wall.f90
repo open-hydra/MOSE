@@ -154,12 +154,15 @@ contains
     use MOSE_Mod_MPI, only: mpi_is_root, is_local_block, mpi_reduce_sum_r8_array
     use MOSE_Lib_BC_Fluxes_Wall_Heat
     use MOSE_Lib_BC_Fluxes_Wall_Temperature
-    use MOSE_Lib_BC_Fluxes_Wall_Melting
-    use MOSE_Lib_BC_Fluxes_Wall_Pyrolysis
+    use MOSE_Lib_BC_Fluxes_GSI_Melting
+    use MOSE_Lib_BC_Fluxes_GSI_Pyrolysis
+    use MOSE_Lib_BC_Fluxes_GSI_Reactions
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     real(R8), dimension(8) :: Ovar
+    logical  :: ablating
+    real(R8) :: Tw_surface
     integer :: f, lower, upper, i, b, bb, pv, Bm, Im, Jm, Km, Fm, Is, Js, Ks
     integer :: n_wall_total, wall_i
     real(R8), allocatable :: wall_buf(:)
@@ -196,16 +199,38 @@ contains
           select case ( domain % bc(i) % type )
 
             case (301) ! wall: prescribed heat flux
-              call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar )
+              call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
+                                  k_rough = domain % bc(i) % k_rough )
 
             case (302) ! wall: prescribed temperature
-              call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar )
+              call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
+                                         k_rough = domain % bc(i) % k_rough )
 
-            case (303) ! wall: temperature + radiative flux (melting)
-              call BC_Wall_Melting ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, domain % bc(i) % qrad, Ovar )
+            ! Gas-surface interaction walls: when the surface is inert the GSI
+            ! routine reports nothing, and the face is an ordinary wall at the
+            ! temperature it settled on -- the same fallback the flux path takes,
+            ! so the wall file keeps describing the boundary that was applied.
+            case (503) ! GSI - melting
+              call BC_Wall_Melting ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % cp_wall, domain % bc(i) % Tw, &
+                                                                       domain % bc(i) % Ti_wall, domain % bc(i) % dh_wall, &
+                                                                       domain % bc(i) % qrad, domain % bc(i) % ci, Ovar, &
+                                                                       ablating = ablating, T_surface = Tw_surface )
+              if (.not. ablating) &
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
 
-            case (304) ! wall: radiative flux only (pyrolysis/ablation)
-              call BC_Wall_Pyrolysis ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qrad, domain%bc(i) % type, Ovar )
+            case (504) ! GSI - pyrolysis
+              call BC_Wall_Pyrolysis ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_pyro_model_id, &
+                                       domain % bc(i) % qrad, domain % bc(i) % ci, Ovar, &
+                                       ablating = ablating, T_surface = Tw_surface )
+              if (.not. ablating) &
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
+
+            case (505) ! GSI - surface reactions
+              call BC_Wall_Reactions ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_surf_reac_id, &
+                                       domain % bc(i) % qrad, Ovar, &
+                                       ablating = ablating, T_surface = Tw_surface )
+              if (.not. ablating) &
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
 
           end select
           wall_buf(8*(wall_i-1)+1 : 8*wall_i) = Ovar

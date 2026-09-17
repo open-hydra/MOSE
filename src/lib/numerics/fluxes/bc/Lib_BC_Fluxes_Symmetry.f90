@@ -210,7 +210,7 @@ contains
     if (model==2) then
       call Eddy_Viscosity ( mut=mie, rans_variables=Prim(nt:nprim), &
                             mul=mil, rho=rho, vel_gradient=Gradient, &
-                            walldist=dist )
+                            walldist=dist, k_rough=Blk % k_rough(Im,Jm,Km) )
     end if
     
     Stress = Stress_Vector ( Gradient, Normal, mil, mie, Prim(nt:) )

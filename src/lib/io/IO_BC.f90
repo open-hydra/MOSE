@@ -14,9 +14,11 @@ contains
 
   subroutine Setup_BC ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_multigrid, obj_io_bc
-    use MOSE_Global_m, only: model
-    use MOSE_IO_BC_Q2D, only: Setup_Q2D_BC_Data
+    use FLINT_Lib_Thermodynamic, only: species_names
+    use MOSE_Config_Types_m,     only: obj_multigrid, obj_io_bc
+    use MOSE_Global_m,           only: model
+    use MOSE_IO_BC_Q2D,          only: Setup_Q2D_BC_Data
+    use MOSE_Lib_GSI,            only: GSI_Initialize
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain(obj_multigrid%MGL)
     ! Local
@@ -48,6 +50,12 @@ contains
       end if
 
     end do
+
+    !! Phase 3: Initialize BCs for specific models
+    ! GSI BCs
+    if (ngsi > 0) then
+      call GSI_Initialize(species_names)
+    end if
 
   end subroutine Setup_BC
 
@@ -102,14 +110,18 @@ contains
     do while (ios==0)
       read( unitfile,*,iostat=ios ) di(1), di(2), di(3), di(4), di(5), ti
       ! Dispatch to skip the right number of extra lines.
+      ! This list must stay in step with the property lines actually consumed by
+      ! Read_BC below: if a type reads one there but is missing here, the scan
+      ! mistakes its property line for a record and the whole file is rejected.
       ! IDs with ONE property line:
-      !   101/103 = connection | 201 = periodic | 301-309 = wall | 401-410,420 = inlet/outlet | 501 = manifold | 502 = srm 
+      !   101/103 = connection | 201 = periodic | 301,302 = wall | 401-410,420 = inlet/outlet
+      !   501 = manifold | 502 = srm | 503-506 = gas-surface interaction
       ! IDs with NO property line:
       !   300 = symmetry | 400 = extrapolation | 409 = forced outlet
       ! IDs with VARIABLE-length property lines:
       !   102 = chimera
       select case(ti)
-      case(101, 103, 201, 301:309, 401:408, 410, 420, 501:502)
+      case(101, 103, 201, 301, 302, 401:408, 410, 420, 501:506)
         read( unitfile,*,iostat=ios )
       case(102)
         read( unitfile,*,iostat=ios ) ci, cii
@@ -261,24 +273,6 @@ contains
           read(unitfile,*,iostat=ios) bc(i)%Tw, bc(i)%k_rough, bc(i)%eps_wall
 
         ! ─────────────────────────────────────────────────────────────────────
-        ! Wall, temperature + radiative flux
-        ! Second line: T, qrad, roughness_ks
-        case(303)
-          if (level == 1) nwall  = nwall  + 1
-          if (level == 1) ngsi   = ngsi   + 1
-          obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
-          read(unitfile,*,iostat=ios) bc(i)%Tw, bc(i)%qrad, bc(i)%k_rough
-
-        ! ─────────────────────────────────────────────────────────────────────
-        ! Wall, radiative flux
-        ! Second line: qrad, roughness_ks
-        case(304)
-          if (level == 1) nwall  = nwall  + 1
-          if (level == 1) ngsi   = ngsi   + 1
-          obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
-          read(unitfile,*,iostat=ios) bc(i)%qrad, bc(i)%k_rough
-
-        ! ─────────────────────────────────────────────────────────────────────
         ! Inlet, stag. conditions (T0, p0)
         ! Second line: T0, p0, alpha, beta, rel_fac, massf(1:nsc), turb(1:nrans)
         case(401)
@@ -401,9 +395,51 @@ contains
         case(502)
           if (level == 1) nSRM = nSRM + 1
           allocate( bc(i) % ci(1 : nsc) )
-          bc(i)%haf = 0.0_R8   ! haf no longer in ATLAS output; set to zero
+          ! The enthalpy of the injected products is no longer read here: it used to
+          ! come from ATLAS and was left at zero when that output dropped it, which
+          ! silently injected the propellant gas cold. It is now evaluated from Taf
+          ! and the product composition against the thermodynamic tables, in BC_SRM.
           read(unitfile,*,iostat=ios) bc(i)%Taf, bc(i)%aCoeff, bc(i)%n, bc(i)%pRef, &
             bc(i)%rhoGrain, bc(i)%SF_geo, (bc(i)%ci(s), s = 1, nsc)
+
+        ! ─────────────────────────────────────────────────────────────────────
+        ! GSI - Melting
+        ! Second line: specific_heat, temperature, initial_temperature, heat_of_fusion, radiative_flux, emissivity, mass fraction(1:nsc)
+        case(503)
+          if (level == 1) nwall  = nwall  + 1
+          if (level == 1) ngsi   = ngsi   + 1
+          allocate( bc(i) % ci(1 : nsc) )
+          obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
+          read(unitfile,*,iostat=ios) bc(i)%cp_wall, bc(i)%Tw, bc(i)%Ti_wall, bc(i)%dh_wall, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+
+        ! ─────────────────────────────────────────────────────────────────────
+        ! GSI - Pyrolysis
+        ! Second line: pyrolysis model id, radiative_flux, emissivity_eps, mass fraction(1:nsc)
+        case(504)
+          if (level == 1) nwall  = nwall  + 1
+          if (level == 1) ngsi   = ngsi   + 1
+          allocate( bc(i) % ci(1 : nsc) )
+          obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
+          read(unitfile,*,iostat=ios) bc(i)%GSI_pyro_model_id, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+
+        ! ─────────────────────────────────────────────────────────────────────
+        ! GSI - Surface reactions
+        ! Second line: surface reaction id, radiative flux
+        case(505)
+          if (level == 1) nwall  = nwall  + 1
+          if (level == 1) ngsi   = ngsi   + 1
+          obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
+          read(unitfile,*,iostat=ios) bc(i)%GSI_surf_reac_id, bc(i)%qrad
+
+        ! ─────────────────────────────────────────────────────────────────────
+        ! GSI - Surface reactions + pyrolysis
+        ! Second line: pyrolysis model id, surface reaction id, radiative flux
+        case(506)
+          if (level == 1) nwall  = nwall  + 1
+          if (level == 1) ngsi   = ngsi   + 1
+          allocate( bc(i) % ci(1 : nsc) )
+          obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
+          read(unitfile,*,iostat=ios) bc(i)%GSI_pyro_model_id, bc(i)%GSI_surf_reac_id, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Coupled multi-solver wall

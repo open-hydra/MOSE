@@ -74,19 +74,27 @@ contains
 
   !> Query: return the min Euclidean distance from (x,y,z) to any point in the tree.
   !> Read-only on the tree; safe to call concurrently from OpenMP threads.
-  subroutine kdtree_nearest(tree, x, y, z, d)
-    type(kdtree_t), intent(in)  :: tree
-    real(R8),       intent(in)  :: x, y, z
-    real(R8),       intent(out) :: d
+  !> `idx`, if present, is the original index of the nearest point. Among
+  !> equidistant points the lowest original index wins, so the answer does not
+  !> depend on the shuffle and every rank picks the same point.
+  subroutine kdtree_nearest(tree, x, y, z, d, idx)
+    type(kdtree_t), intent(in)     :: tree
+    real(R8),       intent(in)     :: x, y, z
+    real(R8),       intent(out)    :: d
+    integer, optional, intent(out) :: idx
     real(R8) :: best2
+    integer  :: best_i
 
     if (tree%n <= 0) then
       d = huge(1.0_R8)
+      if (present(idx)) idx = 0
       return
     end if
-    best2 = huge(1.0_R8)
-    call nearest_rec(tree%px, tree%py, tree%pz, 1, tree%n, 1, x, y, z, best2)
+    best2  = huge(1.0_R8)
+    best_i = huge(1)
+    call nearest_rec(tree%px, tree%py, tree%pz, tree%perm, 1, tree%n, 1, x, y, z, best2, best_i)
     d = sqrt(best2)
+    if (present(idx)) idx = best_i
   end subroutine kdtree_nearest
 
 
@@ -109,10 +117,12 @@ contains
   end subroutine build_rec
 
 
-  recursive subroutine nearest_rec(px, py, pz, lo, hi, axis, qx, qy, qz, best2)
+  recursive subroutine nearest_rec(px, py, pz, perm, lo, hi, axis, qx, qy, qz, best2, best_i)
     real(R8), intent(in)    :: px(:), py(:), pz(:)
+    integer,  intent(in)    :: perm(:)
     real(R8), intent(in)    :: qx, qy, qz
     real(R8), intent(inout) :: best2
+    integer,  intent(inout) :: best_i
     integer,  intent(in)    :: lo, hi, axis
     integer :: mid, next_axis
     real(R8) :: d2, dx, dy, dz, diff
@@ -124,7 +134,10 @@ contains
     dy = py(mid) - qy
     dz = pz(mid) - qz
     d2 = dx*dx + dy*dy + dz*dz
-    if (d2 < best2) best2 = d2
+    if (d2 < best2 .or. (d2 == best2 .and. perm(mid) < best_i)) then
+      best2  = d2
+      best_i = perm(mid)
+    end if
 
     select case (axis)
       case (1) ; diff = qx - px(mid)
@@ -135,13 +148,15 @@ contains
 
     if (diff <= 0.0_R8) then
       ! query on left side: descend left first
-      call nearest_rec(px, py, pz, lo,      mid - 1, next_axis, qx, qy, qz, best2)
-      if (diff*diff < best2) &
-        call nearest_rec(px, py, pz, mid+1, hi,      next_axis, qx, qy, qz, best2)
+      call nearest_rec(px, py, pz, perm, lo,      mid - 1, next_axis, qx, qy, qz, best2, best_i)
+      ! `<=`, not `<`: a point on the splitting plane can tie the best distance
+      ! with a lower original index, and the tie-break must still see it.
+      if (diff*diff <= best2) &
+        call nearest_rec(px, py, pz, perm, mid+1, hi,      next_axis, qx, qy, qz, best2, best_i)
     else
-      call nearest_rec(px, py, pz, mid+1,   hi,      next_axis, qx, qy, qz, best2)
-      if (diff*diff < best2) &
-        call nearest_rec(px, py, pz, lo,    mid - 1, next_axis, qx, qy, qz, best2)
+      call nearest_rec(px, py, pz, perm, mid+1,   hi,      next_axis, qx, qy, qz, best2, best_i)
+      if (diff*diff <= best2) &
+        call nearest_rec(px, py, pz, perm, lo,    mid - 1, next_axis, qx, qy, qz, best2, best_i)
     end if
   end subroutine nearest_rec
 

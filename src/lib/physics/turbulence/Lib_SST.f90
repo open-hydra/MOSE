@@ -195,7 +195,7 @@ contains
   end subroutine SST_Blk
 
   
-  subroutine SST_Eddy_Viscosity ( mi_t, rkw, mi_l, rho, Gradvel, dist )
+  subroutine SST_Eddy_Viscosity ( mi_t, rkw, mi_l, rho, Gradvel, dist, k_rough )
     use MOSE_Global_m
     use MOSE_Lib_Fluid
     implicit none
@@ -203,6 +203,7 @@ contains
     real(R8), intent(in)                   :: mi_l       ! : Molecular viscosity
     real(R8), intent(in)                   :: rho        ! : Density
     real(R8), intent(in)                   :: dist       ! : Wall distance
+    real(R8), intent(in)                   :: k_rough    ! : Wall roughness (not modelled)
     real(R8), intent(in), dimension(3,3)   :: Gradvel    ! : Velocity gradient
     real(R8), intent(out)                  :: mi_t       ! : Eddy viscosity
     ! Local
@@ -241,7 +242,7 @@ contains
     sigma_k = sigma_k1*F1 + sigma_k2*(1d0-F1)
     sigma_w = sigma_w1*F1 + sigma_w2*(1d0-F1)
     call SST_Eddy_Viscosity( mi_t=mi_t, rkw=rkw, mi_l=mi_l, rho=rho, &
-                             Gradvel=Gradvel, dist=dist )
+                             Gradvel=Gradvel, dist=dist, k_rough=0d0 )
     Flux(1) = ( mi_l + sigma_k*mi_t ) * Dot_Product ( Gradkw(1,:), Normal )
     Flux(2) = ( mi_l + sigma_w*mi_t ) * Dot_Product ( Gradkw(2,:), Normal )
     Flux = Flux * Area
@@ -249,13 +250,15 @@ contains
   end subroutine SST_RANS_Diffusive_Flux
 
 
-  subroutine SST_Set_Wall_Values ( mi_l, rkw, dist )
+  subroutine SST_Set_Wall_Values ( mi_l, rkw_cell, rkw, dist, k_rough )
     use MOSE_Global_m
     use MOSE_Config_Types_m, only: obj_rans
     implicit none
+    real(R8), intent(in),  dimension(nRANS)  :: rkw_cell         ! : boundary cell values (not used)
     real(R8), intent(out), dimension(nRANS)  :: rkw              ! : [ rho*k rho*w ] at wall
     real(R8), intent(in)                     :: mi_l             ! : laminar viscosity at wall
     real(R8), intent(in)                     :: dist             ! : cell center distance from wall
+    real(R8), intent(in)                     :: k_rough          ! : wall roughness (not modelled)
 
     rkw(1) = 0d0 ! Solid surface condition on k
     ! Smooth-surface BC: omega_wall = C*mi_l/dist**2, with C set by omega-wall-bc

@@ -5,16 +5,19 @@ module MOSE_Lib_GSI
   
   implicit none
 
-    ! Paraffin/Melting
-  real(R8) :: T_i = 298.15d0             ! initial temperature of paraffin
-  real(R8) :: cp_wax = 1946.0310193884d0 ! data taken from NIST website (last accessed Fri Nov 1 2019): https://webbook.nist.gov/cgi/cbook.cgi?ID=C544854&Units=SI&Mask=6EF
-  real(R8) :: Dh_wax = 1.698285789316d+5 ! data taken from NIST website (last accessed Fri Nov 1 2019): https://webbook.nist.gov/cgi/cbook.cgi?ID=C544854&Units=SI&Mask=6EF 
-  real(R8) :: y_SEBS = 0d0               ! SEBS mass fraction in fuel
-  integer :: iFUEL = 10                      ! standard set for singhWC32
-  integer :: iSEBS = 2
+  private
+  public :: GSI_Initialize, GSI_Melting, GSI_Carbon_Bradley, GSI_HDPE, GSI_HTPB, GSI_PP
+
+  ! Species indices for GSI subroutines
+  integer :: iH, iC2H4, iOH, iCO, iCO2, iH2, iH2O, iO2, iO
+
+  ! ! Paraffin/Melting
+  ! real(R8) :: T_i = 298.15d0             ! initial temperature of paraffin
+  ! real(R8) :: cp_wax = 1946.0310193884d0 ! data taken from NIST website (last accessed Fri Nov 1 2019): https://webbook.nist.gov/cgi/cbook.cgi?ID=C544854&Units=SI&Mask=6EF
+  ! real(R8) :: Dh_wax = 1.698285789316d+5 ! data taken from NIST website (last accessed Fri Nov 1 2019): https://webbook.nist.gov/cgi/cbook.cgi?ID=C544854&Units=SI&Mask=6EF 
 
   ! Carbon
-  real(R8), parameter :: wmc  = 12.0107d0 ! Carbon molecular weight
+  real(R8), parameter :: mwC  = 12.0107d0 ! Carbon molecular weight
   real(R8), parameter :: pref = 1.01325d5 ! Athmospheric reference pressure 
 
   ! HDPE
@@ -44,14 +47,45 @@ module MOSE_Lib_GSI
 
 contains
 
-  subroutine GSI_Melting ( qw, Tw, omega, mdot )
+  subroutine GSI_Initialize(species_name)
     implicit none
-    real(R8), intent(in)    :: qw, Tw
-    real(R8), intent(out)   :: omega(nsc), mdot
-    real(R8) :: cp_solid, Dh_melting, Dh_conduction, heat_absorbed, mdot_wax
+    character(len=*), dimension(:), intent(in) :: species_name
+    integer :: i
 
-    cp_solid   = cp_wax
-    dh_melting = dh_wax
+    do i = 1, nsc
+      call name2index( trim(adjustl(species_name(i))), i )
+    end do
+
+  end subroutine GSI_Initialize
+
+  subroutine name2index( name, index )
+    implicit none
+    character(len=*), intent(in) :: name
+    integer, intent(in) :: index
+
+    select case (trim(adjustl(name)))
+      case ('H')     ; iH = index
+      case ('C2H4')  ; iC2H4 = index
+      case ('OH')    ; iOH = index
+      case ('CO')    ; iCO = index
+      case ('CO2')   ; iCO2 = index
+      case ('H2')    ; iH2 = index
+      case ('H2O')   ; iH2O = index
+      case ('O2')    ; iO2 = index
+      case ('O')     ; iO = index
+    end select
+
+  end subroutine name2index
+
+
+
+  subroutine GSI_Melting ( cp_solid, Tw, T_i, Dh_melting, qw,  y_wall, omega, mdot )
+    implicit none
+    real(R8), intent(in)    :: cp_solid, Tw, T_i, Dh_melting, qw
+    real(R8), intent(in)    :: y_wall(nsc)
+    real(R8), intent(out)   :: omega(nsc), mdot
+    real(R8) :: Dh_conduction, heat_absorbed
+    integer :: i
 
     ! energy balance
     dh_conduction = cp_solid*(Tw - T_i)  ! heat of conduction in solid (J/kg)  
@@ -59,28 +93,25 @@ contains
 
     ! mass flux computed as a result of the energy balance at the grain surface
     mdot = qw / heat_absorbed        ! (kg/(s m^2))
-
-    mdot_wax = (1.0d0-y_SEBS)*mdot
     
     !% Species source term
-    omega = 0.0d0                     
-    ! Injection of paraffin as C32H66 and ethylene for the SEBS
-    if (y_SEBS>0.0d0) omega(iSEBS)  = y_SEBS*mdot ! C2H4
-    omega(iFUEL) = mdot_wax                       ! C32H66
+    do i = 1, nsc
+      omega(i) = mdot * y_wall(i)  ! (kg/(s m^2))
+    end do
     
   end subroutine GSI_Melting
 
 
-  subroutine GSI_Carbon ( roi, Tw, omegadot, mdot )
-    use FLINT_Lib_Thermodynamic, only: Runiv, Ri_tab, Wm_tab
+
+  subroutine GSI_Carbon_Bradley ( roi, Tw, omegadot, q_pyro, mdot )
+    use FLINT_Lib_Thermodynamic, only: Runiv, Ri_tab, Wm_tab, f_tabT, h_tab
     implicit none
     real(R8), intent(in)    ::  roi(nsc), Tw
-    real(R8), intent(inout) :: omegadot(nsc), mdot
+    real(R8), intent(inout) :: omegadot(nsc), q_pyro, mdot
     real(R8) :: dotm_H2O, dotm_CO2, dotm_O2, dotm_OH, dotm_O
     real(R8) :: k5, k6, k7, k8, kH2O, kCO2, kOH, kO, Y_term
     real(R8) :: pi(nsc), RuTw, inv_sqrtTw
-    integer, parameter :: iH=1, iC2H4=2, iOH=3, iCO=4, iCO2=5
-    integer, parameter :: iH2=6, iH2O=7, iO2=8, iO=9
+    integer :: s
 
     omegadot = 0d0  ! initialization
 
@@ -105,45 +136,61 @@ contains
     ! Compute ybig term
     Y_term = 1d0 / ( 1d0 + k8/(k7*pi(iO2)) )
 
-    dotm_H2O = kH2O * sqrt(pi(iO2))
+    dotm_H2O = kH2O * sqrt(pi(iH2O))
     dotm_CO2 = kCO2 * sqrt(pi(iCO2))
-    dotm_O2  = Y_term * (k5*pi(iO2))/(1.0d0 + k6*pi(iO2)) + k7*pi(iO2)*(1d0-Y_term)
+    dotm_O2  = (Y_term*k5*pi(iO2))/(1.0d0 + k6*pi(iO2)*Y_term) + k7*pi(iO2)*(1d0-Y_term)
     dotm_OH  = kOH*pi(iOH)
     dotm_O   = kO*pi(iO)
     ! Compute source terms
-    omegadot(iO2)  = -(Wm_tab(iO2)/wmc)*(0.5d0*dotm_O2)                                         ! O2
-    omegadot(iH2O) = -(Wm_tab(iH2O)/wmc)*(dotm_H2O)                                             ! H2O
-    omegadot(iCO)  =  (Wm_tab(iCO)/wmc)*(2.d0*dotm_CO2 + dotm_H2O + dotm_O2 + dotm_OH + dotm_O) ! CO
-    omegadot(iCO2) = -(Wm_tab(iCO2)/wmc)*(dotm_CO2)                                             ! CO2
-    omegadot(iH2)  =  (Wm_tab(iH2)/wmc)*(dotm_H2O)                                              ! H2
-    omegadot(iO)   = -(Wm_tab(iO)/wmc)*(dotm_O)                                                 ! O
-    omegadot(iH)   =  (Wm_tab(iH)/wmc)*(dotm_OH)                                                ! H
-    omegadot(iOH)  = -(Wm_tab(iOH)/wmc)*(dotm_OH)                                               ! OH
+    omegadot(iO2)  = -(Wm_tab(iO2)/mwC)*(0.5d0*dotm_O2)                                         ! O2
+    omegadot(iH2O) = -(Wm_tab(iH2O)/mwC)*(dotm_H2O)                                             ! H2O
+    omegadot(iCO)  =  (Wm_tab(iCO)/mwC)*(2.d0*dotm_CO2 + dotm_H2O + dotm_O2 + dotm_OH + dotm_O) ! CO
+    omegadot(iCO2) = -(Wm_tab(iCO2)/mwC)*(dotm_CO2)                                             ! CO2
+    omegadot(iH2)  =  (Wm_tab(iH2)/mwC)*(dotm_H2O)                                              ! H2
+    omegadot(iO)   = -(Wm_tab(iO)/mwC)*(dotm_O)                                                 ! O
+    omegadot(iH)   =  (Wm_tab(iH)/mwC)*(dotm_OH)                                                ! H
+    omegadot(iOH)  = -(Wm_tab(iOH)/mwC)*(dotm_OH)                                               ! OH
 
     ! output of dotm
     mdot = sum ( omegadot )
 
-  end subroutine GSI_carbon
+    q_pyro = 0d0
+    do s = 1, nsc
+      q_pyro = q_pyro + omegadot(s)*f_tabT( Tw,s,h_tab )
+    end do
+
+  end subroutine GSI_Carbon_Bradley
 
 
-  subroutine GSI_HDPE ( Tw, omegadot, mdot )
+
+  subroutine GSI_HDPE ( Tw, y_wall, omegadot, q_pyro, mdot )
     use FLINT_Lib_Thermodynamic, only: Runiv
     implicit none
     real(R8), intent(in) :: Tw
-    real(R8), intent(inout) :: omegadot(nsc), mdot
+    real(R8), intent(in) :: y_wall(nsc)
+    real(R8), intent(inout) :: omegadot(nsc), q_pyro
+    real(R8), intent(inout) :: mdot
+    integer :: i
 
     omegadot = 0d0
     mdot = A_HDPE * exp(-Ea_HDPE/(2*Runiv*Tw))
-    omegadot(2) = mdot ! ethylene, C2H4
+    do i = 1, nsc
+      omegadot(i) = mdot * y_wall(i)
+    end do
+    q_pyro = mdot * ( Dh_HDPE + cp_HDPE* (Tw - Ti_HDPE) ) 
 
   end subroutine GSI_HDPE
 
 
-  subroutine GSI_HTPB ( Tw, omegadot, mdot )
+
+  subroutine GSI_HTPB ( Tw, y_wall, omegadot, q_pyro, mdot )
     use FLINT_Lib_Thermodynamic, only: Runiv
     implicit none
     real(R8), intent(in) :: Tw
-    real(R8), intent(inout) :: omegadot(nsc), mdot
+    real(R8), intent(in) :: y_wall(nsc)
+    real(R8), intent(inout) :: omegadot(nsc), q_pyro
+    real(R8), intent(inout) :: mdot
+    integer :: i
 
     omegadot = 0d0
     if (Tw<=Ts_HTPB) then
@@ -151,24 +198,35 @@ contains
     else
       mdot = rho_HTPB * A2_HTPB * exp(-Ea2_HTPB/(Runiv*Tw))
     end if
-    omegadot(2) = mdot ! C4H6
+    do i = 1, nsc
+      omegadot(i) = mdot * y_wall(i)
+    end do
+    q_pyro = mdot * ( Dh_HTPB + cp_HTPB* (Tw - Ti_HTPB) )
 
   end subroutine GSI_HTPB
 
 
-  subroutine GSI_PP ( Tw, omegadot, mdot )
+
+  subroutine GSI_PP ( Tw, y_wall, omegadot, q_pyro, mdot )
     use FLINT_Lib_Thermodynamic, only: Runiv
     implicit none
     real(R8), intent(in) :: Tw
-    real(R8), intent(inout) :: omegadot(nsc), mdot
+    real(R8), intent(in) :: y_wall(nsc)
+    real(R8), intent(inout) :: omegadot(nsc), q_pyro, mdot
     real(R8) :: Arrh, RR
+    integer :: i
 
     omegadot = 0d0
     Arrh = Ea_PP/(Runiv*Tw)
     RR = sqrt ( 4.60517d0 * ( 1d0 - Ti_PP/Tw + Dh_PP/(cp_PP*Tw) ) -Dh_PP/(cp_PP*Tw) )
     mdot = 910d0*sqrt( A_PP * exp(-Arrh) * 1d0/Arrh * 0.2d0/(910d0*cp_PP) * 1/RR )
-    omegadot(2) = mdot ! propylene, C3H6
+    do i = 1, nsc
+      omegadot(i) = mdot * y_wall(i)
+    end do
+    q_pyro = mdot * ( Dh_PP + cp_PP* (Tw - Ti_PP) )
 
   end subroutine GSI_PP
+
+
 
 end module MOSE_Lib_GSI

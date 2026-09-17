@@ -118,7 +118,7 @@ contains
     ! Local
     integer :: dir, modfm2, Face_i, Face_j, Face_k
     integer :: Ig, Jg, Kg
-    real(R8) :: Normal(3), Area, Waldis, M(3,3)
+    real(R8) :: Normal(3), Area, Waldis, Rough, M(3,3)
     real(R8), dimension(nprim) :: Prim_loc, Prim_ghost, Visc_loc, Visc_ghost
     real(R8), dimension(nprim) :: Visc_ip, Visc_im, Visc_jp, Visc_jm, Visc_kp, Visc_km
     real(R8), dimension(nprim) :: Visc_ghost3, Visc_ghost4, Visc_ghost5, Visc_ghost6
@@ -137,6 +137,7 @@ contains
     area = blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
     M = 0.5d0 * ( Blk % M(Im,Jm,Km) % c + Blk % M(Ig,Jg,Kg) % c )
     Waldis = 0.5d0 * ( Blk % yn(Im,Jm,Km) + Blk % yn(Ig,Jg,Kg) )
+    Rough  = 0.5d0 * ( Blk % k_rough(Im,Jm,Km) + Blk % k_rough(Ig,Jg,Kg) )
 
     ! Primitive/auxiliary variables and residual in the 2 connected cells
     Prim_loc = Blk % P(:,Im,Jm,Km)
@@ -185,9 +186,9 @@ contains
     Gradient_ghost = matmul ( Gradient_ghost, M )
 
     Prim = ( Prim_loc + Prim_ghost ) * 0.5d0
-    call Compute_Diffusive_Flux ( Prim, Gradient_loc, Area, Normal, Waldis, Flux_loc, &
+    call Compute_Diffusive_Flux ( Prim, Gradient_loc, Area, Normal, Waldis, Rough, Flux_loc, &
                                   Sc, Sct, Prt, Prl, soot_enabled )
-    call Compute_Diffusive_Flux ( Prim, Gradient_ghost, Area, Normal, Waldis, Flux_ghost, &
+    call Compute_Diffusive_Flux ( Prim, Gradient_ghost, Area, Normal, Waldis, Rough, Flux_ghost, &
                                   Sc, Sct, Prt, Prl, soot_enabled )
 
     ! Residual update

@@ -698,7 +698,7 @@ contains
       logical :: ans
 
       select case (type)
-        case (301, 302, 303, 304)  ! wall BCs (heat flux, T, T+qrad, qrad, coupled)
+        case (301, 302, 503, 504, 505)  ! wall BCs (heat flux, T, GSI)
           ans = .true.
         case default
           ans = .false.

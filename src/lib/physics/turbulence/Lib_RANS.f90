@@ -14,7 +14,7 @@ module MOSE_Lib_RANS
 
   !> Abstract interface relative to the eddy viscosity computation procedure.
   abstract interface
-    subroutine Eddy_Viscosity_if ( mut, rans_variables, mul, rho, vel_gradient, walldist )
+    subroutine Eddy_Viscosity_if ( mut, rans_variables, mul, rho, vel_gradient, walldist, k_rough )
       use iso_fortran_env, only: I4 => int32, R8 => real64
       use MOSE_Global_m
       implicit none
@@ -23,6 +23,7 @@ module MOSE_Lib_RANS
       real(R8), intent(in)                   :: rho             ! : Density
       real(R8), intent(in), dimension(3,3)   :: vel_gradient    ! : Velocity gradient
       real(R8), intent(in)                   :: walldist        ! : Distance nearest wall
+      real(R8), intent(in)                   :: k_rough         ! : Sand-grain roughness of nearest wall (0 = smooth)
       real(R8), intent(out)                  :: mut             ! : Eddy viscosity
     end subroutine Eddy_Viscosity_if
   end interface
@@ -54,13 +55,15 @@ module MOSE_Lib_RANS
 
   !> Abstract interface relative to the computation of wall values for RANS variables.
   abstract interface
-    subroutine RANS_Set_Wall_Values_if(mil, rans_variables, dist)
+    subroutine RANS_Set_Wall_Values_if(mil, rans_cell, rans_variables, dist, k_rough)
       use iso_fortran_env, only: I4 => int32, R8 => real64
       use MOSE_Global_m
       implicit none
+      real(R8), intent(in),  dimension(nRANS)  :: rans_cell        ! : boundary cell values, rescaled to the wall density
       real(R8), intent(out), dimension(nRANS)  :: rans_variables   ! : ... at wall
       real(R8), intent(in)                     :: mil              ! : laminar viscosity at wall
       real(R8), intent(in)                     :: dist             ! : cell center-wall distance
+      real(R8), intent(in)                     :: k_rough          ! : sand-grain roughness of the wall face (0 = smooth)
     end subroutine RANS_Set_Wall_Values_if
   end interface
 

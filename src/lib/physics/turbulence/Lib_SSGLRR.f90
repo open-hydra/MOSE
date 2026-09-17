@@ -265,7 +265,7 @@ contains
   end subroutine SSGLRR_Blk
 
 
-  subroutine SSGLRR_Eddy_Viscosity ( mi_t, var, mi_l, rho, Gradvel, dist )
+  subroutine SSGLRR_Eddy_Viscosity ( mi_t, var, mi_l, rho, Gradvel, dist, k_rough )
     use MOSE_Global_m
     use MOSE_Lib_Fluid
     implicit none
@@ -273,6 +273,7 @@ contains
     real(R8), intent(in)                   :: mi_l       ! : Molecular viscosity
     real(R8), intent(in)                   :: rho        ! : Density
     real(R8), intent(in)                   :: dist       ! : Wall distance (not used)
+    real(R8), intent(in)                   :: k_rough    ! : Wall roughness (not modelled)
     real(R8), intent(in), dimension(3,3)   :: Gradvel    ! : Velocity gradient
     real(R8), intent(out)                  :: mi_t       ! : Eddy viscosity
     ! Local
@@ -356,12 +357,14 @@ contains
 
   end subroutine SSGLRR_SD_RANS_Diffusive_Flux
 
-  subroutine SSGLRR_Set_Wall_Values ( mi_l, var, dist )
+  subroutine SSGLRR_Set_Wall_Values ( mi_l, var_cell, var, dist, k_rough )
     use MOSE_Global_m
     implicit none
+    real(R8), intent(in),  dimension(nRANS)  :: var_cell         ! : boundary cell values (not used)
     real(R8), intent(out), dimension(nRANS)  :: var              ! : [ rho*Rij rho*w ] at wall
     real(R8), intent(in)                     :: mi_l             ! : laminar viscosity at wall
     real(R8), intent(in)                     :: dist             ! : cell center distance from wall
+    real(R8), intent(in)                     :: k_rough          ! : wall roughness (not modelled)
 
     var(1:6) = 0d0 ! Solid surface condition on rhoRij
     var(7) = 8d2 * mi_l / ( dist**2 ) ! approximate BC for smooth surface (Menter kw-SST)

@@ -173,7 +173,7 @@ contains
   end subroutine Wilcox_Blk
 
   
-  subroutine Wilcox2006_Eddy_Viscosity ( mi_t, rkw, mi_l, rho, Gradvel, dist )
+  subroutine Wilcox2006_Eddy_Viscosity ( mi_t, rkw, mi_l, rho, Gradvel, dist, k_rough )
     use MOSE_Global_m
     use MOSE_Lib_Fluid
     implicit none
@@ -181,6 +181,7 @@ contains
     real(R8), intent(in)                   :: mi_l       ! : Molecular viscosity
     real(R8), intent(in)                   :: rho        ! : Density
     real(R8), intent(in)                   :: dist       ! : Wall distance (not used)
+    real(R8), intent(in)                   :: k_rough    ! : Wall roughness (not modelled)
     real(R8), intent(in), dimension(3,3)   :: Gradvel    ! : Velocity gradient
     real(R8), intent(out)                  :: mi_t       ! : Eddy viscosity
     ! Local
@@ -221,20 +222,17 @@ contains
   end subroutine Wilcox2006_RANS_Diffusive_Flux
 
 
-  subroutine Wilcox2006_Set_Wall_Values ( mi_l, rkw, dist )
+  subroutine Wilcox2006_Set_Wall_Values ( mi_l, rkw_cell, rkw, dist, k_rough )
     use MOSE_Global_m
     use MOSE_Config_Types_m, only: obj_rans
     implicit none
+    real(R8), intent(in),  dimension(nRANS)  :: rkw_cell         ! : boundary cell values (not used)
     real(R8), intent(out), dimension(nRANS)  :: rkw              ! : [ rho*k rho*w ] at wall
     real(R8), intent(in)                     :: mi_l             ! : laminar viscosity at wall
     real(R8), intent(in)                     :: dist             ! : cell center distance from wall
-    ! Local
-    !real(R8) :: k_s
-
-    !k_s = 1d-2 ! Surface roughness
+    real(R8), intent(in)                     :: k_rough          ! : wall roughness (not modelled)
 
     rkw(1) = 0d0 ! Solid surface condition on k
-    !rkw(2) = 4d5 * mi_l / k_s**2 ! Slightly rough surface bc for w (low k_s=smooth)
     ! Smooth-surface BC: omega_wall = C*mi_l/dist**2, with C set by omega-wall-bc
     ! (800 = Menter practical, 80 = asymptotic y->0 limit). See Setup_RANS_Model.
     rkw(2) = obj_rans%omega_wall_coef * mi_l / ( dist**2 )

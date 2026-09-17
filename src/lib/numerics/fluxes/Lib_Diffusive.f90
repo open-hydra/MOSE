@@ -7,7 +7,7 @@ module MOSE_Lib_Diffusive
 
 contains
 
-  subroutine Diffusive_Flux ( normal, area, waldis1, waldis2, Prim1, Prim2, Prim3, Prim4, Prim5, &
+  subroutine Diffusive_Flux ( normal, area, waldis1, waldis2, kr1, kr2, Prim1, Prim2, Prim3, Prim4, Prim5, &
                               Prim6, Prim7, Prim8, Prim9, Prim10, M1, M2, Res1, Res2, a, b, c, &
                               Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Global_m
@@ -17,12 +17,13 @@ contains
     logical, intent(in)  :: soot_enabled
     real(R8), intent(in) :: Sc, Sct, Prt, Prl
     real(R8), intent(in) :: normal(3), area, waldis1, waldis2
+    real(R8), intent(in) :: kr1, kr2      ! nearest-wall roughness of the two cells
     real(R8), intent(in), dimension(nprim) :: Prim1, Prim2, Prim3, Prim4, Prim5, Prim6
     real(R8), intent(in), dimension(nprim) :: Prim7, Prim8, Prim9, Prim10
     real(R8), intent(in), dimension(3,3) :: M1, M2
     real(R8), intent(inout), dimension(nprim) :: Res1, Res2
     ! Local
-    real(R8) :: rho1, Rgas, T1, rho2, T2, Gradient(nprim,3), Prim(nprim), M(3,3), waldis, Flux(nprim)
+    real(R8) :: rho1, Rgas, T1, rho2, T2, Gradient(nprim,3), Prim(nprim), M(3,3), waldis, k_rough, Flux(nprim)
     integer  :: v
     real(R8) :: g1, g2, g3
 
@@ -38,6 +39,7 @@ contains
       if (nprim>np) then
       Gradient ( np+1:nprim, a ) = Prim2 ( np+1:nprim ) / rho2 - Prim1 ( np+1:nprim ) / rho1 ! RANS variable gradient
       waldis = 0.5d0 * ( waldis1 + waldis2 ) ! distance to nearest wall
+      k_rough = 0.5d0 * ( kr1 + kr2 )        ! roughness of nearest wall
     end if
 
     ! Gradient in tangential directions: 3-10
@@ -58,7 +60,7 @@ contains
     end do
 
     Prim = 0.5d0 * ( Prim1 + Prim2 )
-    call Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, Flux, Sc, Sct, Prt, Prl, soot_enabled )
+    call Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, k_rough, Flux, Sc, Sct, Prt, Prl, soot_enabled )
 
     Res1 = Res1 - Flux
     Res2 = Res2 + Flux
@@ -99,14 +101,14 @@ contains
   end subroutine Tangential_Gradient
 
 
-  subroutine Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, Flux, Sc, Sct, Prt, Prl, soot_enabled )
+  subroutine Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, k_rough, Flux, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Global_m
     use MOSE_Lib_Fluid
     use MOSE_Lib_RANS
     use MOSE_Mod_Soot, only: Soot_Diffusive_Flux
     use FLINT_Lib_Thermodynamic
     implicit none
-    real(R8), intent(in)  :: Prim(nprim), Gradient(nprim,3), area, normal(3), waldis
+    real(R8), intent(in)  :: Prim(nprim), Gradient(nprim,3), area, normal(3), waldis, k_rough
     real(R8), intent(in)  :: Sc, Sct, Prt, Prl
     logical, intent(in)   :: soot_enabled
     real(R8), intent(out) :: Flux(nprim)
@@ -141,7 +143,7 @@ contains
     if (model==2) then
       call Eddy_Viscosity ( mut=mie, rans_variables=Prim(nt:nprim), &
                             mul=mil, rho=rho, vel_gradient=VelGrad, &
-                            walldist=waldis )
+                            walldist=waldis, k_rough=k_rough )
     end if
 
     ! Species diffusion coefficients. Sc<=0 selects mixture-averaged multicomponent

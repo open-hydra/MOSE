@@ -87,7 +87,7 @@ contains
     !! Allocate the block arrays and import the initial condition.
     !!
     !! `keep(b)` selects the blocks that get the full set of arrays (~800
-    !! B/cell); the others get geometry only, `node` and `yn` (~36 B/cell).
+    !! B/cell); the others get geometry only, `node`, `yn` and `k_rough` (~44 B/cell).
     !! Without `keep`, every block gets everything.
     !!
     !! The excluded blocks still need geometry because set-up reads the mesh
@@ -181,7 +181,7 @@ contains
 
 
   subroutine Allocate_Block( blk, nijk, geometry_only )
-    !! `geometry_only` allocates the mesh arrays `node` and `yn` and skips the
+    !! `geometry_only` allocates the mesh arrays `node`, `yn` and `k_rough` and skips the
     !! state, metric and residual ones -- see Setup_Data_Fields.
     use MOSE_Advanced_Types_m
     use MOSE_Config_Types_m, only: obj_irs, obj_rans
@@ -202,6 +202,7 @@ contains
     ! Mesh -- always present, on every rank
     allocate( blk % node ( 0:ni, 0:nj, 0:nk ) )
     allocate ( blk % yn ( 1-gc:ni+gc, 1-gc:nj+gc, 1-gc:nk+gc ) )
+    allocate ( blk % k_rough ( 1-gc:ni+gc, 1-gc:nj+gc, 1-gc:nk+gc ) )
 
     if ( geom ) then
       call First_Touch_Block( blk )
@@ -280,6 +281,7 @@ contains
     do k = lbound(blk%yn,3), ubound(blk%yn,3)
       do j = lbound(blk%yn,2), ubound(blk%yn,2)
         blk % yn (:,j,k) = 0.0d0
+        blk % k_rough (:,j,k) = 0.0d0
       end do
     end do
 
@@ -453,6 +455,7 @@ contains
         if (allocated(domain%blk(b)%dl))   deallocate(domain%blk(b)%dl)
         if (allocated(domain%blk(b)%vol))  deallocate(domain%blk(b)%vol)
         if (allocated(domain%blk(b)%yn))   deallocate(domain%blk(b)%yn)
+        if (allocated(domain%blk(b)%k_rough)) deallocate(domain%blk(b)%k_rough)
         if (.not. needs_remote_P(b)) then
           do d = 1, 3
             if (allocated(domain%blk(b)%dir(d)%f)) deallocate(domain%blk(b)%dir(d)%f)

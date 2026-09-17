@@ -10,7 +10,7 @@ contains
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
     use MOSE_Lib_Metrics
-    use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Mod_MPI, only: is_local_block, mpi_is_root
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
@@ -19,6 +19,14 @@ contains
     type(MOSE_vector_3D_type) :: N1, N2, N3, N4, N5, N6, N7, N8
 
     call Check_Mesh_Type ( domain )
+
+    ! Wall roughness is modelled by Spalart-Allmaras only (SA-rough). With any
+    ! other model, or laminar, drop it up front so every wall is consistently smooth.
+    if ( any( domain % bc(:) % k_rough > 0d0 ) .and. .not. ( model == 2 .and. nRANS == 1 ) ) then
+      if ( mpi_is_root .and. domain % mg_level == 1 ) write(*,'(A)') &
+        ' [WARNING] Wall roughness (k_rough > 0) is modelled only with the SA turbulence model: all walls are treated as smooth.'
+      domain % bc(:) % k_rough = 0d0
+    end if
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
