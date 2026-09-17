@@ -291,9 +291,16 @@ Test cases symlink to these files rather than duplicating them.
 ## Reference Solution Generation
 
 The 1-D reference solutions are generated using
-[ExactPack](https://github.com/lanl/ExactPack) (included in
-`lib/third_party/ExactPack/`), which provides exact Riemann-problem
-solvers for canonical test cases (Sod, Toro, Einfeldt, Noh, etc.).
+[ExactPack](https://github.com/lanl/ExactPack), which provides exact
+Riemann-problem solvers for canonical test cases (Sod, Toro, Einfeldt,
+Noh, etc.).
+
+ExactPack is not on PyPI and is no longer carried as a submodule; install
+it from LANL's GitHub, pinned to the tag CI uses:
+
+```bash
+pip install "ExactPack @ git+https://github.com/lanl/ExactPack.git@1.7.11"
+```
 
 The `verify.py` scripts use ExactPack to compute the exact solution
 on the same grid and compare point-by-point.

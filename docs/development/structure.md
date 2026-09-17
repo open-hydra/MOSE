@@ -41,8 +41,7 @@ MOSE/
 │   ├── FLINT/               # Thermochemistry library
 │   ├── ORION/               # Structured-grid I/O library
 │   └── third_party/
-│       ├── FiNeR/           # INI file parser
-│       └── ExactPack/       # Exact Riemann solver (Python, for V&V)
+│       └── FiNeR/           # INI file parser
 │
 ├── test/                    # Validation test suite
 │   ├── 1D/                  # 1-D shock tube cases
@@ -71,6 +70,7 @@ MOSE/
 
 Optional compile-time dependencies are enabled via CMake flags; see [Key CMake options](#key-cmake-options) in the Build System section.
 `ExactPack` (Python) is used only for V&V post-processing and is never linked at compile time.
+It is a pip dependency of the test suite, not a submodule; see [Testing](testing.md).
 
 ---
 

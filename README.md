@@ -70,7 +70,7 @@ MOSE is built on top of several companion libraries, included as Git submodules:
 | [ORION](https://github.com/MarcoGrossi92/ORION) | Multi-format I/O (Tecplot, VTK, Plot3D) |
 | [OSLO](https://github.com/MarcoGrossi92/OSLO) | ODE solver library (stiff chemistry integration) |
 | [FiNeR](https://github.com/szaghi/FiNeR) | INI configuration file parser |
-| [ExactPack](https://github.com/lanl/ExactPack) | Exact solutions for verification |
+| [ExactPack](https://github.com/lanl/ExactPack) | Exact solutions for verification (pip, test-suite only) |
 
 Optional external libraries: **OpenMP**, **MPI**, **SUNDIALS**, **Cantera**, **TecIO**.
 
