@@ -122,3 +122,8 @@ mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D"
 
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
+
+# Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
+# which is an exact steady solution, checked against its closed form. These
+# boundary conditions have no other coverage in the suite.
+mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;physics;2D")
