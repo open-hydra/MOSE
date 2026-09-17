@@ -96,6 +96,49 @@ $$
 \tilde\nu_\text{wall} = 0
 $$
 
+### Rough walls — SA-rough
+
+A wall face with a sand-grain roughness height $k_s > 0$ (the `k_rough` field of
+the [wall BCs](../user/boundary-conditions.md#viscous-walls)) switches on the
+Boeing extension of Aupoix & Spalart (2003). Each cell takes the $k_s$ of its
+nearest wall face, and the model changes in three places.
+
+The wall is displaced below the surface by $d_0 = 0.03\,k_s$. Every $y$ above
+becomes
+
+$$
+d = y + 0.03\,k_s
+$$
+
+The damping variable carries the roughness, and $f_{v2}$ is written without
+$\chi$ alone, which no longer equals $\tilde\nu/\nu$:
+
+$$
+\chi = \frac{\tilde\nu}{\nu} + c_{R1}\,\frac{k_s}{d}, \qquad
+f_{v2} = 1 - \frac{\tilde\nu}{\nu + \tilde\nu\,f_{v1}(\chi)}, \qquad c_{R1} = 0.5
+$$
+
+The wall condition becomes a Robin condition, so $\tilde\nu$ is nonzero at the wall:
+
+$$
+\left.\frac{\partial\tilde\nu}{\partial n}\right|_\text{wall} = \frac{\tilde\nu_\text{wall}}{d_0}
+\quad\Longrightarrow\quad
+\tilde\nu_\text{wall} = \tilde\nu_1\,\frac{d_0}{y_1 + d_0}
+$$
+
+where $\tilde\nu_1$ and $y_1$ are the value and wall distance of the boundary
+cell. The eddy viscosity at the wall, $\mu_{t,\text{wall}} = \rho_\text{wall}\,\tilde\nu_\text{wall}\,f_{v1}(\chi_\text{wall})$
+with $d = d_0$, then enters the wall shear stress and, on isothermal walls, the
+wall heat flux through $\mu_t c_p/\mathrm{Pr}_t$.
+
+With $k_s = 0$ every expression reduces to the smooth model, and MOSE takes the
+smooth code path bit for bit.
+
+!!! warning "Scope"
+    Roughness is modelled for SA only. With SST, Wilcox 2006, SSG–LRR or a
+    laminar run, MOSE prints a warning at start-up and treats every wall as
+    smooth. Gas–surface interaction walls are always smooth.
+
 ---
 
 ### SA Variants

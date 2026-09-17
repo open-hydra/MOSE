@@ -124,15 +124,12 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 |:----:|------|-----------------------------|
 | `301` | Adiabatic / prescribed heat flux | `q_wall,  k_rough,  eps_wall` |
 | `302` | Isothermal wall | `T_wall,  k_rough,  eps_wall` |
-| `303` | Isothermal wall + radiation | `T_wall,  q_rad,  k_rough` |
-| `304` | Radiative heat flux | `q_rad,  k_rough` |
 
 | Field | Description |
 |-------|-------------|
 | `q_wall` | Wall heat flux [W/m²] (positive = into fluid; set to `0.0` for adiabatic) |
 | `T_wall` | Wall temperature [K] |
-| `q_rad` | Radiative heat flux [W/m²] |
-| `k_rough` | Sand-grain roughness height $k_s$ [m] (`0.0` for smooth wall) |
+| `k_rough` | Sand-grain roughness height $k_s$ [m] (`0.0` for smooth wall). Modelled with SA only ([SA-rough](../theory/turbulence.md#rough-walls-sa-rough)) |
 | `eps_wall` | Wall emissivity (0–1) |
 
 ### Physical Models
@@ -140,7 +137,47 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 | Type | Name | Data line |
 |:----:|------|-----------|
 | `501` | Manifold connection | `bs  fs` |
-| `502` | SRM grain boundary | `T_af,  a,  n,  p_ref,  rho_grain,  SF_geo,  [massf_1 … massf_ns]` |
+
+### Gas–Surface Interaction
+
+Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.md) for the models and their limitations.
+
+|  Type | Name               | Data line                                                                  |
+| :---: | ------------------ | -------------------------------------------------------------------------- |
+| `502` | SRM grain boundary | `T_af, a, n, p_ref, rho_grain, SF_geo`                                     |
+| `503` | Melting            | `cp_wall, T_wall, Ti_wall, dh_wall, q_rad, eps_wall, [massf_1 … massf_ns]` |
+| `504` | Pyrolysis          | `pyro_id, q_rad, eps_wall, [massf_1 … massf_ns]`                           |
+| `505` | Surface reactions  | `reac_id, q_rad`                                                           |
+
+
+| Field       | Description                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------- |
+| `T_af`      | Adiabatic flame temperature of the propellant [K]                                                 |
+| `a`         | Propellant burn-rate coefficient in the Saint Robert/Vieille burn-rate law                        |
+| `n`         | Pressure exponent in the burn-rate law, typically \(r_b = a(p/p_\mathrm{ref})^n\)                 |
+| `p_ref`     | Reference pressure used with the burn-rate coefficient `a` [Pa]                                   |
+| `rho_grain` | Propellant grain density [kg/m³]                                                                  |
+| `SF_geo`    | Grain-geometry correction/scaling factor applied to the grain-boundary regression or burning rate |
+| `cp_wall`   | Specific heat of the solid [J/(kg·K)]                                                             |
+| `T_wall`    | Melting temperature [K] (type `503`: prescribed, not solved)                                      |
+| `Ti_wall`   | Initial temperature of the solid [K]                                                              |
+| `dh_wall`   | Latent heat of melting [J/kg]                                                                     |
+| `q_rad`     | Radiative heat flux absorbed by the surface [W/m²]                                                |
+| `eps_wall`  | Wall emissivity — **parsed but currently unused**                                                 |
+| `pyro_id`   | Pyrolysis model: `1` = HTPB, `2` = HDPE, `3` = PP                                                 |
+| `reac_id`   | Surface reaction mechanism: `1` = carbon (Bradley)                                                |
+| `massf_s`   | Composition of the material leaving the surface (one value per species)                           |
+
+!!! note
+    These boundary conditions require a viscous run (`equations = navier-stokes`).
+    Under `equations = euler` the face is applied as a plain slip wall, and no
+    ablation takes place.  The same fallback — an impermeable wall — is used
+    whenever the flow cannot sustain the process; see
+    [Inert surfaces](../theory/gsi.md#inert-surfaces).
+
+!!! warning
+    Type `505` requires a thermodynamic table containing O₂, CO₂, CO, H₂O, H₂,
+    OH, O and H.
 
 !!! tip
     More details on these BC may be found in the [Theory Guide](../theory/index.md)

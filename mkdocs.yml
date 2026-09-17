@@ -109,6 +109,7 @@ nav:
     - Thermodynamic and Transport Properties: theory/thermo.md
     - Finite-Rate Kinetics: theory/kinetics.md
     - Chemical Equilibrium: theory/equilibrium.md
+    - Gas-Surface Interaction: theory/gsi.md
 
   - Verification & Validation:
     - vv/index.md
@@ -127,6 +128,7 @@ nav:
     - Laminar Flat Plate: vv/2D-flat-plate-laminar.md
     - Turbulent Flat Plate: vv/2D-flat-plate-turbulent.md
     - Shock Boundary Layer Interaction: vv/2D-swbli.md
+    - Ablating Wall: vv/2D-ablating-wall.md
     - HyShot II Scramjet Combustor: vv/3D-hyshotII.md
     - Rotating Frame: vv/rotating-frame.md
 

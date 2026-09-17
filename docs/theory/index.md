@@ -80,6 +80,14 @@ schemes, turbulence closures, and the thermochemistry framework.
 
     [:octicons-arrow-right-24: Equilibrium solver](equilibrium.md)
 
+-   :material-fire:{ .lg .middle } __Gas-Surface Interaction__
+
+    ---
+
+    Ablating walls: melting, pyrolysis (HTPB, HDPE, PP), heterogeneous surface reactions, surface energy balance and wall temperature solution
+
+    [:octicons-arrow-right-24: Gas-surface interaction](gsi.md)
+
 </div>
 
 ---
@@ -99,5 +107,6 @@ pipeline can be summarised as follows:
 | **Turbulence closure** | SA, SST $k$–$\omega$, Wilcox 2006 $k$–$\omega$ | [Turbulence Modelling](turbulence.md) |
 | **Thermochemistry** | Ideal-gas mixture, NASA polynomials | [Thermodynamics](thermo.md) |
 | **Chemistry** | Finite-rate (Arrhenius/Troe) or equilibrium (CEA) | [Kinetics](kinetics.md), [Equilibrium](equilibrium.md) |
+| **Ablating walls** | Melting, pyrolysis and surface-reaction boundary conditions | [Gas-Surface Interaction](gsi.md) |
 
 ---
