@@ -42,6 +42,7 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
 | Turbulence | SA(+R/RC/comp), SST, Wilcox2006 | SA, SST, Wilcox2006 (flat plate) | RC/comp variants untested |
 | Chemistry | frozen, finite-rate, equilibrium | all (needs Cantera/Sundials) | can't run in CI |
 | Multi-block | core feature | implicit only | **no interface correctness test** |
+| Ablative wall BCs (503/504/505) | melting, pyrolysis, surface reactions | 503/504 vs closed form (`AblatingWall`) | 505 needs a CO/CO2 thermo table |
 | Restart | core feature | none | untested |
 | I/O formats | tec ascii/bin, vtk ascii/raw | ascii only | round-trip untested |
 | Parallelism | OpenMP, MPI | runs, not verified | **no serial==parallel check** |
@@ -126,10 +127,11 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | I5 | Serial vs OpenMP equivalence | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~1 s |
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
 | F8 | Shu–Osher coarse (N=200) | L1 vs N=1600 ref < 5 %, finite | ☑ `ShuOsher` | ~2 s |
+| P1 | Ablative wall BCs (503/504) | wall state vs closed form, both face orientations, inert-surface fallback | ☑ `AblatingWall` | ~8 s |
 
-Current `ctest -L fast`: **11 tests, ~44 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **12 tests, ~30 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation, OpenMPEquiv,
-Restart).
+Restart, AblatingWall).
 
 These catch most regressions (metrics, interfaces, solver crashes, restart/IO,
 conservation) with no reference data or heavy dependencies.
