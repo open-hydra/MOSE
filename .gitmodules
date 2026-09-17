@@ -1,6 +1,3 @@
-[submodule "lib/third_party/ExactPack"]
-	path = lib/third_party/ExactPack
-	url = https://github.com/lanl/ExactPack.git
 [submodule "lib/FLINT"]
 	path = lib/FLINT
 	url = https://github.com/MarcoGrossi92/FLINT.git
