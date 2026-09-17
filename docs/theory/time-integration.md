@@ -232,10 +232,34 @@ in each spatial direction to accelerate convergence to steady state.
 - **Number of levels**: user-specified (`MGL`).
 - **Coarsening rule**: each coarse cell corresponds to $2^d$ fine cells
   ($d$ = number of active spatial dimensions).
-  For 2-D grids ($k_\max = 1$), coarsening is applied only in the $i$
-  and $j$ directions.
 - **Compatibility**: the fine-grid dimensions must be divisible by
   $2^{\text{MGL}-1}$ in each active direction.
+
+!!! warning "Dimensionality and axis convention"
+    Multigrid works for **3-D, 2-D and 1-D** grids, but the reduced-dimension
+    cases must use a fixed axis layout, because only the trailing index
+    directions are treated as collapsible (a dimension equal to $1$ is held
+    fixed and not coarsened):
+
+    | Case | Active directions | Must be singleton ($=1$) |
+    |------|-------------------|--------------------------|
+    | 3-D  | $i,\,j,\,k$        | —                        |
+    | 2-D  | $i,\,j$ (the $i\!-\!j$ plane) | $k$            |
+    | 1-D  | $i$               | $j$ **and** $k$          |
+
+    In other words, a **1-D** case must be laid out **along $i$** ($n_j = n_k = 1$),
+    and a **2-D** case must lie in the **$i\!-\!j$ plane** ($n_k = 1$). A mesh
+    whose non-trivial extent is on $j$ or $k$ alone is *not* supported and will
+    coarsen incorrectly.
+
+!!! warning "Starting-mesh divisibility requirement"
+    The supplied (finest) mesh must already satisfy the coarsening requirement:
+    **every active direction must be divisible by $2^{\text{MGL}-1}$**, while
+    singleton directions ($=1$) are exempt. For example, with `MGL = 5`
+    ($2^{4} = 16$) a 1-D mesh needs $n_i$ a multiple of $16$ (e.g. $n_i = 4000$,
+    $n_j = n_k = 1$). If this is not met, grid generation / setup will reject the
+    mesh. Choose $n_i$ (and $n_j$ in 2-D) accordingly **before** generating the
+    grid — the hierarchy is built from this mesh, not the other way around.
 
 ### Restriction (fine → coarse)
 
@@ -249,7 +273,8 @@ $$
 $$
 
 - 3-D: 8-cell average
-- 2-D: 4-cell average
+- 2-D: 4-cell average (in the $i\!-\!j$ plane)
+- 1-D: 2-cell average (along $i$)
 
 Primitive variables on the coarse grid are recovered from the averaged
 conservative state via Newton–Raphson (`cons2prim`), using the
@@ -258,7 +283,8 @@ fine-grid temperature as the initial guess.
 ### Prolongation (coarse → fine)
 
 The coarse-grid correction is transferred to the fine grid with
-**cubic interpolation** (3-D) or **biquadratic interpolation** (2-D).
+**cubic interpolation** (3-D), **biquadratic interpolation** (2-D, in the
+$i\!-\!j$ plane), or **linear interpolation** (1-D, along $i$).
 
 3-D interpolation weights:
 

@@ -12,6 +12,14 @@ The User Guide describes how to set up, configure, and run simulations with MOSE
 
     [:octicons-arrow-right-24: How to run a simulation](using.md)
 
+-   :material-chip:{ .lg .middle } __Parallel Execution__
+
+    ---
+
+    Choosing ranks × threads, NUMA placement, measured scaling, and batch scripts.
+
+    [:octicons-arrow-right-24: Running in parallel](parallel.md)
+
 -   :material-file-document-outline:{ .lg .middle } __Input File__
 
     ---

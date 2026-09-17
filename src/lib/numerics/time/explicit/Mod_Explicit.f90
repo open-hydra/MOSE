@@ -11,18 +11,21 @@ contains
     use MOSE_Advanced_Types_m
     use MOSE_Config_Types_m
     use MOSE_Global_m
-    use MOSE_Mod_dt,            only: Set_Global_dt, Compute_dt
-    use MOSE_Lib_Ghost,         only: Fill_Ghost_Cell, Ghost_Wall_Extrapolation
-    use MOSE_Mod_Fluxes,        only: Fluxes
-    use MOSE_Mod_BC_Fluxes,     only: BC_Fluxes
-    use MOSE_Lib_RANS,          only: RANS_Source_Terms
-    use MOSE_Mod_Soot,          only: Soot_Source_Terms
-    use MOSE_Mod_Newstate,      only: RK_Newstate
-    use MOSE_Lib_Chemistry,     only: Chemistry_Newstate, Chemistry_Equilibrium
-    use MOSE_Mod_Diagnostic,    only: Compute_Residual
-    use MOSE_Lib_RotatingFrame, only: RotatingFrame_Source_Terms
-    use MOSE_Mod_MPI,           only: is_local_block, mpi_reduce_sum_r8_array, &
-                                      mpi_is_root, mpi_bcast_logical, mpi_bcast_integer
+    use MOSE_Mod_dt,              only: Set_Global_dt, Compute_dt
+    use MOSE_Lib_Ghost,           only: Fill_Ghost_Cell, Ghost_Wall_Extrapolation
+    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes
+    use MOSE_Mod_BC_Fluxes,       only: BC_Fluxes
+    use MOSE_Lib_RANS,            only: RANS_Source_Terms
+    use MOSE_Mod_Soot,            only: Soot_Source_Terms
+    use MOSE_Mod_Newstate,        only: RK_Newstate
+    use MOSE_Lib_Preconditioning, only: update_derived_variables
+    use MOSE_Lib_Chemistry,       only: Chemistry_Newstate, Chemistry_Equilibrium
+    use MOSE_Mod_Diagnostic,      only: Compute_Residual
+    use MOSE_Lib_RotatingFrame,   only: RotatingFrame_Source_Terms
+    use MOSE_Mod_MPI,             only: is_local_block, mpi_reduce_sum_r8_array, &
+                                        mpi_is_root, mpi_bcast_logical, mpi_bcast_integer
+    use MOSE_Mod_Timers,          only: timer_iter_begin, timer_iter_end, timer_report, &
+                                        timer_sync_begin, timer_sync_end
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain(obj_multigrid%MGL)
     external :: External_Function
@@ -30,6 +33,8 @@ contains
     logical  :: endsim, iosim, endmg
     integer  :: i_rk, i_strang, b, level, aaa
     real(R8) :: average(nres)
+
+    call timer_iter_begin()
 
     level = obj_multigrid%MG_level
     obj_multigrid%change_MG = .false.
@@ -62,8 +67,9 @@ contains
 
       rk: do i_rk = 1, obj_time_scheme%n_RK
 
+        call Zero_Residuals ( domain(level) )                ! Zero residuals
         call Fill_Ghost_Cell ( domain(level) )               ! Fill ghost cells
-        call Fluxes ( domain(level) )                        ! Convective and Diffusive fluxes
+        call Internal_Fluxes ( domain(level) )               ! Convective and Diffusive fluxes
         call BC_Fluxes ( domain(level) )                     ! Boundary fluxes
 
         call External_Function ( domain(level) )             ! External function (e.g. source terms)
@@ -81,6 +87,7 @@ contains
         end if 
 
         call RK_Newstate ( domain(level), i_rk )             ! State update
+        call Update_Derived_Variables ( domain(level) )
 
       enddo rk
 
@@ -108,12 +115,16 @@ contains
                                 average=average, &
                                 total=obj_sim_param%residuotot )
       enddo
+      call timer_sync_begin()
       call mpi_reduce_sum_r8_array(obj_sim_param%residuotot, nres)
+      call timer_sync_end()
       if (mpi_is_root) obj_sim_param%residuotot = sqrt ( obj_sim_param%residuotot ) ! L2 norm time derivative
     endif
 
     ! Determine simulation control flags on root, then broadcast to all ranks
     if (mpi_is_root) then
+      endsim = .false.
+      endmg  = .false.
       if (level == 1) then
         endsim = ( obj_sim_param%iter_from_call >= domain(1) % itermax ) &
             .or. ( obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
@@ -140,9 +151,18 @@ contains
     end if
 
     ! Broadcast simulation control from root to all ranks
+    call timer_sync_begin()
     call mpi_bcast_integer(obj_sim_param%TODO)
     call mpi_bcast_logical(obj_multigrid%change_MG)
-      
+    call timer_sync_end()
+
+    ! Wall-clock report (collective: every rank runs the same iteration counter)
+    call timer_iter_end()
+    if ( obj_io%timer_diter > 0 ) then
+      if ( mod (domain(level) % iter, obj_io%timer_diter) == 0 ) &
+        call timer_report ( level, domain(level) % iter )
+    endif
+
   end subroutine Explicit_Step
 
 

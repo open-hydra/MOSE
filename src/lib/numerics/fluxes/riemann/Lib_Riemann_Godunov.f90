@@ -7,7 +7,7 @@ module MOSE_Lib_Riemann_Godunov
 
 contains
 
-  subroutine riemann_exact(dl,ul,vl,wl,p1,a1,dltot,dr,ur,vr,wr,p4,a4,drtot,beta,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+  subroutine riemann_exact(dl,ul,vl,wl,p1,a1,dltot,dr,ur,vr,wr,p4,a4,drtot,beta,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
     use FLINT_Lib_Thermodynamic
     implicit none
@@ -15,7 +15,7 @@ contains
     real(R8), intent(in)  :: dr(nsc),ur,vr,wr,p4,a4
     real(R8), intent(in)  :: dltot,drtot
     real(R8), intent(in)  :: nx, ny, nz
-    real(R8), intent(in)  :: beta
+    real(R8), intent(in)  :: beta, url, urr
     real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_e
     ! common
     real(R8) :: Rgasl,Rgasr

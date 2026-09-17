@@ -24,6 +24,7 @@ contains
     ! specific
     real(R8) :: unl, unr, mL, mR, Mach_tilde, f_rho
     real(R8) :: Vn_mag, Vn_magL, Vn_magR
+    real(R8), parameter :: flux_cap = 1.0d150
 
     ! normal velocities and magnitudes
     unl = ul*nx + vl*ny + wl*nz
@@ -50,6 +51,7 @@ contains
 
     ! mass flux
     F_r = 0.5d0 * ( dltot*(unl + Vn_magL) + drtot*(unr - Vn_magR) - (Chi/aF)*(pr - pl) )
+    F_r = max(-flux_cap, min(F_r, flux_cap))
 
     ! BetaL and BetaR functions
     if (abs(mL) < 1.d0) then
@@ -71,25 +73,29 @@ contains
   end subroutine riemann_SLAU_base
 
 
-  subroutine riemann_SLAU(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+  subroutine riemann_SLAU(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
     use FLINT_Lib_Thermodynamic, only: H0
     implicit none
     real(R8), intent(in)  :: dl(nsc),ul,vl,wl,pl,al,dltot
     real(R8), intent(in)  :: dr(nsc),ur,vr,wr,pr,ar,drtot
     real(R8), intent(in)  :: nx, ny, nz
-    real(R8), intent(in)  :: beta
+    real(R8), intent(in)  :: beta, url, urr
     real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_e
     ! Specific
     real(R8) :: BetaL,BetaR,Chi,sq_veli,sq_velj,aF,p_half,H_L,H_R
+    real(R8), parameter :: flux_cap = 1.0d150
 
     call riemann_SLAU_base(dltot,drtot,ul,vl,wl,ur,vr,wr,pl,pr,al,ar,nx,ny,nz,F_r,BetaL,BetaR,Chi,sq_veli,sq_velj,aF)
 
     ! SLAU pressure flux
     p_half = 0.5d0*(pl + pr) + 0.5d0*(BetaL - BetaR)*(pl - pr) + (1.d0 - Chi)*(BetaL + BetaR - 1.d0)*0.5d0*(pl + pr)
+    p_half = max(-flux_cap, min(p_half, flux_cap))
 
     H_L = H0(pl, dl, sqrt(sq_veli))
     H_R = H0(pr, dr, sqrt(sq_velj))
+    H_L = max(-flux_cap, min(H_L, flux_cap))
+    H_R = max(-flux_cap, min(H_R, flux_cap))
 
     if (F_r >= 0.d0) then
       F_u = F_r*ul + nx*p_half
@@ -106,25 +112,29 @@ contains
   end subroutine riemann_SLAU
 
 
-  subroutine riemann_SLAU2(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
+  subroutine riemann_SLAU2(dl,ul,vl,wl,pl,al,dltot,dr,ur,vr,wr,pr,ar,drtot,beta,url,urr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E)
     use MOSE_Global_m, only: nsc
     use FLINT_Lib_Thermodynamic, only: H0
     implicit none
     real(R8), intent(in)  :: dl(nsc),ul,vl,wl,pl,al,dltot
     real(R8), intent(in)  :: dr(nsc),ur,vr,wr,pr,ar,drtot
     real(R8), intent(in)  :: nx, ny, nz
-    real(R8), intent(in)  :: beta
+    real(R8), intent(in)  :: beta, url, urr
     real(R8), intent(out) :: F_r, F_u, F_v, F_w, F_e
     ! Specific
     real(R8) :: BetaL,BetaR,Chi,sq_veli,sq_velj,aF,p_half,H_L,H_R
+    real(R8), parameter :: flux_cap = 1.0d150
 
     call riemann_SLAU_base(dltot,drtot,ul,vl,wl,ur,vr,wr,pl,pr,al,ar,nx,ny,nz,F_r,BetaL,BetaR,Chi,sq_veli,sq_velj,aF)
 
     ! SLAU2 pressure flux (Kitamura & Shima 2013)
     p_half = 0.5d0*(pl + pr) + 0.5d0*(BetaL - BetaR)*(pl - pr) + sqrt(0.5d0*(sq_veli + sq_velj))*(BetaL + BetaR - 1.d0)*aF*0.5d0*(dltot + drtot)
+    p_half = max(-flux_cap, min(p_half, flux_cap))
 
     H_L = H0(pl, dl, sqrt(sq_veli))
     H_R = H0(pr, dr, sqrt(sq_velj))
+    H_L = max(-flux_cap, min(H_L, flux_cap))
+    H_R = max(-flux_cap, min(H_R, flux_cap))
 
     if (F_r >= 0.d0) then
       F_u = F_r*ul + nx*p_half

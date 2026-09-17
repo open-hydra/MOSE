@@ -1,3 +1,8 @@
+# Prose rendered under the AUTHORS.md heading.
+intro: |
+  Cumulative record of everyone who has contributed to MOSE. Names are never
+  removed from this file; per-release credit is recorded in `CITATION.cff`.
+
 original_authors:
   - name: Marco Grossi
   - name: Alessio Sereno
@@ -11,15 +16,13 @@ original_authors:
 
 present_maintainers:
   - name: Marco Grossi
-  - name: Alessio Sereno
-  - name: Vincenzo Barbato
-  - name: Alessandro Montanari
   - name: Alex Falco
-  - name: Giacomo Passarani
-  - name: Marco Fabiani
-  - name: Gianluca Cocirla
-  - name: Andrea Giacomi
+  - name: Alessandro Montanari
 
+# Substring-matched against the whole "Name <email>" identity.
 exclude:
   - dependabot[bot]
   - github-actions[bot]
+  # AI assistants appear as Co-authored-by trailers; they are tools, not authors.
+  - noreply@anthropic.com
+  - copilot@users.noreply.github.com

@@ -2,207 +2,246 @@ module MOSE_Mod_Fluxes
   use iso_fortran_env, only: I4 => int32, R8 => real64
 
   implicit none
-  private
-  public :: Fluxes
+  private :: Fluxes_blk
+  public  :: Zero_Residuals, Internal_Fluxes
 
 contains
 
-  subroutine Fluxes ( domain )
+  subroutine Zero_Residuals ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_shock_detector, obj_space_scheme, obj_riemann, obj_rans, obj_soot
+    use MOSE_Mod_MPI, only: is_local_block
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    ! Local
+    integer :: b, j, k, n(3)
+
+    do b = 1, domain % nb
+      if (.not. is_local_block(b)) cycle
+
+      n = domain % blk(b) % dim
+
+      ! R(:,1:n1,j,k) is contiguous: zeroing it as one array store per (j,k)
+      ! is a single large memset instead of n1 short ones.
+      !$omp do collapse (2)
+      do k = 1, n(3)
+      do j = 1, n(2)
+        domain % blk(b) % R(:,1:n(1),j,k)  = 0.0_R8
+        domain % blk(b) % beta(1:n(1),j,k) = 1.0_R8
+      enddo; enddo
+
+    enddo
+
+  end subroutine Zero_Residuals
+
+
+  subroutine Internal_Fluxes ( domain )
+    !> Compute internal face fluxes only (no residual zeroing).
+    !> Assumes R(:) and beta(:) have been initialized via Zero_Residuals.
+    use MOSE_Advanced_Types_m
+    use MOSE_Config_Types_m, only: obj_shock_detector, obj_rans, obj_soot, obj_sim_param
     use MOSE_Mod_MPI, only: is_local_block
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer  :: b
-    logical  :: SD, SD_limiter, SD_riemann, soot_enabled
-    real(R8) :: Sc, Sct, Prt
+    integer  :: SD_id
+    logical  :: soot_enabled
+    real(R8) :: Sc, Sct, Prt, Prl
 
-    SD           = obj_shock_detector%SD
-    SD_limiter   = obj_space_scheme%SD
-    SD_riemann   = obj_riemann%SD
+    SD_id = obj_shock_detector%id
     soot_enabled = obj_soot%enabled
-    Sc  = obj_rans%Sc
+    Sc  = obj_sim_param%Sc
     Sct = obj_rans%Sct
     Prt = obj_rans%Prt
+    Prl = obj_sim_param%Prl
 
-    do b = 1, domain % nb ! Loop over blocks
+    do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
-      call Fluxes_blk ( domain % blk(b) % P,   &
-                        domain % blk(b) % R,   &
-                        domain % blk(b) % dir, &
-                        domain % blk(b) % dl,  &
-                        domain % blk(b) % beta,  &
-                        domain % blk(b) % yn,  &
-                        domain % blk(b) % M,   &
-                        domain % blk(b) % dim,  &
-                        SD, SD_limiter, SD_riemann, &
-                        Sc, Sct, Prt, soot_enabled )
+      call Fluxes_blk ( domain % blk(b), SD_id, Sc, Sct, Prt, Prl, soot_enabled )
     enddo
 
-  end subroutine Fluxes
+  end subroutine Internal_Fluxes
 
 
-  subroutine Fluxes_blk ( Prim, Res, Dir, dl, beta, yn, M, n, SD, SD_limiter, SD_riemann, &
-                          Sc, Sct, Prt, soot_enabled )
-    use MOSE_Global_m
-    use MOSE_Base_Types_m
+  subroutine Fluxes_blk ( blk, SD_id, Sc, Sct, Prt, Prl, soot_enabled )
+    use MOSE_Advanced_Types_m, only: MOSE_block_type
+    use MOSE_Global_m, only: model, gc, nprim, np
     use MOSE_Lib_Shock_Detector
     use MOSE_Lib_Convective
     use MOSE_Lib_Diffusive
     implicit none
     ! Inputs
-    integer, intent(in)  :: n(3)
-    logical, intent(in)  :: SD, SD_limiter, SD_riemann, soot_enabled
-    real(R8), intent(in) :: Sc, Sct, Prt
-    real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
-    real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(out) :: Res
-    type(MOSE_d_metrics_type), dimension(3), intent(in) :: Dir
-    type(MOSE_vector_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: dl
-    real(R8), dimension(1:n(1), 1:n(2), 1:n(3)), intent(inout) :: beta
-    real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: yn
-    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
+    type(MOSE_block_type), intent(inout) :: blk
+    logical, intent(in)  :: soot_enabled
+    integer, intent(in)  :: SD_id
+    real(R8), intent(in) :: Sc, Sct, Prt, Prl
     ! Local
-    integer :: i, j, k
+    integer :: i, j, k, n(3)
+    !> Four-cell stencil of cell lengths for the Convective_Flux call.  Filled
+    !> by explicit stores: `blk % dl(i-1:i+2,j,k) % c(d)` is a strided section
+    !> of a derived type, which the compiler would copy to a temporary on every
+    !> face.  Per-thread already — Fluxes_blk runs inside an orphaned parallel
+    !> region.
+    real(R8) :: dl4(-1:2)
 
-    ! -----------------------------------------------------------------
-    ! Reset residuals to zero and inizialize shock sensor arrays
-    !$omp do collapse (3)
-      do k = 1, n(3)
-      do j = 1, n(2)
-      do i = 1, n(1)
-        Res(:,i,j,k) = 0d0
-        beta(i,j,k)  = 1d0
-      enddo; enddo; enddo
+    n = blk % dim
 
     ! -----------------------------------------------------------------
     ! Shock-detector
-    if (SD) then
+    select case(SD_id)
+    case(1)
       !$omp do collapse (3)
       do k = 1, n(3); do j = 1, n(2); do i = 1, n(1)
-            beta(i,j,k) = SD_Tramel ( Prim(np,i-1:i+1,j-1:j+1,k-1:k+1) )
+            blk % beta(i,j,k) = SD_Tramel ( blk % P(np,i-1:i+1,j-1:j+1,k-1:k+1) )
       enddo; enddo; enddo
-    endif
+    case(2)
+      !$omp do collapse (3)
+      do k = 1, n(3); do j = 1, n(2); do i = 1, n(1)
+            blk % beta(i,j,k) = SD_Chen ( blk % P(np,i-1:i+1,j-1:j+1,k-1:k+1) )
+      enddo; enddo; enddo
+    end select
 
     ! -----------------------------------------------------------------
-    ! Convective and diffusive fluxes computation
-    !$omp do collapse (2)
+    ! Convective and diffusive fluxes computation.
+    !
+    ! The directional face loops take schedule(runtime): the split is tunable
+    ! from OMP_SCHEDULE (`guided` is worth trying on chemistry-imbalanced
+    ! meshes) and defaults to static when it is unset.
+    !$omp do collapse (2) schedule(runtime)
     do k = 1, n(3)
     do j = 1, n(2)
     do i = 1, n(1) - 1
-      call Convective_Flux ( dl(i-1:i+2,j,k) % c(1), &
-                             Dir(1) % f(i,j,k) % N,  &
-                             Dir(1) % f(i,j,k) % A,  &
-                             Prim(:,i-1:i+2,j,k),    &
-                             Res (:,i:i+1,j,k),      &
-                             beta(i,j,k), SD_limiter )
+      dl4(-1) = blk % dl(i-1,j,k) % c(1) ; dl4(0) = blk % dl(i  ,j,k) % c(1)
+      dl4( 1) = blk % dl(i+1,j,k) % c(1) ; dl4(2) = blk % dl(i+2,j,k) % c(1)
+      call Convective_Flux ( dl4,                          &
+                             blk % dir(1) % f(i,j,k) % N,  &
+                             blk % dir(1) % f(i,j,k) % A,  &
+                             blk % P(:,i-1:i+2,j,k),       &
+                             blk % R(:,i:i+1,j,k),         &
+                             blk % beta(i,j,k),            &
+                             blk % Ur(i,j,k),              &
+                             blk % Ur(i+1,j,k) )
     enddo; enddo; enddo
 
     if (model>0)  then
-    !$omp do collapse (2)
+    !$omp do collapse (2) schedule(runtime)
       do k = 1, n(3)
       do j = 1, n(2)
       do i = 1, n(1) - 1
-      call Diffusive_Flux ( Dir(1) % f(i,j,k) % N,  &
-                            Dir(1) % f(i,j,k) % A,  &
-                            yn(i  ,j,k),            &
-                            yn(i+1,j,k),            &
-                            Prim(:,i  ,j,k),        &
-                            Prim(:,i+1,j,k),        &
-                            Prim(:,i  ,j-1,k),      &
-                            Prim(:,i  ,j+1,k),      &
-                            Prim(:,i+1,j-1,k),      &
-                            Prim(:,i+1,j+1,k),      &
-                            Prim(:,i  ,j,k-1),      &
-                            Prim(:,i  ,j,k+1),      &
-                            Prim(:,i+1,j,k-1),      &
-                            Prim(:,i+1,j,k+1),      &
-                            M(i  ,j,k) % c,         &
-                            M(i+1,j,k) % c,         &
-                            Res (:,i  ,j,k),        &
-                            Res (:,i+1,j,k),        &
+      call Diffusive_Flux ( blk % dir(1) % f(i,j,k) % N,  &
+                            blk % dir(1) % f(i,j,k) % A,  &
+                            blk % yn(i  ,j,k),            &
+                            blk % yn(i+1,j,k),            &
+                            blk % k_rough(i  ,j,k),       &
+                            blk % k_rough(i+1,j,k),       &
+                            blk % P(:,i  ,j,k),           &
+                            blk % P(:,i+1,j,k),           &
+                            blk % P(:,i  ,j-1,k),         &
+                            blk % P(:,i  ,j+1,k),         &
+                            blk % P(:,i+1,j-1,k),         &
+                            blk % P(:,i+1,j+1,k),         &
+                            blk % P(:,i  ,j,k-1),         &
+                            blk % P(:,i  ,j,k+1),         &
+                            blk % P(:,i+1,j,k-1),         &
+                            blk % P(:,i+1,j,k+1),         &
+                            blk % M(i  ,j,k) % c,         &
+                            blk % M(i+1,j,k) % c,         &
+                            blk % R(:,i  ,j,k),           &
+                            blk % R(:,i+1,j,k),           &
                             1, 2, 3,                &
-                            Sc, Sct, Prt, soot_enabled)
+                            Sc, Sct, Prt, Prl, soot_enabled)
       enddo; enddo; enddo
     endif
 
-    !$omp do collapse (2)
+    !$omp do collapse (2) schedule(runtime)
     do k = 1, n(3)
     do i = 1, n(1)
     do j = 1, n(2) - 1
-      call Convective_Flux ( dl(i,j-1:j+2,k) % c(2), &
-                             Dir(2) % f(i,j,k) % N,  &
-                             Dir(2) % f(i,j,k) % A,  &
-                             Prim(:,i,j-1:j+2,k),    &
-                             Res (:,i,j:j+1,k),      &
-                             beta(i,j,k), SD_limiter )
+      dl4(-1) = blk % dl(i,j-1,k) % c(2) ; dl4(0) = blk % dl(i,j  ,k) % c(2)
+      dl4( 1) = blk % dl(i,j+1,k) % c(2) ; dl4(2) = blk % dl(i,j+2,k) % c(2)
+      call Convective_Flux ( dl4,                          &
+                             blk % dir(2) % f(i,j,k) % N,  &
+                             blk % dir(2) % f(i,j,k) % A,  &
+                             blk % P(:,i,j-1:j+2,k),       &
+                             blk % R(:,i,j:j+1,k),         &
+                             blk % beta(i,j,k),            &
+                             blk % Ur(i,j,k),              &
+                             blk % Ur(i,j+1,k) )
     enddo; enddo; enddo
 
     if (model>0) then
-      !$omp do collapse (2)
+      !$omp do collapse (2) schedule(runtime)
       do k = 1, n(3)
       do i = 1, n(1)
       do j = 1, n(2) - 1
-      call Diffusive_Flux ( Dir(2) % f(i,j,k) % N,  &
-                            Dir(2) % f(i,j,k) % A,  &
-                            yn(i,j  ,k),            &
-                            yn(i,j+1,k),            &
-                            Prim(:,i,j  ,k),        &
-                            Prim(:,i,j+1,k),        &
-                            Prim(:,i-1,j  ,k),      &
-                            Prim(:,i+1,j  ,k),      &
-                            Prim(:,i-1,j+1,k),      &
-                            Prim(:,i+1,j+1,k),      &
-                            Prim(:,i,j  ,k-1),      &
-                            Prim(:,i,j  ,k+1),      &
-                            Prim(:,i,j+1,k-1),      &
-                            Prim(:,i,j+1,k+1),      &
-                            M(i,j  ,k) % c,         &
-                            M(i,j+1,k) % c,         &
-                            Res (:,i,j  ,k),        &
-                            Res (:,i,j+1,k),        &
+      call Diffusive_Flux ( blk % dir(2) % f(i,j,k) % N,  &
+                            blk % dir(2) % f(i,j,k) % A,  &
+                            blk % yn(i,j  ,k),            &
+                            blk % yn(i,j+1,k),            &
+                            blk % k_rough(i,j  ,k),       &
+                            blk % k_rough(i,j+1,k),       &
+                            blk % P(:,i,j  ,k),           &
+                            blk % P(:,i,j+1,k),           &
+                            blk % P(:,i-1,j  ,k),         &
+                            blk % P(:,i+1,j  ,k),         &
+                            blk % P(:,i-1,j+1,k),         &
+                            blk % P(:,i+1,j+1,k),         &
+                            blk % P(:,i,j  ,k-1),         &
+                            blk % P(:,i,j  ,k+1),         &
+                            blk % P(:,i,j+1,k-1),         &
+                            blk % P(:,i,j+1,k+1),         &
+                            blk % M(i,j  ,k) % c,         &
+                            blk % M(i,j+1,k) % c,         &
+                            blk % R(:,i,j  ,k),           &
+                            blk % R(:,i,j+1,k),           &
                             2, 1, 3,                &
-                            Sc, Sct, Prt, soot_enabled)
+                            Sc, Sct, Prt, Prl, soot_enabled)
       enddo; enddo; enddo
     end if
 
-    !$omp do collapse (2)
+    !$omp do collapse (2) schedule(runtime)
     do j = 1, n(2)
     do i = 1, n(1)
     do k = 1, n(3) - 1
-      call Convective_Flux ( dl(i,j,k-1:k+2) % c(3), &
-                             Dir(3) % f(i,j,k) % N,  &
-                             Dir(3) % f(i,j,k) % A,  &
-                             Prim(:,i,j,k-1:k+2),    &
-                             Res (:,i,j,k:k+1),      &
-                             beta(i,j,k), SD_limiter )
+      dl4(-1) = blk % dl(i,j,k-1) % c(3) ; dl4(0) = blk % dl(i,j,k  ) % c(3)
+      dl4( 1) = blk % dl(i,j,k+1) % c(3) ; dl4(2) = blk % dl(i,j,k+2) % c(3)
+      call Convective_Flux ( dl4,                          &
+                             blk % dir(3) % f(i,j,k) % N,  &
+                             blk % dir(3) % f(i,j,k) % A,  &
+                             blk % P(:,i,j,k-1:k+2),       &
+                             blk % R(:,i,j,k:k+1),         &
+                             blk % beta(i,j,k),            &
+                             blk % Ur(i,j,k),              &
+                             blk % Ur(i,j,k+1) )
     enddo; enddo; enddo
 
     if (model>0) then
-      !$omp do collapse (2)
+      !$omp do collapse (2) schedule(runtime)
       do j = 1, n(2)
       do i = 1, n(1)
       do k = 1, n(3) - 1
-      call Diffusive_Flux ( Dir(3) % f(i,j,k) % N,  &
-                            Dir(3) % f(i,j,k) % A,  &
-                            yn(i,j,k  ),            &
-                            yn(i,j,k+1),            &
-                            Prim(:,i,j,k  ),        &
-                            Prim(:,i,j,k+1),        &
-                            Prim(:,i-1,j,k  ),      &
-                            Prim(:,i+1,j,k  ),      &
-                            Prim(:,i-1,j,k+1),      &
-                            Prim(:,i+1,j,k+1),      &
-                            Prim(:,i,j-1,k  ),      &
-                            Prim(:,i,j+1,k  ),      &
-                            Prim(:,i,j-1,k+1),      &
-                            Prim(:,i,j+1,k+1),      &
-                            M(i,j,k  ) % c,         &
-                            M(i,j,k+1) % c,         &
-                            Res (:,i,j,k  ),        &
-                            Res (:,i,j,k+1),        &
+      call Diffusive_Flux ( blk % dir(3) % f(i,j,k) % N,  &
+                            blk % dir(3) % f(i,j,k) % A,  &
+                            blk % yn(i,j,k  ),            &
+                            blk % yn(i,j,k+1),            &
+                            blk % k_rough(i,j,k  ),       &
+                            blk % k_rough(i,j,k+1),       &
+                            blk % P(:,i,j,k  ),           &
+                            blk % P(:,i,j,k+1),           &
+                            blk % P(:,i-1,j,k  ),         &
+                            blk % P(:,i+1,j,k  ),         &
+                            blk % P(:,i-1,j,k+1),         &
+                            blk % P(:,i+1,j,k+1),         &
+                            blk % P(:,i,j-1,k  ),         &
+                            blk % P(:,i,j+1,k  ),         &
+                            blk % P(:,i,j-1,k+1),         &
+                            blk % P(:,i,j+1,k+1),         &
+                            blk % M(i,j,k  ) % c,         &
+                            blk % M(i,j,k+1) % c,         &
+                            blk % R(:,i,j,k  ),           &
+                            blk % R(:,i,j,k+1),           &
                             3, 1, 2,                &
-                            Sc, Sct, Prt, soot_enabled )
+                            Sc, Sct, Prt, Prl, soot_enabled )
       enddo; enddo; enddo
     endif
 

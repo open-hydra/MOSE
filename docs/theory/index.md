@@ -80,6 +80,14 @@ schemes, turbulence closures, and the thermochemistry framework.
 
     [:octicons-arrow-right-24: Equilibrium solver](equilibrium.md)
 
+-   :material-fire:{ .lg .middle } __Gas-Surface Interaction__
+
+    ---
+
+    Ablating walls: melting, pyrolysis (HTPB, HDPE, PP), heterogeneous surface reactions, surface energy balance and wall temperature solution
+
+    [:octicons-arrow-right-24: Gas-surface interaction](gsi.md)
+
 </div>
 
 ---
@@ -94,10 +102,11 @@ pipeline can be summarised as follows:
 |-------|--------|------|
 | **Governing system** | Multi-species Euler / Navier–Stokes | [Governing Equations](governing-equations.md) |
 | **Spatial discretization** | Cell-centred FVM + MUSCL-limited reconstruction | [Spatial Discretization](numerics.md) |
-| **Interface fluxes** | 14 Riemann solvers (AUSM, HLL, Godunov, LF, SLAU) | [Riemann Solvers](riemann-solvers.md) |
+| **Interface fluxes** | 14 Riemann solvers (AUSM, HLL, Roe, SLAU, Godunov, Lax–Friedrichs) | [Riemann Solvers](riemann-solvers.md) |
 | **Time marching** | 3-stage SSP RK3, IRS, multigrid | [Time Integration](time-integration.md) |
 | **Turbulence closure** | SA, SST $k$–$\omega$, Wilcox 2006 $k$–$\omega$ | [Turbulence Modelling](turbulence.md) |
 | **Thermochemistry** | Ideal-gas mixture, NASA polynomials | [Thermodynamics](thermo.md) |
 | **Chemistry** | Finite-rate (Arrhenius/Troe) or equilibrium (CEA) | [Kinetics](kinetics.md), [Equilibrium](equilibrium.md) |
+| **Ablating walls** | Melting, pyrolysis and surface-reaction boundary conditions | [Gas-Surface Interaction](gsi.md) |
 
 ---

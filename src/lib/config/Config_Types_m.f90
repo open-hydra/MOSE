@@ -17,14 +17,15 @@ module MOSE_Config_Types_m
     real(R8)  :: res_threshold    ! Residuo min. per arresto esecuzione
     real(R8)  :: time_threshold   ! Tempo max per arresto esecuzione 
     integer   :: iter_threshold            ! Numero max iterate per arresto esecuzione
-    character(len=clen) :: simulation_type ! Type of simulation (euler, laminar, turbulent) 
+    character(len=clen) :: simulation_type ! Type of simulation (euler, laminar, turbulent)
+    real(R8)  :: Sc               ! Laminar (molecular) Schmidt number (<=0: use mixture-averaged multicomponent diffusion)
+    real(R8)  :: Prl              ! Laminar (molecular) Prandtl number (<=0: use computed mixture conductivity)
     ! Useful variables
     integer         :: iter_general     ! Number of iteration - including all MG levels
     integer         :: iter_from_call
     real(R8)        :: time_from_call
     real(R8), allocatable :: residuotot(:)
     integer         :: nthreads         ! Number of threads for simulation
-    real(R8)        :: cputime(2)       ! Simulation time duration
     integer         :: TODO             ! Decide solve and/or postprocess
     logical         :: HYDRA_time_accurate = .false.
     logical         :: HYDRA_postprocess   = .false.
@@ -48,6 +49,7 @@ module MOSE_Config_Types_m
     character(len=llen)  :: sol_variables, wall_variables   ! Variables to be printed in solution and wall files
     integer              :: shell_diter  ! Shell update
     integer              :: ini_diter    ! input.ini update
+    integer              :: timer_diter  ! Wall-clock timing report (0 = off)
     ! Useful variables
     character(len=llen)  :: nameinit  ! Initial file name
     logical              :: write_thermo, write_transport, write_composition
@@ -68,7 +70,7 @@ module MOSE_Config_Types_m
     ! USER-DEFINED INPUTS
     real(R8)            :: dtime
     integer             :: diter
-    character(len=clen) :: file
+    character(len=llen) :: file
     character(len=hlen) :: varnames
     integer             :: iloc(4)
     real(R8)            :: loc(3)
@@ -121,6 +123,26 @@ module MOSE_Config_Types_m
   !! ------------------------------------------------------
 
   !! ------------------------------------------------------
+  !! Weiss-Smith Preconditioning --------------------------
+  !! ------------------------------------------------------
+  type :: prec_t
+    character(len=llen) :: warning_message
+    character(len=llen) :: error_message
+    character(len=llen) :: description
+    ! USER-DEFINED INPUTS
+    real(R8) :: eps_min     = 0.0_R8  ! Low-Mach cutoff for Ur
+    real(R8) :: Ur_ref      = 0.0_R8   ! Uniform reference velocity
+    real(R8) :: Ur_min      = 0.0_R8   ! Floor on Ur [m/s]
+    real(R8) :: Mach_target = 0.0_R8   ! Target preconditioned Mach
+    real(R8) :: Ur_factor   = 1.0_R8   ! Multiplicative factor on Ur in Weiss-Smith
+    integer  :: n_smooth_Ur = 0        ! Ur max-smoothing passes (0 = disabled)
+    ! Useful variables
+    logical   :: enabled
+  end type prec_t
+  !! ------------------------------------------------------
+  !! ------------------------------------------------------
+
+  !! ------------------------------------------------------
   !! Space Discretization ---------------------------------
   !! ------------------------------------------------------
   type :: space_scheme_t
@@ -131,7 +153,7 @@ module MOSE_Config_Types_m
     character(len=llen) :: space_reconstruction ! Space reconstruction method
     character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction
     ! Useful variables
-    logical :: SD
+    ! ...
   end type space_scheme_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -144,9 +166,9 @@ module MOSE_Config_Types_m
     character(len=llen) :: error_message
     character(len=llen) :: description
     ! USER-DEFINED INPUTS
-    real(R8) :: Minf
+    real(R8) :: Mco
     ! Useful variables
-    logical  :: SD
+    ! ...
   end type riemann_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -161,7 +183,7 @@ module MOSE_Config_Types_m
     ! USER-DEFINED INPUTS
     ! ...
     ! Useful variables
-    logical :: SD
+    integer :: id
   end type shock_detector_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -217,6 +239,7 @@ module MOSE_Config_Types_m
     character(len=llen)   :: model
     character(llen)       :: ode_name
     integer               :: max_ode_steps
+    logical               :: analytical_jacobian
     character(llen)       :: exclude_blocks_str
     integer               :: iopt(3)
     real(R8), allocatable :: RT(:), AT(:)
@@ -257,14 +280,16 @@ module MOSE_Config_Types_m
     character(len=llen)   :: error_message
     character(len=llen)   :: description
     ! USER-DEFINED INPUTS
-    real(R8) :: Sc     ! Schmidt laminare
     real(R8) :: Sct    ! Schmidt turbolento
     real(R8) :: Prt    ! Prandtl turbolento
     character(len=llen) :: model
     logical :: SAcomp, SpalartShur, SAR
     logical :: QCR2000, blowing_corr, k_energy_coupling
+    logical :: point_implicit  ! Point-implicit (Patankar) treatment of turbulence destruction source terms
+    character(len=llen) :: omega_wall_bc  ! omega wall condition: 'practical' or 'asymptotic'
     ! Useful variables
     logical :: RSM, SD
+    real(R8) :: omega_wall_coef  ! coefficient C in omega_wall = C*mi_l/dist**2 (set by Setup_RANS_Model)
   end type rans_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -336,6 +361,7 @@ module MOSE_Config_Types_m
   type(io_bc_t), public                 :: obj_io_bc
   type(time_scheme_t), public           :: obj_time_scheme
   type(irs_t), public                   :: obj_irs
+  type(prec_t), public                  :: obj_prec
   type(space_scheme_t), public          :: obj_space_scheme
   type(riemann_t), public               :: obj_riemann
   type(shock_detector_t), public        :: obj_shock_detector

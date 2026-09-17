@@ -40,10 +40,10 @@ git clone --recurse-submodules https://github.com/open-hydra/MOSE.git
 cd MOSE
 
 # Build with GNU compilers and OpenMP
-./install.sh build --compiler=gnu --use-openmp
+./install.sh build --compilers=gnu --use-openmp
 
 # — or with Intel compilers and full feature set —
-./install.sh build --compiler=intel --use-openmp --use-mpi --use-tecio --use-sundials --use-cantera
+./install.sh build --compilers=intel --use-openmp --use-mpi --use-tecio --use-sundials --use-cantera
 ```
 
 The executable is placed in `bin/MOSE`.

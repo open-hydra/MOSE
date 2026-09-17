@@ -13,22 +13,29 @@ contains
     use MOSE_Global_m
     use MOSE_Read_Ini,             only: Read_Inifile
     use MOSE_Load_ThermoTransport, only: Load_ThermoTransport
+    use MOSE_Lib_Preconditioning,  only: update_derived_variables
     use MOSE_Load_Chemistry,       only: Load_Chemistry
     use MOSE_Assign_Setup,         only: Assign_Setup
-    use MOSE_IO_Solution,          only: Read_IC, Setup_Output_Solution
-    use MOSE_Mod_Allocate_Data,    only: Setup_Data_Structure, deallocate_remote_computation_data
+    use MOSE_IO_Solution,          only: Read_IC, Setup_Output_Solution, Ic_Supports_Zone_Filter
+    use MOSE_Mod_Allocate_Data,    only: Setup_Data_Dimensions, Setup_Data_Fields, &
+                                         deallocate_remote_computation_data, &
+                                         blocks_needing_full_arrays
     use MOSE_Mod_Multigrid,        only: Setup_Multigrid, Restriction
     use MOSE_IO_BC,                only: Setup_BC
     use MOSE_Mod_Metrics,          only: Setup_Metrics
     use MOSE_IO_Probes,            only: Setup_Probes
     use MOSE_IO_Wall,              only: Initialize_Wall_File
     use MOSE_Lib_Ghost,            only: Fill_Ghost_Cell
-    use MOSE_Mod_MPI,              only: mpi_is_root, partition_blocks
-    use MOSE_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index
+    use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks
+    use MOSE_Mod_Timers,           only: timer_run_begin
+    use MOSE_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index, &
+                                         allocate_exchange_schedules
     implicit none
     type(MOSE_simulation_type), intent(inout) :: simulation
     ! Local
     integer :: m, ios
+    logical :: partition_first, lean_read
+    logical, allocatable :: keep(:)
 
     !! ------------------------------------------------------
     !! ------------------------------------------------------
@@ -53,15 +60,34 @@ contains
     call Assign_Setup ()
 
     ! Read file for initial solution.
-    call Read_IC ( simulation%IOfield(1) )
+    !
+    ! Every rank reading the whole field costs O(nranks x filesize) of read
+    ! traffic and leaves every rank holding the whole domain.  Where the format
+    ! allows, read the block headers now and the variable data once ownership
+    ! is known; the extra pass touches headers only.
+    lean_read = Ic_Supports_Zone_Filter() .and. obj_multigrid%MGL == 1 .and. mpi_size_ > 1
+    if ( lean_read ) then
+      call Read_IC ( simulation%IOfield(1), dims_only = .true. )
+    else
+      call Read_IC ( simulation%IOfield(1) )
+    end if
     if (mpi_is_root) call Check_IC ()
 
-    ! Allocation of data structures and copy solution from IOfield.
-    call Setup_Data_Structure ( simulation%domain(1), simulation%IOfield(1) )
+    ! Block count and ijk dimensions.  Cheap, and enough to partition on.
+    call Setup_Data_Dimensions ( simulation%domain(1), simulation%IOfield(1) )
     allocate(obj_sim_param%residuotot(nres))
 
-    ! With multigrid, allocate Grid and IOfield 2,...,MGL
-    if ( obj_multigrid%MGL > 1 ) then
+    ! Allocating every block on every rank makes peak setup memory O(full
+    ! domain) per rank, which caps ranks-per-node long before the cores run
+    ! out.  Ownership can only be used to avoid that on a single level: the
+    ! multigrid setup coarsens from the fine mesh before the boundary
+    ! conditions are read, so the donor set is not yet known and level 1 must
+    ! be complete.
+    partition_first = ( obj_multigrid%MGL == 1 )
+
+    if ( .not. partition_first ) then
+      call Setup_Data_Fields ( simulation%domain(1), simulation%IOfield(1) )
+      ! With multigrid, allocate Grid and IOfield 2,...,MGL
       call Setup_Multigrid ( simulation )
     end if
 
@@ -69,10 +95,26 @@ contains
     call Setup_BC ( simulation%domain )
     if (mpi_is_root) call Check_BC ()
 
-    ! MPI: partition blocks and build ghost cell communication schedule
+    ! MPI: partition blocks once on finest-level cell counts (restriction and
+    ! prolongation are block-local, so a block must live on the same rank at
+    ! every level), then build per-level ghost/chimera communication schedules.
+    call partition_blocks(simulation%domain(1)%nb, &
+      [(product(simulation%domain(1)%blk(ios)%dim(1:3)), ios=1, simulation%domain(1)%nb)])
+
+    ! Ownership is known: allocate the state arrays only where they are needed.
+    ! Every block still gets its mesh -- Setup_Metrics reads donor nodes and
+    ! Compute_Yn is global.
+    if ( partition_first ) then
+      keep = blocks_needing_full_arrays ( simulation%domain(1) )
+      ! Variable data for the owned blocks only; coordinates for all of them.
+      if ( lean_read ) call Read_IC ( simulation%IOfield(1), zone_mask = keep )
+      call Setup_Data_Fields ( simulation%domain(1), simulation%IOfield(1), keep )
+      deallocate(keep)
+    end if
+
+    call allocate_exchange_schedules(obj_multigrid%MGL)
     do m = 1, obj_multigrid%MGL
-      call partition_blocks(simulation%domain(m)%nb, &
-        [(product(simulation%domain(m)%blk(ios)%dim(1:3)), ios=1, simulation%domain(m)%nb)])
+      simulation%domain(m)%mg_level = m
       call build_ghost_schedule(simulation%domain(m))
       call build_local_bc_index(simulation%domain(m))
     end do
@@ -145,6 +187,7 @@ contains
           obj_sim_param%iter_from_call = 0
         enddo
         call Fill_Ghost_Cell ( simulation%domain(1) )
+        call Update_Derived_Variables ( simulation%domain(1) )
 
         ! Interpolate initial solution on coarser domains
         if ( obj_multigrid%MGL > 1 ) then
@@ -162,8 +205,8 @@ contains
     ! If errors are found, print error messages and stop the simulation.
     if (mpi_is_root) call Stop_Simulation()
 
-    ! Calculate time at beginning of simulation
-    call Cpu_Time ( obj_sim_param%cputime(1) )
+    ! Set-up is over: start the solver clock
+    call timer_run_begin()
 
   contains
 
@@ -456,7 +499,9 @@ contains
       write(*,'(A,T35,A)') '   Reconstruction', trim(obj_space_scheme%description)
       if (len_trim(obj_space_scheme%flux_limiter)>0) &
         write(*,'(A,T35,A)') '   Flux limiter',trim(obj_space_scheme%flux_limiter)
-      write(*,*)
+      if (obj_shock_detector%id/=0) &
+        write(*,'(A,T35,A)') '   Shock sensor',trim(obj_shock_detector%description)
+      write(*,*)  
       write(*,'(A,T35,A)') ' Time'
       write(*,'(A,T35,A)') '   Scheme', trim(obj_time_scheme%description)
       write(*,'(A,T35,A)') '   Integration variables', trim(obj_time_scheme%integration_variables)

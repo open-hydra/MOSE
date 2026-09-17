@@ -48,4 +48,8 @@ jobs:
         run: cmake --build build --parallel $(nproc)
 
       - name: Run tests
-        run: ctest --test-dir build --output-on-failure --timeout 300
+        # Exclude cases that need heavy/optional dependencies disabled in this build
+        # (Cantera, SUNDIALS, MPI). See test/TESTING-PLAN.md for the tiering.
+        run: >
+          ctest --test-dir build --output-on-failure --timeout 300
+          --label-exclude "needs-cantera|needs-sundials|needs-mpi"

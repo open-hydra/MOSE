@@ -10,13 +10,12 @@ module MOSE_Lib_BC_Fluxes_Connection
 
 contains
 
-  subroutine BC_Connection_Eul ( Im, Jm, Km, Fm, Blk, SD_limiter, SD_riemann )
+  subroutine BC_Connection_Eul ( Im, Jm, Km, Fm, Blk )
     use MOSE_Lib_Reconstruction, only : reconstruction
     use MOSE_Mod_Riemann
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
-    logical, intent(in) :: SD_limiter, SD_riemann
     type(MOSE_block_type), intent(inout) :: Blk
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Dirm, Face_i, Face_j, Face_k
@@ -55,11 +54,7 @@ contains
     Prim3 = blk % P(:,I3,J3,K3)
     Prim4 = blk % P(:,I4,J4,K4)
 
-    if (SD_limiter) then
-      beta_ = blk % beta(Im,Jm,Km)
-    else
-      beta_ = 1d0
-    end if
+    beta_ = blk % beta(Im,Jm,Km)
     
     Normal = blk % dir(Dirm) % f(Face_i,Face_j,Face_k) % n
     Area = blk % dir(Dirm) % f(Face_i,Face_j,Face_k) % a
@@ -82,15 +77,10 @@ contains
     call co_rotot_Rtot ( Prim_R(1:nsc), rho_R, Rtot_R)
     a_R = f_ss ( Prim_R(1:nsc), Prim_R(np), rho_R, Rtot_R )
 
-    if (SD_riemann) then
-      beta_ = blk % beta(Im,Jm,Km)
-    else
-      beta_ = 1d0
-    end if
-
     call Riemann ( Prim_L(1:nsc), Prim_L(nu), Prim_L(nv), Prim_L(nw), Prim_L(np), a_L, rho_L, &
                    Prim_R(1:nsc), Prim_R(nu), Prim_R(nv), Prim_R(nw), Prim_R(np), a_R, rho_R, &
-                   beta_, Normal(1), Normal(2), Normal(3), F_r, F_u, F_v, F_w, F_E)
+                   beta_, blk%Ur(I2,J2,K2), Blk%Ur(I3,J3,K3), Normal(1), Normal(2), Normal(3), &
+                   F_r, F_u, F_v, F_w, F_E)
 
     su = sign ( 0.5d0, F_r )
     Sel_L = 0.5d0 + su
@@ -114,13 +104,13 @@ contains
   end subroutine BC_Connection_Eul
 
 
-  subroutine BC_Connection_Visc ( Im, Jm, Km, Fm, Blk, Mg, Pg, Sc, Sct, Prt, soot_enabled )
+  subroutine BC_Connection_Visc ( Im, Jm, Km, Fm, Blk, Mg, Pg, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Lib_RANS
     use FLINT_Lib_Thermodynamic
     use MOSE_Lib_Diffusive
     implicit none
     integer, intent(in)  :: Im, Jm, Km, Fm
-    real(R8), intent(in) :: Sc, Sct, Prt
+    real(R8), intent(in) :: Sc, Sct, Prt, Prl
     logical, intent(in)  :: soot_enabled
     type(MOSE_tensor_3D_type), intent(in) :: Mg
     real(R8), intent(in)              :: Pg(nprim,6)
@@ -128,7 +118,7 @@ contains
     ! Local
     integer :: dir, modfm2, Face_i, Face_j, Face_k
     integer :: Ig, Jg, Kg
-    real(R8) :: Normal(3), Area, Waldis, M(3,3)
+    real(R8) :: Normal(3), Area, Waldis, Rough, M(3,3)
     real(R8), dimension(nprim) :: Prim_loc, Prim_ghost, Visc_loc, Visc_ghost
     real(R8), dimension(nprim) :: Visc_ip, Visc_im, Visc_jp, Visc_jm, Visc_kp, Visc_km
     real(R8), dimension(nprim) :: Visc_ghost3, Visc_ghost4, Visc_ghost5, Visc_ghost6
@@ -147,6 +137,7 @@ contains
     area = blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
     M = 0.5d0 * ( Blk % M(Im,Jm,Km) % c + Blk % M(Ig,Jg,Kg) % c )
     Waldis = 0.5d0 * ( Blk % yn(Im,Jm,Km) + Blk % yn(Ig,Jg,Kg) )
+    Rough  = 0.5d0 * ( Blk % k_rough(Im,Jm,Km) + Blk % k_rough(Ig,Jg,Kg) )
 
     ! Primitive/auxiliary variables and residual in the 2 connected cells
     Prim_loc = Blk % P(:,Im,Jm,Km)
@@ -195,14 +186,14 @@ contains
     Gradient_ghost = matmul ( Gradient_ghost, M )
 
     Prim = ( Prim_loc + Prim_ghost ) * 0.5d0
-    call Compute_Diffusive_Flux ( Prim, Gradient_loc, Area, Normal, Waldis, Flux_loc, &
-                                  Sc, Sct, Prt, soot_enabled )
-    call Compute_Diffusive_Flux ( Prim, Gradient_ghost, Area, Normal, Waldis, Flux_ghost, &
-                                  Sc, Sct, Prt, soot_enabled )
+    call Compute_Diffusive_Flux ( Prim, Gradient_loc, Area, Normal, Waldis, Rough, Flux_loc, &
+                                  Sc, Sct, Prt, Prl, soot_enabled )
+    call Compute_Diffusive_Flux ( Prim, Gradient_ghost, Area, Normal, Waldis, Rough, Flux_ghost, &
+                                  Sc, Sct, Prt, Prl, soot_enabled )
 
     ! Residual update
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) - 0.5d0 * modfm2 * (Flux_loc + Flux_ghost)
-    
+
     contains
 
       subroutine Visc_Variables ( Prim, Visc )

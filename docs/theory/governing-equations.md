@@ -169,15 +169,14 @@ $$
 Each species has a diffusive mass flux
 
 $$
-\mathbf{j}_s = -\rho\,D_{m,s}\,\nabla Y_s
+\mathbf{j}_s = -\rho\,D_{s}\,\nabla Y_s
 $$
 
-where the mixture-averaged diffusion coefficient is
-
-$$
-D_{m,s} = \frac{\mu_\ell}{\rho\,\text{Sc}}
-         + \frac{\mu_t}{\rho\,\text{Sc}_t}
-$$
+where the species diffusion coefficient $D_{s} = D_s^{\ell} + \mu_t/(\rho\,\text{Sc}_t)$
+combines a turbulent part with a laminar part $D_s^{\ell}$ from one of two closures —
+a single constant-Schmidt diffusivity $\mu_\ell/(\rho\,\text{Sc})$, or per-species
+mixture-averaged (Curtiss–Hirschfelder) coefficients — selected by the sign of $\text{Sc}$
+(see [Transport Properties](thermo.md#species-diffusion)).
 
 A mass-flux correction enforces $\sum_s \mathbf{j}_s = 0$.
 
@@ -199,7 +198,7 @@ $$
   \ldots,
   -\mathbf{j}_{N_s} \cdot \hat{\mathbf{n}},
   \boldsymbol{\tau}\!\cdot\!\hat{\mathbf{n}},
-  (\boldsymbol{\tau}\!\cdot\!\mathbf{v})\!\cdot\!\hat{\mathbf{n}} + \kappa\,\nabla T\!\cdot\!\hat{\mathbf{n}} + \rho\!\sum_s D_{m,s}\,(\nabla Y_s\!\cdot\!\hat{\mathbf{n}})\,h_s
+  (\boldsymbol{\tau}\!\cdot\!\mathbf{v})\!\cdot\!\hat{\mathbf{n}} + \kappa\,\nabla T\!\cdot\!\hat{\mathbf{n}} + \rho\!\sum_s D_{s}\,(\nabla Y_s\!\cdot\!\hat{\mathbf{n}})\,h_s
 ]
 $$
 

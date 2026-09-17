@@ -10,7 +10,7 @@ module MOSE_Lib_BC_Fluxes_Wall_Heat
 
 contains
 
-  subroutine BC_Wall_Heat ( Im, Jm, Km, Fm, Blk, Heat_Flux, Ovar, w_wall )
+  subroutine BC_Wall_Heat ( Im, Jm, Km, Fm, Blk, Heat_Flux, Ovar, w_wall, k_rough )
     use MOSE_Lib_Fluid
     use MOSE_Lib_RANS
     use FLINT_Lib_Thermodynamic
@@ -20,11 +20,18 @@ contains
     type(MOSE_block_type), intent(inout) :: Blk
     real(R8), optional, dimension(8), intent(inout) :: Ovar
     real(R8), optional, dimension(3), intent(in) :: w_wall
+    real(R8), optional, intent(in) :: k_rough   ! sand-grain roughness of the face (absent = smooth)
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, Ig, Jg, Kg
     real(R8) :: Normal(3), Area, Dist, M(3,3), Prim(nprim), rho, Rgas, temp, Gradient(nprim,3)
-    real(R8) :: mil, kl, Stress(3), Flux(nprim), Prim_Wall(nprim), rho_wall, Twall, dl
+    real(R8) :: mil, kl, Stress(3), Flux(nprim)
+    integer  :: vgrad_i
+    real(R8) :: gvec1, gvec2, gvec3, VelGrad(3,3), Prim_Wall(nprim), rho_wall, Twall, dl
+    real(R8) :: kr, mit
 
+
+    kr = 0d0
+    if ( present(k_rough) ) kr = k_rough
 
     call Compute_Modfm ( fm, modfm, modfm1, modfm2, modfm3 )
     call Face_Index ( Fm, dir, Im, Jm, Km, Face_i, Face_j, Face_k )
@@ -40,7 +47,9 @@ contains
     call co_rotot_Rtot ( Prim(1:nsc), rho, Rgas )
     temp = EOS( p=prim(np), rho=rho, R=Rgas )
 
-    ! Approximation: Twall==Tcell. Therefore, mil(wall) = mil(cell) and mit = 0
+    ! Approximation: Twall==Tcell. Therefore, mil(wall) = mil(cell). The wall
+    ! temperature below is estimated with the laminar conductivity alone, also
+    ! on a rough wall: exact when adiabatic, and the energy flux is Heat_Flux regardless.
     call co_k_mi_lam_Wilke ( Prim(1:nsc), rho, temp, mil, kl )
 
     ! Initialization
@@ -62,14 +71,35 @@ contains
 
     if (model==2)  then
       dl = blk % yn(im,jm,km)
-      call RANS_Set_Wall_Values( mil, Prim_Wall(nt:nprim), dl )
+      call RANS_Set_Wall_Values( mil, Prim(nt:nprim) * rho_wall / rho, Prim_Wall(nt:nprim), dl, kr )
       Gradient(nt:nprim,Dir) = ( Prim(nt:nprim)/rho - Prim_Wall(nt:nprim)/rho_wall ) * modfm3 
     end if
     
-    Gradient = matmul ( Gradient, M )
+
+    !> Computational -> physical transform.  Explicit loop, not
+    !> `Gradient = matmul(Gradient,M)`: Gradient aliases itself there, so the
+    !> compiler would build the result in a temporary on every face.
+    do vgrad_i = 1, nprim
+      gvec1 = Gradient(vgrad_i,1) ; gvec2 = Gradient(vgrad_i,2) ; gvec3 = Gradient(vgrad_i,3)
+      Gradient(vgrad_i,1) = gvec1*M(1,1) + gvec2*M(2,1) + gvec3*M(3,1)
+      Gradient(vgrad_i,2) = gvec1*M(1,2) + gvec2*M(2,2) + gvec3*M(3,2)
+      Gradient(vgrad_i,3) = gvec1*M(1,3) + gvec2*M(2,3) + gvec3*M(3,3)
+    end do
+    !> Contiguous copy of the velocity-gradient rows: passing the strided
+    !> section directly makes each consumer build its own temporary.
+    VelGrad(1,1)=Gradient(nu,1); VelGrad(1,2)=Gradient(nu,2); VelGrad(1,3)=Gradient(nu,3)
+    VelGrad(2,1)=Gradient(nv,1); VelGrad(2,2)=Gradient(nv,2); VelGrad(2,3)=Gradient(nv,3)
+    VelGrad(3,1)=Gradient(nw,1); VelGrad(3,2)=Gradient(nw,2); VelGrad(3,3)=Gradient(nw,3)
+
+    ! Eddy viscosity at the wall. A smooth wall zeroes the turbulence variables
+    ! there, so it is zero; a rough wall leaves nit_wall > 0 (SA-rough).
+    mit = 0d0
+    if ( model==2 .and. kr > 0d0 ) &
+      call Eddy_Viscosity ( mut=mit, rans_variables=Prim_Wall(nt:nprim), mul=mil, rho=rho_wall, &
+                            vel_gradient=VelGrad, walldist=0d0, k_rough=kr )
 
     ! Stress vector
-    Stress = Stress_Vector ( Gradient(nu:nw,:), Normal, mil, 0d0, Prim(nt:) )
+    Stress = Stress_Vector ( VelGrad, Normal, mil, mit, Prim(nt:) )
 
     ! Fluxes
     Flux = 0.0d0
@@ -79,7 +109,7 @@ contains
     if (model==2) then
       call RANS_Diffusive_Flux ( flux=Flux(nt:nprim), &
                                  rans_variables=Prim_Wall(nt:nprim), &
-                                 vel_gradient=Gradient(nu:nw,:), &
+                                 vel_gradient=VelGrad, &
                                  rans_gradient=Gradient(nt:nprim,:), &
                                  mul=mil, rho=rho_wall, &
                                  area=area, normal=normal, dist=dist )

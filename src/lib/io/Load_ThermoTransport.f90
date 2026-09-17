@@ -11,7 +11,8 @@ contains
   subroutine Load_ThermoTransport()
     use MOSE_Config_Types_m,        only: obj_thermo, obj_transport
     use MOSE_Global_m,              only: nsc, MOSE_phase_prefix
-    use FLINT_Load_ThermoTransport, only: read_idealgas_thermo, read_idealgas_transport
+    use FLINT_Load_ThermoTransport, only: read_idealgas_thermo, read_idealgas_transport, &
+                                          read_idealgas_diffusion
     use FLINT_Lib_Thermodynamic,    only: FLINT_phase_prefix, ns
     use MOSE_Parameters_m
     implicit none
@@ -63,6 +64,22 @@ contains
         obj_transport%error_message = '[ERROR] Transport data temperature range does not match thermo data range'
       case default
         obj_transport%error_message = '[ERROR] Unknown error loading transport data'
+    end select
+
+    ! Binary diffusion table (optional): only required when diffusion=multicomponent.
+    ! Absence is non-fatal here; Setup_Diffusion validates it when the model is selected.
+    error = read_idealgas_diffusion( 'INPUT' )
+    select case (error)
+      case (0, 1)
+        ! 0 = loaded, 1 = file not found / single species: both non-fatal
+      case (2)
+        obj_transport%error_message = '[ERROR] Binary diffusion table (diffusion.dat) found but could not be read'
+      case (3)
+        obj_transport%error_message = '[ERROR] Binary diffusion table temperature range does not match thermo data range'
+      case (4)
+        obj_transport%error_message = '[ERROR] Binary diffusion table zone count does not match ns*(ns-1)/2 species pairs'
+      case default
+        obj_transport%error_message = '[ERROR] Unknown error loading binary diffusion data'
     end select
 
     nsc = ns ! Set the number of species from FLINT

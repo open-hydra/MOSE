@@ -39,6 +39,9 @@ contains
     case ('cons')
       RK_Newstate => Newstate_Conservative
       obj_time_scheme%integration_variables = 'Conservative'
+    case ('prec')
+      RK_Newstate => Newstate_Primitive
+      obj_time_scheme%integration_variables = 'Preconditioned'
     end select
 
   end subroutine Assign_Integration_Variables

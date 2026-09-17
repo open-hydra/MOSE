@@ -1,0 +1,56 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      k;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// NASA Turbulence Modeling Resource freestream for SST:
+//   k_inf = 9e-9 * a_inf^2 = 9e-9 * 27442.9 = 2.47e-4 m2/s2
+// (a_inf = 165.66 m/s). Gives nut_inf/nu_inf = 0.009.
+// See README: the MOSE input (kappa = 1e-7) is a near-zero level that would
+// leave the OpenFOAM SST boundary layer laminar.
+
+dimensions      [0 2 -2 0 0 0 0];
+
+internalField   uniform 2.4699e-04;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 2.4699e-04;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bottomWall
+    {
+        // wall-resolved mesh (y+ ~ 0.3): low-Re form, k -> 0 at the wall
+        type            kLowReWallFunction;
+        value           uniform 1e-12;
+    }
+    topWall
+    {
+        type            kLowReWallFunction;
+        value           uniform 1e-12;
+    }
+    symTop
+    {
+        type            symmetry;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

@@ -7,22 +7,25 @@ module MOSE_Lib_Diffusive
 
 contains
 
-  subroutine Diffusive_Flux ( normal, area, waldis1, waldis2, Prim1, Prim2, Prim3, Prim4, Prim5, &
+  subroutine Diffusive_Flux ( normal, area, waldis1, waldis2, kr1, kr2, Prim1, Prim2, Prim3, Prim4, Prim5, &
                               Prim6, Prim7, Prim8, Prim9, Prim10, M1, M2, Res1, Res2, a, b, c, &
-                              Sc, Sct, Prt, soot_enabled )
+                              Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in)  :: a, b, c
     logical, intent(in)  :: soot_enabled
-    real(R8), intent(in) :: Sc, Sct, Prt
+    real(R8), intent(in) :: Sc, Sct, Prt, Prl
     real(R8), intent(in) :: normal(3), area, waldis1, waldis2
+    real(R8), intent(in) :: kr1, kr2      ! nearest-wall roughness of the two cells
     real(R8), intent(in), dimension(nprim) :: Prim1, Prim2, Prim3, Prim4, Prim5, Prim6
     real(R8), intent(in), dimension(nprim) :: Prim7, Prim8, Prim9, Prim10
     real(R8), intent(in), dimension(3,3) :: M1, M2
     real(R8), intent(inout), dimension(nprim) :: Res1, Res2
     ! Local
-    real(R8) :: rho1, Rgas, T1, rho2, T2, Gradient(nprim,3), Prim(nprim), M(3,3), waldis, Flux(nprim)
+    real(R8) :: rho1, Rgas, T1, rho2, T2, Gradient(nprim,3), Prim(nprim), M(3,3), waldis, k_rough, Flux(nprim)
+    integer  :: v
+    real(R8) :: g1, g2, g3
 
     ! Gradient in the same direction of the face: 1 and 2
     call co_rotot_Rtot ( Prim1(1:nsc), rho1, Rgas )
@@ -36,6 +39,7 @@ contains
       if (nprim>np) then
       Gradient ( np+1:nprim, a ) = Prim2 ( np+1:nprim ) / rho2 - Prim1 ( np+1:nprim ) / rho1 ! RANS variable gradient
       waldis = 0.5d0 * ( waldis1 + waldis2 ) ! distance to nearest wall
+      k_rough = 0.5d0 * ( kr1 + kr2 )        ! roughness of nearest wall
     end if
 
     ! Gradient in tangential directions: 3-10
@@ -43,10 +47,20 @@ contains
     call Tangential_Gradient ( Prim7, Prim8, Prim9, Prim10, Gradient(:,c) )
     
     M = 0.5d0 * ( M1 + M2 )
-    Gradient = matmul ( Gradient, M )
+
+    !> Transform the gradients from computational to physical space.
+    !> Explicit loop, not `Gradient = matmul(Gradient,M)`: Gradient aliases
+    !> itself there, so the compiler must build the whole (nprim,3) result in a
+    !> temporary on every face.
+    do v = 1, nprim
+      g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
+      Gradient(v,1) = g1*M(1,1) + g2*M(2,1) + g3*M(3,1)
+      Gradient(v,2) = g1*M(1,2) + g2*M(2,2) + g3*M(3,2)
+      Gradient(v,3) = g1*M(1,3) + g2*M(2,3) + g3*M(3,3)
+    end do
 
     Prim = 0.5d0 * ( Prim1 + Prim2 )
-    call Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, Flux, Sc, Sct, Prt, soot_enabled )
+    call Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, k_rough, Flux, Sc, Sct, Prt, Prl, soot_enabled )
 
     Res1 = Res1 - Flux
     Res2 = Res2 + Flux
@@ -87,21 +101,29 @@ contains
   end subroutine Tangential_Gradient
 
 
-  subroutine Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, Flux, Sc, Sct, Prt, soot_enabled )
+  subroutine Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, k_rough, Flux, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Global_m
     use MOSE_Lib_Fluid
     use MOSE_Lib_RANS
     use MOSE_Mod_Soot, only: Soot_Diffusive_Flux
     use FLINT_Lib_Thermodynamic
     implicit none
-    real(R8), intent(in)  :: Prim(nprim), Gradient(nprim,3), area, normal(3), waldis
-    real(R8), intent(in)  :: Sc, Sct, Prt
+    real(R8), intent(in)  :: Prim(nprim), Gradient(nprim,3), area, normal(3), waldis, k_rough
+    real(R8), intent(in)  :: Sc, Sct, Prt, Prl
     logical, intent(in)   :: soot_enabled
     real(R8), intent(out) :: Flux(nprim)
     ! Local
     integer :: s, T_i, Tint(2)
     real(R8) :: rho, Rgas, T, Tdiff, cp, mil, kl, mie, kappa
     real(R8) :: Dm(nsc), stress(3), DiffHFlux, DmGradYi
+    !> Contiguous copy of the velocity-gradient rows, shared by the three
+    !> consumers below.  Passing `Gradient(nu:nw,:)` directly is a strided
+    !> section, so each consumer would build its own temporary instead.
+    real(R8) :: VelGrad(3,3)
+
+    VelGrad(1,1) = Gradient(nu,1) ; VelGrad(1,2) = Gradient(nu,2) ; VelGrad(1,3) = Gradient(nu,3)
+    VelGrad(2,1) = Gradient(nv,1) ; VelGrad(2,2) = Gradient(nv,2) ; VelGrad(2,3) = Gradient(nv,3)
+    VelGrad(3,1) = Gradient(nw,1) ; VelGrad(3,2) = Gradient(nw,2) ; VelGrad(3,3) = Gradient(nw,3)
 
     ! Thermodynamic and transport properties at the interface
     call co_rotot_Rtot ( Prim(1:nsc), rho, Rgas )
@@ -113,20 +135,32 @@ contains
     Tint(2) = T_i + 1
     cp = f_cp_expr ( Prim(1:nsc), Tint, Tdiff, rho )
     call co_k_mi_lam_Wilke_expr ( Prim(1:nsc), rho, Tint, Tdiff, mil, kl )
-    
+    ! Optional unity/forced laminar Prandtl: override the mixture conductivity with k = mu*cp/Prl
+    if ( Prl > 0d0 ) kl = mil * cp / Prl
+
     ! Eddy viscosity
     mie = 0d0
     if (model==2) then
       call Eddy_Viscosity ( mut=mie, rans_variables=Prim(nt:nprim), &
-                            mul=mil, rho=rho, vel_gradient=Gradient(nu:nw,:), &
-                            walldist=waldis )
+                            mul=mil, rho=rho, vel_gradient=VelGrad, &
+                            walldist=waldis, k_rough=k_rough )
     end if
 
-    Dm (1:nsc) = ( mil/Sc + mie/Sct ) / rho ! binary coefficient computed from Schmidt = mi/rho*Dm
+    ! Species diffusion coefficients. Sc<=0 selects mixture-averaged multicomponent
+    ! diffusion (D_k from the binary-diffusion table), mirroring the Prl<=0 idiom above.
+    if (Sc <= 0d0) then
+      ! Mixture-averaged multicomponent: per-species laminar D_k from binary-diffusion table,
+      ! rescaled internally from the table reference pressure to the local pressure Prim(np).
+      call co_DS_expr ( Prim(1:nsc), rho, Tint, Tdiff, Prim(np), Dm )
+      if (mie > 0d0) Dm(1:nsc) = Dm(1:nsc) + mie/(rho*Sct) ! add turbulent (constant-Sct) part
+    else
+      ! Constant Schmidt: same coefficient for all species (Dm = mu/(rho*Sc))
+      Dm (1:nsc) = ( mil/Sc + mie/Sct ) / rho
+    end if
 
     kappa = kl + mie*cp/Prt ! Laminar + turbulent conductivity
 
-    Stress = stress_vector ( Gradient(nu:nw,:), normal, mil, mie, prim(nt:) ) ! Stress tensor in cartesian components
+    Stress = stress_vector ( VelGrad, normal, mil, mie, prim(nt:) ) ! Stress tensor in cartesian components
 
     ! Fluxes computation
     DiffHFlux = 0.0d0
@@ -153,7 +187,7 @@ contains
     if (model==2) then
       call RANS_Diffusive_Flux ( flux=Flux(nt:nprim), &
                                  rans_variables=Prim(nt:nprim), &
-                                 vel_gradient=Gradient(nu:nw,:), &
+                                 vel_gradient=VelGrad, &
                                  rans_gradient=Gradient(nt:nprim,:), &
                                  mul=mil, rho=rho, &
                                  area=area, normal=normal, dist=waldis )

@@ -21,25 +21,23 @@ contains
     real(R8), intent(inout) :: total(nres)
     ! Local
     integer :: i, j, k
-    real(R8) :: resn(nres), residuo(nres), reslocal ( nres, n(1), n(2), n(3) )
+    real(R8) :: resn(nres), residuo(nres)
 
     residuo = 0d0
-    
+
     !$omp parallel
     !$omp do private ( resn ) reduction ( + : residuo ) collapse (3)
     do k = 1, n(3)
     do j = 1, n(2)
     do i = 1, n(1)
-      
+
       resn(1) = abs ( sum(new(1:nsc,i,j,k) - old(1:nsc,i,j,k)) )  ! delta(rho)
       resn(2:nres) = abs ( new(nu:nprim,i,j,k) - old(nu:nprim,i,j,k) ) ! delta(...)
-      reslocal(:,i,j,k) = resn
       residuo = residuo + resn*resn  ! sum ( r(i)**2 )
 
     enddo; enddo; enddo
     !$omp end parallel
 
-    ! Local max residual (UNUSED)
     ! do i = 1, nres; resmax_(i) = maxval ( reslocal(i,:,:,:) ); enddo
 
     ! Average residual of this block

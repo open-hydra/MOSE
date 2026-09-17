@@ -26,6 +26,9 @@ contains
     call reg%add(section, 'chemistry', obj_chemistry%model, 'frozen', 'Chemistry model', 'frozen, finite-rate, equilibrium', .false.)
     call reg%add(section, 'soot-generation', obj_soot%model, 'none', 'Soot generation model', 'LL91, LIN, none', .false.)
     call reg%add(section, 'rotational-frame', obj_rot%model, 'none', 'Rotational frame model', 'rigid-body, none', .false.)
+    ! Laminar (molecular) transport closure
+    call reg%add(section, 'schmidt', obj_sim_param%Sc, '0.0', 'Laminar Schmidt number', '>= 0', .false.)
+    call reg%add(section, 'prandtl', obj_sim_param%Prl, '0.0', 'Laminar Prandtl number', '>= 0', .false.)
 
     !! ------------------------------------------------------
     !! Chemistry --------------------------------------------
@@ -37,6 +40,10 @@ contains
     call reg%add(section, 'ode-solver', obj_chemistry%ode_name, 'H-radau5', 'ODE solver for chemistry', 'H-radau5, sdirk4b, ros4', .false.)
     ! ODE solver parameters
     call reg%add(section, 'ode-max-steps', obj_chemistry%max_ode_steps, '100000', 'Maximum ODE integration steps', '> 0', .false.)
+    ! Only ONERA-7 and Frolov_nopressure ship an analytical Jacobian, and only
+    ! the Hairer solvers can use one; anything else falls back to finite
+    ! differences.
+    call reg%add(section, 'ode-analytical-jacobian', obj_chemistry%analytical_jacobian, '.false.', 'Use the mechanism analytical Jacobian instead of finite differences', 'logical', .false.)
     call reg%add(section, 'ode-relative-tol-species', obj_chemistry%RT(1:nsc), '1e-5', 'ODE relative tolerance for species', '> 0', .false.)
     call reg%add(section, 'ode-relative-tol-temperature', obj_chemistry%RT(nsc+1), '1e-5', 'ODE relative tolerance for temperature', '> 0', .false.)
     call reg%add(section, 'ode-absolute-tol-species', obj_chemistry%AT(1:nsc), '1e-5', 'ODE absolute tolerance for species', '> 0', .false.)
@@ -49,7 +56,8 @@ contains
     section = trim(codename)//'-Turbulence'
     call reg%add(section, 'Prt', obj_rans%Prt, '0.85', 'Turbulent Prandtl number', '> 0', .false.)
     call reg%add(section, 'Sct', obj_rans%Sct, '0.90', 'Turbulent Schmidt number', '> 0', .false.)
-    call reg%add(section, 'Sc', obj_rans%Sc, '0.7', 'Schmidt number', '> 0', .false.)
+    call reg%add(section, 'point-implicit', obj_rans%point_implicit, '.true.', 'Point-implicit (Patankar) treatment of turbulence destruction source terms', 'logical', .false.)
+    call reg%add(section, 'omega-wall-bc', obj_rans%omega_wall_bc, 'practical', 'Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2)) or asymptotic (6*nu/(beta1*y^2), exact y->0 limit, for wall-resolved meshes)', 'practical, asymptotic', .false.)
     !call reg%add(section, 'k-coupling', obj_rans%k_energy_coupling, '.false.', 'Turbulent kinetic energy coupling', 'logical', .false.)
 
     

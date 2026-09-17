@@ -121,7 +121,7 @@ $$
 
 Smooth, less dissipative than van Leer near local extrema.
 
-**MC (Monotonicity-Centred)**
+**MC (Monotonized Central)**
 
 $$
 \phi(a,b) =
@@ -190,7 +190,7 @@ A smooth blending is applied using a tuneable threshold $\Delta = 20$:
 $$
 \beta =
 \begin{cases}
-1 - \tanh\!\bigl(10\,(\sigma\,\Delta)^3\bigr)
+1 - \tanh\!\bigl(10\,(\sigma/\Delta)^3\bigr)
   & \text{if } \sigma < 1/\Delta \\[4pt]
 0 & \text{otherwise}
 \end{cases}

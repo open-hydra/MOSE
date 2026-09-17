@@ -1,0 +1,29 @@
+#!/bin/sh
+# Mesh generation + case preparation (run before submitting the job).
+# Requires: gmsh, OpenFOAM environment (gmshToFoam, foamDictionary, ...)
+cd "${0%/*}" || exit 1
+
+set -e
+
+GMSH=${GMSH:-gmsh}
+
+# 1. Build the 3D (1-layer extruded) mesh
+if [ ! -f mesh.msh ]; then
+    "$GMSH" -3 mesh.geo -o mesh.msh
+fi
+
+# 2. Convert to OpenFOAM
+gmshToFoam mesh.msh
+
+# 3. gmshToFoam writes every physical surface as a generic patch:
+#    fix the constraint/wall types
+foamDictionary constant/polyMesh/boundary -entry entry0/bottomWall/type   -set wall
+foamDictionary constant/polyMesh/boundary -entry entry0/topWall/type      -set wall
+foamDictionary constant/polyMesh/boundary -entry entry0/symTop/type       -set symmetry
+foamDictionary constant/polyMesh/boundary -entry entry0/frontAndBack/type -set empty
+
+# 4. Sanity check. Expect "Failed 1 mesh checks": the wall-resolved BL gives
+#    a max aspect ratio ~1282, which checkMesh flags but the solver handles.
+checkMesh -constant || true
+
+echo "Mesh ready: submit with 'sbatch run.slurm' (it decomposes on the node)."

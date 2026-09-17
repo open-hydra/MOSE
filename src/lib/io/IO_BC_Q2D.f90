@@ -9,10 +9,10 @@ module MOSE_IO_BC_Q2D
 contains
 
   ! ---------------------------------------------------------------------------
-  ! Setup Q2D mapped boundary condition data (BC type 667).
+  ! Setup Q2D mapped boundary condition data (BC type 410).
   ! Reads the ATLAS Tecplot file(s) specified in bc.txt (one per face),
   ! parses all solution times, maps variables by name to MOSE primitives,
-  ! and populates bc(i)%q2d_map for each type 667 boundary cell.
+  ! and populates bc(i)%q2d_map for each type 410 boundary cell.
   ! ---------------------------------------------------------------------------
   subroutine Setup_Q2D_BC_Data ( domain )
     use MOSE_Advanced_Types_m
@@ -24,10 +24,10 @@ contains
     character(len=256), allocatable :: file_list(:)
     logical :: found
 
-    ! Count type 667 BCs
+    ! Count type 410 BCs
     nq2d_count = 0
     do i = 1, domain%nbound
-      if (domain%bc(i)%type == 667) nq2d_count = nq2d_count + 1
+      if (domain%bc(i)%type == 410) nq2d_count = nq2d_count + 1
     enddo
     if (nq2d_count == 0) return
 
@@ -35,9 +35,9 @@ contains
     allocate(file_list(nq2d_count))
     nfiles = 0
     do i = 1, domain%nbound
-      if (domain%bc(i)%type /= 667) cycle
+      if (domain%bc(i)%type /= 410) cycle
       if (len_trim(domain%bc(i)%q2d_file) == 0) then
-        write(*,*) '[ERROR] BC type 667 entry', i, 'has no Q2D file specified in bc.txt'
+        write(*,*) '[ERROR] BC type 410 entry', i, 'has no Q2D file specified in bc.txt'
         error stop
       endif
       found = .false.
@@ -64,7 +64,7 @@ contains
 
 
   ! ---------------------------------------------------------------------------
-  ! Parse the ATLAS Tecplot ASCII file and distribute data to type 667 BCs.
+  ! Parse the ATLAS Tecplot ASCII file and distribute data to type 410 BCs.
   !
   ! Two-pass reading:
   !   Pass 1 — scan VARIABLES line + all ZONE headers (no data read)
@@ -193,9 +193,9 @@ contains
 
     write(*,'(A,I0,A,I0,A)') '  Q2D data: ', ntimes, ' time steps, ', nvar_file, ' variables'
 
-    ! --- Allocate q2d_map for each type 667 BC ---
+    ! --- Allocate q2d_map for each type 410 BC ---
     do ibc = 1, domain%nbound
-      if (domain%bc(ibc)%type == 667 .and. trim(domain%bc(ibc)%q2d_file) == trim(filename)) then
+      if (domain%bc(ibc)%type == 410 .and. trim(domain%bc(ibc)%q2d_file) == trim(filename)) then
         allocate(domain%bc(ibc)%q2d_map(nprim))
         do iv = 1, nvar_file
           if (varmap(iv) > 0) then
@@ -264,9 +264,9 @@ contains
         read(u, *, iostat=ios) ((cell_buf(iv, i1, i2), i1=1,n1), i2=1,n2)
       enddo
 
-      ! Distribute to matching type 667 BCs
+      ! Distribute to matching type 410 BCs
       do ibc = 1, domain%nbound
-        if (domain%bc(ibc)%type /= 667) cycle
+        if (domain%bc(ibc)%type /= 410) cycle
         if (domain%bc(ibc)%b /= b_zone) cycle
         if (trim(domain%bc(ibc)%q2d_file) /= trim(filename)) cycle
 

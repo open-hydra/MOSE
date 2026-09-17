@@ -1,0 +1,6 @@
+bin/
+OUTPUT/
+INPUT/phase.txt
+INPUT/thermo.dat
+INPUT/ic.tec
+INPUT/bc.txt

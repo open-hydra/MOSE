@@ -6,7 +6,7 @@ module MOSE_Lib_Metrics
   use MOSE_Parameters_m
 
   implicit none
-  real(R8), public :: delthe   ! grid axisymmetric angle
+  real(R8), public :: delthe = 0d0  ! grid axisymmetric angle
 
 contains
 
@@ -37,6 +37,7 @@ contains
     elseif (domain%Blk(1)%dim(3)==1 .and. domain%Blk(1)%dim(2)==1) then
       ! 1D
       ndir = 1
+      delthe = 0d0
     else
       ! 2D
       ndir = 2
@@ -377,15 +378,24 @@ contains
 
   
   subroutine Compute_Yn ( blk, bc, nb, nbound )
+    use MOSE_Lib_KDTree, only: kdtree_t, kdtree_build, kdtree_free
+    use MOSE_Mod_MPI,    only: is_local_block, mpi_is_root
     implicit none
     integer, intent(in)                                  :: nb, nbound
     type(MOSE_block_type), dimension(nb), intent(inout)  :: blk
     type(MOSE_bc_type), dimension(nbound), intent(in)    :: bc
     ! Local
-    real(R8), dimension(nbound) :: facex, facey, facez
+    real(R8), dimension(nbound) :: facex, facey, facez, facekr
     real(R8) :: x1, x2, x3, x4, y1, y2, y3, y4, z1, z2, z3, z4
     integer :: Fm, Bm, Im, Jm, Km, l, b, nwall
     integer :: i1, j1, k1, i2, j2, k2, i3, j3, k3, i4, j4, k4
+    logical, dimension(nb) :: needs_yn
+    type(kdtree_t) :: wall_tree
+
+    ! Validation switch: checks every yn against a brute-force scan, roughly
+    ! doubling setup cost.  Keep .false. in production.
+    logical, parameter  :: DEBUG_KDTREE = .false.
+    real(R8), parameter :: KDTREE_TOL   = 1.0e-10_R8
 
     nwall=0
     
@@ -463,30 +473,76 @@ contains
         facex(nwall) = 0.25d0*( x1 + x2 + x3 + x4 )
         facey(nwall) = 0.25d0*( y1 + y2 + y3 + y4 )
         facez(nwall) = 0.25d0*( z1 + z2 + z3 + z4 )
+
+        ! Face sand-grain roughness, inherited by the cells it is nearest to.
+        facekr(nwall) = bc(l) % k_rough
       
       endif
     
     enddo
 
     ! After bc processing nwall is the viscous face counter.
-    ! Compute distance in block b using viscous face coordinates facex, facey, facez.
+    !
+    ! Blocks needing yn here: the locally-owned ones, the remote sources of a
+    ! local block-connection BC (Yn_Connection reads blk(Bs)%yn), and on root
+    ! all of them, for the eddy viscosity it assembles for the solution file.
+    ! The rest keep the zero First_Touch_Block wrote and are read by no one.
+    needs_yn = .false.
     do b = 1, nb
-      call Wall_Distance_Blk ( blk(b), facex, facey, facez, nwall )
+      if ( is_local_block(b) ) needs_yn(b) = .true.
+    enddo
+    do l = 1, nbound
+      if ( (bc(l)%type == 101 .or. bc(l)%type == 201) .and. is_local_block(bc(l)%b) ) &
+        needs_yn(bc(l)%bs) = .true.
+    enddo
+    if ( mpi_is_root ) needs_yn = .true.
+
+    ! No wall anywhere in the domain: leave behind the same sentinel the
+    ! brute-force scan did, rather than the k-d tree's huge().
+    if ( nwall == 0 ) then
+      do b = 1, nb
+        if (.not. needs_yn(b)) cycle
+        blk(b) % yn ( 1:blk(b)%dim(1), 1:blk(b)%dim(2), 1:blk(b)%dim(3) ) = 1d8
+      enddo
+      return
+    end if
+
+    ! One k-d tree over the wall-face centroids, shared by every block and
+    ! thread: O(log nwall) per cell instead of a full scan, same distance to
+    ! the last bit.
+    call kdtree_build ( wall_tree, facex, facey, facez, nwall )
+
+    ! Compute distance in block b by querying the shared k-d tree.
+    do b = 1, nb
+      if (.not. needs_yn(b)) cycle
+      call Wall_Distance_Blk ( blk(b), wall_tree, facekr(1:nwall) )
     enddo
 
+    ! Validation, off unless DEBUG_KDTREE: prints max |tree - brute| per block
+    ! and aborts past KDTREE_TOL.
+    if ( DEBUG_KDTREE ) then
+      do b = 1, nb
+        if (.not. needs_yn(b)) cycle
+        call Validate_Tree_Yn ( blk(b), facex, facey, facez, nwall, b )
+      enddo
+    end if
+
+    call kdtree_free ( wall_tree )
+
     contains
-      
-      subroutine Wall_Distance_Blk ( blk, fx, fy, fz, nwall )
+
+      subroutine Wall_Distance_Blk ( blk, tree, face_kr )
+        use MOSE_Lib_KDTree, only: kdtree_t, kdtree_nearest
         implicit none
-        type(MOSE_block_type), intent(inout)       :: blk
-        integer, intent(in)                        :: nwall
-        real(R8), intent(in), dimension(nwall) :: fx, fy, fz
+        type(MOSE_block_type), intent(inout) :: blk
+        type(kdtree_t), intent(in)           :: tree
+        real(R8), intent(in)                 :: face_kr(:)   ! Roughness of each wall face, by original face index
         ! Local
-        integer :: l, i, j, k
-        real(R8) :: center(3), dummy
+        integer :: i, j, k, iface
+        real(R8) :: center(3), dist
 
         !$omp parallel
-        !$omp do collapse(3) private(i, j, k, l, center, dummy)
+        !$omp do collapse(3) private(i, j, k, center, dist, iface)
         do k = 1, blk % dim(3)
         do j = 1, blk % dim(2)
         do i = 1, blk % dim(1)
@@ -497,19 +553,65 @@ contains
                               blk % node(i-1,j  ,k  ) % c + blk % node(i-1,j-1,k  ) % c + &
                               blk % node(i-1,j-1,k-1) % c + blk % node(i-1,j  ,k-1) % c )
 
-          ! Minimum distance initialization.
-          blk % yn (i,j,k) = 1d8
-
-          ! Wall face vector processing.
-          do l = 1, nwall
-            dummy = sqrt( (center(1) - fx(l))**2 + (center(2) - fy(l))**2 + (center(3) - fz(l))**2 )
-            blk % yn(i,j,k) = min ( dummy, blk % yn(i,j,k) )
-          enddo
+          ! Nearest wall-face centroid via the k-d tree.
+          call kdtree_nearest ( tree, center(1), center(2), center(3), dist, iface )
+          blk % yn (i,j,k) = dist
+          blk % k_rough (i,j,k) = face_kr(iface)
 
         enddo; enddo; enddo
         !$omp end parallel
 
       end subroutine Wall_Distance_Blk
+
+
+      !> Brute-force check of the k-d tree result: recompute each cell's
+      !> nearest-wall distance against the full face list, compare with
+      !> `blk%yn`, and abort past KDTREE_TOL.
+      subroutine Validate_Tree_Yn ( blk, fx, fy, fz, nwall_, b_id )
+        use MOSE_Mod_MPI, only: mpi_rank_
+        implicit none
+        type(MOSE_block_type), intent(in)           :: blk
+        integer, intent(in)                         :: nwall_
+        real(R8), intent(in), dimension(nwall_)     :: fx, fy, fz
+        integer, intent(in)                         :: b_id
+        ! Local
+        integer :: i, j, k, ll
+        real(R8) :: center(3), dbrute, dummy, err, max_err
+
+        max_err = 0d0
+
+        !$omp parallel
+        !$omp do collapse(3) private(i, j, k, ll, center, dbrute, dummy, err) &
+        !$omp             reduction(max:max_err)
+        do k = 1, blk % dim(3)
+        do j = 1, blk % dim(2)
+        do i = 1, blk % dim(1)
+
+          center = 1d0/8d0 * ( blk % node(i  ,j  ,k  ) % c + blk % node(i  ,j-1,k  ) % c + &
+                              blk % node(i  ,j-1,k-1) % c + blk % node(i  ,j  ,k-1) % c + &
+                              blk % node(i-1,j  ,k  ) % c + blk % node(i-1,j-1,k  ) % c + &
+                              blk % node(i-1,j-1,k-1) % c + blk % node(i-1,j  ,k-1) % c )
+
+          dbrute = 1d8
+          do ll = 1, nwall_
+            dummy = sqrt( (center(1) - fx(ll))**2 + (center(2) - fy(ll))**2 + (center(3) - fz(ll))**2 )
+            if (dummy < dbrute) dbrute = dummy
+          enddo
+
+          err = abs( blk % yn(i,j,k) - dbrute )
+          if (err > max_err) max_err = err
+
+        enddo; enddo; enddo
+        !$omp end parallel
+
+        write(*,'(A,I0,A,I0,A,ES12.5)') &
+          ' [KDTREE] rank ', mpi_rank_, '  block ', b_id, '  max |tree - brute| = ', max_err
+        if (max_err > KDTREE_TOL) then
+          write(*,'(A,ES12.5,A)') ' [KDTREE] ERROR: exceeds tolerance ', KDTREE_TOL, '. Aborting.'
+          stop
+        end if
+
+      end subroutine Validate_Tree_Yn
 
   end subroutine Compute_Yn
   
@@ -528,6 +630,7 @@ contains
     Kg = Km - guide(Fm,3)
 
     blkm % yn(Ig,Jg,Kg) = blks % yn(Is,Js,Ks)
+    blkm % k_rough(Ig,Jg,Kg) = blks % k_rough(Is,Js,Ks)
 
   end subroutine Yn_Connection
 
@@ -661,7 +764,13 @@ contains
         endif
 
       case(5)
-        if ( ndir==2 .and. delthe==0d0 .or. ndir==1 ) then
+        if ( ndir==1 ) then
+          do g = 1, gc
+            Mg(g)   = blk % M(Im, Jm, Km)
+            dlg(g)  = blk % dl(Im, Jm, Km)
+            volg(g) = blk % vol(Im, Jm, Km)
+          enddo
+        elseif ( ndir==2 .and. delthe==0d0 ) then
           do g = 0, 1
             N1(g)%c = blk % node (Im-1,Jm-1,Km+g-1) % c
             N3(g)%c = blk % node (Im-1,Jm  ,Km+g-1) % c
@@ -727,7 +836,13 @@ contains
         endif
 
       case(6)
-        if ( ndir==2 .and. delthe==0d0 .or. ndir==1 ) then
+        if ( ndir==1 ) then
+          do g = 1, gc
+            Mg(g)   = blk % M(Im, Jm, Km)
+            dlg(g)  = blk % dl(Im, Jm, Km)
+            volg(g) = blk % vol(Im, Jm, Km)
+          enddo
+        elseif ( ndir==2 .and. delthe==0d0 ) then
           do g = 0, -1, -1
             N2(g)%c = blk % node (Im-1,Jm-1,Km+g) % c
             N4(g)%c = blk % node (Im-1,Jm  ,Km+g) % c
@@ -857,7 +972,7 @@ contains
   end subroutine BC_Symmetry_Metrics
 
 
-  subroutine BC_Connect_Metrics ( Im, Jm, Km, Fm, blkm, Is, Js, Ks, Fs, blks, d11s, d12s, d21s, d22s, Mg, dlg, volg )
+  subroutine BC_Connect_Metrics ( Im, Jm, Km, Fm, blkm, Is, Js, Ks, Fs, blks, d11s, d12s, d21s, d22s, Mg, dlg, volg, periodic )
     implicit none
     integer, intent(in)                  :: Im, Jm, Km, Fm, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s
     type(MOSE_block_type), intent(in)    :: blks
@@ -865,11 +980,13 @@ contains
     type(MOSE_tensor_3D_type), intent(out) :: Mg(2)
     type(MOSE_vector_3D_type), intent(out) :: dlg(2)
     real(R8), intent(out)                  :: volg(2)
+    logical, intent(in)                    :: periodic
     ! Local
     integer      :: g, Is1, Js1, Ks1
-    integer      :: II, JJ, KK, III, JJJ, KKK      
+    integer      :: II, JJ, KK, III, JJJ, KKK
     integer      :: guidem(6,3), guides(6,3), guidem2(6,3), guides2(6,3)
     type(MOSE_vector_3D_type), dimension(0:gc) :: N1, N2, N3, N4, N5, N6, N7, N8
+    type(MOSE_vector_3D_type) :: T
     
     ! ---------------------------------------------------------------------------------------------
     ! Preliminary definitions
@@ -923,6 +1040,35 @@ contains
         N8(0)%c = blkm%node(Im  ,Jm  ,Km  ) % c
     end select
 
+    T%c = 0._R8
+    if (periodic) then
+      Is1 = Is + gc*guides(Fs,1) - guides2(Fs,1)
+      Js1 = Js + gc*guides(Fs,2) - guides2(Fs,2)
+      Ks1 = Ks + gc*guides(Fs,3) - guides2(Fs,3)
+      select case(Fs)
+        case(1:2)
+          II=Is1
+          JJ=(2*Js1+d11s+d21s)/2
+          KK=(2*Ks1+d12s+d22s)/2
+        case(3:4)
+          II=(2*Is1+d11s+d21s)/2
+          JJ=Js1
+          KK=(2*Ks1+d12s+d22s)/2
+        case(5:6)
+          II=(2*Is1+d11s+d21s)/2
+          JJ=(2*Js1+d12s+d22s)/2
+          KK=Ks1
+      end select
+      select case(Fm)
+        case(1) ; T%c = N4(0)%c - blks%node(II,JJ,KK)%c
+        case(2) ; T%c = N8(0)%c - blks%node(II,JJ,KK)%c
+        case(3) ; T%c = N6(0)%c - blks%node(II,JJ,KK)%c
+        case(4) ; T%c = N8(0)%c - blks%node(II,JJ,KK)%c
+        case(5) ; T%c = N7(0)%c - blks%node(II,JJ,KK)%c
+        case(6) ; T%c = N8(0)%c - blks%node(II,JJ,KK)%c
+      end select
+    end if
+
     do g = 1, gc
 
       ! connected cell node index
@@ -946,17 +1092,17 @@ contains
           KK=Ks1
       end select
       if (Fm == 1) then
-          N4(g)%c = blks%node(ii,jj,kk)%c
+          N4(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 2) then
-          N8(g)%c = blks%node(ii,jj,kk)%c
+          N8(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 3) then
-          N6(g)%c = blks%node(ii,jj,kk)%c
+          N6(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 4) then
-          N8(g)%c = blks%node(ii,jj,kk)%c
+          N8(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 5) then
-          N7(g)%c = blks%node(ii,jj,kk)%c
+          N7(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 6) then
-          N8(g)%c = blks%node(ii,jj,kk)%c
+          N8(g)%c = blks%node(ii,jj,kk)%c + T%c
       endif
 
       ! update the remaining 3 indexes (only necessary in the corners, but for good measure)
@@ -976,17 +1122,17 @@ contains
           KKK=KK
       end select
       if (Fm == 1) then
-        N2(g)%c = blks%node(iii,jjj,kkk)%c
+        N2(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 2) then
-        N6(g)%c = blks%node(iii,jjj,kkk)%c
+        N6(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 3) then
-        N2(g)%c = blks%node(iii,jjj,kkk)%c
+        N2(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 4) then
-        N4(g)%c = blks%node(iii,jjj,kkk)%c
+        N4(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 5) then
-        N3(g)%c = blks%node(iii,jjj,kkk)%c
+        N3(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 6) then
-        N4(g)%c = blks%node(iii,jjj,kkk)%c
+        N4(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       endif
 
       ! node i1,i2-1 update
@@ -1005,17 +1151,17 @@ contains
           KKK=KK
       end select
       if (Fm == 1) then
-        N3(g)%c = blks%node(iii,jjj,kkk)%c
+        N3(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 2) then
-        N7(g)%c = blks%node(iii,jjj,kkk)%c
+        N7(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 3) then
-        N5(g)%c = blks%node(iii,jjj,kkk)%c
+        N5(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 4) then
-        N7(g)%c = blks%node(iii,jjj,kkk)%c
+        N7(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 5) then
-        N5(g)%c = blks%node(iii,jjj,kkk)%c
+        N5(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 6) then
-        N6(g)%c = blks%node(iii,jjj,kkk)%c
+        N6(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       endif
 
       ! node i1-1,i2-1 update
@@ -1034,17 +1180,17 @@ contains
           KKK=KK
       end select
       if (Fm == 1) then
-        N1(g)%c = blks%node(iii,jjj,kkk)%c
+        N1(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 2) then
-        N5(g)%c = blks%node(iii,jjj,kkk)%c
+        N5(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 3) then
-        N1(g)%c = blks%node(iii,jjj,kkk)%c
+        N1(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 4) then
-        N3(g)%c = blks%node(iii,jjj,kkk)%c
+        N3(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 5) then
-        N1(g)%c = blks%node(iii,jjj,kkk)%c
+        N1(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 6) then
-        N2(g)%c = blks%node(iii,jjj,kkk)%c
+        N2(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       endif
 
       ! compute metric variables
@@ -1091,17 +1237,14 @@ contains
 
   end subroutine BC_Connect_Metrics
 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
   function Is_Wall(type) result (ans)
       implicit none
       integer, intent(in) :: type
       logical :: ans
 
       select case (type)
-        case (301, 302, 303, 304)  ! wall BCs
+        case (301, 302, 503, 504, 505)  ! wall BCs (heat flux, T, GSI)
           ans = .true.
         case default
           ans = .false.

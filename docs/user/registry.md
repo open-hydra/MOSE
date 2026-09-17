@@ -14,7 +14,7 @@
 
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
-| ini-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw |  no | Initial condition (INPUT/ic.*) format |
+| ic-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw |  no | Initial condition (INPUT/ic.*) format |
 | sol-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw |  no | Solution (OUTPUT/field.*) format |
 | sol-diter | 1000000000 | > 0 |  no | Solution output iter frequency |
 | sol-dtime | 1e30 | > 0 |  no | Solution output time frequency |
@@ -24,6 +24,7 @@
 | res-diter | 1 | > 0 |  no | Residual history iter frequency |
 | shell-diter | 1 | > 0 |  no | Shell update iter frequency |
 | ini-diter | 10000 | > 0 |  no | input.ini update iter frequency |
+| timer-diter | 0 | >= 0 |  no | Wall-clock timing report iter frequency (0 = off) |
 
 ## MOSE-Probes
 
@@ -50,13 +51,20 @@
 | vnn | 0.3 | > 0 |  no | VNN parameter |
 | cfl-rise-threshold | 0 | >= 0 |  no | CFL rise threshold |
 | time-accurate | .false. | logical | yes | Time accurate switch |
-| integration-variables | cons | cons ,  prim |  no | Integration variables (cons/prim) |
+| integration-variables | cons | cons ,  prim , prec |  no | Integration variables (cons/prim/prec) |
 | irs | .false. | logical |  no | Implicit Residual Smoothing |
 | irs-beta | 0.0 | >= 0 |  no | IRS beta parameter |
-| space-reconstruction |  | MUSCL-SD, MUSCL, first-order | yes | Space reconstruction method |
+| preconditioning-Uref | 0.0 | >= 0 |  no | Reference velocity for preconditioning |
+| preconditioning-Mach | 0.0 | >= 0 |  no | Mach target for preconditioning |
+| preconditioning-eps-min | 0.05 | in (0, 1) |  no | Low-Mach cutoff for Ur |
+| preconditioning-Ur-min | 0.0 | >= 0 |  no | Floor on Ur [m/s] |
+| preconditioning-Ur-factor | 1.0 | > 0 |  no | Weiss-Smith multiplicative factor |
+| preconditioning-Ur-smooth | 0 | >= 0 |  no | Ur max-smoothing passes |
+| space-reconstruction |  | MUSCL, first-order | yes | Space reconstruction method |
 | flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | Flux limiter for space reconstruction |
-| riemann-solver | HLLC | SLAU, SLAU2, HLLC+, HLLE++, HLLE, HLLEM, HLLC, AUSM+, AUSM+-up, AUSM+-up2, exact |  no | Riemann solver |
-| riemann-options-Minf | 0.0 | >= 0 |  no | Mach infinity for AUSM+-up |
+| shock-detector |  | Tramel, Chen |  no | Shock detector method |
+| riemann-solver | HLLC | HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact |  no | Riemann solver |
+| riemann-options-Mco | 0.0 | >= 0 |  no | Low-Mach acoustic-dissipation cutoff Mach (floor) |
 
 ## MOSE-Multigrid
 
@@ -74,6 +82,8 @@
 | chemistry | frozen | frozen, finite-rate, equilibrium |  no | Chemistry model |
 | soot-generation | none | LL91, LIN, none |  no | Soot generation model |
 | rotational-frame | none | rigid-body, none |  no | Rotational frame model |
+| schmidt | 0.0 | >= 0 |  no | Laminar Schmidt number |
+| prandtl | 0.0 | >= 0 |  no | Laminar Prandtl number |
 
 ## MOSE-Chemistry
 
@@ -82,6 +92,7 @@
 | exclude-blocks | none |  |  no | Blocks to exclude from chemistry |
 | ode-solver | H-radau5 | H-radau5, sdirk4b, ros4 |  no | ODE solver for chemistry |
 | ode-max-steps | 100000 | > 0 |  no | Maximum ODE integration steps |
+| ode-analytical-jacobian | .false. | logical |  no | Use the mechanism analytical Jacobian instead of finite differences |
 | ode-relative-tol-species | 1e-5 | > 0 |  no | ODE relative tolerance for species |
 | ode-relative-tol-temperature | 1e-5 | > 0 |  no | ODE relative tolerance for temperature |
 | ode-absolute-tol-species | 1e-5 | > 0 |  no | ODE absolute tolerance for species |
@@ -93,7 +104,8 @@
 |-----------|---------|---------|----------|-------------|
 | Prt | 0.85 | > 0 |  no | Turbulent Prandtl number |
 | Sct | 0.90 | > 0 |  no | Turbulent Schmidt number |
-| Sc | 0.7 | > 0 |  no | Schmidt number |
+| point-implicit | .true. | logical |  no | Point-implicit (Patankar) treatment of turbulence destruction source terms |
+| omega-wall-bc | practical | practical, asymptotic |  no | Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2)) or asymptotic (6*nu/(beta1*y^2), exact y->0 limit, for wall-resolved meshes) |
 
 ## MOSE-Rotating-Frame
 

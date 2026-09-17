@@ -109,7 +109,7 @@ if [[ $1 == test ]]; then
   fi
 
   # Array of Riemann solvers
-  riemann_schemes=(HLLE HLLC HLLC+ SLAU)
+  riemann_schemes=(HLLE HLLC HLLC+Tramel SLAU)
   # Input file
   input_file="input.ini"
 

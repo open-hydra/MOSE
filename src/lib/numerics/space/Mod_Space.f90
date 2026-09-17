@@ -22,13 +22,6 @@ contains
         obj_space_scheme%flux_limiter='vanleer'
         obj_space_scheme%warning_message = '[WARNING] You have specified MUSCL reconstruction but not a flux limiter. Van Leer by default.'
       endif
-      ! Shock detector
-      if (index(obj_space_scheme%space_reconstruction,'SD')>0) then
-        obj_space_scheme%SD = .true.
-        obj_space_scheme%description = trim(obj_space_scheme%description)//' with shock detection'
-      else
-        obj_space_scheme%SD = .false.
-      endif
     ! First order
     else
       obj_space_scheme%description = 'First-order'

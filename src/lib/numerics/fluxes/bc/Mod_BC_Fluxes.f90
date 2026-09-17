@@ -9,7 +9,7 @@ contains
 
   subroutine BC_Fluxes ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rans, obj_space_scheme, obj_riemann, obj_soot, obj_rot
+    use MOSE_Config_Types_m, only: obj_rans, obj_soot, obj_rot, obj_sim_param
     use MOSE_Global_m, only: model
     use MOSE_Mod_MPI, only: is_local_block
     use MOSE_Lib_RotatingFrame
@@ -24,9 +24,10 @@ contains
     use MOSE_Lib_BC_Fluxes_Extrapolation
     use MOSE_Lib_BC_Fluxes_Wall_Heat
     use MOSE_Lib_BC_Fluxes_Wall_Temperature
-    use MOSE_Lib_BC_Fluxes_Wall_Melting
-    use MOSE_Lib_BC_Fluxes_Wall_Pyrolysis
-    use MOSE_Lib_BC_Fluxes_SRM
+    use MOSE_Lib_BC_Fluxes_GSI_Melting
+    use MOSE_Lib_BC_Fluxes_GSI_Pyrolysis
+    use MOSE_Lib_BC_Fluxes_GSI_Reactions
+    use MOSE_Lib_BC_Fluxes_GSI_SRM
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
@@ -35,15 +36,16 @@ contains
     integer  :: Bm, Im, Jm, Km, Fm, Bs, Fs
     real(R8) :: T0, g, pstat, rhot(nsc), visct(1:nrans)
     real(R8) :: r_fc(3)                              ! Face centre [m] (stationary-wall BCs)
-    logical  :: RSM, SD_limiter, SD_riemann, soot_enabled
-    real(R8) :: Sc, Sct, Prt
+    logical  :: RSM, soot_enabled
+    logical  :: ablating                             ! GSI walls: is the surface consuming material?
+    real(R8) :: Tw_surface                           ! GSI walls: wall temperature for the inert fallback
+    real(R8) :: Sc, Sct, Prt, Prl
 
     RSM = obj_rans%RSM
-    SD_limiter = obj_space_scheme%SD
-    SD_riemann = obj_riemann%SD
-    Sc  = obj_rans%Sc
+    Sc  = obj_sim_param%Sc
     Sct = obj_rans%Sct
     Prt = obj_rans%Prt
+    Prl = obj_sim_param%Prl
     soot_enabled = obj_soot%enabled
 
     ! BC fluxes are computed in order of block and face type.
@@ -55,7 +57,7 @@ contains
         lower = upper + 1                   ! Update lower bound
         upper = upper + domain % n_bf(b,f)  ! Upper bound: add number of cells on face f of block b
 
-        !$omp do schedule ( dynamic ) private(i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, rhot, visct, T0, g, pstat, r_fc)
+        !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, rhot, visct, T0, g, pstat, r_fc, ablating, Tw_surface)
         do i = lower, upper
           Bm = domain % bc(i) % b
           if (.not. is_local_block(Bm)) cycle
@@ -70,10 +72,10 @@ contains
               domain % blk(Bm) % R(:,Im,Jm,Km) = domain % blk(Bm) % R(:,Im,Jm,Km) + domain % bc(i) % ext_flux
 
             case (101,102,201) ! connection & chimera (101=block connect, 102=chimera)
-              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm), SD_limiter, SD_riemann )
+              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
               if (model>0) &
                 call BC_Connection_Visc ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Mg(1), domain % bc(i) % Pg, &
-                                          Sc, Sct, Prt, soot_enabled )
+                                          Sc, Sct, Prt, Prl, soot_enabled )
 
             case (200) ! periodic
               call BC_Rotational_Periodic_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
@@ -88,9 +90,10 @@ contains
               if (model>0.AND.obj_rot%enabled.AND.RF_Is_Stationary_Face(Bm,Fm)) then
                 call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
                 call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, &
-                                    w_wall = RF_Wall_Velocity(r_fc) )
+                                    w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough )
               elseif (model>0) then
-                call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw )
+                call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, &
+                                    k_rough = domain % bc(i) % k_rough )
               endif
 
             case (302) ! wall: prescribed temperature
@@ -98,20 +101,11 @@ contains
               if (model>0.AND.obj_rot%enabled.AND.RF_Is_Stationary_Face(Bm,Fm)) then
                 call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
                 call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, &
-                                           w_wall = RF_Wall_Velocity(r_fc) )
+                                           w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough )
               elseif (model>0) then
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, &
+                                           k_rough = domain % bc(i) % k_rough )
               endif
-
-            case (303) ! wall: temperature + radiative flux (melting)
-              call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
-              if (model>0) &
-                call BC_Wall_Melting( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, domain % bc(i) % qrad )
-                    
-            case (304) ! wall: radiative flux only (pyrolysis/ablation)
-              call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
-              if (model>0) &
-                call BC_Wall_Pyrolysis( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qrad, domain % bc(i) % type )
 
             case (400) ! extrapolation
               call BC_Extrapolation ( Im, Jm, Km, Fm, domain % blk(Bm) )
@@ -184,15 +178,23 @@ contains
                                       domain % bc(i) % ci(1:nrans), &
                                       domain % bc(i) % mdot )
 
+            case (408) ! inlet: static temperature T + prescribed velocity (u) normal to the boundary
+              call BC_Inlet_un_T ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
+                                      domain % bc(i) % T0, domain % bc(i) % un, &
+                                      domain % bc(i) % rel_fac, &
+                                      domain % bc(i) % alpha, domain % bc(i) % beta, &
+                                      domain % bc(i) % ci(nrans+1:nrans+nsc), &
+                                      domain % bc(i) % ci(1:nrans), error )
+              if (error == 1) call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+
             case (410) ! Mapped BC: Riemann flux with Q2D-interpolated ghost cell
-              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm), SD_limiter, SD_riemann )
+              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
 
             case(420) ! choked nozzle
-              call BC_Inflow_Nozzle( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Mach, &
+              call BC_Inflow_Nozzle( Im, Jm, Km, Fm, domain % blk(Bm), &
                                      domain % bc(i) % T0, domain % bc(i) % p0, domain % bc(i) % rel_fac, &
-                                     domain % bc(i) % alpha, domain % bc(i) % beta, domain % bc(i) % pAmb, &
-                                     domain % bc(i) % ci(nrans+1:nrans+nsc), domain % bc(i) % ci(1:nrans), &
-                                     domain % bc(i) % mdot, error )
+                                     domain % bc(i) % psub, domain % bc(i) % psup, domain % bc(i) % mdot, &
+                                     domain % bc(i) % ci(nrans+1:nrans+nsc), domain % bc(i) % ci(1:nrans), error )
               if (error == 1) then
                 call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
               endif
@@ -203,10 +205,78 @@ contains
               call BC_Manifold ( domain % blk(Bm), Fm, domain % blk(Bs), Fs, T0, g, pstat )
 
             case (502) ! SRM grain combustion
-              call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+              ! Like the GSI walls below, a burning grain lays down the complete boundary
+              ! flux, wall pressure included, so no reflective flux is applied alongside
+              ! it. An inhibited surface (a = 0) burns nothing and falls back to an
+              ! impermeable wall at the flame temperature. Unlike the GSI walls this one
+              ! also runs inviscid: the mass injection is the point, the stress is not.
+              ablating = .false.
+              Tw_surface = domain % bc(i) % Taf
               call BC_SRM ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % aCoeff, &
                              domain % bc(i) % n, domain % bc(i) % pRef, domain % bc(i) % Taf, &
-                             domain % bc(i) % haf, domain % bc(i) % ci )
+                             domain % bc(i) % ci, &
+                             burning = ablating, T_surface = Tw_surface )
+              if (.not. ablating) then
+                call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+                if (model>0) &
+                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+              endif
+
+            ! ─────────────────────────────────────────────────────────────────
+            ! Gas-surface interaction walls (503-505).
+            !
+            ! While the surface ablates, the GSI routine lays down the complete
+            ! boundary flux -- wall pressure, the momentum and enthalpy convected in
+            ! with the blown mass, and the viscous terms -- so no reflective wall
+            ! flux is applied alongside it; adding one would impose u.n = 0 at a face
+            ! that is deliberately permeable.
+            !
+            ! When the flow cannot sustain the process the routine touches nothing
+            ! and reports back, and the face is closed as an ordinary impermeable
+            ! wall: reflective inviscid flux plus a no-slip wall at the temperature
+            ! the surface settled on. An inviscid run (model = 0) never ablates
+            ! either, and takes the same path.
+            case (503) ! GSI - melting
+              ablating = .false.
+              Tw_surface = domain % bc(i) % Tw
+              if (model>0) &
+                call BC_Wall_Melting( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % cp_wall, domain % bc(i) % Tw, &
+                                                                        domain % bc(i) % Ti_wall, domain % bc(i) % dh_wall, &
+                                                                        domain % bc(i) % qrad, domain % bc(i) % ci, &
+                                                                        ablating = ablating, T_surface = Tw_surface )
+              if (.not. ablating) then
+                call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+                if (model>0) &
+                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+              endif
+
+            case (504) ! GSI - pyrolysis
+              ablating = .false.
+              Tw_surface = 0d0
+              if (model>0) &
+                call BC_Wall_Pyrolysis( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_pyro_model_id, &
+                                                                          domain % bc(i) % qrad, domain % bc(i) % ci, &
+                                                                          ablating = ablating, T_surface = Tw_surface )
+              if (.not. ablating) then
+                call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+                if (model>0) &
+                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+              endif
+
+            case(505) ! GSI - surface reactions
+              ablating = .false.
+              Tw_surface = 0d0
+              if (model>0) &
+                call BC_Wall_Reactions( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_surf_reac_id, &
+                                        domain % bc(i) % qrad, ablating = ablating, T_surface = Tw_surface )
+              if (.not. ablating) then
+                call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+                if (model>0) &
+                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+              endif
+
+            ! case(506) ! GSI - surface reactions + pyrolysis
+            ! TODO: implement this case in the future
 
           end select
 

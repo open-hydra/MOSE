@@ -1,0 +1,10 @@
+# Mesh and results are regenerated / re-run, not tracked (as for MOSE's OUTPUT/).
+mesh.msh
+constant/polyMesh/
+[0-9]*[0-9]/
+!0/
+log.*
+slurm-*.out
+slurm-*.err
+processor*/
+postProcessing/

@@ -17,6 +17,10 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   # Uncomment the below if you want the user to choose a parallelization library
   OPTION(USE_MPI "Use the MPI library for parallelization" OFF)
   OPTION(USE_OPENMP "Use OpenMP for parallelization" OFF)
+  # Interprocedural (link-time) optimization. On by default because it is worth
+  # ~10% -- see docs/development/performance_notes.md -- but switchable off for
+  # toolchains where it misbehaves. It also self-disables if unsupported.
+  OPTION(USE_IPO "Use interprocedural optimization in RELEASE builds" ON)
 
   # This INCLUDE statement executes code that sets the compile flags for DEBUG,
   # RELEASE, and TESTING. You should  review this file and make sure the flags 

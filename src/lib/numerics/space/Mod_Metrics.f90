@@ -10,7 +10,7 @@ contains
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
     use MOSE_Lib_Metrics
-    use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Mod_MPI, only: is_local_block, mpi_is_root
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
@@ -19,6 +19,14 @@ contains
     type(MOSE_vector_3D_type) :: N1, N2, N3, N4, N5, N6, N7, N8
 
     call Check_Mesh_Type ( domain )
+
+    ! Wall roughness is modelled by Spalart-Allmaras only (SA-rough). With any
+    ! other model, or laminar, drop it up front so every wall is consistently smooth.
+    if ( any( domain % bc(:) % k_rough > 0d0 ) .and. .not. ( model == 2 .and. nRANS == 1 ) ) then
+      if ( mpi_is_root .and. domain % mg_level == 1 ) write(*,'(A)') &
+        ' [WARNING] Wall roughness (k_rough > 0) is modelled only with the SA turbulence model: all walls are treated as smooth.'
+      domain % bc(:) % k_rough = 0d0
+    end if
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
@@ -51,14 +59,14 @@ contains
       
       !$omp parallel
       ! Set wall-distance in connected cells
-      !$omp do schedule (dynamic) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks)
+      !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks)
       do i = 1, domain % nbound
         select case ( domain % bc(i) % type )
-          case(101) ! block connection
+          case(101,201) ! block connection
             Bm = domain % bc(i) % b
-            Im = domain % bc(i) % i 
-            Jm = domain % bc(i) % j 
-            Km = domain % bc(i) % k 
+            Im = domain % bc(i) % i
+            Jm = domain % bc(i) % j
+            Km = domain % bc(i) % k
             Fm = domain % bc(i) % f
             Bs = domain % bc(i) % bs
             Is = domain % bc(i) % is
@@ -73,19 +81,22 @@ contains
     
     !$omp parallel
     ! Create the nodes for gc layers of ghost cell
-    !$omp do schedule (dynamic) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
+    !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
     do i = 1, domain % nbound
       Bm = domain % bc(i) % b
-      Im = domain % bc(i) % i 
-      Jm = domain % bc(i) % j 
-      Km = domain % bc(i) % k 
+      ! Ghost metrics land in blk(Bm) and bc(i), read only by the rank owning
+      ! Bm, so a non-owning rank needs no blk(Bm)%M/dl/vol at all.
+      if (.not. is_local_block(Bm)) cycle
+      Im = domain % bc(i) % i
+      Jm = domain % bc(i) % j
+      Km = domain % bc(i) % k
       Fm = domain % bc(i) % f
       select case ( domain % bc(i) % type )
-        case(101) ! block connection
+        case(101,201) ! block connection
           Bs = domain % bc(i) % bs
-          Is = domain % bc(i) % is 
-          Js = domain % bc(i) % js 
-          Ks = domain % bc(i) % ks 
+          Is = domain % bc(i) % is
+          Js = domain % bc(i) % js
+          Ks = domain % bc(i) % ks
           Fs = domain % bc(i) % fs
           d11s = domain % bc(i) % d11
           d12s = domain % bc(i) % d12
@@ -93,7 +104,8 @@ contains
           d22s = domain % bc(i) % d22
           call BC_Connect_Metrics ( Im, Jm, Km, Fm, domain % blk(Bm), &
                                     Is, Js, Ks, Fs, domain % blk(Bs), d11s, d12s, d21s, d22s, &
-                                    domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg)
+                                    domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg, &
+                                    periodic = (domain % bc(i) % type == 201) )
         case(300) ! symmetry
           call BC_Symmetry_Metrics ( Im, Jm, Km, Fm, domain % blk(Bm), &
                                      domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg )

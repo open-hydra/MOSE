@@ -26,12 +26,12 @@ contains
     use MOSE_Mod_Multigrid,  only: Prolongation
     use MOSE_Read_Ini,       only: Read_Inifile_Runtime
     use MOSE_Mod_MPI,        only: mpi_is_root
+    use MOSE_Mod_Timers,     only: timer_summary
     use IR_precision
     implicit none
     type(MOSE_simulation_type), intent(inout) :: simulation
     ! Local
     character(len=llen) :: solfile, dgsfile, wallfile, mgsol, mgwall
-    real(R8) :: sim_time
     integer  :: m, level
 
     level = obj_multigrid%MG_level
@@ -51,6 +51,8 @@ contains
       dgsfile  = '/'//trim(MOSE_phase_prefix)//'diagnostic'
     else
       solfile  = '/'//trim(MOSE_phase_prefix)//'field-level'//trim(str(.true.,level))
+      wallfile = '/'//trim(MOSE_phase_prefix)//'wall-level'//trim(str(.true.,level))
+      dgsfile  = '/'//trim(MOSE_phase_prefix)//'diagnostic-level'//trim(str(.true.,level))
       mgsol    = '/'//trim(MOSE_phase_prefix)//'field-prolongated'
       mgwall   = '/'//trim(MOSE_phase_prefix)//'wall-prolongated'
     endif
@@ -72,7 +74,7 @@ contains
         ! Shell
         if ( obj_time_scheme%time_accurate ) then
           if (obj_multigrid%MGL > 1 ) then
-            write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
+            write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(level)%time, simulation%domain(level)%dtglobal
           else
             write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
           endif
@@ -83,14 +85,10 @@ contains
             write (*,RANS_shell_format) obj_sim_param%iter_from_call, obj_sim_param%iter_general, obj_sim_param%residuotot(1)
           endif
         endif
-
-        ! Calculate time at end of simulation
-        call Cpu_Time ( obj_sim_param%cputime(2) )
-
-        sim_time = ( obj_sim_param%cputime(2) - obj_sim_param%cputime(1) ) / obj_sim_param%nthreads
-        write(*,*)
-        write(*,*) '  Time of operation was', sim_time/60, 'min'
       end if
+
+      ! Timing summary (collective — every rank contributes its accumulators)
+      call timer_summary()
 
       ! Write output solution (collective — all ranks participate in gather)
       call Write_Solution ( simulation%domain(1), simulation%IOfield(1), solfile )
@@ -127,7 +125,7 @@ contains
         if ( mod (simulation%domain(level) % iter, obj_io%shell_diter) == 0d0 ) then
           if (obj_time_scheme%time_accurate) then
             if (obj_multigrid%MGL > 1 ) then
-              write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
+              write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(level)%time, simulation%domain(level)%dtglobal
             else
               write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
             endif
@@ -218,7 +216,7 @@ contains
         if ( mod (simulation%domain(level) % iter, obj_io%shell_diter) == 0d0 ) then
           if (obj_time_scheme%time_accurate) then
             if (obj_multigrid%MGL > 1 ) then
-              write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
+              write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(level)%time, simulation%domain(level)%dtglobal
             else
               write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
             endif

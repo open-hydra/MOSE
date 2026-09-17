@@ -20,9 +20,10 @@ contains
     use MOSE_Mod_Soot,            only: Setup_Soot
     use MOSE_Mod_RANS,            only: Setup_RANS_Model
     use MOSE_Lib_RotatingFrame,   only: Setup_RotatingFrame
+    use FLINT_Lib_Thermodynamic,  only: dij_tab
     implicit none
 
-    ! Setting simulation type
+    !! Setting simulation type
     if (obj_sim_param%simulation_type=='euler') then
       model = 0
     elseif (obj_sim_param%simulation_type=='navier-stokes') then
@@ -34,38 +35,56 @@ contains
       end if
     endif
 
-    ! Setting input solution
+    !! Setting input solution
     call Setup_Input_Solution()
 
-    ! Space
+    !! Space
     call Setup_Space_Scheme()
-    call Assign_Riemann_Solver()
-    if ( obj_riemann%SD .or. obj_space_scheme%SD) then
-      obj_shock_detector%SD = .true.
-    else
-      obj_shock_detector%SD = .false.
-    end if
 
-    ! Time
+    !! Riemann
+    call Assign_Riemann_Solver()
+
+    !! Shock detector
+    obj_shock_detector%id = 0
+    if (obj_shock_detector%description=='tramel') then
+      obj_shock_detector%id = 1; obj_shock_detector%description='Tramel'
+    elseif (obj_shock_detector%description=='chen') then
+      obj_shock_detector%id = 2; obj_shock_detector%description='Chen'
+    elseif (obj_shock_detector%description=='' .and. index(obj_riemann%description,'Tramel')>0) then
+      obj_shock_detector%id = 1; obj_shock_detector%description='Tramel'
+    elseif (obj_shock_detector%description=='' .and. index(obj_riemann%description,'Chen')>0) then
+      obj_shock_detector%id = 2; obj_shock_detector%description='Chen'
+    endif
+
+    !! Time
+    ! Time scheme
     if (obj_time_scheme%solver_type /= 'euler') then
       read(obj_time_scheme%solver_type(3:3), *) obj_time_scheme%n_rk
     else
       obj_time_scheme%n_rk = 1
     end if
-    if (obj_irs%beta>0d0) obj_irs%enabled = .true. 
+    ! Implicit residual smoothing
+    if (obj_irs%beta>0d0) obj_irs%enabled = .true.
+    ! Preconditioning
+    if ( trim(obj_time_scheme%integration_variables) == 'prec' ) then
+      obj_prec%enabled = .true.
+    else
+      obj_prec%enabled = .false.
+    end if
+    ! Integration variables
     call Assign_Integration_Variables()
 
-    ! Assign Chemistry
+    !! Assign Chemistry
     call Setup_Chemistry()
     call Setup_Strang_Splitting()
     
-    ! Assign soot model
+    !! Assign soot model
     call Setup_Soot()
 
-    ! Assign RANS model
+    !! Assign RANS model
     call Setup_RANS_Model()
 
-    ! Assign Rotating frame
+    !! Assign Rotating frame
     call Setup_RotatingFrame()
 
     !! Descriptions, warnings and errors
@@ -87,20 +106,35 @@ contains
     if (obj_time_scheme%time_accurate) then
       obj_time_scheme%description = trim(obj_time_scheme%description)//' with time-accurate switch enabled'
     end if
+    if (trim(obj_time_scheme%integration_variables) == 'Preconditioned' .and. obj_time_scheme%time_accurate) then
+      obj_time_scheme%error_message = '[ERROR] integration-variables=prec is currently supported only for steady/pseudo-time runs.'
+    end if
     if (obj_irs%enabled) then
       obj_irs%description = 'Beta set to '//trim(str(.true.,real(obj_irs%beta)))
     end if
     ! Space scheme
     ! ... written in Mod_Space ...
     ! Riemann solver
-    if (trim(obj_riemann%description) == 'AUSM+-up' .or. trim(obj_riemann%description) == 'AUSM+-up2') then
-      if (obj_riemann%Minf == 0.0d0) then
-        obj_riemann%error_message = '[ERROR] AUSM+-up solver selected. Minf must be defined in input.'
+    if (index(obj_riemann%description, 'AUSM+M')      > 0 .or. &
+        index(obj_riemann%description, 'HLLC+ (Chen') > 0 .or. &
+        index(obj_riemann%description, 'Low-Mach Roe') > 0) then
+      if (obj_riemann%Mco == 0.0d0) then
+        obj_riemann%error_message = '[ERROR] Low-Mach Riemann solver selected. Mco (riemann-options-Mco) must be defined in input.'
+      end if
+    endif
+    if (trim(obj_riemann%description) == 'HLLC-PC') then
+      if (obj_time_scheme%integration_variables /= 'Preconditioned') then
+        obj_riemann%error_message = '[ERROR] Preconditioned HLL solver selected. integration-variables must be set to "prec".'
       end if
     endif
     ! Transport
     if (model>0 .and. obj_transport%description=='Unavailable') &
     write(*,'(A)') '[ERROR] Transport properties are unavailable for the selected phase: cannot run Navier-Stokes simulation'
+    ! Species diffusion model
+    if (model>0 .and. obj_sim_param%Sc <= 0d0 .and. .not. allocated(dij_tab)) then
+      obj_transport%error_message = &
+        '[ERROR] Sc<=0 (multicomponent diffusion) requires a binary diffusion table (INPUT/diffusion.dat)'
+    end if
 
   end subroutine Assign_Setup
 

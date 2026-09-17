@@ -4,3 +4,6 @@ CMakePresets.json
 site
 
 OUTPUT
+.ID
+logfile
+error_file

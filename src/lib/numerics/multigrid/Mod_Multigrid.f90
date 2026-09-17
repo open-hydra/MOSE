@@ -30,6 +30,7 @@ contains
       rap = 2
       do b = 1, nb
         simulation%domain(m) % Blk(b) % Dim = simulation%domain(m-1) % Blk(b) % Dim / rap
+        simulation%domain(m) % Blk(b) % Dim(2) = Max ( 1, simulation%domain(m) % Blk(b) % Dim(2) ) ! 1D case
         simulation%domain(m) % Blk(b) % Dim(3) = Max ( 1, simulation%domain(m) % Blk(b) % Dim(3) ) ! 2D case
         call Allocate_Block ( simulation%domain(m) % Blk(b), simulation%domain(m) % Blk(b) % Dim )
       enddo

@@ -29,3 +29,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 
 add_fortran_executable(${solver} "main.f90")
 add_fortran_executable(DocGen "docgen.f90")
+
+# MMS (Method of Manufactured Solutions) driver for the viscous order-of-accuracy
+# verification test (test/2D/viscous/mms). Same as ${solver} but its external
+# callback injects the analytic manufactured source term.
+add_fortran_executable(MOSE_mms "mms.f90")

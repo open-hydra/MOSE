@@ -37,10 +37,11 @@
       </div>
 
       <div class="mose-hero__pills">
-        <div class="mose-pill"><strong>6+</strong>&nbsp;Riemann Solvers</div>
-        <div class="mose-pill"><strong>5+</strong>&nbsp;Turbulence Models</div>
-        <div class="mose-pill"><strong>OpenMP</strong>&nbsp;+ MPI</div>
-        <div class="mose-pill"><strong>Modern</strong>&nbsp;Fortran</div>
+        <div class="mose-pill"><strong>Euler +</strong>&nbsp;Navier&ndash;Stokes</div>
+        <div class="mose-pill"><strong>Reacting</strong>&nbsp;Flows</div>
+        <div class="mose-pill"><strong>All-Speed</strong>&nbsp;Capable</div>
+        <div class="mose-pill"><strong>Multi-Block</strong>&nbsp;Grids</div>
+        <div class="mose-pill"><strong>OpenMP +</strong>&nbsp;MPI</div>
       </div>
 
     </div>
@@ -72,7 +73,7 @@
             </svg>
           </div>
           <h3>High-Order Numerics</h3>
-          <p>MUSCL reconstruction with five flux limiters. Six Riemann solvers: HLLC, HLLE, SLAU, AUSM&#x207A;-up, Godunov, Lax-Friedrichs.</p>
+          <p>MUSCL reconstruction. Riemann solvers across the HLL, AUSM, SLAU and Roe families &mdash; including all-speed low-Mach variants.</p>
         </article>
 
         <article class="mose-card mose-card--orange">
@@ -82,7 +83,7 @@
             </svg>
           </div>
           <h3>Finite-Rate Chemistry</h3>
-          <p>Multi-species reacting flows with finite-rate kinetics or NASA CEA chemical equilibrium. Soot formation models included.</p>
+          <p>Multi-species reacting flows with finite-rate kinetics or NASA CEA chemical equilibrium.</p>
         </article>
 
         <article class="mose-card mose-card--teal">
@@ -128,7 +129,7 @@
 
       <div class="mose-qs__text">
         <h2>Up and running in minutes</h2>
-        <p>MOSE ships with a single install script that handles all dependencies, compiles the Fortran core, and puts the binary on your PATH.</p>
+        <p>MOSE ships with a single install script that handles all dependencies and compiles the Fortran core accordingly to the requested options.</p>
         <div class="mose-qs__links">
           <a href="{{ 'getting-started/installation/' | url }}" class="mose-btn mose-btn--primary">
             Installation guide &rarr;
@@ -148,11 +149,8 @@
             <span class="mose-term__label">terminal</span>
           </div>
           <pre class="mose-term__body"><code><span class="tc"># Clone and build</span>
-<span class="tp">$</span> git clone https://github.com/open-hydra/MOSE.git
-<span class="tp">$</span> cd MOSE &amp;&amp; ./install.sh
-
-<span class="tc"># Run a simulation</span>
-<span class="tp">$</span> ./bin/MOSE input.ini</code></pre>
+<span class="tp">$</span> git clone https://github.com/open-hydra/MOSE.git &amp;&amp; cd MOSE
+<span class="tp">$</span> ./install.sh --use-mpi --use-tecio
         </div>
       </div>
 

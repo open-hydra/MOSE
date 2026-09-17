@@ -1,9 +1,13 @@
 # Turbulence Modelling
 
 MOSE provides Reynolds-Averaged Navier–Stokes (RANS) closures for
-turbulent flows.  Three families of eddy-viscosity models are
-available, ranging from a one-equation model to two-equation
-formulations.  All models are selected at run time via the input file.
+turbulent flows, selected at run time via the `turbulence` key in the
+`[MOSE-Physics]` section of the input file.  The eddy-viscosity models
+described in detail below range from the one-equation Spalart–Allmaras
+model (with several variants) to the two-equation Menter SST and
+Wilcox 2006 $k$–$\omega$ models.  A full Reynolds-stress closure
+(SSG–LRR) and an algebraic non-linear correction (QCR2000) are also
+available — see [Other models](#other-models).
 
 ---
 
@@ -91,6 +95,49 @@ $$
 $$
 \tilde\nu_\text{wall} = 0
 $$
+
+### Rough walls — SA-rough
+
+A wall face with a sand-grain roughness height $k_s > 0$ (the `k_rough` field of
+the [wall BCs](../user/boundary-conditions.md#viscous-walls)) switches on the
+Boeing extension of Aupoix & Spalart (2003). Each cell takes the $k_s$ of its
+nearest wall face, and the model changes in three places.
+
+The wall is displaced below the surface by $d_0 = 0.03\,k_s$. Every $y$ above
+becomes
+
+$$
+d = y + 0.03\,k_s
+$$
+
+The damping variable carries the roughness, and $f_{v2}$ is written without
+$\chi$ alone, which no longer equals $\tilde\nu/\nu$:
+
+$$
+\chi = \frac{\tilde\nu}{\nu} + c_{R1}\,\frac{k_s}{d}, \qquad
+f_{v2} = 1 - \frac{\tilde\nu}{\nu + \tilde\nu\,f_{v1}(\chi)}, \qquad c_{R1} = 0.5
+$$
+
+The wall condition becomes a Robin condition, so $\tilde\nu$ is nonzero at the wall:
+
+$$
+\left.\frac{\partial\tilde\nu}{\partial n}\right|_\text{wall} = \frac{\tilde\nu_\text{wall}}{d_0}
+\quad\Longrightarrow\quad
+\tilde\nu_\text{wall} = \tilde\nu_1\,\frac{d_0}{y_1 + d_0}
+$$
+
+where $\tilde\nu_1$ and $y_1$ are the value and wall distance of the boundary
+cell. The eddy viscosity at the wall, $\mu_{t,\text{wall}} = \rho_\text{wall}\,\tilde\nu_\text{wall}\,f_{v1}(\chi_\text{wall})$
+with $d = d_0$, then enters the wall shear stress and, on isothermal walls, the
+wall heat flux through $\mu_t c_p/\mathrm{Pr}_t$.
+
+With $k_s = 0$ every expression reduces to the smooth model, and MOSE takes the
+smooth code path bit for bit.
+
+!!! warning "Scope"
+    Roughness is modelled for SA only. With SST, Wilcox 2006, SSG–LRR or a
+    laminar run, MOSE prints a warning at start-up and treats every wall as
+    smooth. Gas–surface interaction walls are always smooth.
 
 ---
 
@@ -181,6 +228,23 @@ $$
 
 This prevents unbounded growth of $k$ in stagnation regions.
 
+!!! note "$\omega$-production uses the *limited* $P_k$"
+    Per the NASA Turbulence-Modelling-Resource SST-2003 specification, the
+    $\omega$-equation production is
+
+    $$
+    P_\omega = \frac{\alpha}{\nu_t}\,\tilde P_k
+             = \frac{\gamma\,\rho}{\mu_t}\,\tilde P_k, \qquad
+    \tilde P_k = \min\!\bigl(\mu_t S^2,\;10\,\beta^\ast\rho\,\omega\,k\bigr),
+    $$
+
+    i.e. it is built from the **same limited** production $\tilde P_k$ used in
+    the $k$-equation, *not* the unlimited $\gamma\rho S^2$.  (The unlimited form
+    that appears in the original 2003 paper is a typographical error, corrected
+    on the TMR page.)  MOSE therefore applies the production limiter first and
+    forms $P_\omega$ from the limited value; this matches the reference SST-2003
+    codes (e.g. SU2's default `V2003`).
+
 ### Eddy viscosity
 
 $$
@@ -223,8 +287,15 @@ $$
 
 $$
 k_\text{wall} = 0, \qquad
-\omega_\text{wall} = \frac{6\,\nu}{0.075\,y^2}
+\omega_\text{wall} = 10\,\frac{6\,\nu}{\beta_1\,y^2} = \frac{800\,\nu}{y^2}
 $$
+
+with $\beta_1 = 0.075$.  The factor of 10 over the analytical near-wall limit
+$6\nu/(\beta_1 y^2)$ is Menter's recommended over-specification, which forces
+the correct $\omega$ behaviour in the first off-wall cell.  Note that this
+value grows as $1/y^2$ under grid refinement and is the origin of the
+near-wall stiffness handled by the [point-implicit source
+treatment](#numerical-treatment-of-the-source-terms).
 
 ### Energy coupling *(optional)*
 
@@ -264,8 +335,8 @@ where $\omega$ is small relative to the strain rate.
 
 ### Destruction with stress-limiter correction
 
-The $\omega$-destruction coefficient is modified by the Baerten
-correction:
+The $\omega$-destruction coefficient is modified by Wilcox's
+vortex-stretching function $f_\beta$:
 
 $$
 \beta = \beta_0\,f_\beta, \qquad
@@ -294,6 +365,32 @@ $$
 
 ---
 
+## Other models
+
+### SSG–LRR (Reynolds-stress model)
+
+In addition to the eddy-viscosity closures above, MOSE provides the
+**SSG–LRR** differential Reynolds-stress model (`turbulence = SSGLRR`),
+which transports the six independent components of the Reynolds-stress
+tensor together with a length-scale variable instead of assuming the
+Boussinesq relation. It blends the Speziale–Sarkar–Gatski (SSG)
+pressure–strain model away from walls with the Launder–Reece–Rodi (LRR)
+model near walls. Being anisotropy-resolving, it captures secondary
+flows and strong streamline-curvature effects that the two-equation
+models miss, at the cost of the additional transport equations.
+
+### QCR2000 (non-linear constitutive correction)
+
+The **Quadratic Constitutive Relation** (Spalart, 2000) is an algebraic,
+non-linear correction to the Boussinesq stress rather than a standalone
+model. It is enabled as a suffix on a base model (e.g.
+`turbulence = SA-QCR2000`) and adds a quadratic dependence on the
+rotation tensor to the modelled stress, improving the prediction of
+anisotropy-driven secondary flows (corner flows, square ducts) while
+reusing the eddy viscosity of the underlying model.
+
+---
+
 ## General RANS Features
 
 ### Procedure-pointer architecture
@@ -319,6 +416,125 @@ injection or suction.
 
 ---
 
+## Freestream and inlet values ($k$, $\omega$, $\tilde\nu$)
+
+For the two-equation models the freestream/inlet values of $k$ and $\omega$
+must be chosen consistently — the destruction of $k$ scales with $\omega$
+($D_k = \beta^\ast\rho\,\omega\,k$), so an $\omega$ that is set too low
+starves the $k$-equation of dissipation and lets $k$ grow without bound.
+The recommended (NASA Turbulence-Modelling-Resource) freestream values are
+built from a turbulence intensity $Tu$ and an eddy-to-molecular viscosity
+ratio $\mu_t/\mu$:
+
+$$
+k_\infty = \tfrac{3}{2}\,\bigl(Tu\,U_\infty\bigr)^2, \qquad
+\omega_\infty = \frac{\rho_\infty\,k_\infty}{\mu\,(\mu_t/\mu)}
+             = \frac{k_\infty}{\nu_\infty\,(\mu_t/\mu)} .
+$$
+
+Typical verification values are $Tu \approx 0.04\%\!-\!1\%$ and
+$\mu_t/\mu \approx 0.009\!-\!1$ (smaller $\mu_t/\mu$ ⇒ larger $\omega_\infty$
+⇒ more near-wall dissipation and a more robust start-up).  For example, a
+Mach-5 stream at $p=4000$ Pa, $T=68.3$ K ($\rho=0.204$ kg m⁻³,
+$U_\infty=828$ m s⁻¹, $\nu_\infty=5.8\times10^{-5}$ m² s⁻¹) with
+$Tu=0.04\%$, $\mu_t/\mu=0.009$ gives $k_\infty\approx0.16$ m² s⁻²,
+$\omega_\infty\approx3\times10^{5}$ s⁻¹.  Values orders of magnitude below
+this (e.g. $\omega_\infty=100$ s⁻¹) are a frequent cause of $k$ runaway.
+
+The same values are set for both the initial condition (`[ICB-Block*]`) and
+the inflow (`[inflow]`) in the input file.
+
+---
+
+## Numerical treatment of the source terms
+
+### Point-implicit (Patankar) destruction
+
+The turbulence source terms are added to the residual and advanced with the
+same explicit Runge–Kutta step as the mean flow.  The **destruction** terms,
+however, are stiff near walls — for $k$–$\omega$ models the wall value
+$\omega_\text{wall}=6\nu/(\beta_1 y^2)$ grows like $1/y^2$, so on a fine
+near-wall grid the explicit stability limit $\Delta t < 1/(\beta\,\omega)$ is
+easily violated and $k$/$\omega$ diverge while the mean flow stays healthy
+(typically at a multigrid fine-grid transition).
+
+To remove this restriction MOSE treats the destruction terms
+**point-implicitly**.  Writing the update for a conserved turbulence
+variable $q=\rho\phi$ as $q^{n+1}=q^n+\Delta t\,S(q)$ and linearising only
+the (stabilising) destruction part $D$,
+
+$$
+\Delta q = \Delta t\,\bigl[S^n - d\,\Delta q\bigr]
+\;\Longrightarrow\;
+\Delta q = \frac{\Delta t\,S^n}{1 + \Delta t\,d}, \qquad
+d \equiv \frac{\partial D}{\partial q}\ge 0 .
+$$
+
+In practice the net source increment is simply divided by $(1+\Delta t\,d)$,
+using the local time step $\Delta t$.  The destruction Jacobians are
+
+| Model | Equation | $d = \partial D/\partial q$ |
+|-------|----------|------------------------------|
+| SST / Wilcox | $k$ | $\beta^\ast\,\omega$ |
+| SST / Wilcox | $\omega$ | $2\,\beta\,\omega$ |
+| SA | $\tilde\nu$ | $2\,c_{w1}\,f_w\,\tilde\nu/y^2$ |
+
+Because the factor multiplies only the *increment*, it vanishes at
+convergence ($\Delta q\to0$) and therefore **does not change the converged,
+zero-residual solution** — it only enlarges the stable time step. This makes
+SST/Wilcox run at the mean-flow CFL independent of near-wall spacing.
+
+!!! warning "Effect on time-accurate (URANS) runs"
+    For **steady** computations (local time-stepping) the treatment is exact:
+    at convergence the residual is zero, so the factor has no effect on the
+    result.
+
+    For **time-accurate** runs it *does* enter the solution.  Dividing the
+    destruction increment by $(1+\Delta t\,d)$ is a backward-Euler
+    linearisation, so it formally reduces the turbulence **source** to
+    first-order in time wherever $\Delta t\,d$ is not small — i.e. near walls,
+    where $d\approx\beta\,\omega_\text{wall}\propto 1/y^2$ and
+    $\Delta t\,d\gg 1$ even at a modest CFL.  Note that:
+
+    - only the turbulence *destruction* is affected — the mean-flow equations
+      and the turbulence production/diffusion/convection retain the full
+      Runge–Kutta order;
+    - the terms made implicit are exactly the *stiff, fast* ones, whose
+      near-wall relaxation time is far shorter than any resolved URANS scale,
+      so the physically relevant (resolved-scale) accuracy is essentially
+      unchanged — the first-order error lives only in the unresolved fast
+      transient.
+
+    Disabling `point-implicit` for a URANS run does **not** recover accuracy
+    for free: the explicit near-wall $\omega$ source then violates its
+    stability limit and diverges.  To genuinely verify temporal convergence,
+    set `point-implicit = .false.` **and** reduce $\Delta t$ until
+    $\Delta t\,\beta\,\omega_\text{wall} < 1$ in the first off-wall cell
+    (usually impractically small).  For production URANS the recommendation is
+    to leave the treatment enabled.
+
+The treatment is enabled by default and controlled by
+
+```ini
+[MOSE-Turbulence]
+point-implicit = .true.   ; (default) point-implicit turbulence destruction
+```
+
+### Relation to under-relaxation
+
+Point-implicit damping is a *physically weighted, automatic* form of
+under-relaxation: the effective relaxation factor $1/(1+\Delta t\,d)$ is
+large (≈1) where the source is mild and small only where the destruction is
+stiff, and it scales with the local time step.  A constant global
+under-relaxation factor on the turbulence update achieves a similar
+stabilising effect but is blunter — it slows convergence everywhere, must be
+hand-tuned per case/grid, and (if applied to the whole update rather than the
+increment) can bias the transient.  Point-implicit treatment is therefore the
+preferred technique; global under-relaxation remains a valid, simpler
+fallback when a model's destruction Jacobian is not readily available.
+
+---
+
 ## References
 
 1. P. R. Spalart, S. R. Allmaras, "A one-equation turbulence model for
@@ -332,3 +548,11 @@ injection or suction.
    2006.
 5. P. R. Spalart, M. L. Shur, "On the sensitization of turbulence models
    to rotation and curvature," *Aerosp. Sci. Technol.*, 1(5), 1997.
+6. P. R. Spalart, "Strategies for turbulence modelling and simulations,"
+   *Int. J. Heat Fluid Flow*, 21(3), 2000 (Quadratic Constitutive
+   Relation, QCR2000).
+7. C. G. Speziale, S. Sarkar, T. B. Gatski, "Modelling the pressure–strain
+   correlation of turbulence: an invariant dynamical systems approach,"
+   *J. Fluid Mech.*, 227, 1991 (SSG model); B. E. Launder, G. J. Reece,
+   W. Rodi, "Progress in the development of a Reynolds-stress turbulence
+   closure," *J. Fluid Mech.*, 68(3), 1975 (LRR model).

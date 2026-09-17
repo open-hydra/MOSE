@@ -22,9 +22,9 @@ The test validates thermochemical coupling by comparing MOSE velocity and temper
 | Output times used for comparison | $170\,\mu s$, $190\,\mu s$, $230\,\mu s$ |
 | Time scheme | RK2 |
 | CFL | 0.5 |
-| Space reconstruction | MUSCL-SD |
+| Space reconstruction | MUSCL |
 | Flux limiter | Van Leer |
-| Riemann solver | HLLC+ |
+| Riemann solver | HLLC+Tramel |
 
 ### Results and verification
 
