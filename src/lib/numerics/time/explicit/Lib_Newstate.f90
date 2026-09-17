@@ -167,7 +167,7 @@ contains
   ! ===========================================================================
   subroutine Newstate_Primitive ( domain, irk )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_time_scheme, obj_irs, obj_chemistry
+    use MOSE_Config_Types_m, only: obj_time_scheme, obj_irs, obj_chemistry, obj_prec
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
     use MOSE_Lib_RK
@@ -313,12 +313,18 @@ contains
       !----------------------------------------------------------
       ! Weiss-Smith preconditioning parameters
       !   Theta = (drho/dp) replaced by pseudo-acoustic value
+      !
+      ! Guarded, because this routine serves BOTH
+      ! `integration-variables = prim` and `= prec`.
       !----------------------------------------------------------
 
-      !beta2     = max( Ur*Ur/a2, 1.d-6 )
-      beta2     = Ur*Ur/a2
+      if ( obj_prec%enabled ) then
+        beta2 = max( Ur*Ur/a2, 1.d-6 )
+        Theta = 1.d0/(beta2*a2) + 1.d0/(cp*temperature)
+      else
+        Theta = rho_p
+      endif
 
-      Theta = 1.d0/(beta2*a2) + 1.d0/(cp*temperature)
       Denom = 1.d0/( rho*cp*Theta + rho_T )
 
       !----------------------------------------------------------
