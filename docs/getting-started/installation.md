@@ -21,11 +21,18 @@ MOSE depends on several repositories that are included as Git submodules.
 
 | Path                               | Repository URL                                        | Purpose                                  |
 |------------------------------------|-------------------------------------------------------|------------------------------------------|
-| `lib/third_party/ExactPack`        | `https://github.com/lanl/ExactPack.git`              | Exact solutions database for reference    |
 | `lib/ORION`                        | `https://github.com/MarcoGrossi92/ORION.git`         | I/O routines (TecIO, VTK, Plot3D, etc.)  |
 | `lib/third_party/FiNeR`            | `https://github.com/szaghi/FiNeR.git`                | INI file parser                      |
 | `build/lib/OSLO` (installed by FLINT) | `https://github.com/MarcoGrossi92/OSLO.git`       | ODE solvers library               |
 | `lib/FLINT`                        | `https://github.com/MarcoGrossi92/FLINT.git`         | Thermodynamic database utilities          |
+
+[ExactPack](https://github.com/lanl/ExactPack) used to be a submodule here. It is
+now a pip dependency of the test suite only, installed from LANL's GitHub because
+it is not published on PyPI:
+
+```bash
+pip install "ExactPack @ git+https://github.com/lanl/ExactPack.git@1.7.11"
+```
 
 ## Build methods
 

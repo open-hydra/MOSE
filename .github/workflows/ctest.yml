@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  # The verifier scripts import pyplot unconditionally; keep them headless.
+  MPLBACKEND: Agg
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -25,11 +29,20 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.12"
 
       - name: Install Python dependencies
+        # ExactPack is not on PyPI; it is published only from LANL's GitHub.
+        # Pin the tag so the verification baseline cannot shift without a
+        # commit here. scipy arrives as an ExactPack dependency.
         run: |
-          pip install numpy
+          python -m pip install --upgrade pip
+          python -m pip install numpy matplotlib sympy \
+            "ExactPack @ git+https://github.com/lanl/ExactPack.git@1.7.11"
+
+      - name: Check Python dependencies
+        run: |
+          python -c "import numpy, scipy, matplotlib, sympy, exactpack; print('exactpack', exactpack.__version__)"
 
       - name: Configure
         run: |
