@@ -62,7 +62,7 @@ See the [Quick Start](https://open-hydra.github.io/MOSE/getting-started/quick-st
 
 ## Dependencies
 
-MOSE is built on top of several companion libraries, included as Git submodules:
+MOSE is built on top of several companion libraries:
 
 | Library | Role |
 |---|---|
