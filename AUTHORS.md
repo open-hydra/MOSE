@@ -23,3 +23,9 @@ removed from this file; per-release credit is recorded in `CITATION.cff`.
 - Marco Grossi
 - Alex Falco
 - Alessandro Montanari
+
+## Contributors
+
+Automatically sourced from git history.
+
+- AndreaGiacomi

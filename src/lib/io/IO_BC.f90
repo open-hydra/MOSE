@@ -120,10 +120,11 @@ contains
       !   300 = symmetry | 400 = extrapolation | 409 = forced outlet
       ! IDs with VARIABLE-length property lines:
       !   102 = chimera
+      !   104 = Multisover coupling & chimera
       select case(ti)
       case(101, 103, 201, 301, 302, 401:408, 410, 420, 501:506)
         read( unitfile,*,iostat=ios )
-      case(102)
+      case(102, 104)
         read( unitfile,*,iostat=ios ) ci, cii
         do c = 1, ci+cii
           read( unitfile,*,iostat=ios )
@@ -448,6 +449,29 @@ contains
           obj_io_bc%coupling_flag( bc(i)%b , bc(i)%f ) = .true.
           read( unitfile,*,iostat=ios ) &
             bc(i)%bs, bc(i)%is, bc(i)%js, bc(i)%ks, bc(i)%fs, bc(i)%d11, bc(i)%d12, bc(i)%d21, bc(i)%d22
+          allocate(bc(i)%ext_flux(nprim))
+          bc(i)%ext_flux = 0.0
+          allocate ( bc(i) % Pg (1, 6) )
+
+        ! ─────────────────────────────────────────────────────────────────────
+        ! Coupled multi-solver wall
+        case(104)
+          if (level == 1) nchimera = nchimera + 1
+          if (level == 1) ncoupled = ncoupled + 1
+          obj_io_bc%coupling_flag( bc(i)%b , bc(i)%f ) = .true.
+          read( unitfile,*,iostat=ios ) (bc(i)%ni(cc),cc=1,2)
+          allocate(bc(i)%donorID(1:sum(bc(i)%ni),1:4))
+          allocate(bc(i)%volume_fraction(1:sum(bc(i)%ni)))
+          do s = 1, bc(i)%ni(1)
+            read( unitfile,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
+          enddo
+          do s = bc(i)%ni(1)+1, bc(i)%ni(1)+bc(i)%ni(2)
+            read( unitfile,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
+          enddo
+          if (sum(bc(i)%volume_fraction(1:bc(i)%ni(1))) < 0.5d0 .or. &
+              sum(bc(i)%volume_fraction(bc(i)%ni(1)+1:sum(bc(i)%ni))) < 0.5d0) then
+            nzero_chim = nzero_chim + 1
+          endif
           allocate(bc(i)%ext_flux(nprim))
           bc(i)%ext_flux = 0.0
           allocate ( bc(i) % Pg (1, 6) )

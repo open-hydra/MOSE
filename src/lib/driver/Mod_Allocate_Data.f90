@@ -164,7 +164,7 @@ contains
 
     do i = 1, domain%nbound
       select case (domain%bc(i)%type)
-        case (102) ! chimera
+        case (102, 104) ! chimera
           if (allocated(domain%bc(i)%donorID)) then
             do c = 1, size(domain%bc(i)%donorID, 1)
               b = domain%bc(i)%donorID(c, 1)
@@ -409,13 +409,13 @@ contains
     call check_donors_are_colocated(domain)
 
     ! Build mask of remote blocks whose P (and dir) must be kept:
-    !  - chimera (102): donorID(:,1) can reference remote blocks
+    !  - chimera (102, 104): donorID(:,1) can reference remote blocks
     !  - manifold (501): bc%bs can be remote
     allocate(needs_remote_P(domain%nb))
     needs_remote_P = .false.
     do i = 1, domain%nbound
       select case (domain%bc(i)%type)
-        case (102) ! chimera
+        case (102, 104) ! chimera
           if (allocated(domain%bc(i)%donorID)) then
             do c = 1, size(domain%bc(i)%donorID, 1)
               b = domain%bc(i)%donorID(c, 1)
