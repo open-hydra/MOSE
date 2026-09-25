@@ -635,6 +635,27 @@ contains
   end subroutine Yn_Connection
 
 
+  subroutine Yn_Chimera ( Im, Jm, Km, Fm, blk )
+    implicit none
+    integer, intent(in) :: Im, Jm, Km, Fm
+    type(MOSE_block_type), intent(inout) :: blk
+    ! Local
+    integer :: Ig, Jg, Kg
+
+    ! Ghost cell coordinates
+    Ig = Im - guide(Fm,1)
+    Jg = Jm - guide(Fm,2)
+    Kg = Km - guide(Fm,3)
+
+    ! The chimera ghost cell extends the receiver grid (as its metrics do), so it
+    ! takes the wall distance and roughness of the adjacent receiver cell.
+    ! Zeroth order on purpose: linear extrapolation can reach yn <= 0 near walls.
+    blk % yn(Ig,Jg,Kg) = blk % yn(Im,Jm,Km)
+    blk % k_rough(Ig,Jg,Kg) = blk % k_rough(Im,Jm,Km)
+
+  end subroutine Yn_Chimera
+
+
   subroutine BC_Extrapolate_Metrics( Im, Jm, Km, Fm, blk, Mg, dlg, volg )
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
