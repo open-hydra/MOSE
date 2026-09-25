@@ -147,7 +147,8 @@ contains
 
   function blocks_needing_full_arrays ( domain ) result ( keep )
     !! Blocks whose state arrays this rank has to hold: the ones it owns, plus
-    !! the chimera donors and manifold sources whose `P` it reads directly.
+    !! the chimera donors whose `P` it reads directly. Manifold sources need no
+    !! entry: check_donors_are_colocated puts them on their receiver's rank.
     use MOSE_Advanced_Types_m
     use MOSE_Mod_MPI, only: is_local_block
 
@@ -171,9 +172,6 @@ contains
               if (b >= 1 .and. b <= domain%nb) keep(b) = .true.
             end do
           end if
-        case (501) ! manifold
-          b = domain%bc(i)%bs
-          if (b >= 1 .and. b <= domain%nb) keep(b) = .true.
       end select
     end do
 
@@ -408,9 +406,10 @@ contains
 
     call check_donors_are_colocated(domain)
 
-    ! Build mask of remote blocks whose P (and dir) must be kept:
+    ! Build mask of remote blocks whose P must be kept:
     !  - chimera (102): remote donors of a receiver block this rank owns
-    !  - manifold (501): bc%bs can be remote
+    ! Manifold (501) sources never are remote to their receiver: the check
+    ! above aborts unless both blocks live on the same rank.
     allocate(needs_remote_P(domain%nb))
     needs_remote_P = .false.
     do i = 1, domain%nbound
@@ -423,9 +422,6 @@ contains
               if (.not. is_local_block(b)) needs_remote_P(b) = .true.
             end do
           end if
-        case (501) ! manifold
-          b = domain%bc(i)%bs
-          if (b > 0 .and. .not. is_local_block(b)) needs_remote_P(b) = .true.
       end select
     end do
 
@@ -443,13 +439,13 @@ contains
       if (allocated(domain%blk(b)%rc_term1))     deallocate(domain%blk(b)%rc_term1)
       if (allocated(domain%blk(b)%rc_term2))     deallocate(domain%blk(b)%rc_term2)
 
-      ! P — free unless this remote block is a chimera donor or manifold source
+      ! P — free unless this remote block is a chimera donor
       if (.not. needs_remote_P(b)) then
         if (allocated(domain%blk(b)%P)) deallocate(domain%blk(b)%P)
       end if
 
-      ! Metrics — free on non-root ranks only (root needs them for wall I/O)
-      ! Keep dir on blocks needed for manifold (BC_Manifold reads blk(Bs)%dir%f%A)
+      ! Metrics — free on non-root ranks only (root needs them for wall I/O).
+      ! Chimera donors are read through P alone, so their metrics go too.
       if (.not. mpi_is_root) then
         if (allocated(domain%blk(b)%node)) deallocate(domain%blk(b)%node)
         if (allocated(domain%blk(b)%M))    deallocate(domain%blk(b)%M)
@@ -457,11 +453,9 @@ contains
         if (allocated(domain%blk(b)%vol))  deallocate(domain%blk(b)%vol)
         if (allocated(domain%blk(b)%yn))   deallocate(domain%blk(b)%yn)
         if (allocated(domain%blk(b)%k_rough)) deallocate(domain%blk(b)%k_rough)
-        if (.not. needs_remote_P(b)) then
-          do d = 1, 3
-            if (allocated(domain%blk(b)%dir(d)%f)) deallocate(domain%blk(b)%dir(d)%f)
-          end do
-        end if
+        do d = 1, 3
+          if (allocated(domain%blk(b)%dir(d)%f)) deallocate(domain%blk(b)%dir(d)%f)
+        end do
       end if
     end do
 
