@@ -13,7 +13,9 @@ contains
     use MOSE_Mod_GhostExchange, only: exchange_ghost_P_post_recv, exchange_ghost_P_pack, &
                                        exchange_ghost_P_post_send, exchange_ghost_P_wait_unpack, &
                                        exchange_ghost_P_wait_send, &
-                                       exchange_ghost_chimera_begin, exchange_ghost_chimera_end, &
+                                       exchange_ghost_chimera_post_recv, exchange_ghost_chimera_pack, &
+                                       exchange_ghost_chimera_post_send, exchange_ghost_chimera_wait_recv, &
+                                       exchange_ghost_chimera_unpack, exchange_ghost_chimera_wait_send, &
                                        Ghost_Interrank, exchange_ghost_Pg, ghost_sched, &
                                        set_active_mg_level
     use MOSE_Mod_Timers, only: timer_comm_begin, timer_comm_end
@@ -37,18 +39,24 @@ contains
       !$omp single
       call set_active_mg_level(domain%mg_level)
       call exchange_ghost_P_post_recv(domain)
-      call exchange_ghost_chimera_begin(domain)
+      call exchange_ghost_chimera_post_recv(domain)
       !$omp end single
 
-      ! Pack send buffer in parallel over face groups
+      ! Pack send buffers in parallel: P over face groups, chimera over donor cells
       !$omp do schedule(static) private(fg)
       do fg = 1, ghost_sched%n_send_faces
         call exchange_ghost_P_pack(domain, fg, fg)
+      end do
+      !$omp end do nowait
+      !$omp do schedule(static) private(ii)
+      do ii = 1, ghost_sched%n_chim_send
+        call exchange_ghost_chimera_pack(domain, ii, ii)
       end do
 
       ! Post sends (must wait for all packing to complete — implicit barrier from !$omp do)
       !$omp single
       call exchange_ghost_P_post_send(domain)
+      call exchange_ghost_chimera_post_send(domain)
       !$omp end single nowait
     end if
 
@@ -130,9 +138,15 @@ contains
       !$omp single
       call timer_comm_begin()
       call exchange_ghost_P_wait_unpack(domain)
-      call exchange_ghost_chimera_end(domain)
+      call exchange_ghost_chimera_wait_recv(domain)
       call timer_comm_end()
       !$omp end single
+
+      ! Chimera donor cells are distinct, so the unpack has no write conflicts
+      !$omp do schedule(static) private(ii)
+      do ii = 1, ghost_sched%n_chim_recv
+        call exchange_ghost_chimera_unpack(domain, ii, ii)
+      end do
     end if
 
     ! Chimera ghost fill: all donor data (local and remote) is now current
@@ -176,6 +190,7 @@ contains
       ! Wait for P sends to complete before reusing buffers
       !$omp single
       call exchange_ghost_P_wait_send(domain)
+      call exchange_ghost_chimera_wait_send(domain)
       call exchange_ghost_Pg(domain)
       !$omp end single
     end if
@@ -546,44 +561,44 @@ contains
 
     select case(Fm)
       case(1:2)
-        i1 = Im
+        i1 = Ig
         j1 = Jm - 1
         k1 = Km
-        i2 = Im
+        i2 = Ig
         j2 = Jm + 1
         k2 = Km
-        i3 = Im
+        i3 = Ig
         j3 = Jm
         k3 = Km - 1
-        i4 = Im
+        i4 = Ig
         j4 = Jm
         k4 = Km + 1
       case(3:4)
         i1 = Im - 1
-        j1 = Jm
+        j1 = Jg
         k1 = Km
         i2 = Im + 1
-        j2 = Jm 
+        j2 = Jg 
         k2 = Km
         i3 = Im
-        j3 = Jm
+        j3 = Jg
         k3 = Km - 1
         i4 = Im
-        j4 = Jm 
+        j4 = Jg 
         k4 = Km + 1
       case(5:6)
         i1 = Im - 1
         j1 = Jm
-        k1 = Km
+        k1 = Kg
         i2 = Im + 1
         j2 = Jm
-        k2 = Km
+        k2 = Kg
         i3 = Im
         j3 = Jm - 1
-        k3 = Km
+        k3 = Kg
         i4 = Im
         j4 = Jm + 1
-        k4 = Km
+        k4 = Kg
     end select
     
     Pg (:,3) = blk % P (:,i1,j1,k1)

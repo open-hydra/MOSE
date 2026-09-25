@@ -216,8 +216,8 @@ contains
 
     do i = 1, domain%nbound
       select case (domain%bc(i)%type)
-        case (102, 104) ! chimera
-          if (allocated(domain%bc(i)%donorID)) then
+        case (102, 104) ! chimera: only donors of a receiver this rank owns
+          if (allocated(domain%bc(i)%donorID) .and. is_local_block(domain%bc(i)%b)) then
             do c = 1, size(domain%bc(i)%donorID, 1)
               b = domain%bc(i)%donorID(c, 1)
               if (b >= 1 .and. b <= domain%nb) keep(b) = .true.
@@ -461,16 +461,17 @@ contains
     call check_donors_are_colocated(domain)
 
     ! Build mask of remote blocks whose P (and dir) must be kept:
-    !  - chimera (102, 104): donorID(:,1) can reference remote blocks
+    !  - chimera (102, 104): remote donors of a receiver block this rank owns
     !  - manifold (501): bc%bs can be remote
     allocate(needs_remote_P(domain%nb))
     needs_remote_P = .false.
     do i = 1, domain%nbound
       select case (domain%bc(i)%type)
-        case (102, 104) ! chimera
-          if (allocated(domain%bc(i)%donorID)) then
+        case (102, 104) ! chimera: only donors of a receiver this rank owns
+          if (allocated(domain%bc(i)%donorID) .and. is_local_block(domain%bc(i)%b)) then
             do c = 1, size(domain%bc(i)%donorID, 1)
               b = domain%bc(i)%donorID(c, 1)
+              if (b < 1 .or. b > domain%nb) cycle
               if (.not. is_local_block(b)) needs_remote_P(b) = .true.
             end do
           end if
