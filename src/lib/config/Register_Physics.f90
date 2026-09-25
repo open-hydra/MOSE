@@ -37,7 +37,14 @@ contains
     ! Exclude blocks from chemistry
     call reg%add(section, 'exclude-blocks', obj_chemistry%exclude_blocks_str, 'none', 'Blocks to exclude from chemistry', '', .false.)
     ! ODE solver selection
-    call reg%add(section, 'ode-solver', obj_chemistry%ode_name, 'H-radau5', 'ODE solver for chemistry', 'H-radau5, sdirk4b, ros4', .false.)
+    ! Every integrator OSLO's setup_odesolver knows. cvode needs OSLO built with
+    ! USE_SUNDIALS; H-dopri5 is explicit and only suited to non-stiff mechanisms.
+    call reg%add(section, 'ode-solver', obj_chemistry%ode_name, 'H-radau5', 'ODE solver for chemistry', &
+                 'H-radau5, H-rodas, H-sdirk4, H-dopri5, '// &
+                 'radau2a, lobatto3c, gauss, radau1a, '// &
+                 'ros2, ros3, ros4, rodas3, rodas4, '// &
+                 'sdirk2a, sdirk2b, sdirk3a, sdirk4a, sdirk4b, '// &
+                 'dodesol, cvode', .false.)
     ! ODE solver parameters
     call reg%add(section, 'ode-max-steps', obj_chemistry%max_ode_steps, '100000', 'Maximum ODE integration steps', '> 0', .false.)
     ! Only ONERA-7 and Frolov_nopressure ship an analytical Jacobian, and only
