@@ -52,7 +52,8 @@ def read_tec(path):
     """Minimal reader for the Tecplot BLOCK files MOSE writes."""
     with open(path) as fh:
         lines = fh.read().split('\n')
-    names = re.findall(r'"([^"]+)"', lines[0])
+    # names quoted ("rho") or not (rho): ORION writes either, depending on its version
+    names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s,"]+)', lines[0].split('=', 1)[1])]
     zone = lines[1]
     I, J, K = (int(re.search(rf'{c}=\s*(\d+)', zone).group(1)) for c in 'IJK')
     vals = [float(v) for v in ' '.join(lines[2:]).split()]
