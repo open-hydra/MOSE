@@ -57,13 +57,13 @@ contains
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
-      call Fluxes_blk ( domain % blk(b), SD_id, Sc, Sct, Prt, Prl, soot_enabled )
+      call Fluxes_blk ( b, domain % blk(b), SD_id, Sc, Sct, Prt, Prl, soot_enabled )
     enddo
 
   end subroutine Internal_Fluxes
 
 
-  subroutine Fluxes_blk ( blk, SD_id, Sc, Sct, Prt, Prl, soot_enabled )
+  subroutine Fluxes_blk ( b, blk, SD_id, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Advanced_Types_m, only: MOSE_block_type
     use MOSE_Global_m, only: model, gc, nprim, np
     use MOSE_Lib_Shock_Detector
@@ -71,6 +71,7 @@ contains
     use MOSE_Lib_Diffusive
     implicit none
     ! Inputs
+    integer, intent(in)  :: b                ! block id, for error messages only
     type(MOSE_block_type), intent(inout) :: blk
     logical, intent(in)  :: soot_enabled
     integer, intent(in)  :: SD_id
@@ -120,7 +121,8 @@ contains
                              blk % R(:,i:i+1,j,k),         &
                              blk % beta(i,j,k),            &
                              blk % Ur(i,j,k),              &
-                             blk % Ur(i+1,j,k) )
+                             blk % Ur(i+1,j,k),            &
+                             [b, 1, i, j, k] )
     enddo; enddo; enddo
 
     if (model>0)  then
@@ -166,7 +168,8 @@ contains
                              blk % R(:,i,j:j+1,k),         &
                              blk % beta(i,j,k),            &
                              blk % Ur(i,j,k),              &
-                             blk % Ur(i,j+1,k) )
+                             blk % Ur(i,j+1,k),            &
+                             [b, 2, i, j, k] )
     enddo; enddo; enddo
 
     if (model>0) then
@@ -212,7 +215,8 @@ contains
                              blk % R(:,i,j,k:k+1),         &
                              blk % beta(i,j,k),            &
                              blk % Ur(i,j,k),              &
-                             blk % Ur(i,j,k+1) )
+                             blk % Ur(i,j,k+1),            &
+                             [b, 3, i, j, k] )
     enddo; enddo; enddo
 
     if (model>0) then

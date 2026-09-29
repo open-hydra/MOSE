@@ -7,7 +7,7 @@ module MOSE_Lib_Convective
 
 contains
 
-  subroutine Convective_Flux ( dl, normal, area, Prim, Res, beta, Ur_0, Ur_1 )
+  subroutine Convective_Flux ( dl, normal, area, Prim, Res, beta, Ur_0, Ur_1, loc )
     use MOSE_Global_m
     use MOSE_Lib_Reconstruction, only: Reconstruction
     use MOSE_Mod_Riemann
@@ -19,6 +19,7 @@ contains
     real(R8), intent(inout), dimension(nprim,0:1) :: Res
     real(R8), intent(in) :: beta
     real(R8), intent(in) :: Ur_0, Ur_1
+    integer, intent(in), optional :: loc(5)   ! b, dir, i, j, k of the face (cells i, i+1 along dir): error messages only
     ! Local
     real(R8) :: l0, l1, l2, lm, lp
     real(R8), dimension(nprim) :: Prim1, Prim4
@@ -40,7 +41,16 @@ contains
     call check_gas_state ( Prim4(1:nsc), Prim4(np), error4 )
     if (error1 /= 0 .or. error4 /= 0) then
       write(*,*) '[ERROR] Non-physical state detected at the interface.'
-      stop
+      if (present(loc)) write(*,'(A,I0,A,I0,A,3(1X,I0))') &
+        ' [ERROR]   block ', loc(1), ', face between cell (i,j,k) and its +1 neighbour along dir ', loc(2), ':', loc(3:5)
+      write(*,'(A,2(1X,I0))') ' [ERROR]   error flags L, R:', error1, error4
+      write(*,'(A,*(1X,ES12.4))') ' [ERROR]   rho_s u v w p  L:', Prim1(1:np)
+      write(*,'(A,*(1X,ES12.4))') ' [ERROR]   rho_s u v w p  R:', Prim4(1:np)
+      write(*,'(A,*(1X,ES12.4))') ' [ERROR]   stencil p   (cells -1..2):', Prim(np,-1:2)
+      write(*,'(A,*(1X,ES12.4))') ' [ERROR]   stencil rho (cells -1..2):', sum(Prim(1:nsc,-1:2),dim=1)
+      ! error stop, not mpi_abort_all: this runs inside OpenMP threads and MPI is
+      ! initialised FUNNELED. The non-zero exit code makes the launcher end the other ranks.
+      error stop
     end if
 
     ! Compute rho and Rtot
