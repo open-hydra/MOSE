@@ -285,16 +285,16 @@ contains
         + A(1,3)*A(2,1)*A(3,2) - A(1,3)*A(2,2)*A(3,1)
 
     if ( abs(det) == 0d0 ) then
-      write(*,'(A90)') ' [ERROR] Metric tensor det=0. Should not happen, but going on with M==I'
-      stop
-
-      M % c = 0d0
-      do h = 1, 3
-        M % c(h,h) = 1d0
-      enddo
+      ! Degenerate cell (zero volume): a mesh error, or ghost cells extrapolated from a
+      ! wall-thin first cell whose coordinates were read back in single precision.
+      ! error stop, not mpi_abort_all: this can run inside OpenMP threads (MPI is FUNNELED).
+      write(*,'(A)') ' [ERROR] Metric tensor det=0: degenerate cell. Check the mesh, or the precision of the restart file'
+      write(*,'(A,3(1X,ES14.6))') ' [ERROR]   corner node N1:', N1 % c
+      write(*,'(A,3(1X,ES14.6))') ' [ERROR]   corner node N8:', N8 % c
+      error stop
 
     else
-      
+
       cofactor(1,1) =  (A(2,2)*A(3,3)-A(2,3)*A(3,2))
       cofactor(1,2) = -(A(2,1)*A(3,3)-A(2,3)*A(3,1))
       cofactor(1,3) =  (A(2,1)*A(3,2)-A(2,2)*A(3,1))
