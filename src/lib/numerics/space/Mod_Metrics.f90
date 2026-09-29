@@ -10,11 +10,14 @@ contains
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
     use MOSE_Lib_Metrics
+    use MOSE_Lib_Diffusive, only: Inverse3
+    use MOSE_Config_Types_m, only: obj_space_scheme
     use MOSE_Mod_MPI, only: is_local_block, mpi_is_root
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: b, i, j, k
+    logical :: inverse_metric
     integer :: Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s
     type(MOSE_vector_3D_type) :: N1, N2, N3, N4, N5, N6, N7, N8
 
@@ -28,8 +31,14 @@ contains
       domain % bc(:) % k_rough = 0d0
     end if
 
+    ! Inverse metric of the interior cells, for the viscous face metric (diffusive-metric =
+    ! inverse-mean): the face then needs one 3x3 inversion instead of three.
+    inverse_metric = obj_space_scheme % inverse_metric .and. model > 0
+
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
+      if ( inverse_metric .and. .not. allocated(domain % blk(b) % Minv) ) &
+        allocate( domain % blk(b) % Minv ( domain % blk(b) % dim(1), domain % blk(b) % dim(2), domain % blk(b) % dim(3) ) )
       !$omp parallel
       ! Compute metric tensor and cell dimension across i,j,k. => block % M, & block % dl      
       !$omp do collapse(3) private(i, j, k, N1, N2, N3, N4, N5, N6, N7, N8)
@@ -45,6 +54,7 @@ contains
         N7 % c = domain % blk(b) % node(i  ,j  ,k-1) % c
         N8 % c = domain % blk(b) % node(i  ,j  ,k  ) % c
         call Compute_Metric_Tensor ( N1, N2, N3, N4, N5, N6, N7, N8, domain % blk(b) % M(i,j,k), domain % blk(b) % dl(i,j,k), domain % blk(b) % vol(i,j,k) )
+        if ( inverse_metric ) domain % blk(b) % Minv(i,j,k) % c = Inverse3 ( domain % blk(b) % M(i,j,k) % c )
       enddo; enddo; enddo
       !$omp end parallel
 

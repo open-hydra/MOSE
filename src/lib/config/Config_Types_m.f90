@@ -152,8 +152,9 @@ module MOSE_Config_Types_m
     ! USER-DEFINED INPUTS
     character(len=llen) :: space_reconstruction ! Space reconstruction method
     character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction
+    character(len=llen) :: diffusive_metric     ! Face metric of the interior viscous fluxes (inverse-mean/mean)
     ! Useful variables
-    ! ...
+    logical             :: inverse_metric = .true. ! diffusive_metric == inverse-mean
   end type space_scheme_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------

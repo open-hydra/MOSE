@@ -62,6 +62,7 @@
 | preconditioning-Ur-smooth | 0 | >= 0 |  no | Ur max-smoothing passes |
 | space-reconstruction |  | MUSCL, first-order | yes | Space reconstruction method |
 | flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | Flux limiter for space reconstruction |
+| diffusive-metric | inverse-mean | inverse-mean, mean |  no | Face metric of the interior viscous fluxes: inverse-mean is exact on stretched meshes, mean is faster but overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r |
 | shock-detector |  | Tramel, Chen |  no | Shock detector method |
 | riemann-solver | HLLC | HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact |  no | Riemann solver |
 | riemann-options-Mco | 0.0 | >= 0 |  no | Low-Mach acoustic-dissipation cutoff Mach (floor) |

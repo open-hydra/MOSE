@@ -15,6 +15,7 @@ module MOSE_Advanced_Types_m
     real(R8), allocatable                  :: vol(:,:,:)       ! Cell volume
     type(MOSE_vector_3D_type), allocatable :: node(:,:,:)      ! Mesh grid points (including ghost)
     type(MOSE_tensor_3D_type), allocatable :: M(:,:,:)         ! Metric transformation tensor
+    type(MOSE_tensor_3D_type), allocatable :: Minv(:,:,:)      ! Inverse of M (interior cells only), for the viscous face metric; diffusive-metric = inverse-mean only
     type(MOSE_vector_3D_type), allocatable :: dl(:,:,:)        ! Average cell length (in i/j/k direction). eg: dl%c(1) is sqrt(dx**2+dy**2+dz**2) of the cell in the i direction
     type(MOSE_d_metrics_type)              :: dir(3)           ! Direction object. Contains: i-faces, j-faces, k-faces; eg: dir(1)%face(i,j,k)%n
     real(R8), allocatable                  :: yn(:,:,:)        ! Nearest wall distance
