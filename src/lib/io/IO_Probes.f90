@@ -39,7 +39,7 @@ contains
   subroutine Setup_Probes( domain, newrun )
     use IR_precision
     use strings, only: parse
-    use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Mod_MPI, only: is_local_block, mpi_abort_all
     implicit none
     type(MOSE_domain_type), intent(in)  :: domain
     logical, intent(in)                 :: newrun
@@ -83,18 +83,17 @@ contains
 
       call Assign_Variables(probe(i), domain)
 
+      ! A restart appends to the probe file, creating it if missing (e.g. probes added
+      ! or files moved away); a new run replaces it. Only the rank that owns the probe
+      ! gets here, so a failure aborts all ranks: an unopened unit would write to an
+      ! arbitrary file.
       if (.not.newrun) then
-        open(newunit=probe(i)%unit,file=trim(obj_io_probes(i)%file),status='OLD',iostat=error)
-        if (error/=0) then
-          obj_io_probes(i)%error_message = "[ERROR] You restarted from an old solution but the probes files were not found."
-          return
-        endif
-        error = 0
-        do while ( error == 0 ); read (probe(i)%unit, *, iostat=error); enddo
-        backspace (probe(i)%unit)
+        open(newunit=probe(i)%unit,file=trim(obj_io_probes(i)%file),status='UNKNOWN', &
+             position='APPEND',action='WRITE',iostat=error)
       else
         open(newunit=probe(i)%unit,file=trim(obj_io_probes(i)%file),status='REPLACE',iostat=error)
       endif
+      if (error/=0) call mpi_abort_all('cannot open probe file '//trim(obj_io_probes(i)%file))
 
     enddo
 
@@ -142,7 +141,8 @@ contains
 
   subroutine Assign_Variables(probe, domain)
     use IR_precision
-    use MOSE_Global_m, only: nsc, nu, nv, nw, np
+    use MOSE_Global_m, only: nsc, nu, nv, nw, np, nt, nrans
+    use MOSE_Mod_MPI,  only: mpi_abort_all
     implicit none
     type(obj_probe), intent(inout), target     :: probe
     type(MOSE_domain_type), intent(in), target :: domain
@@ -156,6 +156,9 @@ contains
 
     probe%P => domain%blk(b)%P(:,i,j,k)
     allocate(probe%variables(1:probe%nvar))
+    do v = 1, probe%nvar
+      nullify(probe%variables(v)%p)
+    enddo
 
     do v = 1, probe%nvar
       do s = 1, nsc
@@ -167,6 +170,11 @@ contains
       if (probe%names(v)=='p') probe%variables(v)%p => probe%P(np)
       if (probe%names(v)=='T') probe%variables(v)%p => probe%T
       if (probe%names(v)=='M') probe%variables(v)%p => probe%M
+      ! First RANS variable, same name as in the solution files (SA: mu-tilde = rho*nu-tilde)
+      if (probe%names(v)=='mi_tilde' .and. nrans > 0) probe%variables(v)%p => probe%P(nt)
+      if (.not. associated(probe%variables(v)%p)) &
+        call mpi_abort_all('unknown probe variable "'//trim(probe%names(v))// &
+                           '" (accepted: rho(n) u v w p T M, and mi_tilde with a RANS model)')
     enddo
 
   end subroutine Assign_Variables
