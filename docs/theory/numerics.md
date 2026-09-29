@@ -216,7 +216,46 @@ are computed with a 10-point stencil at each cell interface:
 - 8 points in the two tangential directions (four per direction)
 
 The gradient in computational space $(\xi, \eta, \zeta)$ is mapped to
-Cartesian coordinates $(x, y, z)$ using the face metric tensor $M_{3\times 3}$, which is computed from the grid geometry and stored at each face.  The same metric is used to compute the physical spacing $\Delta l$ for the MUSCL reconstruction.
+Cartesian coordinates $(x, y, z)$ with a face metric tensor $M_f$. Each cell
+stores its metric $M = A^{-T}$, where the rows of $A$ are the cell edge vectors
+$\partial\mathbf{x}/\partial\xi$, $\partial\mathbf{x}/\partial\eta$,
+$\partial\mathbf{x}/\partial\zeta$; the edge lengths also give the physical
+spacings $\Delta l$ of the MUSCL reconstruction. The face metric combines the
+two cells $L$ and $R$ that share the face, selected by `diffusive-metric` in
+`[MOSE-Numerics]`:
+
+| `diffusive-metric` | Face metric | |
+|---|---|---|
+| `inverse-mean` (default) | $M_f = \left[\tfrac12\left(A_L + A_R\right)\right]^{-T}$ | the face-normal edge is the centre-to-centre vector: exact for a linear field on any stretching |
+| `mean` | $M_f = \tfrac12\left(M_L + M_R\right)$ | faster; biased on stretched meshes |
+
+In one dimension $M = 1/h$, so `mean` divides the difference across the face by
+the mean of $1/h$ instead of the centre-to-centre distance. With a cell-size
+ratio $r = h_R/h_L$ it overstates the face-normal gradient, and so the viscous,
+conductive and diffusive fluxes, by
+
+$$
+\frac{(1+r)^2}{4r}:\qquad
++0.2\,\% \;(r=1.1),\quad +0.8\,\% \;(r=1.2),\quad +4.2\,\% \;(r=1.5),\quad +8.9\,\% \;(r=1.8)
+$$
+
+This bias does not decrease with grid refinement at a fixed growth ratio, and it
+is present in the converged steady solution. `mean` is adequate where adjacent
+cells grow by about 1.2 or less; boundary-layer meshes often grow faster near
+the wall. With `inverse-mean` MOSE stores $A^{T}$ per cell (9 values), so each
+face needs one $3\times 3$ inversion.
+
+Block-connection and chimera faces always use the inverse mean: across a large
+cell-size jump at a block interface, the mean makes the normal gradient so steep
+that the explicit diffusion becomes unstable.
+
+!!! note "Tangential derivatives"
+    The tangential derivatives on a face are central differences over two cells,
+    divided by the cell's own tangential edge. With stretching in a tangential
+    direction they carry the same $(1+r)^2/(4r)$ factor, which neither option
+    corrects. In a thin boundary layer this enters only through the streamwise
+    variation of the shear on faces normal to the flow, so its effect is much
+    smaller than that of the face-normal gradient.
 
 ---
 

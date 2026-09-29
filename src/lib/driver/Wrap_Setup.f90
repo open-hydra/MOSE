@@ -504,6 +504,8 @@ contains
       write(*,'(A,T35,A)') '   Reconstruction', trim(obj_space_scheme%description)
       if (len_trim(obj_space_scheme%flux_limiter)>0) &
         write(*,'(A,T35,A)') '   Flux limiter',trim(obj_space_scheme%flux_limiter)
+      if (model>0) &
+        write(*,'(A,T35,A)') '   Viscous face metric',trim(obj_space_scheme%diffusive_metric)
       if (obj_shock_detector%id/=0) &
         write(*,'(A,T35,A)') '   Shock sensor',trim(obj_shock_detector%description)
       write(*,*)  
