@@ -213,6 +213,7 @@ After a run completes, the `OUTPUT/` directory contains:
 | `field.*` | Solution fields ($\rho$, $u$, $v$, $w$, $p$, $T$, …) |
 | `residual-history.dat` | Iteration-by-iteration residual norms |
 | `wall.tec` | Wall quantities (skin friction, heat flux) — viscous cases only |
+| `diagnostic.*` | Per-cell residuals of $\rho$, $\rho u$, $\rho v$, $\rho w$, $\rho E$ and of the RANS variables, local time step `dt`, shock-sensor flag `beta` — steady runs only |
 | `<probe>.txt` | Time-history data at probe locations called <probe>|
 
 ### Input/Output Formats
