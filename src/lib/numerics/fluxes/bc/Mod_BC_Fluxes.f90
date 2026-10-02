@@ -67,7 +67,7 @@ contains
           Fm = domain % bc(i) % f
           select case ( domain % bc(i) % type )
 
-            case (103) ! multi-Solver coupling
+            case (103, 104) ! multi-Solver coupling (103=block connect, 104=chimera)
               call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
               domain % blk(Bm) % R(:,Im,Jm,Km) = domain % blk(Bm) % R(:,Im,Jm,Km) + domain % bc(i) % ext_flux
 
