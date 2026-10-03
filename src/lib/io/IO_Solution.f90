@@ -289,7 +289,7 @@ contains
     use Lib_VTK
     use Lib_Tecplot
     use FLINT_Lib_Thermodynamic
-    use MOSE_Mod_MPI, only: mpi_is_root
+    use MOSE_Mod_MPI, only: mpi_is_root, mpi_size_, is_local_block, block_owner, check_mpi_error
     use MOSE_Mod_GhostExchange, only: gather_P_to_root, mpi_io_barrier
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
@@ -298,49 +298,69 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    integer             :: E_IO, b, i, j, k, pv
-    real(8)             :: p, rho, Rtot, rhoi(nsc), T, mu, kl, mut
-    real(8)             :: vel_gradient(3,3)
+    integer             :: E_IO, b
 
     ! Gather P from all ranks to root (collective — all ranks must call)
     call gather_P_to_root(domain)
 
+    ! Output variables are computed by the rank that owns the block: the auxiliary
+    ! ones need the metrics, the wall distance and the ghost cells, which root
+    ! does not hold for remote blocks (geometry-only, interior P from the gather).
+    if (mpi_is_root) then
+      do b = 1, domain%nb
+        if (is_local_block(b)) call Fill_Output_Vars ( domain%blk(b), domain%blk(b)%dim, IOfield%block(b)%vars )
+      enddo
+    endif
+
+#ifdef USE_MPI
+    if (mpi_size_ > 1) then
+      block
+        use mpi
+        integer :: ierr, nreq, n, offset
+        integer, allocatable :: reqs(:), stats(:,:)
+        real(R8P), allocatable :: buf(:)
+
+        allocate(reqs(domain%nb), stats(MPI_STATUS_SIZE, domain%nb))
+        nreq = 0
+        if (mpi_is_root) then
+          ! Root: receive the remote blocks straight into IOfield
+          do b = 1, domain%nb
+            if (is_local_block(b)) cycle
+            n = obj_io%Onvar * product(domain%blk(b)%dim)
+            nreq = nreq + 1
+            call MPI_IRECV(IOfield%block(b)%vars, n, MPI_DOUBLE_PRECISION, &
+                           block_owner(b), b, MPI_COMM_WORLD, reqs(nreq), ierr)
+            call check_mpi_error(ierr)
+          enddo
+        else
+          ! Non-root: fill the local blocks in one contiguous buffer and send them
+          n = 0
+          do b = 1, domain%nb
+            if (is_local_block(b)) n = n + obj_io%Onvar * product(domain%blk(b)%dim)
+          enddo
+          allocate(buf(max(n, 1)))
+          offset = 0
+          do b = 1, domain%nb
+            if (.not. is_local_block(b)) cycle
+            n = obj_io%Onvar * product(domain%blk(b)%dim)
+            call Fill_Output_Vars ( domain%blk(b), domain%blk(b)%dim, buf(offset+1:offset+n) )
+            nreq = nreq + 1
+            call MPI_ISEND(buf(offset+1), n, MPI_DOUBLE_PRECISION, &
+                           0, b, MPI_COMM_WORLD, reqs(nreq), ierr)
+            call check_mpi_error(ierr)
+            offset = offset + n
+          enddo
+        endif
+        if (nreq > 0) then
+          call MPI_WAITALL(nreq, reqs(1:nreq), stats(:,1:nreq), ierr)
+          call check_mpi_error(ierr)
+        endif
+      end block
+    endif
+#endif
+
     if (mpi_is_root) then
       path = 'OUTPUT/'
-
-      ! Update IOfield variables with domain primitives and other variables
-      do b = 1, size(IOfield%block)
-        IOfield%block(b)%vars(1:nprim,:,:,:) = domain%blk(b)%P(:,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk)
-        ! Auxiliary variables
-        do k = 1, IOfield%block(b)%Nk ; do j = 1, IOfield%block(b)%Nj ; do i = 1, IOfield%block(b)%Ni
-          rhoi = domain%blk(b)%P(1:nsc,i,j,k)
-          p    = domain%blk(b)%P(np,i,j,k)
-          rho  = sum ( rhoi )
-          Rtot = f_Rtot( rhoi )
-          T = eos(p=p,rho=rho,R=Rtot)
-          pv = 1; IOfield%block(b)%vars(nprim+1,i,j,k) = T
-          if (obj_io%write_thermo) then
-            pv = pv + 1; IOfield%block(b)%vars(nprim+pv,i,j,k) = f_gamma ( rhoi, p, rho, Rtot )
-            pv = pv + 1; IOfield%block(b)%vars(nprim+pv,i,j,k) = Rtot
-          endif
-          if (obj_io%write_transport) then
-            call co_k_mi_lam_Wilke(rhoi,rho,T,mu,kl)
-            pv = pv +1; IOfield%block(b)%vars(nprim+pv,i,j,k) = mu
-            pv = pv +1; IOfield%block(b)%vars(nprim+pv,i,j,k) = kl
-            if (nrans>0) then
-              vel_gradient(:,1) = ( domain%blk(b)%P(nu:nw,i+1,j,k) - domain%blk(b)%P(nu:nw,i-1,j,k) )/2d0
-              vel_gradient(:,2) = ( domain%blk(b)%P(nu:nw,i,j+1,k) - domain%blk(b)%P(nu:nw,i,j-1,k) )/2d0
-              vel_gradient(:,3) = ( domain%blk(b)%P(nu:nw,i,j,k+1) - domain%blk(b)%P(nu:nw,i,j,k-1) )/2d0
-              vel_gradient = matmul ( vel_gradient + 1d-40, domain%blk(b)%m(i,j,k)%c )
-              call Eddy_Viscosity ( mut=mut, rans_variables=domain%blk(b)%p(nt:,i,j,k), &
-                                    mul=mu, rho=rho, vel_gradient=vel_gradient, &
-                                    walldist=domain%blk(b)%yn(i,j,k), &
-                                    k_rough=domain%blk(b)%k_rough(i,j,k))
-              pv = pv +1; IOfield%block(b)%vars(nprim+pv,i,j,k) = mut
-            end if
-          endif
-        enddo; enddo; enddo
-      enddo
 
       ! Write the IOfield accordingly to the solution format
       if (index(obj_io%sol_format,'vtk')>0) then
@@ -357,5 +377,59 @@ contains
     call mpi_io_barrier()
 
   end subroutine Write_vtk_tec
+
+
+  !> Output variables of one block: primitives, then T and the optional thermo,
+  !> transport and eddy-viscosity ones, in the order of obj_io%Ovarnames.
+  !> Needs the full block (P with ghosts, metrics, wall distance): call it on the owner.
+  subroutine Fill_Output_Vars ( blk, nijk, out )
+    use MOSE_Advanced_Types_m
+    use MOSE_Config_Types_m, only: obj_io
+    use MOSE_Global_m
+    use MOSE_Parameters_m
+    use MOSE_Lib_RANS
+    use IR_Precision
+    use FLINT_Lib_Thermodynamic
+    implicit none
+    type(MOSE_block_type), intent(in) :: blk
+    integer, intent(in)               :: nijk(3)
+    real(R8P), intent(out)            :: out(obj_io%Onvar, nijk(1), nijk(2), nijk(3))
+    ! Local
+    integer :: i, j, k, pv
+    real(8) :: p, rho, Rtot, rhoi(nsc), T, mu, kl, mut
+    real(8) :: vel_gradient(3,3)
+
+    out(1:nprim,:,:,:) = blk%P(:,1:nijk(1),1:nijk(2),1:nijk(3))
+    ! Auxiliary variables
+    do k = 1, nijk(3) ; do j = 1, nijk(2) ; do i = 1, nijk(1)
+      rhoi = blk%P(1:nsc,i,j,k)
+      p    = blk%P(np,i,j,k)
+      rho  = sum ( rhoi )
+      Rtot = f_Rtot( rhoi )
+      T = eos(p=p,rho=rho,R=Rtot)
+      pv = 1; out(nprim+1,i,j,k) = T
+      if (obj_io%write_thermo) then
+        pv = pv + 1; out(nprim+pv,i,j,k) = f_gamma ( rhoi, p, rho, Rtot )
+        pv = pv + 1; out(nprim+pv,i,j,k) = Rtot
+      endif
+      if (obj_io%write_transport) then
+        call co_k_mi_lam_Wilke(rhoi,rho,T,mu,kl)
+        pv = pv +1; out(nprim+pv,i,j,k) = mu
+        pv = pv +1; out(nprim+pv,i,j,k) = kl
+        if (nrans>0) then
+          vel_gradient(:,1) = ( blk%P(nu:nw,i+1,j,k) - blk%P(nu:nw,i-1,j,k) )/2d0
+          vel_gradient(:,2) = ( blk%P(nu:nw,i,j+1,k) - blk%P(nu:nw,i,j-1,k) )/2d0
+          vel_gradient(:,3) = ( blk%P(nu:nw,i,j,k+1) - blk%P(nu:nw,i,j,k-1) )/2d0
+          vel_gradient = matmul ( vel_gradient + 1d-40, blk%m(i,j,k)%c )
+          call Eddy_Viscosity ( mut=mut, rans_variables=blk%p(nt:,i,j,k), &
+                                mul=mu, rho=rho, vel_gradient=vel_gradient, &
+                                walldist=blk%yn(i,j,k), &
+                                k_rough=blk%k_rough(i,j,k))
+          pv = pv +1; out(nprim+pv,i,j,k) = mut
+        end if
+      endif
+    enddo; enddo; enddo
+
+  end subroutine Fill_Output_Vars
 
 end module MOSE_IO_Solution
