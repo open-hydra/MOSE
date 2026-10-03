@@ -97,24 +97,6 @@ contains
       end select
     enddo
 
-    ! Compute Pg(:,3:6) for type-1 connections where source block is local.
-    ! This only reads local blk%P data, so it can run before the MPI exchange.
-    !$omp do schedule (dynamic, 64) private(ii, i, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
-    do ii = 1, domain % n_local_bs
-      i  = domain % local_bs_idx(ii)
-      Bs = domain % bc(i) % bs
-      Is = domain % bc(i) % is
-      Js = domain % bc(i) % js
-      Ks = domain % bc(i) % ks
-      Fs = domain % bc(i) % fs
-      d11s = domain % bc(i) % d11
-      d12s = domain % bc(i) % d12
-      d21s = domain % bc(i) % d21
-      d22s = domain % bc(i) % d22
-      call Fill_BC_Ghost_Connection ( Is, Js, Ks, Fs, d11s, d12s, d21s, d22s, &
-                                      domain % blk(Bs), domain % bc(i) % Pg )
-    enddo
-
     ! Compute Pg for Q2D (410) connections where Bm is local.
     !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
     do ii = 1, domain % n_local_bc
@@ -148,6 +130,27 @@ contains
         call exchange_ghost_chimera_unpack(domain, ii, ii)
       end do
     end if
+
+    ! Compute Pg(:,3:6) for type-1 connections where source block is local.
+    ! The four tangential neighbours of a source cell on the edge of its face are
+    ! ghost cells of Bs, and those can be filled from another rank: this loop must
+    ! follow the P unpack above, or it reads them one stage old (MPI-only drift at
+    ! block edges and junctions, ~1e-9 after 500 iterations on RL36).
+    !$omp do schedule (dynamic, 64) private(ii, i, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
+    do ii = 1, domain % n_local_bs
+      i  = domain % local_bs_idx(ii)
+      Bs = domain % bc(i) % bs
+      Is = domain % bc(i) % is
+      Js = domain % bc(i) % js
+      Ks = domain % bc(i) % ks
+      Fs = domain % bc(i) % fs
+      d11s = domain % bc(i) % d11
+      d12s = domain % bc(i) % d12
+      d21s = domain % bc(i) % d21
+      d22s = domain % bc(i) % d22
+      call Fill_BC_Ghost_Connection ( Is, Js, Ks, Fs, d11s, d12s, d21s, d22s, &
+                                      domain % blk(Bs), domain % bc(i) % Pg )
+    enddo
 
     ! Chimera ghost fill: all donor data (local and remote) is now current
     !$omp do schedule (dynamic, 64) private(ii, i)
