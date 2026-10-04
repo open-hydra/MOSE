@@ -45,7 +45,7 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
 | Ablative wall BCs (503/504/505) | melting, pyrolysis, surface reactions | 503/504 vs closed form (`AblatingWall`) | 505 needs a CO/CO2 thermo table |
 | Restart | core feature | none | untested |
 | I/O formats | tec ascii/bin, vtk ascii/raw | ascii only | round-trip untested |
-| Parallelism | OpenMP, MPI | runs, not verified | **no serial==parallel check** |
+| Parallelism | OpenMP, MPI | 1 vs 4 threads (`OpenMPEquiv`); MPI ranks × threads bit-identical in the `needs-mpi` tier (`test/mpi/`) | MPI tier runs only in MPI builds, not on the CI runner |
 | 3D | full | source terms only | no 3D NS verification |
 
 ---
@@ -107,7 +107,10 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
   is a possible future addition.)
 - ☑ **I5 — Serial vs OpenMP equivalence**: 1 vs 4 threads bit-identical, also with chimera faces meeting at
   the edges of a block. *Done:*
-  `test/fast/openmp-equiv`. (MPI variant → nightly.)
+  `test/fast/openmp-equiv`. *MPI variant (needs-mpi tier):* `test/mpi/boundary-records`
+  (`MPIBoundaryRecords`) — a strip of four viscous blocks bit-identical on 1×1, 2×1,
+  4×1 and 2×2 ranks × threads, and with the `bc.txt` records in reverse order (1 and 2
+  ranks, with and without threads).
 
 ---
 

@@ -49,6 +49,8 @@ test/
 │       ├── mms/                   # residuals/: RANS right-hand sides on manufactured fields
 │       ├── point-implicit-steady/ # Steady state with the point-implicit factor independent of the time step
 │       └── swbli/
+├── mpi/                       # MPI tier (needs-mpi): make_case.py
+│   └── boundary-records/      # Boundary records
 ├── 3D/                        # 3-D validation cases
 │   └── coriolis-channel/
 ├── Pressure_Centrifugal_eq/   # Rotating-frame equilibrium case
@@ -228,6 +230,25 @@ cost, 14 000 iterations per model: the steady state of a short hypersonic plate
 with the point-implicit factor (Spalart–Allmaras, SST) does not depend on the
 time step, and implicit residual smoothing does not move it either (wall shear
 and heat flux to 1e-9). Run them with `ctest -L validation`.
+
+### MPI tier contents
+
+Builds with `USE_MPI=ON` also register a `needs-mpi` tier. Each test generates
+its own small multi-block case with
+[`test/mpi/make_case.py`](https://github.com/open-hydra/MOSE/blob/main/test/mpi/make_case.py),
+launches the solver itself through the MPI launcher CMake found
+(`MPIEXEC_EXECUTABLE`, at most 4 ranks) and asserts **bit-for-bit** invariants
+of the parallel solution, comparing the `vtk raw` output files byte by byte.
+
+| Test | Asserts | Lives in |
+|------|---------|----------|
+| `MPIBoundaryRecords` | a strip of four viscous blocks (inlet, outlet, wall, symmetry and block-cut records) gives the same solution on 1×1, 2×1, 4×1 and 2×2 (MPI ranks × OpenMP threads); the same case with the `bc.txt` records in reverse order gives the same solution as the ordered file, on 1 and 2 ranks, with and without threads | `test/mpi/boundary-records` |
+
+Run the tier from the build directory of an MPI build:
+
+```bash
+ctest -L needs-mpi --output-on-failure
+```
 
 The broader plan — coverage map, remaining gaps, and the rationale behind
 the tiering — lives in

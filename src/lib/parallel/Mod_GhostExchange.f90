@@ -277,14 +277,15 @@ contains
 
 
   !> Build pre-filtered list of BC indices where Bm is local to this rank.
-  !> Avoids O(nbound) loop scanning in hot paths (Fill_Ghost_Cell, etc.).
+  !> Avoids O(nbound) loop scanning in hot paths (Fill_Ghost_Cell, BC_Fluxes, etc.).
   subroutine build_local_bc_index(domain)
     use MOSE_Advanced_Types_m
 
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
-    integer :: i, n, ns
+    integer :: i, n, ns, b, f
+    integer, allocatable :: next(:,:)
 
     ! Count local BC entries (Bm is local) and local source entries (Bs is local, type-1)
     n = 0; ns = 0
@@ -318,6 +319,42 @@ contains
           domain%local_bs_idx(ns) = i
         end if
       end if
+    end do
+
+    ! Group the local entries by block, then face, keeping the file order within
+    ! a group (counting sort). BC_Fluxes runs one worksharing loop per group: the
+    ! records of one face of one block write distinct target cells, and the faces
+    ! of a corner cell are summed in the order 1..6 whatever the order of the BC file.
+    if (allocated(domain%local_bf_first)) deallocate(domain%local_bf_first)
+    if (allocated(domain%local_bf_count)) deallocate(domain%local_bf_count)
+    if (allocated(domain%local_bf_idx))   deallocate(domain%local_bf_idx)
+    allocate(domain%local_bf_first(domain%nb, 6), domain%local_bf_count(domain%nb, 6))
+    allocate(domain%local_bf_idx(domain%n_local_bc))
+
+    domain%local_bf_count = 0
+    do n = 1, domain%n_local_bc
+      i = domain%local_bc_idx(n)
+      b = domain%bc(i)%b
+      f = domain%bc(i)%f
+      domain%local_bf_count(b,f) = domain%local_bf_count(b,f) + 1
+    end do
+
+    n = 1
+    do b = 1, domain%nb
+      do f = 1, 6
+        domain%local_bf_first(b,f) = n
+        n = n + domain%local_bf_count(b,f)
+      end do
+    end do
+
+    allocate(next(domain%nb, 6))
+    next(:,:) = domain%local_bf_first(:,:)
+    do n = 1, domain%n_local_bc
+      i = domain%local_bc_idx(n)
+      b = domain%bc(i)%b
+      f = domain%bc(i)%f
+      domain%local_bf_idx(next(b,f)) = i
+      next(b,f) = next(b,f) + 1
     end do
   end subroutine build_local_bc_index
 

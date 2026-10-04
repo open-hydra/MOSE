@@ -190,3 +190,31 @@ mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;phys
 add_fortran_executable(qcr2000_check unit/qcr2000_check.f90)
 add_test(NAME QCR2000Stress COMMAND qcr2000_check)
 set_tests_properties(QCR2000Stress PROPERTIES LABELS "fast;physics;unit" TIMEOUT 60)
+
+# ===========================================================================
+#  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
+#  Each test generates its own small multi-block case (test/mpi/make_case.py)
+#  and launches the solver itself through the MPI launcher CMake found, with
+#  at most 4 ranks; it asserts bit-for-bit invariants of the parallel run.
+# ===========================================================================
+if(USE_MPI)
+    function(mose_add_mpi_script NAME DIR)
+        if(EXISTS "${CMAKE_SOURCE_DIR}/test/${DIR}/run.sh")
+            add_test(
+                NAME    ${NAME}
+                COMMAND bash -c "./run.sh"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${DIR}"
+            )
+            set_tests_properties(${NAME} PROPERTIES
+                LABELS      "${ARGN}"
+                TIMEOUT     600
+                PROCESSORS  4
+                ENVIRONMENT "${_MOSE_TEST_ENV};MOSE_MPIEXEC=${MPIEXEC_EXECUTABLE};MOSE_MPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}"
+            )
+        endif()
+    endfunction()
+
+    # Boundary records: the boundary-flux loop gives the same bits on any
+    # ranks x threads layout and for any order of the records in bc.txt.
+    mose_add_mpi_script(MPIBoundaryRecords mpi/boundary-records "needs-mpi;implementation;2D")
+endif()
