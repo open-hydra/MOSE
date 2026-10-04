@@ -37,7 +37,7 @@ nightly/local tier.
 | Equations | euler, navier-stokes | both | — |
 | Time scheme | euler, RK2, RK3 | RK3 only | RK2, forward-euler untested |
 | Integration vars | cons, prim, prec | cons (+ prec in Gresho) | `prim` untested |
-| Space recon | first-order, MUSCL | MUSCL | first-order path untested |
+| Space recon | first-order, MUSCL | both (first-order: Noh87, LimiterDefaults) | — |
 | Limiters | vanleer, vanalbada, minmod, superbee, mc | vanleer (mostly) | 4 of 5 never smoke-tested |
 | Riemann solvers | ~14 | ~6 in V&V | half never executed in CI |
 | Low-Mach (Mco) | floor | Gresho | ok |
@@ -145,6 +145,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F4 | Single- vs multi-block equivalence | identical field | ☑ `Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder` (I7, I7b) | see I7, I7b |
 | F5 | Riemann smoke matrix | no NaN, ρ,p>0 | ☑ `RiemannSmoke` | ~4 s |
 | F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
+| F5c | Limiter defaults (MUSCL without limiter, first-order with limiter) | field bit-identical to the explicit setting; matching warnings and summary | ☑ `InputChecks`/`LimiterDefaults` | <1 s |
 | F5e | Time control (1-D duct, time-dependent inlet 402) | order in time ≥ 1.8 (RK2, RK3); table held before its first instant; time-threshold reached | ☑ `TimeIntegration`/`TimeControl` | ~5 s |
 | F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart` | ~1 s |
 | I11 | Wall output in vtk raw (2x2-block box of 8 × 8 cells, adiabatic no-slip walls (301) on its four sides, 5 RK3 steps) | the run ends; every wall file `wallB<b>F<f>.vts` has the extent of its face (WholeExtent and Piece Extent, from `fieldBlock<b>.vts`) and its points, as raw appended data | ☑ `OutputFiles`/`WallOutput` | <1 s |
@@ -166,11 +167,10 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F21 | Rotational periodicity of a 3-D sector (annulus sector from -45 to 45 degrees, type 200 on the k faces, radial flow with uniform density and pressure, 20 steps of RK3) | the columns k and NK + 1 - k mirror images (rho, u, v, p equal, w opposite) within 1e-10 of their scales | ☑ `Connections`/`SectorRadial` | <1 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
-Current `ctest -L fast`: **20 tests, ~103 s** (Sod79, Einfeldt91, Noh87, Toro99,
-ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, TimeIntegration,
-BoundaryConditions, Conservation, OpenMPEquiv, Connections, Restart,
-OutputFiles, InputChecks, MMSResiduals, AblatingWall, MeshGeometry,
-QCR2000Stress).
+Current `ctest -L fast`: **20 tests, ~105 s** (Sod79, Einfeldt91, Noh87, Toro99,
+ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, InputChecks,
+TimeIntegration, BoundaryConditions, Conservation, OpenMPEquiv, Connections,
+Restart, OutputFiles, MMSResiduals, AblatingWall, MeshGeometry, QCR2000Stress).
 
 The time is CPU time at one thread, one test at a time, measured on one machine
 (load average ~190 on 192 logical CPUs), where the 12 fast tests of main take ~41 s.

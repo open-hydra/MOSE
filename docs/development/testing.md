@@ -24,7 +24,8 @@ test/
 │   ├── openmp-equiv/          # 1 vs 4 threads bit-identical
 │   ├── restart/               # Restart round-trip reproduces uninterrupted run
 │   ├── input-checks/          # Input checks
-│   │   └── exit-codes/        # Runs stopped on an error end with a non-zero exit code and their message
+│   │   ├── exit-codes/        # Runs stopped on an error end with a non-zero exit code and their message
+│   │   └── limiter-defaults/  # The reconstruction that runs is the declared one
 │   ├── connections/           # Faces between blocks
 │   │   ├── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
 │   │   ├── connection-flux/   # One flux per face between blocks: one block = two blocks, conservation
@@ -226,6 +227,7 @@ seconds on a CI runner.
 | `PrandtlMeyer` | analytic turning angle | `test/2D/euler/prandtl-meyer` |
 | `RiemannSmoke` | every shock-capturing solver stays positive (no NaN, ρ,p>0) | `test/fast/riemann-smoke` |
 | `NumericsSmoke` | all limiters × time schemes × recon × integration vars stay positive | `test/fast/numerics-smoke` |
+| `InputChecks`/`LimiterDefaults` | MUSCL without `flux-limiter` runs van Leer and first-order ignores a given limiter (fields bit-identical to the explicit settings), with the matching set-up warnings and summary | `test/fast/input-checks/limiter-defaults` |
 | `BoundaryConditions`/`Inlets` | an ambient inlet (407) with the flow direction `normal` gives the field of the angles the token stands for on that face, to the bit, with no transverse velocity; inlets at total conditions in a 1-D tube of air, one forward Euler step with first-order reconstruction: the mass flux of each inlet face equals that of the face state within 1e-9 of rho a — ambient (407) and inlet (401) faces with the gas at rest and p0 = 2 p (subsonic inflow, 0.7701 rho a) or 36 p (choked, normal Mach 1, 20.83 rho a), on both ends; an inlet with p0 below the pressure the gas of the cell reaches at rest is a slip wall; an ambient (407) face that the reservoir cannot feed, with the gas of the cell moving in at 0.5 a or 1.2 a, is an outlet at p_back (0.0590 and 0.0389 rho a out), and at rest at p_stop with p_back above it (no mass) | `test/fast/boundary-conditions/inlets` |
 | `TimeIntegration`/`TimeControl` | second order in time with a time-dependent inlet (BC 402) for RK2 and RK3; a time table holds its first value before its first instant; `res-threshold` does not end a time-accurate run | `test/fast/time-integration/time-control` |
 | `Conservation` | closed slip-wall box conserves total mass to round-off | `test/fast/conservation` |

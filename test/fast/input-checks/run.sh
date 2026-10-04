@@ -9,13 +9,15 @@
 #  the head of its run.sh; each part runs in its folder, as CTest runs a
 #  test:
 #    ExitCodes (exit-codes): exit codes and messages of the error stops
+#    LimiterDefaults (limiter-defaults): limiter defaults and the declared
+#      reconstruction
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(exit-codes)
+PARTS=(exit-codes limiter-defaults)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

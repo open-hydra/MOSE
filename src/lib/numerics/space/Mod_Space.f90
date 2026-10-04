@@ -18,16 +18,19 @@ contains
     ! MUSCL
     if (index(obj_space_scheme%space_reconstruction,'MUSCL')>0) then
       obj_space_scheme%description = 'MUSCL'
-      if (obj_space_scheme%flux_limiter=='none') then
+      ! flux-limiter omitted: the registry default is the empty string
+      if (len_trim(obj_space_scheme%flux_limiter)==0 .or. obj_space_scheme%flux_limiter=='none') then
         obj_space_scheme%flux_limiter='vanleer'
         obj_space_scheme%warning_message = '[WARNING] You have specified MUSCL reconstruction but not a flux limiter. Van Leer by default.'
       endif
     ! First order
     else
       obj_space_scheme%description = 'First-order'
-      if (obj_space_scheme%flux_limiter /= 'none') then
+      if (len_trim(obj_space_scheme%flux_limiter)>0 .and. obj_space_scheme%flux_limiter /= 'none') then
         obj_space_scheme%warning_message = '[WARNING] Flux limiter specified but MUSCL reconstruction is not enabled. Ignoring flux limiter.'
       end if
+      ! First order means zero slopes: drop the limiter, so that Assign_Limiter selects rlimiter_IORD
+      obj_space_scheme%flux_limiter = ''
     end if
 
     call Assign_Limiter(obj_space_scheme%flux_limiter)

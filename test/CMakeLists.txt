@@ -191,7 +191,10 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # variable. A steady run with a soot model ends normally and its diagnostic
 # output names every variable it writes; a steady single-species run without
 # thermo or transport output stops with a message that says so.
-mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
+# Limiter defaults: the reconstruction that runs is the declared one (MUSCL
+# without flux-limiter = van Leer; first-order ignores a given limiter), and
+# the set-up warnings say so.
+mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;numerics;1D")
 
 # Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).
 # Spalart-Allmaras with variable density: the right-hand side of the equation
