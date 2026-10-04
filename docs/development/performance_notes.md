@@ -112,8 +112,9 @@ grows 2475 → 3530 bytes; the binary shrinks 7.07 → 5.65 MB.
 **Correctness under parallelism** — 2 MPI ranks and 4 OpenMP threads both produce
 output bit-identical to serial, same as the non-IPO build. Worth stating because,
 when this was measured, `ctest` had no MPI coverage at all. MPI builds now
-register a `needs-mpi` tier that checks ranks × threads against the serial run
-bit for bit ([Testing](testing.md#mpi-tier-contents)).
+register a `needs-mpi` tier that checks parallel runs: bit for bit against the
+serial run, and which thread makes the MPI calls
+([Testing](testing.md#mpi-tier-contents)).
 
 **Numerics** — IPO changes results at round-off, growing from ~1e-14 relative at
 t = 10 µs to ~3e-9 at 250 µs on Fer14, three orders below the ODE solver's own

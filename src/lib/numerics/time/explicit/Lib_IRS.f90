@@ -150,11 +150,14 @@ contains
 
     ! MPI: exchange residual data for inter-rank type-1 connections.
     ! exchange_ghost_R is a no-op on one rank; skipping it also skips the
-    ! !$omp single barrier, once per direction per stage.
+    ! barrier, once per direction per stage. Under MPI_THREAD_FUNNELED only
+    ! the primary thread may call MPI (master); the barrier publishes the
+    ! received residuals to the other threads.
     if (mpi_size_ > 1) then
-      !$omp single
+      !$omp master
       call exchange_ghost_R(domain)
-      !$omp end single
+      !$omp end master
+      !$omp barrier
     end if
 
     ! BC array processing — iterate only over local BC entries

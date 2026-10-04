@@ -65,7 +65,8 @@ test/
 │   ├── boundary-records/      # Boundary records
 │   ├── connection-flux/       # Faces between ranks
 │   ├── connection-order/      # The 2-D case of ConnectionOrder with one block per rank
-│   └── vertex-stencil/        # Viscous connection stencil at a vertex shared by four blocks
+│   ├── vertex-stencil/        # Viscous connection stencil at a vertex shared by four blocks
+│   └── thread-funnel/         # MPI calls only from the main thread (MPI_THREAD_FUNNELED)
 ├── 3D/                        # 3-D validation cases
 │   └── coriolis-channel/
 ├── Pressure_Centrifugal_eq/   # Rotating-frame equilibrium case
@@ -265,14 +266,18 @@ Run them with `ctest -L validation`.
 ### MPI tier contents
 
 Builds with `USE_MPI=ON` also register a `needs-mpi` tier. Each test generates
-its own small multi-block case, launches the solver itself through the MPI
-launcher CMake found (`MPIEXEC_EXECUTABLE`, at most 4 ranks) and asserts
-**bit-for-bit** invariants of the parallel solution.
+its own small multi-block case, with
+[`test/mpi/make_case.py`](https://github.com/open-hydra/MOSE/blob/main/test/mpi/make_case.py) or, for
+`MPIConnectionFlux` and `MPIConnectionOrder`, with the generator of their fast tests,
+launches the solver itself through the MPI launcher CMake found
+(`MPIEXEC_EXECUTABLE`, at most 4 ranks) and checks an invariant of the parallel
+run; all but `MPIThreadFunnel` compare the `vtk raw` output files byte by byte.
 
 | Test | Asserts | Lives in |
 |------|---------|----------|
 | `MPIBoundaryRecords` | a strip of four viscous blocks (inlet, outlet, wall, symmetry and block-cut records) gives the same solution on 1×1, 2×1, 4×1 and 2×2 (MPI ranks × OpenMP threads); the same case with the `bc.txt` records in reverse order gives the same solution and the same wall output (Tecplot) as the ordered file, on 1 and 2 ranks, with and without threads; and so does a Spalart–Allmaras run, ordered and reversed (1×1, 1×4, 2×2) | `test/mpi/boundary-records` |
 | `MPIVertexStencil` | a 2×2 box of viscous blocks with a vortex on the vertex the four blocks share gives the same solution on 1×1, 1×4, 2×1, 4×1 and 2×2 (MPI ranks × OpenMP threads) | `test/mpi/vertex-stencil` |
+| `MPIThreadFunnel` | with `MPI_THREAD_FUNNELED`, every MPI call comes from the thread that initialised MPI: a probe library preloaded into the solver (`mpi_thread_probe.c`, built with the tests) counts no MPI call from other threads on any rank, on 2×2, 2×4 and 2×2 with implicit residual smoothing in a steady run (MPI ranks × OpenMP threads), checks that every run uses the requested threads, and sees the halo exchange on every rank; the largest tag of the point-to-point calls is at most 32767, the least `MPI_TAG_UB` the MPI standard allows | `test/mpi/thread-funnel` |
 | `MPIConnectionFlux` | the two-block cases of `Connections`/`ConnectionFlux` with one block per rank (block cut and periodic connection between ranks) give the one-rank and the one-block solutions bit for bit, and conserve | `test/mpi/connection-flux` |
 | `MPIConnectionOrder` | the 2-D case of `Connections`/`ConnectionOrder` with one block per rank (the cut, inviscid and viscous shares, between ranks): 2 ranks with the records of `bc.txt` sorted and reversed give the one-rank solution bit for bit | `test/mpi/connection-order` |
 

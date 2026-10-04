@@ -161,6 +161,15 @@ Each call to `Explicit_Step` performs one complete time step:
     - Update conserved state via `RK_Newstate` (IRS smoothing + RK update)
 4. **Compute residual** and write diagnostics.
 
+The RK stages run inside one OpenMP parallel region. The MPI calls made inside it (the halo
+exchange in `Fill_Ghost_Cell`, the residual exchange of the implicit residual smoothing) are made
+by the primary thread only, in `!$omp master` blocks (OpenMP 5.1 added the `masked`
+construct and deprecated `master`), each followed by an explicit
+`!$omp barrier` wherever the other threads use its result. MOSE initialises MPI with
+`MPI_THREAD_FUNNELED`, which allows MPI calls only from the thread that initialised MPI, and that
+thread is the primary thread of the region. A `single` block may run on any thread of the team,
+so it must not contain MPI calls. The `needs-mpi` test `MPIThreadFunnel` checks this.
+
 ---
 
 ## Convective Flux Evaluation

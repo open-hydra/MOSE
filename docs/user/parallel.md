@@ -94,6 +94,10 @@ mpirun \
 
 CPU affinity is important: without explicit process and thread binding, different MPI ranks or OpenMP threads may be placed on the same cores, invalidating the intended parallel configuration.
 
+### MPI thread support
+
+MOSE initialises MPI with the thread level `MPI_THREAD_FUNNELED`: every rank may run several OpenMP threads, but only the thread that initialised MPI makes MPI calls. Any MPI library that provides this level can be used; MOSE stops at start-up if the library provides less.
+
 ### Multi-node execution
 
 The same strategy extends naturally across nodes.

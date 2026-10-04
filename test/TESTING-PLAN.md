@@ -121,6 +121,10 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
   `test/mpi/vertex-stencil` (`MPIVertexStencil`) — a
   2×2 box of viscous blocks with a vortex on the common vertex, bit-identical on 1×1,
   1×4, 2×1, 4×1 and 2×2 ranks × threads.
+- ☑ **I6 — MPI thread level**: MOSE requests `MPI_THREAD_FUNNELED`, so only the thread
+  that initialised MPI may call it. *Done (needs-mpi tier):* `test/mpi/thread-funnel`
+  (`MPIThreadFunnel`) — a probe library preloaded into the solver counts no MPI call
+  from other threads on 2×2, 2×4 and 2×2-with-IRS (steady) ranks × threads.
 
 ---
 
