@@ -115,10 +115,15 @@ the solution at the stage time $t^n + \theta_k\,\Delta t$:
 In time-accurate runs the time-dependent boundary data (inlet `402`,
 assigned state `410`) are evaluated at the stage time; with Strang splitting,
 inside each half step. This is the conventional imposition analysed by
-Carpenter et al. [5]: it keeps second order in time. With the third-order
-scheme the boundary error can lower the order to two as the step is refined
-[5]; keeping third order would need intermediate boundary values built from
-the time derivatives of the data [5], which tabulated data do not provide.
+Carpenter et al. [5]. On a fixed mesh, with $\Delta t \to 0$, both schemes keep
+their order in time (second for Heun, third for SSP-RK3). Refining mesh and
+step together at a fixed CFL number, the boundary error lowers the global
+order of the third-order scheme towards two (in the fourth-order experiments
+of [5], table I.a, the rate settles at 2.5 in the L2 norm), also when the
+boundary data enter through the boundary flux as in MOSE; Heun stays second
+order. Keeping the full order would need intermediate boundary values built
+from the time derivatives of the data [5], which tabulated data do not
+provide.
 
 ### State update
 
