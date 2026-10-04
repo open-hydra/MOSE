@@ -98,6 +98,7 @@ module MOSE_Config_Types_m
     real(R8)            :: cfl              ! Parametro di stabilita' convettiva
     real(R8)            :: vnn              ! Parametro di stabilita' diffusiva
     integer             :: rampa_cfl_iter   ! Numero di iterazioni per rampa di cfl
+    character(len=llen) :: dt_method        ! Local time step: directional (per-direction minimum) or summed (multi-dimensional)
     logical             :: time_accurate    ! Flag per integrazione time-accurate
     integer             :: n_RK
     character(len=llen) :: integration_variables ! Integration variables (cons/prim)
