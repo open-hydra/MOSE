@@ -34,9 +34,11 @@ contains
     call reg%add( trim(section), 'vnn', obj_time_scheme%vnn, '0.3', 'VNN parameter', '> 0', .false. )
     call reg%add( trim(section), 'cfl-rise-threshold', obj_time_scheme%rampa_cfl_iter, '0', 'CFL rise threshold', '>= 0', .false. )
     call reg%add( trim(section), 'dt-method', obj_time_scheme%dt_method, 'directional', &
-                  'Local time step: directional (cfl and vnn per direction, minimum over directions) or summed '// &
-                  '(cfl and vnn bound the sum over directions; vnn also covers energy and turbulence diffusion)', &
-                  'directional, summed', .false. )
+                  'Local time step: directional (cfl and vnn per direction, minimum over directions), summed '// &
+                  '(cfl and vnn bound the sum over directions; vnn also covers energy and turbulence diffusion; '// &
+                  'dt is the smaller of the two limits) or additive (as summed, but the convective and diffusive '// &
+                  'fractions add: 1/dt = Lc/cfl + Ld/vnn per equation)', &
+                  'directional, summed, additive', .false. )
 
     ! Time-accurate switch
     call reg%add( trim(section), 'time-accurate', obj_time_scheme%time_accurate, '.false.', 'Time accurate switch', 'logical', .true. )

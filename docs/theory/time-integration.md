@@ -120,42 +120,97 @@ path is faster per step but less conservative.
 
 ## Stability Conditions
 
-### CFL condition
+Every cell $i$ gets its own time step $\Delta t_i$ from `cfl` (convection) and,
+in viscous runs, `vnn` (diffusion).  How the two are applied is chosen with
+`[MOSE-Numerics] dt-method`; the key is re-read with `input.ini` at run time.
 
-The convective time-step limit in direction $d$ for cell $i$ is
+### Where the limits come from
+
+For the model equation $u_t + a\,u_x = \nu\,u_{xx}$ on a grid of spacing $h$,
+a Fourier mode $e^{\mathrm{i}\theta j}$ of the upwind/central semi-discretisation
+has the eigenvalue $\lambda(\theta) = -\tfrac{a}{h}(1-e^{-\mathrm{i}\theta})
+- \tfrac{4\nu}{h^2}\sin^2\tfrac{\theta}{2}$.  The two-stage RK scheme is stable
+for $|1 + z + z^2/2| \le 1$ with $z = \Delta t\,\lambda$, which on the negative
+real axis reaches $z=-2$:
+
+- convection alone: $C = a\,\Delta t/h \le 1$ (lower with MUSCL in practice);
+- diffusion alone: $D = \nu\,\Delta t/h^2 \le 1/2$;
+- both, at $\theta=\pi$: $C/1 + D/(1/2) \le 1$ — the two fractions **add**.
+
+In more dimensions the eigenvalues of the directions add too, so the limits
+apply to sums over directions.  On a curvilinear grid the role of $1/h_d$ is
+played by $|\mathbf{g}_d|$, with $\mathbf{g}_d = \nabla\xi_d$ the row $d$ of the
+cell metric ($|\mathbf{g}_d|$ = face area / cell volume = 1 / face-normal height).
+For the Euler equations $a$ becomes $|\mathbf{v}\cdot\hat{\mathbf{n}}| + a_s$.
+The diffusivity is that of the fastest-diffusing equation, from the
+linearised operators: momentum $\tfrac43(\mu_\ell+\mu_t)/\rho$, energy
+$\kappa/(\rho c_v) = \gamma\,(k_\ell/c_p + \mu_t/\mathrm{Pr}_t)/\rho$, and for
+Spalart–Allmaras $(\mu_\ell+\rho\tilde\nu)/(\sigma\rho)$, up to several times the
+eddy viscosity of the momentum equations.
+
+### `dt-method = directional` (default)
+
+Per direction $d$, with $\Delta x_d$ the averaged edge length of the cell,
 
 $$
 \Delta t_{\text{CFL},\,i}^{(d)} =
-\frac{\Delta x_d}{\bigl|\mathbf{v}\!\cdot\!\hat{\mathbf{e}}_d\bigr| + a}
-\;\times\;\text{CFL}
-$$
-
-### VNN condition
-
-When a turbulence model is active, the viscous (von Neumann) stability
-limit is
-
-$$
+\frac{\Delta x_d}{\bigl|\mathbf{v}\!\cdot\!\hat{\mathbf{n}}_d\bigr| + a_s}
+\;\times\;\text{CFL},
+\qquad
 \Delta t_{\text{VNN},\,i}^{(d)} =
-\frac{\rho\,(\Delta x_d)^2}{\mu_\ell + \mu_t}\;\times\;\text{VNN}
+\frac{\rho\,(\Delta x_d)^2}{\mu_\ell + \mu_t}\;\times\;\text{VNN},
 $$
+
+and $\Delta t_i = \min_d \min(\Delta t_{\text{CFL},i}^{(d)}, \Delta t_{\text{VNN},i}^{(d)})$
+($\mu_t$ only with a RANS model).  The per-direction limits ignore the sum over
+directions, and the VNN limit ignores the energy and turbulence-model
+diffusivities, so `cfl` and `vnn` are not the stability numbers of the scheme.
+
+### `dt-method = summed`
+
+With $\Lambda_c = \sum_d (|\mathbf{v}\cdot\mathbf{g}_d| + a_s|\mathbf{g}_d|)$ and
+$G = \sum_d |\mathbf{g}_d|^2$,
+
+$$
+\Delta t_i = \min\!\left(\frac{\text{CFL}}{\Lambda_c},\;
+\frac{\text{VNN}}{\max(\nu_\text{flow},\nu_\text{turb})\,G}\right),
+$$
+
+where $\nu_\text{flow} = \max\bigl(\tfrac43(\mu_\ell+\mu_t)/\rho,\;
+\gamma(k_\ell/c_p+\mu_t/\mathrm{Pr}_t)/\rho\bigr)$ and $\nu_\text{turb}$ is
+$(\mu_\ell+\rho\tilde\nu)/(\sigma\rho)$ for SA, $(\mu_\ell+\mu_t)/\rho$ for two-equation
+models.  `cfl` and `vnn` are now the summed convective and diffusion numbers
+(limits about 1 and 1/2).  A cell where both limits are close can use both at
+once, which the combined condition above does not allow.
+
+### `dt-method = additive`
+
+The convective and diffusive fractions add, per equation:
+
+$$
+\frac{1}{\Delta t_i} = \max\!\left(
+\frac{\Lambda_c}{\text{CFL}} + \frac{\nu_\text{flow}\,G}{\text{VNN}},\;
+\frac{\Lambda_u}{\text{CFL}} + \frac{\nu_\text{turb}\,G}{\text{VNN}}\right),
+\qquad \Lambda_u = \sum_d |\mathbf{v}\cdot\mathbf{g}_d| ,
+$$
+
+the second term only with a RANS model (the turbulence variables are carried at
+the flow speed, without the acoustic speed).  Every cell then sits at the same
+fraction of the combined limit; this is the usual local time step of
+finite-volume codes (Blazek, *Computational Fluid Dynamics: Principles and
+Applications*, chapter on the local time step).
 
 ### Global time step
 
-The actual time step is the global minimum:
-
-$$
-\Delta t = \min_{i,\,d}\!\bigl[\min\!\bigl(
-  \Delta t_{\text{CFL},\,i}^{(d)},\;
-  \Delta t_{\text{VNN},\,i}^{(d)}\bigr)\bigr]
-$$
+In time-accurate runs all cells advance with the global minimum
+$\Delta t = \min_i \Delta t_i$.
 
 !!! tip "CFL ramp-up"
 
-    During the initial transient MOSE supports a linear CFL ramp from a
-    low starting value to the target CFL over a user-specified number of
-    iterations (`rampa_iter`).  This improves robustness when the initial
-    condition is far from the steady state.
+    For the first $N$ = `cfl-rise-threshold` iterations of every start (and
+    restart) the local time steps are multiplied by $n/N$, $n$ being the
+    iteration count of the current start.  This improves robustness when the
+    initial condition is far from the steady state.
 
 ---
 

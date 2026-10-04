@@ -50,7 +50,7 @@
 | cfl | 0.5 | > 0 | yes | CFL number |
 | vnn | 0.3 | > 0 |  no | VNN parameter |
 | cfl-rise-threshold | 0 | >= 0 |  no | CFL rise threshold |
-| dt-method | directional | directional, summed |  no | Local time step: directional (cfl and vnn per direction, minimum over directions) or summed (cfl and vnn bound the sum over directions; vnn also covers energy and turbulence diffusion) |
+| dt-method | directional | directional, summed, additive |  no | Local time step: directional (cfl and vnn per direction, minimum over directions), summed (cfl and vnn bound the sum over directions; vnn also covers energy and turbulence diffusion; dt is the smaller of the two limits) or additive (as summed, but the convective and diffusive fractions add: 1/dt = Lc/cfl + Ld/vnn per equation) |
 | time-accurate | .false. | logical | yes | Time accurate switch |
 | integration-variables | cons | cons ,  prim , prec |  no | Integration variables (cons/prim/prec) |
 | irs | .false. | logical |  no | Implicit Residual Smoothing |
