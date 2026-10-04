@@ -179,15 +179,17 @@ contains
       Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
 
-      ! Point-implicit (Patankar) treatment of the destruction terms.
+      ! Point-implicit (Patankar) treatment of the destruction terms: the whole residual of each
+      ! equation (the fluxes already in Res, plus the source) is divided by 1 + dt*dD/dq, so the
+      ! update vanishes with the residual and the converged solution does not depend on dt.
       fk = 1d0 ; fw = 1d0
       if ( point_implicit ) then
         fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
         fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
       end if
 
-      Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
-      Res(nt+1,i,j,k) = Res(nt+1,i,j,k) - Source(2) * Volume(i,j,k) * fw
+      Res(nt,  i,j,k) = ( Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) ) * fk
+      Res(nt+1,i,j,k) = ( Res(nt+1,i,j,k) - Source(2) * Volume(i,j,k) ) * fw
       if ( k_energy_coupling ) Res(np,i,j,k) = Res(np,i,j,k) + Source(1) * Volume(i,j,k)
 
     enddo ; enddo ; enddo ! (i, j, k) loop

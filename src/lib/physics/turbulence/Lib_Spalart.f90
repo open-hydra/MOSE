@@ -199,14 +199,16 @@ contains
       if ( SAcomp ) call Compressibility_Correction &
       ( nit, rho, chi, Prim(1:nsc,i,j,k), Prim(np,i,j,k), Rgas, Om, Production )
 
-      ! Point-implicit (Patankar) treatment of the SA destruction term
+      ! Point-implicit (Patankar) treatment of the SA destruction term: the whole SA residual
+      ! (the fluxes already in Res, plus the source) is divided by 1 + dt*dD/d(rho*nit), so the
+      ! update vanishes with the residual and the converged solution does not depend on dt
       fnu = 1d0
       if ( point_implicit ) &
         fnu = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * cw1 * fw * nit / d**2 )
 
       ! Source multiplied by rho since the SA equation is integrated in conservative form
-      Source = rho * ( Production + Diffusion - Destruction ) * vol(i,j,k) * fnu
-      Res(nt,i,j,k) = Res(nt,i,j,k) - Source
+      Source = rho * ( Production + Diffusion - Destruction ) * vol(i,j,k)
+      Res(nt,i,j,k) = ( Res(nt,i,j,k) - Source ) * fnu
 
     enddo ; enddo ; enddo ! (i, j, k) loop
 

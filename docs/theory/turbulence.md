@@ -460,18 +460,21 @@ easily violated and $k$/$\omega$ diverge while the mean flow stays healthy
 
 To remove this restriction MOSE treats the destruction terms
 **point-implicitly**.  Writing the update for a conserved turbulence
-variable $q=\rho\phi$ as $q^{n+1}=q^n+\Delta t\,S(q)$ and linearising only
-the (stabilising) destruction part $D$,
+variable $q=\rho\phi$ as $q^{n+1}=q^n+\Delta t\,\mathcal{R}(q)$, where
+$\mathcal{R} = -\tfrac{1}{V}\sum_\text{faces} F + S$ collects the convective and
+diffusive fluxes and the source, and linearising only the (stabilising)
+destruction part $D$ of $S$,
 
 $$
-\Delta q = \Delta t\,\bigl[S^n - d\,\Delta q\bigr]
+\Delta q = \Delta t\,\bigl[\mathcal{R}^n - d\,\Delta q\bigr]
 \;\Longrightarrow\;
-\Delta q = \frac{\Delta t\,S^n}{1 + \Delta t\,d}, \qquad
+\Delta q = \frac{\Delta t\,\mathcal{R}^n}{1 + \Delta t\,d}, \qquad
 d \equiv \frac{\partial D}{\partial q}\ge 0 .
 $$
 
-In practice the net source increment is simply divided by $(1+\Delta t\,d)$,
-using the local time step $\Delta t$.  The destruction Jacobians are
+In practice the whole residual of the turbulence equation (fluxes and
+source) is divided by $(1+\Delta t\,d)$, using the local time step
+$\Delta t$.  The destruction Jacobians are
 
 | Model | Equation | $d = \partial D/\partial q$ |
 |-------|----------|------------------------------|
@@ -479,10 +482,18 @@ using the local time step $\Delta t$.  The destruction Jacobians are
 | SST / Wilcox | $\omega$ | $2\,\beta\,\omega$ |
 | SA | $\tilde\nu$ | $2\,c_{w1}\,f_w\,\tilde\nu/y^2$ |
 
-Because the factor multiplies only the *increment*, it vanishes at
-convergence ($\Delta q\to0$) and therefore **does not change the converged,
+Because the factor multiplies the whole *increment*, it vanishes at
+convergence ($\mathcal{R}\to0$) and therefore **does not change the converged,
 zero-residual solution** — it only enlarges the stable time step. This makes
 SST/Wilcox run at the mean-flow CFL independent of near-wall spacing.
+
+!!! note "Change of 2026-10"
+    Earlier versions divided only the source $S$ by $(1+\Delta t\,d)$ and
+    left the fluxes unscaled.  Their converged solution satisfied
+    $-\tfrac{1}{V}\sum F + S/(1+\Delta t\,d) = 0$ instead of $\mathcal{R}=0$, so it
+    depended on the local time step wherever $\Delta t\,d$ was not small (the
+    first cells off the wall).  On the RL36 aerospike $1-1/(1+\Delta t\,d)$
+    reached 2.4 % at `cfl` 0.024 and 25 % with the larger `summed` time step.
 
 !!! warning "Effect on time-accurate (URANS) runs"
     For **steady** computations (local time-stepping) the treatment is exact:
@@ -490,20 +501,20 @@ SST/Wilcox run at the mean-flow CFL independent of near-wall spacing.
     result.
 
     For **time-accurate** runs it *does* enter the solution.  Dividing the
-    destruction increment by $(1+\Delta t\,d)$ is a backward-Euler
-    linearisation, so it formally reduces the turbulence **source** to
-    first-order in time wherever $\Delta t\,d$ is not small — i.e. near walls,
-    where $d\approx\beta\,\omega_\text{wall}\propto 1/y^2$ and
+    turbulence increment by $(1+\Delta t\,d)$ is a backward-Euler
+    linearisation of the destruction, so it formally reduces the turbulence
+    update to first-order in time wherever $\Delta t\,d$ is not small — i.e.
+    near walls, where $d\approx\beta\,\omega_\text{wall}\propto 1/y^2$ and
     $\Delta t\,d\gg 1$ even at a modest CFL.  Note that:
 
-    - only the turbulence *destruction* is affected — the mean-flow equations
-      and the turbulence production/diffusion/convection retain the full
-      Runge–Kutta order;
-    - the terms made implicit are exactly the *stiff, fast* ones, whose
-      near-wall relaxation time is far shorter than any resolved URANS scale,
-      so the physically relevant (resolved-scale) accuracy is essentially
-      unchanged — the first-order error lives only in the unresolved fast
-      transient.
+    - only the turbulence equations are affected — the mean-flow equations
+      retain the full Runge–Kutta order, and where $\Delta t\,d \ll 1$ so do
+      the turbulence equations;
+    - the cells where the factor matters are those where the destruction is
+      *stiff and fast*, with a near-wall relaxation time far shorter than any
+      resolved URANS scale, so the physically relevant (resolved-scale)
+      accuracy is essentially unchanged — the first-order error lives only in
+      the unresolved fast transient.
 
     Disabling `point-implicit` for a URANS run does **not** recover accuracy
     for free: the explicit near-wall $\omega$ source then violates its
