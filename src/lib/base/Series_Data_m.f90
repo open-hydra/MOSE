@@ -67,7 +67,8 @@ contains
       if (period > 0d0) t_ = time_(1) + modulo(t_ - time_(1), period)
     endif
 
-    if (t_ == time_(1)) then
+    ! At or before the first instant the first value, after the last instant the last value (below)
+    if (t_ <= time_(1)) then
         varout = var_(1)
         return
     endif

@@ -118,6 +118,15 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
 | `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |
 
+**Time-varying data (`402`, `410`).** The `p0_file` of type `402` lists
+`time  p0` pairs, one per line, with `p0` in bar; a first line containing
+`periodic` makes the table periodic. MOSE interpolates linearly in time;
+before the first instant it uses the first value, after the last instant
+the last one (unless the table is periodic). Steady runs evaluate the data
+at time $-1$. In time-accurate runs the data of `402` and `410` are
+evaluated at the time of each Runge–Kutta stage (see
+[Time Integration](../theory/time-integration.md#stage-times-and-time-dependent-boundary-data)).
+
 ### Viscous Walls
 
 | Type | Name | Data line (comma-separated) |

@@ -25,8 +25,10 @@ test/
 │   ├── restart/               # Restart round-trip reproduces uninterrupted run
 │   ├── input-checks/          # Input checks
 │   │   └── exit-codes/        # Runs stopped on an error end with a non-zero exit code and their message
-│   └── connections/           # Faces between blocks
-│       └── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
+│   ├── connections/           # Faces between blocks
+│   │   └── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
+│   └── time-integration/      # Time integration
+│       └── time-control/      # Time-dependent inlet order, time tables, stop criteria
 ├── 2D/                        # 2-D validation cases
 │   ├── euler/                 # Inviscid cases
 │   │   ├── oblique-shock/
@@ -199,6 +201,7 @@ seconds on a CI runner.
 | `PrandtlMeyer` | analytic turning angle | `test/2D/euler/prandtl-meyer` |
 | `RiemannSmoke` | every shock-capturing solver stays positive (no NaN, ρ,p>0) | `test/fast/riemann-smoke` |
 | `NumericsSmoke` | all limiters × time schemes × recon × integration vars stay positive | `test/fast/numerics-smoke` |
+| `TimeIntegration`/`TimeControl` | second order in time with a time-dependent inlet (BC 402) for RK2 and RK3; a time table holds its first value before its first instant; `res-threshold` does not end a time-accurate run | `test/fast/time-integration/time-control` |
 | `Conservation` | closed slip-wall box conserves total mass to round-off | `test/fast/conservation` |
 | `OpenMPEquiv` | 1 vs 4 threads bit-identical: the Sod tube, and a block overset on another whose four chimera faces meet at its edges (Navier–Stokes) | `test/fast/openmp-equiv` |
 | `Connections`/`ChimeraFace` | the viscous stencil of chimera faces, one evaluation of the residual of a linear field on two blocks that overlap with their ghost cells on cells of the other block: with u = G y in 2-D and u = G (y + z) in 3-D the y and z momentum residual is zero also in the cells at the ends of the chimera faces; with a radial velocity on a 2-D wedge of 1 degree the momentum residual of every cell is that of the same mesh as one block (within 1e-9 of μ G / H) | `test/fast/connections/chimera-face` |

@@ -101,6 +101,25 @@ $$
 
 Row index = `n_RK`; column index = stage.
 
+### Stage times and time-dependent boundary data
+
+Stage $k$ evaluates the residual of $\mathbf{U}^{(k-1)}$, which approximates
+the solution at the stage time $t^n + \theta_k\,\Delta t$:
+
+| Scheme | $\theta_1$ | $\theta_2$ | $\theta_3$ |
+|--------|:---:|:---:|:---:|
+| Forward Euler | 0 | | |
+| SSP-RK2 (Heun) | 0 | 1 | |
+| SSP-RK3 | 0 | 1 | ½ |
+
+In time-accurate runs the time-dependent boundary data (inlet `402`,
+assigned state `410`) are evaluated at the stage time; with Strang splitting,
+inside each half step. This is the conventional imposition analysed by
+Carpenter et al. [5]: it keeps second order in time. With the third-order
+scheme the boundary error can lower the order to two as the step is refined
+[5]; keeping third order would need intermediate boundary values built from
+the time derivatives of the data [5], which tabulated data do not provide.
+
 ### State update
 
 At each RK stage $k$ the full update sequence is:
@@ -330,3 +349,7 @@ fine cell's position within the coarse cell.
 4. A. Jameson, "Solution of the Euler equations for two-dimensional
    transonic flow by a multigrid method," *Appl. Math. Comput.*,
    13(3–4), 1983.
+5. M. H. Carpenter, D. Gottlieb, S. Abarbanel, W.-S. Don, "The theoretical
+   accuracy of Runge–Kutta time discretizations for the initial boundary
+   value problem: a study of the boundary error," *SIAM J. Sci. Comput.*,
+   16(6), 1241–1252, 1995, doi:10.1137/0916072 (ICASE Report 93-83, 1993).

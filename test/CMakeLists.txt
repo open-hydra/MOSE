@@ -114,6 +114,14 @@ mose_add_fast_script(RiemannSmoke   fast/riemann-smoke  "fast;numerics;1D")
 # Numerics smoke (N4): limiter / time-scheme / reconstruction / int-var sweep.
 mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 
+# Time integration (TimeIntegration): the parts below, each in its folder of
+# test/fast/time-integration, run one after the other by
+# test/fast/time-integration/run.sh.
+# Time control: second order in time with a time-dependent inlet (BC 402,
+# boundary data at the stage times), time tables before their first instant,
+# res-threshold not ending a time-accurate run.
+mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D")
+
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
 mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")
 
