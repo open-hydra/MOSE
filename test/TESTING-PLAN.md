@@ -117,7 +117,10 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
   (`MPIBoundaryRecords`) — a strip of four viscous blocks bit-identical on 1×1, 2×1,
   4×1 and 2×2 ranks × threads, and with the `bc.txt` records in reverse order (1 and 2
   ranks, with and without threads), the wall output included; the same with the
-  Spalart–Allmaras model, ordered and reversed (1×1, 1×4, 2×2).
+  Spalart–Allmaras model, ordered and reversed (1×1, 1×4, 2×2);
+  `test/mpi/vertex-stencil` (`MPIVertexStencil`) — a
+  2×2 box of viscous blocks with a vortex on the common vertex, bit-identical on 1×1,
+  1×4, 2×1, 4×1 and 2×2 ranks × threads.
 
 ---
 

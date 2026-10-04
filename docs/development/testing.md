@@ -64,7 +64,8 @@ test/
 ├── mpi/                       # MPI tier (needs-mpi): make_case.py
 │   ├── boundary-records/      # Boundary records
 │   ├── connection-flux/       # Faces between ranks
-│   └── connection-order/      # The 2-D case of ConnectionOrder with one block per rank
+│   ├── connection-order/      # The 2-D case of ConnectionOrder with one block per rank
+│   └── vertex-stencil/        # Viscous connection stencil at a vertex shared by four blocks
 ├── 3D/                        # 3-D validation cases
 │   └── coriolis-channel/
 ├── Pressure_Centrifugal_eq/   # Rotating-frame equilibrium case
@@ -271,6 +272,7 @@ launcher CMake found (`MPIEXEC_EXECUTABLE`, at most 4 ranks) and asserts
 | Test | Asserts | Lives in |
 |------|---------|----------|
 | `MPIBoundaryRecords` | a strip of four viscous blocks (inlet, outlet, wall, symmetry and block-cut records) gives the same solution on 1×1, 2×1, 4×1 and 2×2 (MPI ranks × OpenMP threads); the same case with the `bc.txt` records in reverse order gives the same solution and the same wall output (Tecplot) as the ordered file, on 1 and 2 ranks, with and without threads; and so does a Spalart–Allmaras run, ordered and reversed (1×1, 1×4, 2×2) | `test/mpi/boundary-records` |
+| `MPIVertexStencil` | a 2×2 box of viscous blocks with a vortex on the vertex the four blocks share gives the same solution on 1×1, 1×4, 2×1, 4×1 and 2×2 (MPI ranks × OpenMP threads) | `test/mpi/vertex-stencil` |
 | `MPIConnectionFlux` | the two-block cases of `Connections`/`ConnectionFlux` with one block per rank (block cut and periodic connection between ranks) give the one-rank and the one-block solutions bit for bit, and conserve | `test/mpi/connection-flux` |
 | `MPIConnectionOrder` | the 2-D case of `Connections`/`ConnectionOrder` with one block per rank (the cut, inviscid and viscous shares, between ranks): 2 ranks with the records of `bc.txt` sorted and reversed give the one-rank solution bit for bit | `test/mpi/connection-order` |
 

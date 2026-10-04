@@ -274,6 +274,10 @@ if(USE_MPI)
     # ranks x threads layout and for any order of the records in bc.txt.
     mose_add_mpi_script(MPIBoundaryRecords mpi/boundary-records "needs-mpi;implementation;2D")
 
+    # Viscous connection stencil at a vertex shared by four blocks: the same
+    # bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads.
+    mose_add_mpi_script(MPIVertexStencil mpi/vertex-stencil "needs-mpi;implementation;2D")
+
     # Faces between ranks: the two-block cases of ConnectionFlux with one block
     # per rank give the one-rank and the one-block bits, and conserve.
     mose_add_mpi_script(MPIConnectionFlux mpi/connection-flux "needs-mpi;implementation;1D")
