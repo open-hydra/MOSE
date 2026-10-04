@@ -146,6 +146,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F5 | Riemann smoke matrix | no NaN, ρ,p>0 | ☑ `RiemannSmoke` | ~4 s |
 | F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
 | F5c | Limiter defaults (MUSCL without limiter, first-order with limiter) | field bit-identical to the explicit setting; matching warnings and summary | ☑ `InputChecks`/`LimiterDefaults` | <1 s |
+| F5d | Residual smoothing with time-accurate runs | refused at set-up, no solution; steady runs keep it | ☑ `InputChecks`/`IRSTimeAccurate` | <1 s |
 | F5e | Time control (1-D duct, time-dependent inlet 402) | order in time ≥ 1.8 (RK2, RK3); table held before its first instant; time-threshold reached | ☑ `TimeIntegration`/`TimeControl` | ~5 s |
 | F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart` | ~1 s |
 | I11 | Wall output in vtk raw (2x2-block box of 8 × 8 cells, adiabatic no-slip walls (301) on its four sides, 5 RK3 steps) | the run ends; every wall file `wallB<b>F<f>.vts` has the extent of its face (WholeExtent and Piece Extent, from `fieldBlock<b>.vts`) and its points, as raw appended data | ☑ `OutputFiles`/`WallOutput` | <1 s |

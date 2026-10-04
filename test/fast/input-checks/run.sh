@@ -11,13 +11,15 @@
 #    ExitCodes (exit-codes): exit codes and messages of the error stops
 #    LimiterDefaults (limiter-defaults): limiter defaults and the declared
 #      reconstruction
+#    IRSTimeAccurate (irs-time-accurate): implicit residual smoothing in
+#      time-accurate runs
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(exit-codes limiter-defaults)
+PARTS=(exit-codes limiter-defaults irs-time-accurate)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

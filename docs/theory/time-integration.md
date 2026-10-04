@@ -117,33 +117,33 @@ the solution at the stage time $t^n + \theta_k\,\Delta t$:
 In time-accurate runs the time-dependent boundary data (inlet `402`,
 assigned state `410`) are evaluated at the stage time; with Strang splitting,
 inside each half step. This is the conventional imposition analysed by
-Carpenter et al. [5]. On a fixed mesh, with $\Delta t \to 0$, both schemes keep
+Carpenter et al. [7]. On a fixed mesh, with $\Delta t \to 0$, both schemes keep
 their order in time (second for Heun, third for SSP-RK3). Refining mesh and
 step together at a fixed CFL number, the boundary error lowers the global
 order of the third-order scheme towards two (in the fourth-order experiments
-of [5], table I.a, the rate settles at 2.5 in the L2 norm); Heun stays second
+of [7], table I.a, the rate settles at 2.5 in the L2 norm); Heun stays second
 order. Both statements follow from the boundary error derived below. The
-experiments of [5] show the same loss with a weak (SAT) imposition of the
+experiments of [7] show the same loss with a weak (SAT) imposition of the
 data, and its appendix A shows that data entering as a source term give the
 same scheme; the characteristic boundary fluxes of MOSE are outside that
 analysis and are checked by the tests (`TimeIntegration`/`TimeControl`).
 
-[5] gives two ways to keep the full order. One imposes no boundary data at
+[7] gives two ways to keep the full order. One imposes no boundary data at
 the intermediate stages, only at the end of the step: the scheme keeps its
-order, also for nonlinear systems, but in the experiments of [5] the CFL
+order, also for nonlinear systems, but in the experiments of [7] the CFL
 number had to be lower by at least a factor of two, and often much more
 (text after table I.a). The other imposes intermediate values built from the
-data and its time derivatives (equations (22)–(27) of [5]) at the same time
-step; it is general for linear problems only, and for nonlinear systems [5]
+data and its time derivatives (equations (22)–(27) of [7]) at the same time
+step; it is general for linear problems only, and for nonlinear systems [7]
 shows it for the third-order Runge–Kutta scheme of Heun (stage times 0, 1/3,
 2/3; section 3), not for SSP-RK3. MOSE uses neither: tabulated data have no
 time derivatives, and the step would shrink.
 
 #### Boundary error of the stage-time data
 
-The derivation of [5], section 2, carried out for the two schemes of MOSE
-([5] does it for the classical fourth-order scheme and notes that it can be
-done for any Runge–Kutta scheme). Model problem ([5], equations (1)–(4)):
+The derivation of [7], section 2, carried out for the two schemes of MOSE
+([7] does it for the classical fourth-order scheme and notes that it can be
+done for any Runge–Kutta scheme). Model problem ([7], equations (1)–(4)):
 $u_t + u_x = 0$ for $x > 0$, $u(0,t) = g(t)$, semi-discretised as
 $\mathrm{d}V/\mathrm{d}t = (1/h)\,DV$ for the interior entries of $V$, with the
 boundary entry $v_0 = g$. Split $D$ by its first row and column,
@@ -155,8 +155,8 @@ $$
 so that $c$ couples the interior entries to the boundary one, and let
 $\lambda = \Delta t/h$. Each stage computes every entry with $D$ and then sets
 the boundary entry to the data at its stage time; that change is $G^k e_0$, as
-in [5], equations (9)–(16). With the exact solution in $V^n$,
-$\lambda^k (D^k V^n)_0 = \Delta t^k g^{(k)}(t^n) + \dots$ ([5], equation (18)),
+in [7], equations (9)–(16). With the exact solution in $V^n$,
+$\lambda^k (D^k V^n)_0 = \Delta t^k g^{(k)}(t^n) + \dots$ ([7], equation (18)),
 and the scheme without the boundary changes is accurate to its own order.
 
 *Heun* (stage times 0, 1):
@@ -196,12 +196,12 @@ $$
 
 Both errors sit next to the boundary, where $c$ and $Bc$ are not zero. At a
 fixed CFL number they are $O(\Delta t^2)$ per step, first order there per unit
-of time, as equations (20)–(21) of [5] for the fourth-order scheme, and the
-global order is two ([5], abstract; it cannot exceed two, after equation
+of time, as equations (20)–(21) of [7] for the fourth-order scheme, and the
+global order is two ([7], abstract; it cannot exceed two, after equation
 (21)): SSP-RK3 drops from three to two, and two is the order of Heun. On a
 fixed mesh they are $\Delta t^3 g''c/(4h)$ and $\Delta t^4 g''Bc/(12h^2)$ per step,
 $O(\Delta t^2)$ and $O(\Delta t^3)$ per unit of time: the orders of the schemes. The
-derivation is linear and one-dimensional, like that of [5].
+derivation is linear and one-dimensional, like that of [7].
 
 ### State update
 
@@ -225,8 +225,7 @@ path is faster per step but less conservative.
 ### Local time step
 
 Each cell $i$ gets a local time step that combines convection and diffusion in one additive rule
-([6], §6 and §9.3; A. Arnone, M.-S. Liou, L. A. Povinelli, *Multigrid Time-Accurate Integration of
-Navier–Stokes Equations*, NASA TM-106373, 1993, eq. 26–28):
+([8], §6 and §9.3; [5], eq. 26–28):
 
 $$
 \frac{1}{\Delta t_i} =
@@ -265,9 +264,9 @@ is.
 
 Without dimensional splitting the convective limits of the directions add up: an explicit scheme
 on square 2-D cells needs a condition of the type $\tau(|a_x|/\Delta x + |a_y|/\Delta y) \le C_0$, not
-the largest of the two terms ([6], §9.3, which states the form without a proof). For forward
+the largest of the two terms ([8], §9.3, which states the form without a proof). For forward
 Euler the form follows, with the diffusive rates added as well, from the positivity condition (6.1)
-of [6]: with first-order upwind convection and central diffusion on a Cartesian mesh the
+of [8]: with first-order upwind convection and central diffusion on a Cartesian mesh the
 diagonal entry of a row is $-\sum_d \bigl(|a_d|/h_d + 2D/h_d^2\bigr)$ and the others are not negative, so
 $\tau \sum_d \bigl(|a_d|/h_d + 2D/h_d^2\bigr) \le 1$: the rule above with CFL = 1 and VNN = 1/2. The
 constants of Heun and RK3 in the table do not come from that source: they are the von Neumann limits
@@ -292,7 +291,7 @@ and exact at every Péclet number (the checkerboard mode reaches $z = -2$); for 
 convex, and the convex hull of $1.17K$ and $[-2.48, 0]$ (and of $1.1757K$ and $[-2.512, 0]$) is
 shown inside it with a certificate in exact rational arithmetic.
 The source warns that such an eigenvalue criterion can mislead for the non-normal
-operators that boundaries give, as an inflow boundary with upwind differences ([6], §3.3,
+operators that boundaries give, as an inflow boundary with upwind differences ([8], §3.3,
 pp. 26–27): the limits are those of the interior.
 
 | Scheme | real stability interval | CFL ≤, MUSCL, smooth flow | CFL ≤, first order (limiter at extrema and shocks) | VNN ≤ | CFL and VNN ≤ for positivity with the limiter |
@@ -327,7 +326,7 @@ so that $\Delta t\,(4D_{\max}\sum_d|\nabla\xi_d|^2 + s_h) = 4\,\text{VNN}$. What
   $\Gamma_{de} = \nabla\xi_d\cdot\nabla\xi_e$ (the cross metric terms of skewed cells included).
   $\Theta = \mathbf c\mathbf c^T + \mathrm{diag}\bigl((1-\cos\theta_d)^2\bigr)$, $c_d = \sin\theta_d$, is positive
   semidefinite: the eigenvalues are real and not positive, the operator is normal, and the eigenvalue criterion is von
-  Neumann's ([6], §2.4, eq. (2.10), p. 18, and §3.3, pp. 25–28).
+  Neumann's ([8], §2.4, eq. (2.10), p. 18, and §3.3, pp. 25–28).
 - In 2-D $\Theta \le 4I$: for any skew angle and aspect ratio the spectral radius is exactly $4D\sum_d|\nabla\xi_d|^2$ for a
   scalar and $4\nu\bigl(\sum_d|\nabla\xi_d|^2 + \lambda_{\max}(\Gamma)/3\bigr) \le \tfrac{16}{3}\nu\sum_d|\nabla\xi_d|^2$ for the
   momentum, so the rate $4D_{\max}\sum_d|\nabla\xi_d|^2$ bounds it, with equality for the scalar of largest diffusivity (the
@@ -359,20 +358,20 @@ so that $\Delta t\,(4D_{\max}\sum_d|\nabla\xi_d|^2 + s_h) = 4\,\text{VNN}$. What
   (32 × 32 cells, 2000 local steps) the largest stable VNN is about 0.5 with Heun (0.508 to 0.519 on the final code of this
   series) and 0.63 to 0.65 with RK3 for $dx/dr$ = 1, 4 and 8 at Prandtl numbers 0.72 and 0.9 (and 10 at $dx/dr$ = 4), and the
   test runs 2000 steps at the limits and at the recommended values. The eigenvalue criterion can mislead for non-normal operators
-  ([6], pp. 26–27).
+  ([8], pp. 26–27).
 
 Next to the axis of square cells $s_h = 8\,\nu/\Delta r^2$; far from it $s_h$ vanishes as $1/r$. The wedge stress, and with it $s_h$, applies
 with either sign of the wedge angle (a right-handed mesh with the axis on the last $j$ face has a negative one). Test
 `WedgeAxisStep`.
 
 These limits are linear (von Neumann, smooth solutions). With the limiter, positivity (a maximum principle:
-in more than one dimension a second-order scheme is not TVD, Goodman et al. 1985 as cited in [7], p. 15 of the
+in more than one dimension a second-order scheme is not TVD, Goodman et al. 1985 as cited in [9], p. 15 of the
 report) is guaranteed only for smaller steps, for the
 scalar advection of each direction with the limited flux: the van Leer slope of MOSE is the flux limiter $\psi(\theta) =
 \theta/(1+\theta)$, which satisfies $0 \le \psi \le 1$ and $0 \le \psi/\theta \le \mu$ with $\mu = 1$, and with
 Heun and RK3 (SSP coefficient 1) positivity holds for $(1+\mu)\,\nu \le 1$, that is
 $\sum_d \nu_d \le 1/2$; central diffusion is positive for $\text{VNN} \le 1/2$; with the additive rule
-both hold for CFL ≤ 1/2 and VNN ≤ 1/2 ([6], §5.2, §6.2 and §6.4; experiments reported there give
+both hold for CFL ≤ 1/2 and VNN ≤ 1/2 ([8], §5.2, §6.2 and §6.4; experiments reported there give
 positive results up to $\nu = 1$ in 1D and about $2/3$ in 2D). With moving shocks and Heun keep `cfl` at
 0.5–0.7. With preconditioning,
 $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$ is replaced by the preconditioned eigenvalue
@@ -483,6 +482,27 @@ sweeps**, which is sufficient for practical convergence.
 The smoothing amplifies the stable CFL limit by approximately
 $1 + 2\varepsilon$.  Typical values of the smoothing parameter $\varepsilon$
 range from 0.1 to 0.2.
+
+### Steady runs only
+
+The smoothed residual is not the residual of the space discretization, so a
+run with IRS does not follow the transient of the discretized equations: IRS
+accelerates the convergence of steady (pseudo-time) runs. It is switched on
+by `irs = true` or by `irs-beta > 0` alone, and MOSE refuses it at set-up
+when `time-accurate = true`. In unsteady computations residual smoothing
+belongs to the pseudo-time iterations of dual time stepping [5], which MOSE
+does not implement.
+
+The change does not vanish as $\Delta t \to 0$: the smoothing turns the
+semi-discrete system into $(I - \varepsilon\,\delta^2)\,d\mathbf{U}/dt =
+-\mathbf{R}/V$ in each direction, which slows a Fourier mode of wavenumber
+$k$ by the factor $1 + 4\varepsilon\sin^2(k\Delta x/2)$: a change of order
+$\varepsilon (k\Delta x)^2$ for well-resolved waves and of order one at
+discontinuities. Residual smoothing has also been used in time-accurate
+computations with a constant time step: Jorgenson and Chima raised the step
+limit of a four-stage Runge–Kutta scheme by a factor of six, with negligible
+differences in the unsteady results of periodic rotor–stator flows [6]; MOSE
+refuses it because its time-accurate targets include moving shocks.
 
 ### Implementation
 
@@ -602,14 +622,19 @@ fine cell's position within the coarse cell.
 4. A. Jameson, "Solution of the Euler equations for two-dimensional
    transonic flow by a multigrid method," *Appl. Math. Comput.*,
    13(3–4), 1983.
-5. M. H. Carpenter, D. Gottlieb, S. Abarbanel, W.-S. Don, "The theoretical
+5. A. Arnone, M.-S. Liou, L. A. Povinelli, "Multigrid time-accurate
+   integration of Navier–Stokes equations," NASA TM-106373
+   (ICOMP-93-37), 1993.
+6. P. C. E. Jorgenson, R. V. Chima, "An unconditionally stable
+   Runge–Kutta method for unsteady flows," NASA TM-101347, 1989.
+7. M. H. Carpenter, D. Gottlieb, S. Abarbanel, W.-S. Don, "The theoretical
    accuracy of Runge–Kutta time discretizations for the initial boundary
    value problem: a study of the boundary error," *SIAM J. Sci. Comput.*,
    16(6), 1241–1252, 1995, doi:10.1137/0916072 (ICASE Report 93-83, 1993).
-6. W. Hundsdorfer, *Numerical Solution of Advection–Diffusion–Reaction
+8. W. Hundsdorfer, *Numerical Solution of Advection–Diffusion–Reaction
    Equations*, lecture notes, Thomas Stieltjes Institute, CWI, Amsterdam,
    2000.
-7. E. M. Constantinescu, A. Sandu, "Multirate timestepping methods for
+9. E. M. Constantinescu, A. Sandu, "Multirate timestepping methods for
    hyperbolic conservation laws," *J. Sci. Comput.*, 33(3), 239–278, 2007,
    doi:10.1007/s10915-007-9151-y; the page cited is that of the authors'
    report, Virginia Tech, https://hdl.handle.net/10919/19488.

@@ -194,6 +194,8 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # Limiter defaults: the reconstruction that runs is the declared one (MUSCL
 # without flux-limiter = van Leer; first-order ignores a given limiter), and
 # the set-up warnings say so.
+# Implicit residual smoothing is a steady-state accelerator: a time-accurate
+# run that asks for it (irs = true or irs-beta > 0) is refused at set-up.
 mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;numerics;1D")
 
 # Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).

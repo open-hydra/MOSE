@@ -112,6 +112,11 @@ contains
     if (obj_irs%enabled) then
       obj_irs%description = 'Beta set to '//trim(str(.true.,real(obj_irs%beta)))
     end if
+    ! IRS accelerates steady runs: the smoothed residual changes the transient of a time-accurate run
+    if (obj_irs%enabled .and. obj_time_scheme%time_accurate) then
+      obj_irs%error_message = '[ERROR] Implicit residual smoothing (irs, irs-beta > 0) is supported only for '// &
+                              'steady/pseudo-time runs.'
+    end if
     ! Space scheme
     ! ... written in Mod_Space ...
     ! Riemann solver

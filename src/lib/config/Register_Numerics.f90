@@ -48,8 +48,10 @@ contains
     obj_irs%description     = 'none'
     obj_irs%warning_message = 'none'
     obj_irs%error_message   = 'none'
-    call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', 'Implicit Residual Smoothing', 'logical', .false. )
-    call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', 'IRS beta parameter', '>= 0', .false. )
+    call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', &
+          'Implicit Residual Smoothing (steady runs only)', 'logical', .false. )
+    call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
+          'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false. )
 
     ! Preconditioning controls (used when integration-variables = prec)
     obj_prec%description     = 'none'
