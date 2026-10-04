@@ -47,7 +47,7 @@ nightly/local tier.
 | Multi-block | core feature | faces between blocks: one block against two and records sorted against reversed, bit for bit (`Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder`; with MPI `MPIConnectionFlux`, `MPIConnectionOrder`) | 3-D faces with permuted index directions, connections with multigrid and with RANS untested |
 | Ablative wall BCs (503/504/505) | melting, pyrolysis, surface reactions | 503/504 vs closed form (`AblatingWall`) | 505 needs a CO/CO2 thermo table |
 | Restart | core feature | none | untested |
-| I/O formats | tec ascii/bin, vtk ascii/raw | ascii only | round-trip untested |
+| I/O formats | tec ascii/bin, vtk ascii/raw | ascii; `vtk raw` files are well-formed XML with the right names (`OutputFiles`/`VtkNames`) | round-trip untested |
 | Parallelism | OpenMP, MPI | 1 vs 4 threads (`OpenMPEquiv`); MPI ranks × threads bit-identical in the `needs-mpi` tier (`test/mpi/`) | MPI tier runs only in MPI builds, not on the CI runner |
 | 3D | full | source terms only | no 3D NS verification |
 
@@ -161,6 +161,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart` | ~1 s |
 | I11 | Wall output in vtk raw (2x2-block box of 8 × 8 cells, adiabatic no-slip walls (301) on its four sides, 5 RK3 steps) | the run ends; every wall file `wallB<b>F<f>.vts` has the extent of its face (WholeExtent and Piece Extent, from `fieldBlock<b>.vts`) and its points, as raw appended data | ☑ `OutputFiles`/`WallOutput` | <1 s |
 | I5 | Serial vs OpenMP equivalence: the Sod tube; a chimera case, a block overset on another whose four chimera faces meet at its edges (Navier–Stokes; it passes on the parent of its commit too: the race it guards shows under ThreadSanitizer with Archer, in three runs of three) | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~3 s |
+| I12 | Names of the VTK outputs (steady viscous run on a 2 × 2-block box with no-slip walls, 5 iterations, `vtk raw`) | every `.vts` that `field.vtm`, `wall.vtm` and `diagnostic.vtm` list parses as XML, and its data arrays are named as the variables that MOSE writes for the case (field, walls, diagnostic), with no other array | ☑ `OutputFiles`/`VtkNames` | <1 s |
 | F9 | Viscous stencil of chimera faces: two blocks of 8 x 6 cells (8 x 6 x 4 in 3-D) overlapping by 4 cells in x, each ghost cell on a cell of the other block; one step of a steady run with u = G y (2-D), u = G (y + z) (3-D), and a radial velocity on a 2-D wedge of 1 degree against the same wedge as one block | y and z momentum residual zero within 1e-9 of μ G / H, also in the cells at the ends of the chimera faces (1/4 of it with the ghost cell copied beyond the edge); on the wedge the momentum residual of every cell that of the one block within 1e-9 of μ G / H (half of v/r at the chimera faces with the ghost cell as its own k neighbour) | ☑ `Connections`/`ChimeraFace` | ~1 s |
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
 | F8 | Shu–Osher coarse (N=200) | L1 vs N=1600 ref < 5 %, finite | ☑ `ShuOsher` | ~2 s |
@@ -182,7 +183,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F23 | Rotating frame (Sod tube, rigid-body frame) with two `stationary-face-<n>` entries | the run ends within 60 s with exit code 0; the set-up summary lists the two stationary patches | ☑ `BoundaryConditions`/`RotatingFrame` | <1 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
-Current `ctest -L fast`: **20 tests, ~141 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **20 tests, ~140 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, InputChecks,
 TimeIntegration, BoundaryConditions, Conservation, OpenMPEquiv, Connections,
 Restart, OutputFiles, MMSResiduals, AblatingWall, MeshGeometry, QCR2000Stress).

@@ -9,13 +9,14 @@
 #  the head of its run.sh; each part runs in its folder, as CTest runs a
 #  test:
 #    WallOutput (wall-output): wall output files
+#    VtkNames (vtk-names): names and times of the VTK outputs
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(wall-output)
+PARTS=(wall-output vtk-names)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

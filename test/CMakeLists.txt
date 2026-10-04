@@ -185,6 +185,7 @@ mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D"
 # test/fast/output-files/run.sh.
 # Wall output: a vtk raw run with no-slip walls ends, and every wall file has
 # the extent and the points of its face.
+# VTK outputs (field, wall, diagnostic) are well-formed XML with the right names.
 mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 
 # Input checks (InputChecks): the parts below, each in its folder of

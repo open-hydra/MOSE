@@ -120,7 +120,8 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    integer             :: E_IO
+    character(len=len(obj_io%Owallnames)) :: vtknames
+    integer             :: E_IO, i
     character(len=clen) :: format(2)
 
     ! Each rank computes wall properties for its local blocks and reduces to root.
@@ -135,10 +136,15 @@ contains
       select case(trim(format(1)))
       case('vtk')
         IOwall%vtk%format = trim(format(2))
+        ! The names become XML attributes (Name="..."): the double quotes of the Tecplot list must go
+        vtknames = obj_io%Owallnames
+        do i = 1, len_trim(vtknames)
+          if ( vtknames(i:i) == '"' ) vtknames(i:i) = ' '
+        enddo
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
         E_IO = vtk_write_structured_multiblock(orion=IOwall,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=obj_io%Owallnames,time=domain%time)
+                                                             vtmpath=trim(path)//trim(file),varnames=vtknames,time=domain%time)
       case('tecplot')
         IOwall%tec%format = trim(format(2))
         E_IO = tec_write_structured_multiblock(orion=IOwall,varnames=obj_io%Owallnames,filename=trim(path)//trim(file)//trim(IOwall%tec%extension))

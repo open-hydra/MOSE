@@ -65,9 +65,10 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    character(len=hlen) :: varnames
+    character(len=hlen) :: varnames, vtknames
     integer             :: E_IO, b, i, j, k, ndiag
     character(len=clen) :: format(2), extension
+    real(R8), allocatable :: full(:,:,:,:)
 
     ! Residuals of rho, rho*u, rho*v, rho*w, rho*E and of the variables that follow the energy in r: soot, passive
     ! scalars, RANS (named as in the solution files, Setup_Output_Solution), then dt and beta
@@ -117,10 +118,28 @@ contains
       select case(trim(format(1)))
       case('vtk')
         IOfield%vtk%format = trim(format(2))
+        ! The names become XML attributes (Name="..."): the double quotes of the Tecplot list must go
+        vtknames = varnames
+        do i = 1, len_trim(vtknames)
+          if ( vtknames(i:i) == '"' ) vtknames(i:i) = ' '
+        enddo
+        ! IOfield is the output buffer of the field, with obj_io%Onvar columns, and the vtk
+        ! writer writes every column it holds: give it the ndiag diagnostic columns only,
+        ! then the field's size back (the field writer fills every column at each write).
+        do b = 1, size(IOfield%block)
+          call move_alloc(IOfield%block(b)%vars, full)
+          allocate(IOfield%block(b)%vars(1:ndiag,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk))
+          IOfield%block(b)%vars(:,:,:,:) = full(1:ndiag,:,:,:)
+          deallocate(full)
+        enddo
         localpath_vtk = trim(path)//'/vtk'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
         E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=varnames,time=domain%time)
+                                                             vtmpath=trim(path)//trim(file),varnames=vtknames,time=domain%time)
+        do b = 1, size(IOfield%block)
+          deallocate(IOfield%block(b)%vars)
+          allocate(IOfield%block(b)%vars(1:obj_io%Onvar,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk))
+        enddo
       case('tecplot')
         if (format(2)=='binary') then
           extension = '.szplt'

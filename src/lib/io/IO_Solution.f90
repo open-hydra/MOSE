@@ -303,7 +303,8 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    integer             :: E_IO, b
+    character(len=len(obj_io%Ovarnames)) :: vtknames
+    integer             :: E_IO, b, c
 
     ! Gather P from all ranks to root (collective — all ranks must call)
     call gather_P_to_root(domain)
@@ -370,10 +371,15 @@ contains
 
       ! Write the IOfield accordingly to the solution format
       if (index(obj_io%sol_format,'vtk')>0) then
+        ! The names become XML attributes (Name="..."): the double quotes of the Tecplot list must go
+        vtknames = obj_io%Ovarnames
+        do c = 1, len_trim(vtknames)
+          if ( vtknames(c:c) == '"' ) vtknames(c:c) = ' '
+        enddo
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
         E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=obj_io%Ovarnames,time=domain%time)
+                                                             vtmpath=trim(path)//trim(file),varnames=vtknames,time=domain%time)
       else
         E_IO = tec_write_structured_multiblock(orion=IOfield,varnames=obj_io%Ovarnames,filename=trim(path)//trim(file)//trim(IOfield%tec%extension))
       end if
