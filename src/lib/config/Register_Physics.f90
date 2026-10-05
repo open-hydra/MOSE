@@ -27,7 +27,7 @@ contains
     call reg%add(section, 'soot-generation', obj_soot%model, 'none', 'Soot generation model', 'LL91, LIN, none', .false.)
     call reg%add(section, 'rotational-frame', obj_rot%model, 'none', 'Rotational frame model', 'rigid-body, none', .false.)
     ! Laminar (molecular) transport closure
-    call reg%add(section, 'schmidt', obj_sim_param%Sc, '0.0', 'Laminar Schmidt number', '>= 0', .false.)
+    call reg%add(section, 'schmidt', obj_sim_param%Sc, '0.0', 'Laminar Schmidt number (<= 0: multicomponent, needs INPUT/diffusion.dat; unused with one species)', '>= 0', .false.)
     call reg%add(section, 'prandtl', obj_sim_param%Prl, '0.0', 'Laminar Prandtl number', '>= 0', .false.)
 
     !! ------------------------------------------------------

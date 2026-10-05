@@ -10,7 +10,7 @@ contains
 
   subroutine Assign_Setup()
     use MOSE_Config_Types_m
-    use MOSE_Global_m,            only: model
+    use MOSE_Global_m,            only: model, nsc
     use MOSE_IO_Solution,         only: Setup_Input_Solution
     use MOSE_Mod_Space,           only: Setup_Space_Scheme
     use MOSE_Mod_Riemann,         only: Assign_Riemann_Solver
@@ -130,8 +130,8 @@ contains
     ! Transport
     if (model>0 .and. obj_transport%description=='Unavailable') &
     write(*,'(A)') '[ERROR] Transport properties are unavailable for the selected phase: cannot run Navier-Stokes simulation'
-    ! Species diffusion model
-    if (model>0 .and. obj_sim_param%Sc <= 0d0 .and. .not. allocated(dij_tab)) then
+    ! Species diffusion model (with a single species there is no species diffusion and Sc is not used)
+    if (model>0 .and. nsc > 1 .and. obj_sim_param%Sc <= 0d0 .and. .not. allocated(dij_tab)) then
       obj_transport%error_message = &
         '[ERROR] Sc<=0 (multicomponent diffusion) requires a binary diffusion table (INPUT/diffusion.dat)'
     end if

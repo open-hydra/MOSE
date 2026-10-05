@@ -168,8 +168,11 @@ number $Sc$:
     because $\nabla Y_s \to 0$ there and the flux is fixed by the mass-conservation
     correction.
 
-In both cases the turbulent contribution is added on top with a constant turbulent
-Schmidt number,
+With a single species there is no diffusive mass flux ($\nabla Y = 0$): MOSE sets
+$D_s = 0$, ignores $Sc$ and needs no `diffusion.dat`.
+
+With two or more species, the turbulent contribution is added on top in both cases, with a
+constant turbulent Schmidt number,
 
 $$
 D_s = D_s^{\ell} + \frac{\mu_t}{\rho\,Sc_t},
