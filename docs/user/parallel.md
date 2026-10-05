@@ -132,14 +132,14 @@ When the case has a file `INPUT/decomposition.map` (with the phase prefix of `bc
   MPI partition read from INPUT/decomposition.map
 ```
 
-The file is the decomposition map the ATLAS mesh decomposer (MDB) writes next to the split mesh. Lines starting with `#` are comments; then one line per block, blocks 1 to *nb* in order, with 13 integers
+The file is the decomposition map the ATLAS mesh decomposer (MDB) writes, where its `map-file` option says (by default next to the split mesh, with the phase prefix in multi-phase runs): copy it into `INPUT/` together with the split mesh and its `bc.txt`. Lines starting with `#` are comments; then one line per block, blocks 1 to *nb* in order, with 13 integers
 
 ```text
 # new  parent   i0   i1    j0   j1    k0   k1      ni   nj   nk        cells  rank
      1     1     1    14       1    16       1     8        14   16    8         1792     0
 ```
 
-of which MOSE uses `new` (the block), `ni nj nk` and `cells`, which must be those of the block in the mesh, and `rank`, counted from 0. The first `#` line after the block lines ends them: the face origins MDB writes after it are not read. The map must be made for the mesh and for the run: it must list every block of the mesh once, in order, its ranks must lie between 0 and the number of ranks of the run minus 1, and that highest rank must be used, so that a map made for another number of ranks is refused. A map that does not fit the mesh or the run stops MOSE at setup, on every rank, with a message that names the fault. A rank the map gives no block to stays idle, with a warning. The assignment does not change the solution, only where each block is computed (the residuals printed, summed over the ranks, may differ in the last digits).
+of which MOSE uses `new` (the block), `ni nj nk` and `cells`, which must be those of the block in the mesh, and `rank`, counted from 0. The first `#` line after the block lines ends them: the face origins MDB writes after it are not read. The map must be made for the mesh and for the run: it must list every block of the mesh once, in order, its ranks must lie between 0 and the number of ranks of the run minus 1, and when the mesh has at least as many blocks as the run has ranks the highest rank must be used, otherwise the map was made for another number of ranks. A map that does not fit the mesh or the run stops MOSE at setup, on every rank, with a message that names the fault; remove a map made for another number of ranks (or write one for this run with MDB) and MOSE assigns the blocks itself. A rank the map gives no block to stays idle, with a warning; with fewer blocks than ranks some always do, as without a map. The balance printed is that of the cells on each rank, not of each level of a multirate step. The assignment does not change the solution, only where each block is computed (the residuals printed, summed over the ranks, may differ in the last digits).
 
 ## 3. Verifying CPU Placement
 

@@ -1,0 +1,19 @@
+# ATLAS MDB decomposition map
+# parent blocks: 3  ->  new blocks: 6
+#
+# new  parent   i0   i1    j0   j1    k0   k1      ni   nj   nk        cells  rank
+     1     1     1    14       1    16       1     8        14   16    8         1792     0
+     2     1    15    27       1    16       1     8        13   16    8         1664     1
+     3     1    28    40       1    16       1     8        13   16    8         1664     2
+     4     2     1    12       1    16       1     8        12   16    8         1536     3
+     5     2    13    24       1    16       1     8        12   16    8         1536     4
+     6     3     1     8       1    16       1     8         8   16    8         1024     5
+#
+# face origin of every new block (parent face number, or cut)
+# new  parent   face1    face2    face3    face4    face5    face6
+     1     1        1      cut        3        4        5        6
+     2     1      cut      cut        3        4        5        6
+     3     1      cut        2        3        4        5        6
+     4     2        1      cut        3        4        5        6
+     5     2      cut        2        3        4        5        6
+     6     3        1        2        3        4        5        6

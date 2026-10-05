@@ -9,10 +9,17 @@
 #   2. a map that does not fit the mesh or the run stops the solver at setup
 #      with a message that names the fault: a block line missing or one too
 #      many, blocks out of order, sizes or cell counts other than the mesh's,
-#      a rank the run does not have, a map without the rank column.
-#  Case: 4 x 1 blocks of 8 x 8 cells (../../../mpi/make_case.py); maps written
-#  by ../../../mpi/write_map.py. The MPI tier runs the assignments on 2 and 4
-#  ranks (test/mpi/decomposition-map).
+#      a rank the run does not have, a map without the rank column, a number
+#      written as a real (8.5), a directory in place of the file;
+#   3. a map written by MDB itself (halo-trade.decomposition.map, the map of
+#      the halo-trade test of ATLAS, byte for byte) on a case with its block
+#      sizes (halo_trade_case.py): with its rank column set to 0 it gives the
+#      bits of the run without a map; as written, for 6 ranks, it stops the
+#      one-rank run at its second block. A change of the format MDB writes
+#      shows up here.
+#  Case of 1 and 2: 4 x 1 blocks of 8 x 8 cells (../../../mpi/make_case.py);
+#  maps written by ../../../mpi/write_map.py. The MPI tier runs the assignments
+#  on 2, 3 and 4 ranks (test/mpi/decomposition-map).
 #===============================================================================
 set -uo pipefail
 
@@ -126,12 +133,59 @@ dims|--owners lpt:1 --bad dims|block 2 is 9 x 8 x 1 cells in the map, 8 x 8 x 1 
 cells|--owners lpt:1 --bad cells|block 2 has 65 cells in the map, 64 in the mesh
 rank|--owners list:0,1,0,0|block 2 is on rank 1, outside the ranks of the run (0 to 0)
 no-rank|--owners lpt:1 --bad no-rank|line 5 is not 13 integers
+real-token|--owners lpt:1 --bad real-token|line 6 is not 13 integers
 EOF
+rm -f "$MAP"
+
+# a directory in place of the file
+mkdir -p "$MAP"
+run directory
+if [[ $RC -ne 0 ]] && grep -aqF "decomposition.map: is a directory, not a file" solve_directory.log; then
+  echo "  stops: a directory named $MAP"
+else
+  echo "  does not stop on a directory named $MAP (exit $RC, solve_directory.log)"; status=1
+fi
+rmdir "$MAP"
+
+# 3. a map written by MDB, on a case with its blocks (Euler, 5 steps)
+python3 -B halo_trade_case.py > /dev/null || fail "case generation (halo-trade)"
+sed -e 's/^iter-threshold = 20/iter-threshold = 5/' -e 's/^equations = navier-stokes/equations = euler/' \
+  input.ini > input.tmp && mv input.tmp input.ini
+run mdb-nomap
+[[ $RC -eq 0 ]] || fail "the run of the halo-trade case without a map failed (solve_mdb-nomap.log)"
+# the rank column of the block lines set to 0, the rest of the file as MDB wrote it
+python3 -B -c "
+lines = open('halo-trade.decomposition.map').read().split('\n')
+out, rows = [], False
+for ln in lines:
+    if ln.startswith('#'):
+        if rows:
+            rows = None
+    elif rows is not None and ln.strip():
+        rows = True
+        ln = ln[:-6] + '%6d' % 0
+    out.append(ln)
+open('INPUT/decomposition.map', 'w').write('\n'.join(out))
+" || fail "map rewrite"
+run mdb-rank0
+if [[ $RC -ne 0 ]]; then
+  echo "  the halo-trade run with the map of MDB on rank 0 failed (solve_mdb-rank0.log)"; status=1
+else
+  same mdb-nomap mdb-rank0 || status=1
+  grep -aq "MPI partition read from $MAP" solve_mdb-rank0.log || { echo "  the setup log does not name $MAP"; status=1; }
+fi
+cp halo-trade.decomposition.map "$MAP"
+run mdb-6ranks
+if [[ $RC -ne 0 ]] && grep -aqF "block 2 is on rank 1, outside the ranks of the run (0 to 0)" solve_mdb-6ranks.log; then
+  echo "  stops: the map of MDB for 6 ranks on one rank"
+else
+  echo "  the map of MDB for 6 ranks does not stop the one-rank run (exit $RC, solve_mdb-6ranks.log)"; status=1
+fi
 rm -f "$MAP"
 
 if [[ $status -ne 0 ]]; then
   echo "DecompositionMap: FAIL"
   exit 1
 fi
-echo "DecompositionMap: ok — a map on rank 0 gives the bits of the run without it; maps that do not fit stop the run"
+echo "DecompositionMap: ok — maps on rank 0, written by write_map.py or by MDB, give the bits of the run without a map; maps that do not fit stop the run"
 exit 0

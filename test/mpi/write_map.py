@@ -16,7 +16,8 @@ which MOSE does not read. Here no block is split: every block is its own parent 
 --bad writes a wrong map, to check the errors of the reader:
     missing-row  the last block line left out;      extra-row   one block line more;
     order        the first two block lines swapped;  dims        ni of block 2 one larger (cells as in the mesh);
-    cells        cells of block 2 one larger;        no-rank     12 integers per line, as MDB writes without ranks.
+    cells        cells of block 2 one larger;        no-rank     12 integers per line, as MDB writes without ranks;
+    real-token   ni of block 2 written as a real, e.g. 8.5 (a list-directed integer read may truncate it to 8).
 
 Usage: write_map.py --layout PIxPJ --cells NI NJ --owners SPEC [--bad KIND] [--out PATH]
 """
@@ -30,7 +31,7 @@ def parse():
     ap.add_argument('--layout', required=True, help='PIxPJ blocks, e.g. 4x1')
     ap.add_argument('--cells', nargs=2, type=int, required=True, metavar=('NI', 'NJ'), help='cells per block')
     ap.add_argument('--owners', required=True, help='lpt:N, cyclic:N, reverse:N or list:R1,R2,...')
-    ap.add_argument('--bad', choices=['missing-row', 'extra-row', 'order', 'dims', 'cells', 'no-rank'])
+    ap.add_argument('--bad', choices=['missing-row', 'extra-row', 'order', 'dims', 'cells', 'no-rank', 'real-token'])
     ap.add_argument('--out', default=os.path.join('INPUT', 'decomposition.map'))
     a = ap.parse_args()
     a.PI, a.PJ = (int(s) for s in a.layout.lower().split('x'))
@@ -87,6 +88,9 @@ def main():
         lines[1] = lines[1][:-19] + f'{ni * nj * nk:13d}{rank[1]:6d}'
     elif a.bad == 'cells':
         lines[1] = lines[1][:-19] + f'{int(lines[1][-19:-6]) + 1:13d}{rank[1]:6d}'
+    elif a.bad == 'real-token':
+        ni = dims[1][0]
+        lines[1] = lines[1][:57] + f'{str(ni) + ".5":>5}' + lines[1][62:]   # the ni field: 2I6, 3(2I6,2X), 3X
     os.makedirs(os.path.dirname(a.out) or '.', exist_ok=True)
     with open(a.out, 'w') as f:
         f.write('# ATLAS MDB decomposition map\n')

@@ -203,7 +203,10 @@ contains
 
     if (present(map_file)) then
       write(*,'(A,A)') '  MPI partition read from ', trim(map_file)
-      if (count(rank_load == 0) > 0) then
+      if (count(rank_load == 0) > 0 .and. mpi_size_ > nb) then
+        write(*,'(A,I0,A,I0,A,I0,A)') '  WARNING: the decomposition map gives no block to ', count(rank_load == 0), &
+          ' of ', mpi_size_, ' ranks; they idle (the mesh has only ', nb, ' blocks).'
+      else if (count(rank_load == 0) > 0) then
         write(*,'(A,I0,A,I0,A)') '  WARNING: the decomposition map gives no block to ', count(rank_load == 0), &
           ' of ', mpi_size_, ' ranks; they idle.'
       else if (real(maxval(blk_ncells), R8) > ideal) then
@@ -226,9 +229,13 @@ contains
   !>   new parent i0 i1 j0 j1 k0 k1 ni nj nk cells rank
   !> of which MOSE uses new (the block), ni nj nk and cells (checked against the
   !> mesh) and rank (from 0). The first '#' line after the block lines ends them
-  !> (MDB writes the face origins of the blocks after it). Every rank of the run
-  !> must be in the map, the highest one included: a map written for another
-  !> number of ranks is an error. Rank 0 reads the file and broadcasts what it
+  !> (MDB writes the face origins of the blocks after it). The ranks must lie
+  !> between 0 and N-1; when the mesh has at least as many blocks as the run has
+  !> ranks, the highest rank must be used too, or the map was written for another
+  !> number of ranks, an error; with fewer blocks than ranks, some ranks idle
+  !> whatever the map, with a warning (report_partition_balance), as without a
+  !> map. A directory in place of the file is an error too.
+  !> Rank 0 reads the file and broadcasts what it
   !> found, so that every rank takes the same decision: no file (found false),
   !> the assignment in owner (found true), or an error, which every rank prints
   !> before the run stops.
@@ -260,7 +267,7 @@ contains
     end if
 #endif
     if (status == MAP_ERROR) then
-      write(*,'(A,I0,A,A)') ' [RANK ', mpi_rank_, '] ERROR: ', trim(message)
+      write(*,'(A,I4,A,A)') ' [RANK ', mpi_rank_, '] ERROR: ', trim(message)
       flush(output_unit)
 #ifdef USE_MPI
       if (mpi_size_ > 1) call MPI_BARRIER(MPI_COMM_WORLD, ierr)
@@ -283,13 +290,24 @@ contains
     integer, parameter :: UNSET = -huge(1)
     character(len=1024) :: line
     integer :: unit, ios, nline, nrow, v(13), b
-    logical :: exists, in_rows
+    logical :: exists, is_dir, in_rows
 
     status = MAP_ABSENT
+    ! A directory of that name is not a missing map. gfortran reports it as existing
+    ! (and path/. too); ifx does not, but opens it.
     inquire(file=path, exist=exists)
-    if (.not. exists) return
-
+    inquire(file=trim(path)//'/.', exist=is_dir)
+    if (.not. exists .and. .not. is_dir) then
+      open(newunit=unit, file=path, status='old', action='read', iostat=ios)
+      if (ios /= 0) return                      ! no map
+      close(unit)
+      is_dir = .true.
+    end if
     status = MAP_ERROR
+    if (is_dir) then
+      message = trim(path)//': is a directory, not a file'
+      return
+    end if
     open(newunit=unit, file=path, status='old', action='read', iostat=ios)
     if (ios /= 0) then
       message = trim(path)//': cannot be opened'
@@ -301,7 +319,12 @@ contains
     in_rows = .false.
     do
       read(unit, '(A)', iostat=ios) line
-      if (ios /= 0) exit
+      if (is_iostat_end(ios)) exit
+      if (ios /= 0) then
+        write(message, '(A,A,I0,A,I0,A)') trim(path), ': read error after line ', nline, ' (iostat ', ios, ')'
+        close(unit)
+        return
+      end if
       nline = nline + 1
       line = adjustl(line)
       if (len_trim(line) == 0) cycle
@@ -311,7 +334,8 @@ contains
       end if
       in_rows = .true.
       v = UNSET
-      read(line, *, iostat=ios) v
+      ios = 1
+      if (starts_with_13_integers(line)) read(line, *, iostat=ios) v
       if (ios /= 0 .or. any(v == UNSET)) then
         write(message, '(A,A,I0,A)') trim(path), ': line ', nline, &
           ' is not 13 integers (new parent i0 i1 j0 j1 k0 k1 ni nj nk cells rank)'
@@ -358,14 +382,55 @@ contains
       write(message, '(A,A,I0,A,I0,A)') trim(path), ': ', nrow, ' block lines for the ', nb, ' blocks of the mesh'
       return
     end if
-    if (maxval(owner) + 1 /= mpi_size_) then
-      write(message, '(A,A,I0,A,I0,A,A,I0)') trim(path), ': the largest rank is ', maxval(owner), &
+    if (maxval(owner) + 1 < mpi_size_ .and. nb >= mpi_size_) then
+      write(message, '(A,A,I0,A,I0,A,A,I0,A,I0,A)') trim(path), ': the largest rank is ', maxval(owner), &
         ': the map is for ', maxval(owner) + 1, trim(merge(' rank, ', ' ranks,', maxval(owner) == 0)), &
-        ' the run has ', mpi_size_
+        ' but the run has ', mpi_size_, ' ranks and the mesh ', nb, &
+        ' blocks (not fewer than the ranks): a map for another number of ranks'
       return
     end if
     status = MAP_READ
   end subroutine parse_decomposition_map
+
+
+  !> Internal: whether line starts with 13 integers, each an optional sign and
+  !> digits, separated by blanks, tabs or a carriage return. What follows the
+  !> 13th is not looked at. A list-directed read alone may take 8.5 for 8.
+  logical function starts_with_13_integers(line) result(ok)
+    character(len=*), intent(in) :: line
+    ! Local
+    integer :: i, ntok, ndig
+    character :: c
+
+    ok = .false.
+    ntok = 0
+    ndig = -1                                 ! -1 between tokens, else the digits of the token
+    do i = 1, len(line)
+      c = line(i:i)
+      if (c == ' ' .or. c == achar(9) .or. c == achar(13)) then
+        if (ndig == 0) return                 ! a sign alone
+        if (ndig > 0 .and. ntok == 13) then
+          ok = .true.
+          return
+        end if
+        ndig = -1
+      else if (ndig < 0) then                 ! first character of a token
+        ntok = ntok + 1
+        if (c == '+' .or. c == '-') then
+          ndig = 0
+        else if (c >= '0' .and. c <= '9') then
+          ndig = 1
+        else
+          return
+        end if
+      else if (c >= '0' .and. c <= '9') then
+        ndig = ndig + 1
+      else
+        return
+      end if
+    end do
+    ok = (ntok == 13 .and. ndig > 0)
+  end function starts_with_13_integers
 
 
   !> MPI_ALLREDUCE with MPI_SUM for a scalar real(R8).

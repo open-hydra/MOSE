@@ -19,8 +19,12 @@
 #   3. 110 blocks (11 x 10 of 4 x 4 cells): 2 ranks cyclic (0 1 0 1 ...) and
 #      4 ranks with MOSE's own assignment. Output in Tecplot ASCII, so this
 #      comparison holds to its 15 significant digits.
+#   4. Fewer blocks than ranks, 3 x 1 blocks on 4 ranks (0 1 2): a rank must
+#      stay idle, so the run goes on with a warning, as without a map.
 #  A map for other ranks stops the run on every rank with the same message:
-#  a block on rank 2 of a 2-rank run; every block on rank 0 of a 2-rank run.
+#  a block on rank 2 of a 2-rank run; with at least as many blocks as ranks,
+#  a map that leaves the highest ranks without blocks (every block on rank 0
+#  of a 2-rank run, ranks 0 and 1 of a 3-rank run).
 #  The residual history is not compared: its sums over the ranks follow the
 #  assignment. The cases come from ../make_case.py, the maps from
 #  ../write_map.py; nothing else is stored here.
@@ -154,7 +158,8 @@ with_map 2 strip-3to1   list:0,0,0,1   strip-ref 'vtk/*.vts' "balance  66.7% of 
 with_map 2 strip-idle0  list:1,1,1,1   strip-ref 'vtk/*.vts' "WARNING: the decomposition map gives no block to 1 of 2 ranks"
 with_map 4 strip-rev4   reverse:4      strip-ref 'vtk/*.vts'
 stops 2 strip-rank2 list:0,1,2,0 "block 3 is on rank 2, outside the ranks of the run (0 to 1)"
-stops 2 strip-for1  list:0,0,0,0 "the largest rank is 0: the map is for 1 rank, the run has 2"
+stops 2 strip-for1  list:0,0,0,0 "the map is for 1 rank, but the run has 2 ranks and the mesh 4 blocks (not fewer than the ranks)"
+stops 3 strip-for2  list:0,1,0,1 "the map is for 2 ranks, but the run has 3 ranks and the mesh 4 blocks (not fewer than the ranks)"
 
 # --- 2. square of 2 x 2 blocks around one vertex -------------------------------
 CASE="--layout 2x2 --cells 16 16"
@@ -172,6 +177,15 @@ run 1 many-ref
 [[ $RC -eq 0 ]] || fail "the reference run failed (solve_many-ref.log)"
 with_map 2 many-cyclic cyclic:2 many-ref 'field*.tec'
 with_map 4 many-lpt    lpt:4    many-ref 'field*.tec'
+
+# --- 4. fewer blocks than ranks ------------------------------------------------
+CASE="--layout 3x1 --cells 16 16"
+write_ini "vtk raw"
+python3 -B ../make_case.py $CASE --bc channel --zfaces 300 > /dev/null || fail "case generation (3 blocks)"
+run 1 few-ref
+[[ $RC -eq 0 ]] || fail "the reference run failed (solve_few-ref.log)"
+with_map 4 few-4 list:0,1,2 few-ref 'vtk/*.vts' \
+  "WARNING: the decomposition map gives no block to 1 of 4 ranks; they idle (the mesh has only 3 blocks)"
 
 if [[ $status -ne 0 ]]; then
   echo "MPIDecompositionMap: FAIL"
