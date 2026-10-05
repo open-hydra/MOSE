@@ -127,11 +127,15 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | I5 | Serial vs OpenMP equivalence | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~1 s |
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
 | F8 | Shu–Osher coarse (N=200) | L1 vs N=1600 ref < 5 %, finite | ☑ `ShuOsher` | ~2 s |
-| P1 | Ablative wall BCs (503/504) | wall state vs closed form, both face orientations, inert-surface fallback | ☑ `AblatingWall` | ~8 s |
+| P1 | Ablative wall BCs (503/504); the melting column also without `schmidt` (default 0: one species needs no `diffusion.dat`) | wall state vs closed form, both face orientations, inert-surface fallback | ☑ `AblatingWall` | ~11 s |
+| I9 | Exit codes of the error stops: the Sod tube as a viscous mixture of four species without `schmidt` and without `diffusion.dat` ([thermo](../docs/theory/thermo.md)) | non-zero exit code and the diffusion-table error, no solution | ☑ `InputChecks`/`ExitCodes` | ~1 s |
 
-Current `ctest -L fast`: **12 tests, ~30 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **13 tests, ~43 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation, OpenMPEquiv,
-Restart, AblatingWall).
+Restart, InputChecks, AblatingWall).
+
+The time is CPU time at one thread, one test at a time, measured on one machine
+(load average ~170 on 192 logical CPUs), where the 12 fast tests of main take ~41 s.
 
 These catch most regressions (metrics, interfaces, solver crashes, restart/IO,
 conservation) with no reference data or heavy dependencies.

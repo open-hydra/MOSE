@@ -123,7 +123,18 @@ mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D"
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
 
+# Input checks (InputChecks): the parts below, each in its folder of
+# test/fast/input-checks, run one after the other by
+# test/fast/input-checks/run.sh.
+# Exit codes of the error stops: a run that MOSE stops on an error ends with a
+# non-zero exit code and its message. Default Schmidt number (schmidt = 0,
+# multicomponent diffusion): the Sod tube as a viscous mixture of four species,
+# without a diffusion table, stops at setup.
+mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
+
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
 # which is an exact steady solution, checked against its closed form. These
 # boundary conditions have no other coverage in the suite.
+# The melting column also runs without schmidt: the default, 0, needs no
+# diffusion table with a single species.
 mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;physics;2D")

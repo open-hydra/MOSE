@@ -22,7 +22,9 @@ test/
 │   ├── numerics-smoke/        # Limiter / time-scheme / recon / int-var sweep
 │   ├── conservation/          # Closed slip-wall box conserves mass
 │   ├── openmp-equiv/          # 1 vs 4 threads bit-identical
-│   └── restart/               # Restart round-trip reproduces uninterrupted run
+│   ├── restart/               # Restart round-trip reproduces uninterrupted run
+│   └── input-checks/          # Input checks
+│       └── exit-codes/        # Runs stopped on an error end with a non-zero exit code and their message
 ├── 2D/                        # 2-D validation cases
 │   ├── euler/                 # Inviscid cases
 │   │   ├── oblique-shock/
@@ -198,6 +200,7 @@ seconds on a CI runner.
 | `Conservation` | closed slip-wall box conserves total mass to round-off | `test/fast/conservation` |
 | `OpenMPEquiv` | 1 vs 4 threads bit-identical | `test/fast/openmp-equiv` |
 | `Restart` | split + restart reproduces the uninterrupted run | `test/fast/restart` |
+| `InputChecks`/`ExitCodes` | a run stopped on an error ends with a non-zero exit code and its message and writes no solution: the Sod tube as a viscous mixture of four species, without `schmidt` and `diffusion.dat`, stops at setup | `test/fast/input-checks/exit-codes` |
 
 A few heavier checks carry the `validation` (not `fast`) label because they
 need reference data or plotting — for example `ShuOsherConvergence`, a 4-grid
