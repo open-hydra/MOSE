@@ -178,6 +178,8 @@ mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
 # at a restart a missing probe file is written again, an existing one appended,
 # with the probe rows of the uninterrupted run.
+# Restart counters (I3): a time-accurate restart from a steady solution
+# starts at t = 0.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
 
 # Output files (OutputFiles): the parts below, each in its folder of

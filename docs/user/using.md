@@ -283,6 +283,8 @@ Controlled by `sol-format` in `[MOSE-IO]`:
 | `vtk ascii` | VTK ASCII (`.vts`) |
 | `vtk raw` | VTK binary (`.vts`): the data of the field, wall and diagnostic outputs in raw binary, appended to each file |
 
+With the vtk formats each output is a multi-block file, `OUTPUT/field.vtm` for instance, that lists its blocks relative to its own folder: `vtk/fieldBlock1.vts`, ...
+
 ### Output Variables
 
 By default, MOSE writes primitive variables ($\rho$, $u$, $v$, $w$, $p$, $T$) and, under a RANS model, the density-weighted turbulence variables it advances: `rhoNuTilde` $= \rho\tilde\nu$ (Spalart-Allmaras), `rhoK` and `rhoOmega` ($k$-$\omega$ models), the names of the initial condition ([Initial Conditions](initial-conditions.md#required-variables)). Additional variable groups can be enabled in `[MOSE-IO]` via `sol-variables`:

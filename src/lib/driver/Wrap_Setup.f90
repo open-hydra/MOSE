@@ -210,11 +210,13 @@ contains
             endif
             obj_sim_param%iter_general = 0
           else
+            ! The restart solution is read on the finest level: its time and iteration count hold for
+            ! every level (the coarse IOfields are built from the fine one and hold no time)
             if (obj_time_scheme%time_accurate) then
-              simulation%domain(m)%time = simulation%IOfield(m)%solutiontime
+              simulation%domain(m)%time = simulation%IOfield(1)%solutiontime
               obj_sim_param%iter_general = 0
             else
-              obj_sim_param%iter_general = int(simulation%IOfield(m)%solutiontime)
+              obj_sim_param%iter_general = int(simulation%IOfield(1)%solutiontime)
               simulation%domain(m)%time = -1.d0
             endif
           endif

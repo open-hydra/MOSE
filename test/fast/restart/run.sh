@@ -133,4 +133,16 @@ else
        "(before $nB), rows of the run in one go: $([[ $same -eq 0 ]] && echo yes || echo no); see OUTPUT/probes_restart.log"
   status=1
 fi
+# Parts of this test in their own folders, each with its case and checks
+# described at the head of its run.sh, run in their folders as CTest runs
+# this script:
+for part in restart-counters; do
+  echo "=== $part"
+  if (cd "$HERE/$part" && ./run.sh); then
+    echo "=== $part: PASS"
+  else
+    echo "=== $part: FAIL"
+    status=1
+  fi
+done
 exit $status

@@ -46,7 +46,7 @@ nightly/local tier.
 | Chemistry | frozen, finite-rate, equilibrium | all (needs Cantera/Sundials) | can't run in CI |
 | Multi-block | core feature | faces between blocks: one block against two and records sorted against reversed, bit for bit (`Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder`; with MPI `MPIConnectionFlux`, `MPIConnectionOrder`) | 3-D faces with permuted index directions, connections with multigrid and with RANS untested |
 | Ablative wall BCs (503/504/505) | melting, pyrolysis, surface reactions | 503/504 vs closed form (`AblatingWall`) | 505 needs a CO/CO2 thermo table |
-| Restart | core feature | none | untested |
+| Restart | core feature | Tecplot ASCII round trip (`Restart`); the start of a transient from a steady `vtk raw` solution (`Restart`/`RestartCounters`) | Tecplot ASCII keeps 15 significant digits and no counters |
 | I/O formats | tec ascii/bin, vtk ascii/raw | ascii; `vtk raw` files are well-formed XML with the right names (`OutputFiles`/`VtkNames`) and hold raw appended data (`OutputFiles`/`VtkRawFormat`) | round-trip untested |
 | Parallelism | OpenMP, MPI | 1 vs 4 threads (`OpenMPEquiv`); MPI ranks × threads bit-identical in the `needs-mpi` tier (`test/mpi/`) | MPI tier runs only in MPI builds, not on the CI runner |
 | 3D | full | source terms only | no 3D NS verification |
@@ -111,6 +111,8 @@ nightly/local tier.
   tier. Four blocks at a vertex and 3-D faces with permuted directions are not covered.
 - ☑ **I3 — Restart round-trip**: N steps vs (N/2 → write → restart → N/2); match to
   ~2e-15. *Done:* `test/fast/restart` (restart = `newrun=false`, reads OUTPUT/field.tec).
+  `test/fast/restart/restart-counters` (`Restart`/`RestartCounters`) covers a transient started from a
+  steady solution.
 - ☑ **I4 — Conservation invariant**: closed slip-wall box, shock-tube IC; total mass
   conserved to round-off (~2e-13). *Done:* `test/fast/conservation`. (Energy invariant
   is a possible future addition.)
@@ -158,7 +160,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F5c | Limiter defaults (MUSCL without limiter, first-order with limiter) | field bit-identical to the explicit setting; matching warnings and summary | ☑ `InputChecks`/`LimiterDefaults` | <1 s |
 | F5d | Residual smoothing with time-accurate runs | refused at set-up, no solution; steady runs keep it | ☑ `InputChecks`/`IRSTimeAccurate` | <1 s |
 | F5e | Time control (1-D duct, time-dependent inlet 402) | order in time ≥ 1.8 (RK2, RK3); table held before its first instant; time-threshold reached | ☑ `TimeIntegration`/`TimeControl` | ~5 s |
-| F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart` | ~1 s |
+| F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart`, `Restart`/`RestartCounters` | ~3 s, ~6 s |
 | I11 | Wall output in vtk raw (2x2-block box of 8 × 8 cells, adiabatic no-slip walls (301) on its four sides, 5 RK3 steps) | the run ends; every wall file `wallB<b>F<f>.vts` has the extent of its face (WholeExtent and Piece Extent, from `fieldBlock<b>.vts`), its points and one value of each wall variable per cell, as raw appended data | ☑ `OutputFiles`/`WallOutput` | <1 s |
 | I5 | Serial vs OpenMP equivalence: the Sod tube; a chimera case, a block overset on another whose four chimera faces meet at its edges (Navier–Stokes; it passes on the parent of its commit too: the race it guards shows under ThreadSanitizer with Archer, in three runs of three) | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~3 s |
 | I12 | Names of the VTK outputs (steady viscous run on a 2 × 2-block box with no-slip walls, 5 iterations, `vtk raw`) | every `.vts` that `field.vtm`, `wall.vtm` and `diagnostic.vtm` list parses as XML, and its data arrays are named as the variables that MOSE writes for the case (field, walls, diagnostic), with no other array | ☑ `OutputFiles`/`VtkNames` | <1 s |

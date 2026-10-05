@@ -120,6 +120,7 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
+    character(len=llen) :: name
     character(len=len(obj_io%Owallnames)) :: vtknames
     integer             :: E_IO, i
     character(len=clen) :: format(2)
@@ -141,10 +142,13 @@ contains
         do i = 1, len_trim(vtknames)
           if ( vtknames(i:i) == '"' ) vtknames(i:i) = ' '
         enddo
+        ! As for the field (IO_Solution): the .vtm lists its blocks relative to its folder
+        name = file
+        if ( name(1:1) == '/' ) name = name(2:)
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
-        E_IO = vtk_write_structured_multiblock(orion=IOwall,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=vtknames,time=domain%time)
+        E_IO = vtk_write_structured_multiblock(orion=IOwall,vtspath=trim(localpath_vtk)//trim(name), &
+                                               vtmpath=trim(path)//trim(name),varnames=vtknames,time=domain%time)
       case('tecplot')
         IOwall%tec%format = trim(format(2))
         E_IO = tec_write_structured_multiblock(orion=IOwall,varnames=obj_io%Owallnames,filename=trim(path)//trim(file)//trim(IOwall%tec%extension))

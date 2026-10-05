@@ -116,6 +116,7 @@ contains
     ! Local
     integer         :: error
     character(clen) :: format(2)
+    character(llen) :: vtspath
 
     error = 0
 
@@ -134,12 +135,78 @@ contains
                                              zone_mask=zone_mask,dims_only=dims_only)
     case('vtk')
       IOfield%tec%format = trim(format(2))
-      error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4),vtspath='INPUT/vtk/field',time=obj_io%IOtime)
+      if ( obj_sim_param%newrun ) then
+        ! Initial condition: block files INPUT/vtk/field<name>.vts
+        vtspath = 'INPUT/vtk/field'
+      else
+        ! Restart: the .vtm written by MOSE lists its blocks relative to its own folder
+        vtspath = obj_io%nameinit(1:index(obj_io%nameinit,'/',back=.true.))
+      endif
+      ! The ORION reader needs the vtk format of the block files, and it is the one they declare:
+      ! MOSE writes vtk raw solutions as raw appended data, older versions wrote base64 (raw after
+      ! the first diagnostic output of a steady run), and an initial condition may come in any
+      ! format. When the files cannot tell, the reader keeps its format (base64), as before.
+      IOfield%vtk%format = Vtk_Block_Format(obj_io%nameinit, vtspath, IOfield%vtk%format)
+      error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4), &
+                                             vtspath=trim(vtspath),time=obj_io%IOtime)
+      ! The solution time of the file, where the Tecplot reader stores it. A steady run writes its
+      ! solutions at time -1: they hold no time, and no iteration count either
+      IOfield%solutiontime = max(obj_io%IOtime, 0.d0)
     end select
 
     if (error/=0) obj_io%error_message = "[ERROR] reading input file "//trim(obj_io%nameinit)
 
   end subroutine Read_vtk_tec
+
+
+  !> \brief vtk format of the block files of a .vtm: 'ascii', 'binary' (base64) or 'raw'
+  !>        (appended), as the first block file declares it, or fallback when it cannot tell.
+  !> \details The blocks of a .vtm are written in one call, so they share the format. The
+  !>          block file is vtspath//<entry of the .vtm>//'.vts', the path the ORION reader
+  !>          opens; its XML header names the format of every DataArray before any data.
+  function Vtk_Block_Format ( vtmfile, vtspath, fallback ) result(fmt)
+    use MOSE_Parameters_m, only: llen
+    implicit none
+    character(*), intent(in) :: vtmfile, vtspath, fallback
+    character(6)             :: fmt
+    ! Local
+    integer         :: u, ios, i1, i2
+    character(llen) :: line, block
+
+    fmt = fallback
+    open(newunit=u, file=trim(vtmfile), action='read', status='old', iostat=ios)
+    if (ios /= 0) return
+    block = ''
+    do
+      read(u, '(A)', iostat=ios) line
+      if (ios /= 0) exit
+      i1 = index(line, 'file="')
+      if (i1 == 0) cycle
+      i2 = index(line, '.vts"')
+      if (i2 > i1+6) block = line(i1+6:i2-1)
+      exit
+    enddo
+    close(u)
+    if (len_trim(block) == 0) return
+
+    open(newunit=u, file=trim(vtspath)//trim(block)//'.vts', action='read', status='old', iostat=ios)
+    if (ios /= 0) return
+    do
+      read(u, '(A)', iostat=ios) line
+      if (ios /= 0) exit
+      if (index(line, '<DataArray') == 0) cycle
+      if (index(line, 'format="appended"') > 0) then
+        fmt = 'raw'
+      elseif (index(line, 'format="binary"') > 0) then
+        fmt = 'binary'
+      elseif (index(line, 'format="ascii"') > 0) then
+        fmt = 'ascii'
+      endif
+      exit
+    enddo
+    close(u)
+
+  end function Vtk_Block_Format
 
 
   !> \brief Can Read_IC report block dimensions without reading the field?
@@ -305,6 +372,7 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
+    character(len=llen) :: name
     character(len=len(obj_io%Ovarnames)) :: vtknames
     integer             :: E_IO, b, c
 
@@ -378,10 +446,15 @@ contains
         do c = 1, len_trim(vtknames)
           if ( vtknames(c:c) == '"' ) vtknames(c:c) = ' '
         enddo
+        ! The block files go to OUTPUT/vtk/ and the .vtm lists them relative to its own
+        ! folder (vtk/fieldBlockN.vts), as VTK readers and the restart resolve them: the
+        ! leading '/' of file is dropped so that both paths share the prefix OUTPUT/.
+        name = file
+        if ( name(1:1) == '/' ) name = name(2:)
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
-        E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=vtknames,time=domain%time)
+        E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(name), &
+                                               vtmpath=trim(path)//trim(name),varnames=vtknames,time=domain%time)
       else
         E_IO = tec_write_structured_multiblock(orion=IOfield,varnames=obj_io%Ovarnames,filename=trim(path)//trim(file)//trim(IOfield%tec%extension))
       end if

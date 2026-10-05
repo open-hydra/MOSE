@@ -23,6 +23,7 @@ test/
 │   ├── conservation/          # Closed slip-wall box conserves mass
 │   ├── openmp-equiv/          # 1 vs 4 threads bit-identical
 │   ├── restart/               # Restart round-trip reproduces uninterrupted run
+│   │   └── restart-counters/  # Restarts carry on iteration, output and level counters
 │   ├── input-checks/          # Input checks
 │   │   ├── exit-codes/        # Runs stopped on an error end with a non-zero exit code and their message, valid runs with 0
 │   │   ├── limiter-defaults/  # The reconstruction that runs is the declared one
@@ -246,6 +247,7 @@ seconds on a CI runner.
 | `Connections`/`ChimeraFace` | the viscous stencil of chimera faces, one evaluation of the residual of a linear field on two blocks that overlap with their ghost cells on cells of the other block: with u = G y in 2-D and u = G (y + z) in 3-D the y and z momentum residual is zero also in the cells at the ends of the chimera faces; with a radial velocity on a 2-D wedge of 1 degree the momentum residual of every cell is that of the same mesh as one block (within 1e-9 of μ G / H) | `test/fast/connections/chimera-face` |
 | `Restart` | split + restart reproduces the uninterrupted run; at a restart a missing probe file is written again and an existing one is appended to, with the rows of the uninterrupted run | `test/fast/restart` |
 | `OutputFiles`/`WallOutput` | a vtk raw run of a 2x2-block box with no-slip walls on its four sides ends, and every wall file `wallB<b>F<f>.vts` has the extent of its face, taken from `fieldBlock<b>.vts`, as WholeExtent and as Piece Extent, its points and one value of each wall variable per cell (a direction with one plane of nodes counts one layer of cells, as in the cell-centered ordered data of the Tecplot format), as raw appended data | `test/fast/output-files/wall-output` |
+| `Restart`/`RestartCounters` | a time-accurate restart from a steady `vtk raw` solution starts at t = 0 | `test/fast/restart/restart-counters` |
 | `OutputFiles`/`VtkNames` | field, wall and diagnostic `vtk raw` outputs of a steady viscous run are well-formed XML and name their arrays after the variables MOSE writes | `test/fast/output-files/vtk-names` |
 | `InputChecks`/`RuntimeInput` | a 2x2-block viscous box with input.ini read again every 20 iterations: cfl = -1 stops the run at setup and, written during the run, at its next reading with the message of the rule; with an input.ini that holds the required keys only, and with one that also writes integration-variables, riemann-solver and flux-limiter, read again every 5 iterations, the run reaches iteration 10 with the residual history of the same run without readings; a comment line with "=" before cfl in its section is skipped: the run with it writes the residual history of the same run without it, and the setup names no key as not read | `test/fast/input-checks/runtime-input` |
 | `OutputFiles`/`VtkRawFormat` | with `sol-format = vtk raw`, every block file of the field and diagnostic outputs of a steady and of a time-accurate run holds raw appended data, before and after the first diagnostic output | `test/fast/output-files/vtk-raw-format` |
