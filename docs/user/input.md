@@ -83,11 +83,19 @@ the additive rule stays stable for any `cfl` and `vnn` up to these values:
 | `RK3` | 1.17 | 0.62 |
 | `euler` | 1 with `first-order` reconstruction (unstable with `MUSCL`) | 0.5 |
 
-Keep a margin below the limits where shocks and limiters act (for example `cfl = 0.8`).
-To recover the old step of a viscous time-accurate run, raise `vnn` toward the limit of the
-scheme rather than `cfl`: in the nozzle case above `cfl = 0.8` with `vnn = 0.52` gives back
-the old global step with RK3 (limit 0.62); with Heun the old step lies about 3 % beyond the
-limits. The defaults stay `cfl = 0.5` and `vnn = 0.3`.
+These are linear limits. With the limiter, positivity and the TVD property are guaranteed
+only up to `cfl = 0.5` and `vnn = 0.5`, with Heun and with RK3
+([theory](../theory/time-integration.md#local-time-step)), and the `vnn` limits are sharp: a run
+a little beyond them blows up. Suggested values:
+
+- `RK3`: `cfl = 0.8` (above the guaranteed 0.5) and `vnn = 0.5`;
+- `RK2` (Heun): `cfl = 0.5` with moving shocks, up to `cfl = 0.7` where the flow is smooth, and
+  `vnn = 0.4`; never `cfl` ≥ 0.95 or `vnn` ≥ 0.5.
+
+To recover the old step of a viscous time-accurate run, raise `vnn` rather than `cfl`: in the
+nozzle case above, `cfl = 0.8` with `vnn = 0.5` gives 0.96 of the old global step with RK3
+(the whole old step needs `vnn = 0.52`, beyond the positivity limit). With Heun, `cfl = 0.5`
+and `vnn = 0.4` give 0.76 of it. The defaults stay `cfl = 0.5` and `vnn = 0.3`.
 
 ---
 

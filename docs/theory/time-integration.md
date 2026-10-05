@@ -15,16 +15,18 @@ MOSE provides three explicit time integration schemes, all formulated in
 the unified **Shu–Osher convex-combination** form.  The active scheme is
 selected at run time via `n_RK` (1, 2, or 3):
 
-| Scheme | Order | CFL limit |
+| Scheme | Order | SSP coefficient |
 |--------|:-----:|:---------:|
 | Forward Euler | 1 | 1 |
 | 2-stage SSP Runge–Kutta (Heun) | 2 | 1 |
 | 3-stage SSP Runge–Kutta (Shu–Osher) | 3 | 1 |
 
 All three are **strong-stability preserving (SSP)**: each stage is a
-convex combination of forward-Euler steps, so positivity and TVD
-properties of the spatial discretization are inherited under the
-standard CFL limit.
+convex combination of forward-Euler steps, so the positivity and TVD
+properties of the spatial discretization under a forward-Euler step
+$\Delta t$ hold for the same $\Delta t$ (SSP coefficient 1). These are not
+the linear stability limits of the local time step: both are given in
+[Stability Conditions](#stability-conditions).
 
 ---
 
@@ -198,8 +200,16 @@ stability limits below; at the worst cell Péclet number the additive law is exa
 | `RK3` | 1.17 | 0.62 |
 | explicit Euler (`euler`) | 1 with first-order reconstruction; unstable with MUSCL | 1/2 |
 
-The limiter may need less near discontinuities. With preconditioning, $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$
-is replaced by the preconditioned eigenvalue $\bigl(u_n (1-\alpha) + c^\ast\bigr)|\nabla\xi_d|$.
+These limits are linear (von Neumann, smooth solutions). With the limiter, positivity and the TVD property
+are guaranteed only for smaller steps: the van Leer slope of MOSE is the flux limiter $\psi(\theta) =
+\theta/(1+\theta)$, which satisfies $0 \le \psi \le 1$ and $0 \le \psi/\theta \le \mu$ with $\mu = 1$, and with
+Heun and RK3 (SSP coefficient 1) positivity holds for $(1+\mu)\,\nu \le 1$, that is
+$\sum_d \nu_d \le 1/2$; central diffusion is positive for $\text{VNN} \le 1/2$; with the additive rule
+both hold for CFL ≤ 1/2 and VNN ≤ 1/2 (Hundsdorfer, §5.2, §6.2 and §6.4; experiments reported there give
+positive results up to $\nu = 1$ in 1D and about $2/3$ in 2D). With moving shocks and Heun keep `cfl` at
+0.5–0.7. With preconditioning,
+$|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$ is replaced by the preconditioned eigenvalue
+$\bigl(u_n (1-\alpha) + c^\ast\bigr)|\nabla\xi_d|$.
 
 ### Global time step
 
