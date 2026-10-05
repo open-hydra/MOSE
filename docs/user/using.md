@@ -309,6 +309,6 @@ Each probe writes a text file named after the probe — here `OUTPUT/exit.txt` �
 
 Accepted variables: `rho(n)` (density of species `n`), `u`, `v`, `w`, `p`, `T`, `M` (Mach number) and, with a RANS model, `mi_tilde`, the first turbulence variable, which the solution files name `rhoNuTilde` (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model). An unknown name stops the run at set-up.
 
-A new run replaces the probe files; a restart appends to them, and creates any that are missing (for example a probe added before the restart). Time-based rows fall on the multiples of `dtime`, from the first. A restart that goes on in time writes its next time-based row at the first multiple of `dtime` its time has not reached.
+A new run replaces the probe files; a restart appends to them, and creates any that are missing (for example a probe added before the restart). Time-based rows fall on the multiples of `dtime`, from the first. A restart that goes on in time writes its next time-based row at the first multiple of `dtime` its time has not reached; a restart that goes on from the counters of a `vtk raw` solution first drops the rows written after that solution (see [Restart](initial-conditions.md#restart)).
 
 ---

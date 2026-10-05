@@ -28,9 +28,14 @@
 #  and
 #   probes     time-accurate, a solution every 10 iterations and three probes:
 #              p1 every 0.01 s of physical time, p2 every 4 iterations, p3
-#              every 7 iterations and every 0.03 s, 50 iterations in one go:
-#              p1 writes one row per multiple of its dtime, from the first,
-#              and p2 only rows of iterations.
+#              every 7 iterations and every 0.03 s. 25 iterations, then the
+#              final solution of the first part (field.vtm) is removed, as if
+#              that run had stopped before writing it, and the restart reads
+#              field2 (iteration 20) and runs 30 iterations, against 50 in one
+#              go: residual-history.dat and the probe files of the first part
+#              also hold rows 21 to 25, which the restart must not keep twice.
+#              In the run in one go, p1 writes one row per multiple of its
+#              dtime, from the first, and p2 only rows of iterations.
 #
 #  Reuses the Sod inputs (test/1D/Sod79); nothing else is stored here.
 #===============================================================================
@@ -164,9 +169,17 @@ print('  transient: solution time after 5 steps from the steady solution = %.17g
 sys.exit(0 if ok else 1)
 EOF
 
-# probes: 50 iterations in one go
+# probes: 25 iterations, then the restart from the solution of iteration 20 (the final solution of the first
+# part removed, as after a run that stopped before writing it); residual-history.dat and the probe files
+# must be those of the run in one go
 prepare runs/probes/full
 write_ini runs/probes/full probes 50 true;    solve runs/probes/full full
+prepare runs/probes/split
+write_ini runs/probes/split probes 25 true;   solve runs/probes/split first
+rm -f runs/probes/split/OUTPUT/field.vtm
+write_ini runs/probes/split probes 30 false;  solve runs/probes/split restart
+python3 -B "$CHECK" runs/probes/full/OUTPUT runs/probes/split/OUTPUT > runs/probes/compare.log 2>&1 || status=1
+sed "s/^Restart (vtk raw)/  probes/" runs/probes/compare.log
 # the time-based rows of the run in one go: p1 one row per multiple of dtime = 0.01 from the first (none at the first
 # step, which ends at t < 0.01), p2 (diter only) no time row at all. A probe row is the iteration or the time and its
 # three variables, written list-directed: some compilers break it over two lines
@@ -192,5 +205,5 @@ EOF
 if [[ $status -ne 0 ]]; then
   fail "a restart does not carry on the counters"
 fi
-echo "RestartCounters: ok — steady, dtime and multigrid restarts reproduce the uninterrupted runs bit for bit, a transient from a steady solution starts at t = 0, and the probes of a new run write the rows of their dtime and diter"
+echo "RestartCounters: ok — steady, dtime, multigrid and probes restarts reproduce the uninterrupted runs bit for bit, and a transient from a steady solution starts at t = 0"
 exit 0

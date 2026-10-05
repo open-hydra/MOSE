@@ -24,7 +24,7 @@ contains
     use MOSE_IO_BC,                only: Setup_BC
     use MOSE_Mod_Metrics,          only: Setup_Metrics
     use MOSE_Mod_Fluxes,           only: Setup_Quasi2D_W
-    use MOSE_IO_Probes,            only: Setup_Probes, Restart_Probes
+    use MOSE_IO_Probes,            only: Setup_Probes, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
     use MOSE_IO_Wall,              only: Initialize_Wall_File
     use MOSE_Lib_Ghost,            only: Fill_Ghost_Cell
     use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_stop_all, mpi_bcast_logical
@@ -243,6 +243,16 @@ contains
           simulation%domain(1)%iter    = obj_io%restart%iteration
           obj_sim_param%time_from_call = obj_io%restart%last_output_time
           obj_io%output_number         = obj_io%restart%output_number
+          ! A run that went on past the solution read left in residual-history.dat and in the probe files
+          ! the rows of the iterations after it, which the restart writes again: drop them
+          if (mpi_is_root) then
+            close(obj_io%unitRES)
+            call Drop_Rows_After ( 'OUTPUT/'//trim(MOSE_phase_prefix)//'residual-history.dat', 2 + nres, &
+                                   obj_io%restart%cycle, simulation%domain(1)%time )
+            open(newunit=obj_io%unitRES,file='OUTPUT/'//trim(MOSE_phase_prefix)//'residual-history.dat', &
+                 status='old',position='append',form='formatted')
+          endif
+          call Drop_Probe_Rows ( obj_io%restart%cycle, simulation%domain(1)%time )
         endif
         ! Time-based probe rows fall on the multiples of their dtime: a restart that goes on in time
         ! writes the next one not reached yet; a new transient starts from the first, as a new run

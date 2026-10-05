@@ -7,7 +7,7 @@ module MOSE_IO_Probes
 
   implicit none
   private
-  public :: Setup_Probes, Write_Probes_Data, Restart_Probes
+  public :: Setup_Probes, Write_Probes_Data, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
 
   type :: real_ptr
     real(R8), pointer :: p
@@ -223,6 +223,90 @@ contains
     enddo
 
   end subroutine Restart_Probes
+
+
+  !> \brief Drop from the probe files the rows written after the solution a restart reads.
+  !> \details For a restart that goes on from the counters of its solution (see Drop_Rows_After). Each
+  !>          rank handles the probes it owns: it closes the file, drops the rows, and opens it again
+  !>          at its end, as Setup_Probes does.
+  subroutine Drop_Probe_Rows ( iteration, time )
+    use MOSE_Mod_MPI, only: is_local_block, mpi_abort_all
+    implicit none
+    integer,  intent(in) :: iteration
+    real(R8), intent(in) :: time
+    ! Local
+    integer :: i, error
+
+    do i = 1, nprobes
+      if (.not. is_local_block(probe(i)%ilocation(1))) cycle
+      close(probe(i)%unit)
+      call Drop_Rows_After ( trim(obj_io_probes(i)%file), 1 + probe(i)%nvar, iteration, time )
+      open(newunit=probe(i)%unit,file=trim(obj_io_probes(i)%file),status='UNKNOWN', &
+           position='APPEND',action='WRITE',iostat=error)
+      if (error/=0) call mpi_abort_all('cannot open probe file '//trim(obj_io_probes(i)%file))
+    enddo
+
+  end subroutine Drop_Probe_Rows
+
+
+  !> \brief Drop the rows of a history file written after the solution a restart reads.
+  !> \details residual-history.dat and the probe files get a row at the iterations, or at the times,
+  !>          that call for one. A run that went on past the solution a restart reads (it stopped
+  !>          without writing its final solution, and the restart reads an earlier numbered one) left
+  !>          in them rows that the restart writes again. The rows kept are those before the first one
+  !>          whose first value is an iteration greater than iteration, or a time later than time; that
+  !>          row and all the rows after it are dropped, so the file goes on as that of the run in one
+  !>          go. A row holds ncol values; written list-directed it may take more than one line, and a
+  !>          row starts on a new line: the values are counted to find where each row starts. A time is
+  !>          compared as printed, to 1e-12 relative: the row of the step of the solution may print its
+  !>          time rounded up in the last digit. The file is truncated and closed; a missing file is
+  !>          left alone.
+  subroutine Drop_Rows_After ( file, ncol, iteration, time )
+    implicit none
+    character(len=*), intent(in) :: file
+    integer,          intent(in) :: ncol, iteration
+    real(R8),         intent(in) :: time
+    ! Local
+    character(len=32768) :: line
+    integer              :: unit, ios, nkeep, nval, k, k1, k2, it
+    real(R8)             :: t
+    logical              :: later
+
+    open(newunit=unit,file=file,status='OLD',action='READWRITE',iostat=ios)
+    if (ios /= 0) return
+    nkeep = 0
+    nval  = 0
+    do
+      read(unit,'(A)',iostat=ios) line
+      if (ios /= 0) exit
+      if (mod(nval, ncol) == 0 .and. len_trim(line) > 0) then
+        ! The line starts a row: its first value, line(k1:k2), is an iteration or a time
+        k1 = verify(line, ' ')
+        k2 = k1 + index(line(k1:), ' ') - 2
+        later = .false.
+        if (scan(line(k1:k2), '.eEdD') > 0) then
+          read(line(k1:k2),*,iostat=ios) t
+          if (ios == 0) later = t > time + abs(time) * 1.0e-12_R8
+        else
+          read(line(k1:k2),*,iostat=ios) it
+          if (ios == 0) later = it > iteration
+        endif
+        if (later) exit
+      endif
+      ! Values on the line
+      do k = 1, len_trim(line)
+        if (line(k:k) /= ' ' .and. (k == 1 .or. line(max(k-1,1):max(k-1,1)) == ' ')) nval = nval + 1
+      enddo
+      nkeep = nkeep + 1
+    enddo
+    rewind(unit)
+    do k = 1, nkeep
+      read(unit,'(A)')
+    enddo
+    endfile(unit)
+    close(unit)
+
+  end subroutine Drop_Rows_After
 
 
   subroutine Write_Probes_Data( iter, time )

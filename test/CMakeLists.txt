@@ -180,8 +180,8 @@ mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;
 # with the probe rows of the uninterrupted run.
 # Restart counters (I3): with vtk raw, steady, time-based-output and multigrid
 # restarts reproduce the uninterrupted runs bit for bit; a time-accurate restart
-# from a steady solution starts at t = 0; the probe by time of a new run writes
-# its rows from the first multiple of its dtime.
+# from a steady solution starts at t = 0; a restart from an older solution keeps
+# no residual-history or probe row twice.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
 
 # Output files (OutputFiles): the parts below, each in its folder of
