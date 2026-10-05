@@ -38,6 +38,8 @@ For a block with $n_i \times n_j \times n_k$ cells the six faces are labelled:
 For 2-D cases (`nk = 1`), faces 5 and 6 are degenerate. They should be set to the null type (`type = 0`) or symmetry (`300`).
 The null type has no flux through the k faces. In a planar case (not an axisymmetric wedge) with symmetry on all the k faces MOSE sets the z velocity to zero and does not integrate the z momentum. The two mirror planes one cell apart would otherwise give $w$ the mode $dw/dt = -2\,a\,w/\Delta z$ ($a$ the speed of sound, $\Delta z$ the thickness of the layer), which the explicit schemes cannot follow at the time step of the in-plane cells: round-off in $w$ would grow until the run fails. MOSE does so only when every k face is a plane normal to z (the x and y components of its unit normal at most $10^{-10}$). Where the k faces are not normal to z, as in a layer between parallel planes inclined to z, symmetry on them asks the gas to move along them, across the layer, and setting $w$ to zero would change the flow (the mass flow, the pressure): there MOSE integrates the z momentum, with a warning, and the mode above limits the time step. Heun follows it for time steps up to $\Delta z/a$ and RK3 up to $1.26\,\Delta z/a$: with the time step of the in-plane cells, about $\text{cfl}\,\Delta x/a$, layers thinner than about $\text{cfl}\,\Delta x$ (Heun) or $0.8\,\text{cfl}\,\Delta x$ (RK3) make the run fail.
 
+An axisymmetric case is a wedge, symmetric about the plane $z = 0$, with faces 5 and 6 of type `200` (see [Euler Boundaries](#euler-boundaries)).
+
 ---
 
 ## File Format
@@ -94,6 +96,15 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 | `200` | Axisymmetry | — |
 | `300` | Symmetry / slip wall | — |
 | `400` | Extrapolation | — |
+
+!!! note "Axisymmetry (200)"
+    With one cell in $k$, type `200` on faces 5 and 6 makes the mesh a 2-D axisymmetric wedge: the two faces lie at
+    $\theta = \mp\delta/2$ and the ghost cell across each is the cell rotated by $\pm\delta$ about the $x$ axis. The
+    inviscid flux gives the pressure and centrifugal terms; with the Navier–Stokes equations the viscous stress of the
+    faces is applied as well ($-\tau_{\theta\theta}/r$ in the radial momentum, see
+    [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge-bc-200)). Keep the wedge thin: the azimuthal
+    derivatives carry an error of order $\delta^2$. With more than one cell in $k$, type `200` is a rotational
+    periodicity, inviscid flux only.
 
 ### Inlet / Outlet
 

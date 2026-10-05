@@ -171,6 +171,8 @@ mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
 # takes the rotation of the frame in r~, a uniform flow keeps nu~, and air at
 # rest next to a wall, or flowing along it on stretched cells, changes nu~ as
 # with SA.
+# Part 4: the viscous force on the axisymmetric wedge (Homann's flow and a field
+# with dilatation and swirl) converges to the Navier-Stokes one with second order.
 mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")
 
 # Steady state with the point-implicit factor: it must not depend on the time

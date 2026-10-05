@@ -273,6 +273,52 @@ one cell wide in another direction they are the ghost cell itself.
 
 ---
 
+## Axisymmetric Wedge (BC 200)
+
+A 2-D axisymmetric case is a wedge of the 3-D mesh: one cell in $k$, whose two
+$k$ faces lie in the meridional planes $\theta = \mp\delta/2$ and carry the
+boundary type `200`. MOSE integrates the 3-D equations on the wedge; there are
+no axisymmetric source terms. The ghost cell across each wedge face is the cell
+itself rotated by $\pm\delta$ about the $x$ axis, so every face flux follows
+from the state of the cell:
+
+- inviscid: the pressure and the momentum carried by the cell state rotated to
+  the face (no Riemann problem). In the radial momentum the two faces give the
+  $+p/r$ and the centrifugal terms of the axisymmetric equations;
+- viscous: the flux of a face between the cell and its rotated image, with the
+  stencil of an interior face (the $i$ and $j$ neighbours of the image rotated
+  in the same way) and the face metric of the block connections.
+
+For an axisymmetric field the mass, energy and scalar fluxes of the two faces
+are equal and opposite, and only the momentum fluxes are applied. Without swirl
+the viscous traction of each face is the normal stress
+
+$$
+\tau_{\theta\theta} = 2\mu\,\frac{u_r}{r} + \lambda\,\nabla\!\cdot\mathbf{u},
+\qquad \lambda = -\tfrac23\,\mu ,
+$$
+
+with $\mu$ including the eddy viscosity, and the two faces together give the
+$-\tau_{\theta\theta}/r$ of the radial momentum equation [5, 6]; with swirl
+they also carry $\tau_{r\theta}$ and $\tau_{x\theta}$. Near the axis
+$\tau_{\theta\theta}/r$ is as large as the radial stress terms it balances: in
+Homann's stagnation-point flow [7] $\tau_{rr} = \tau_{\theta\theta}$, and
+$\tau_{rr}/r$ and $\tau_{\theta\theta}/r$ cancel exactly while each grows like
+$1/r$ towards the axis.
+
+The azimuthal derivatives of the $i$ and $j$ faces are differences across the
+rotated ghost cells divided by the $k$ edge of the cell, which is a chord: they
+carry a relative error of order $\delta^2$ that the mesh does not reduce
+($\delta^2/12$ of the hoop stress $2\mu u_r/r^2$ in the radial balance,
+$2.5\times10^{-5}$ for $\delta = 1^\circ$). Keep the wedge thin.
+
+The 3-D rotational periodicity (type `200` with more than one cell in $k$)
+computes the inviscid flux only. On a planar 2-D mesh (faces 5 and 6 parallel,
+no wedge angle) type `200` makes the image the cell itself, and the fluxes of
+the two faces cancel.
+
+---
+
 ## References
 
 1. B. van Leer, "Towards the ultimate conservative difference scheme.
@@ -284,3 +330,19 @@ one cell wide in another direction they are the ghost cell itself.
    equations by finite volume methods using Runge–Kutta time-stepping
    schemes," AIAA-81-1259, 1981.
 4. R. Tramel, R. Nichols, and P. Buning. "Addition of improved shock-capturing schemes to OVERFLOW 2.1." 19th AIAA Computational Fluid Dynamics. 2009. 3988.
+5. R. Vandenhoeck, A. Lani, "Implicit high-order flux reconstruction solver
+   for high-speed compressible flows," arXiv:1811.08666v1, 2018, Appendix A.2,
+   eqs. (A.6)–(A.7) (axisymmetric source $(0, 0, p - \tau_{\theta\theta}, 0)^T$).
+6. Eilmer 4, Gas Dynamics Toolkit, `src/eilmer/fvcell.d`, lines 1213–1228 (viscous
+   source of axisymmetric flow), https://github.com/gdtk-uq/gdtk, commit 826496a;
+   the code is described in N. N. Gibbons, K. A. Damm, P. A. Jacobs, R. J. Gollan,
+   "Eilmer: an open-source multi-physics hypersonic flow solver," *Comput. Phys.
+   Commun.*, 282, 108551, 2023, doi:10.1016/j.cpc.2022.108551.
+7. F. Homann, "Der Einfluss grosser Zähigkeit bei der Strömung um den Zylinder
+   und um die Kugel," *Z. Angew. Math. Mech.*, 16, 153–164, 1936 (not read; as
+   cited by J. Magnaudet and M. Abbas, arXiv:2011.10755v1, 2020). The equation
+   of the flow, f''' + 2ff'' − f'² + 1 = 0 with f(0) = f'(0) = 0, f'(∞) = 1,
+   u_r = a r f'(η), u_x = −2(aν)^{1/2} f(η), as written by P. Rajamanickam,
+   arXiv:2508.17982v4, Eq. (12), and by H. Guo, X. Zhuang, X. Meng,
+   T. Rabczuk, arXiv:2010.05682v1, Eq. (7) with β₀ = 2, β = 1, whose Table 8
+   gives f''(0) = 1.31194.
