@@ -84,7 +84,7 @@
 | chemistry | frozen | frozen, finite-rate, equilibrium |  no | Chemistry model |
 | soot-generation | none | LL91, LIN, none |  no | Soot generation model |
 | rotational-frame | none | rigid-body, none |  no | Rotational frame model |
-| schmidt | 0.0 | >= 0 |  no | Laminar Schmidt number |
+| schmidt | 0.0 | >= 0 |  no | Laminar Schmidt number (<= 0: multicomponent, needs INPUT/diffusion.dat; unused with one species) |
 | prandtl | 0.0 | >= 0 |  no | Laminar Prandtl number |
 
 ## MOSE-Chemistry

@@ -18,7 +18,7 @@ module MOSE_Config_Types_m
     real(R8)  :: time_threshold   ! Tempo max per arresto esecuzione 
     integer   :: iter_threshold            ! Numero max iterate per arresto esecuzione
     character(len=clen) :: simulation_type ! Type of simulation (euler, laminar, turbulent)
-    real(R8)  :: Sc               ! Laminar (molecular) Schmidt number (<=0: use mixture-averaged multicomponent diffusion)
+    real(R8)  :: Sc               ! Laminar (molecular) Schmidt number (<=0: use mixture-averaged multicomponent diffusion; unused with one species)
     real(R8)  :: Prl              ! Laminar (molecular) Prandtl number (<=0: use computed mixture conductivity)
     ! Useful variables
     integer         :: iter_general     ! Number of iteration - including all MG levels

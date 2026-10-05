@@ -194,9 +194,13 @@ contains
                             walldist=waldis, k_rough=k_rough )
     end if
 
-    ! Species diffusion coefficients. Sc<=0 selects mixture-averaged multicomponent
-    ! diffusion (D_k from the binary-diffusion table), mirroring the Prl<=0 idiom above.
-    if (Sc <= 0d0) then
+    ! Species diffusion coefficients. A single species has no diffusive mass flux
+    ! (grad Y = 0), so Sc is not used there. Otherwise Sc<=0 selects mixture-averaged
+    ! multicomponent diffusion (D_k from the binary-diffusion table), mirroring the
+    ! Prl<=0 idiom above.
+    if (nsc == 1) then
+      Dm(1) = 0d0
+    else if (Sc <= 0d0) then
       ! Mixture-averaged multicomponent: per-species laminar D_k from binary-diffusion table,
       ! rescaled internally from the table reference pressure to the local pressure Prim(np).
       call co_DS_expr ( Prim(1:nsc), rho, Tint, Tdiff, Prim(np), Dm )
