@@ -22,7 +22,7 @@ module MOSE_IO_Probes
     real(R8), pointer                :: P(:)
     real(R8)                         :: T, M
     real(R8)                         :: dtime
-    integer                          :: ntime
+    integer                          :: ntime = 1   ! next multiple of dtime with a time-based row
     integer                          :: diter
     integer                          :: unit
   contains

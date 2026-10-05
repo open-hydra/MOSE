@@ -112,7 +112,8 @@ nightly/local tier.
 - ☑ **I3 — Restart round-trip**: N steps vs (N/2 → write → restart → N/2); match to
   ~2e-15. *Done:* `test/fast/restart` (restart = `newrun=false`, reads OUTPUT/field.tec).
   `test/fast/restart/restart-counters` (`Restart`/`RestartCounters`) covers a transient started from a
-  steady solution.
+  steady solution, and the rows of the probes of a new run (by time from the first
+  multiple of dtime).
 - ☑ **I4 — Conservation invariant**: closed slip-wall box, shock-tube IC; total mass
   conserved to round-off (~2e-13). *Done:* `test/fast/conservation`. (Energy invariant
   is a possible future addition.)
