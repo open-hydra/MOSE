@@ -5,7 +5,6 @@ module MOSE_Wrap_Postprocess
   private
   public :: MOSE_postprocess
 
-  integer, private :: id_stampa=0
   character(81), private :: RANS_shell_format  =    "('MOSE | Iter =', i9, ' | Global iter =', i9, ' | Density residual =', E13.6)"
   character(69), private :: URANS_shell_format =    "('MOSE | Iter =', i9, ' | Time =', E13.6,  ' | Delta t =', E13.6)"
   character(96), private :: RANS_shell_format_MG  = "('MOSE Grid Level', i2, ' | Iter =', i9, ' | Global iter =', i9, ' | Density residual =', E13.6)"
@@ -104,10 +103,11 @@ contains
     elseif ( obj_sim_param%TODO == 2 ) then
 
       if (level == 1) then
-        id_stampa = id_stampa + 1
-        if (.not.obj_io%sol_overwrite) solfile  = trim(solfile)//trim(str(.true.,id_stampa))
-        if (.not.obj_io%sol_overwrite) wallfile = trim(wallfile)//trim(str(.true.,id_stampa))
-        if (.not.obj_io%sol_overwrite) dgsfile  = trim(dgsfile)//trim(str(.true.,id_stampa))
+        ! The output number is stored with every vtk solution: a restart goes on with it
+        obj_io%output_number = obj_io%output_number + 1
+        if (.not.obj_io%sol_overwrite) solfile  = trim(solfile)//trim(str(.true.,obj_io%output_number))
+        if (.not.obj_io%sol_overwrite) wallfile = trim(wallfile)//trim(str(.true.,obj_io%output_number))
+        if (.not.obj_io%sol_overwrite) dgsfile  = trim(dgsfile)//trim(str(.true.,obj_io%output_number))
       endif
 
       ! Residuals history

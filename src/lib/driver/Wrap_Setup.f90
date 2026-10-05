@@ -24,7 +24,7 @@ contains
     use MOSE_IO_BC,                only: Setup_BC
     use MOSE_Mod_Metrics,          only: Setup_Metrics
     use MOSE_Mod_Fluxes,           only: Setup_Quasi2D_W
-    use MOSE_IO_Probes,            only: Setup_Probes
+    use MOSE_IO_Probes,            only: Setup_Probes, Restart_Probes
     use MOSE_IO_Wall,              only: Initialize_Wall_File
     use MOSE_Lib_Ghost,            only: Fill_Ghost_Cell
     use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_stop_all, mpi_bcast_logical
@@ -35,7 +35,7 @@ contains
     type(MOSE_simulation_type), intent(inout) :: simulation
     ! Local
     integer :: m, ios
-    logical :: partition_first, lean_read
+    logical :: partition_first, lean_read, resume
     logical :: setup_error   ! an error found by a check of rank 0 (Stop_Together)
     logical, allocatable :: keep(:)
 
@@ -213,7 +213,12 @@ contains
             ! The restart solution is read on the finest level: its time and iteration count hold for
             ! every level (the coarse IOfields are built from the fine one and hold no time)
             if (obj_time_scheme%time_accurate) then
-              simulation%domain(m)%time = simulation%IOfield(1)%solutiontime
+              if (obj_io%restart%steady) then
+                ! A transient started from a steady solution starts at t = 0
+                simulation%domain(m)%time = 0.0d0
+              else
+                simulation%domain(m)%time = simulation%IOfield(1)%solutiontime
+              endif
               obj_sim_param%iter_general = 0
             else
               obj_sim_param%iter_general = int(simulation%IOfield(1)%solutiontime)
@@ -223,6 +228,28 @@ contains
           obj_sim_param%time_from_call = simulation%domain(m)%time
           obj_sim_param%iter_from_call = 0
         enddo
+
+        ! The counters stored with a vtk solution: the restart goes on as the uninterrupted run
+        ! would (CFL ramp, output cadence and numbering, residual history, multigrid level), if
+        ! that run was of the same kind, steady or time-accurate. Otherwise, or with a solution
+        ! that holds no counters, the run starts its counters as a new one, as before.
+        resume = .false.
+        if ( .not. obj_sim_param%newrun ) &
+          resume = obj_io%restart%found .and. ( obj_io%restart%steady .neqv. obj_time_scheme%time_accurate )
+        if ( resume ) then
+          obj_sim_param%iter_general   = obj_io%restart%cycle
+          obj_multigrid%MG_level       = max(1, min(obj_multigrid%MGL, obj_io%restart%grid_level))
+          ! The solution read is that of the finest level, and so is its iteration count
+          simulation%domain(1)%iter    = obj_io%restart%iteration
+          obj_sim_param%time_from_call = obj_io%restart%last_output_time
+          obj_io%output_number         = obj_io%restart%output_number
+        endif
+        ! Time-based probe rows fall on the multiples of their dtime: a restart that goes on in time
+        ! writes the next one not reached yet; a new transient starts from the first, as a new run
+        if ( .not. obj_sim_param%newrun ) then
+          call Restart_Probes ( simulation%domain(1)%time, &
+                                resume = .not. ( obj_io%restart%steady .and. obj_time_scheme%time_accurate ) )
+        endif
         call Fill_Ghost_Cell ( simulation%domain(1) )
         call Update_Derived_Variables ( simulation%domain(1) )
 

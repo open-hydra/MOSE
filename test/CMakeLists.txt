@@ -178,9 +178,10 @@ mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
 # at a restart a missing probe file is written again, an existing one appended,
 # with the probe rows of the uninterrupted run.
-# Restart counters (I3): a time-accurate restart from a steady solution
-# starts at t = 0; the probe by time of a new run writes its rows from the
-# first multiple of its dtime.
+# Restart counters (I3): with vtk raw, steady, time-based-output and multigrid
+# restarts reproduce the uninterrupted runs bit for bit; a time-accurate restart
+# from a steady solution starts at t = 0; the probe by time of a new run writes
+# its rows from the first multiple of its dtime.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
 
 # Output files (OutputFiles): the parts below, each in its folder of
@@ -308,6 +309,10 @@ if(USE_MPI)
             )
         endif()
     endfunction()
+
+    # Exact restart from vtk raw on 2 ranks x 2 threads: 20 + 20 steps give
+    # the bits of 40 steps in one go, output numbering and counters included.
+    mose_add_mpi_script(MPIRestart mpi/restart "needs-mpi;implementation;2D")
 
     # Boundary records: the boundary-flux loop gives the same bits on any
     # ranks x threads layout and for any order of the records in bc.txt.

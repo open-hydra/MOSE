@@ -2,12 +2,28 @@
 #===============================================================================
 #  Restart counters (fast tier, I3/F6)
 #
-#  A restart must carry on the counters that decide what the run does and
-#  writes next. The case below solves the Sod tube of test/1D/Sod79 (100
-#  cells) in two parts, with a restart in between (newrun = false):
+#  An exact restart from vtk raw must also carry on the counters that decide
+#  what the run does and writes next. Each case below solves the Sod tube of
+#  test/1D/Sod79 (100 cells) twice, in one go ("full") and in two parts with a
+#  restart in between ("split", newrun = false), and the two OUTPUT/ trees
+#  must be identical byte for byte (../check_restart_vtk.py): numbered
+#  solutions, diagnostic files, residual-history.dat, probe files.
 #
-#   transient  a time-accurate restart from a steady vtk raw solution starts
-#              the transient at t = 0: after 5 steps the solution time of the
+#   steady     local time stepping, CFL ramp over 30 iterations, solutions
+#              every 7 iterations (sol-overwrite = false) with the diagnostic
+#              output, a probe every 3 iterations; 20 + 20 against 40. Carries
+#              the iteration count, the global iteration count (residual
+#              history, probe rows, steady solution time) and the output
+#              number.
+#   dtime      time-accurate, a solution every 0.0083 s of physical time,
+#              25 + 25 against 50 iterations with the first part ending
+#              between two outputs. Carries the time of the last output.
+#   multigrid  two grid levels, 10 iterations on the coarse one, then 30 on
+#              the fine one, the restart after 15 of them; solutions every 4
+#              iterations of the level. Carries the level.
+#  and
+#   transient  a time-accurate restart from a steady solution starts the
+#              transient at t = 0: after 5 steps the solution time of the
 #              last output is the sum of their time steps, in (0, 0.1).
 #  and
 #   probes     time-accurate, a solution every 10 iterations and three probes:
@@ -27,6 +43,7 @@ MASTER=../../../../bin/MOSE
 LOCAL=./bin/MOSE
 SOD=../../../1D/Sod79
 COMMON=../../../common/Air
+CHECK=../check_restart_vtk.py
 
 ulimit -s unlimited 2>/dev/null || true
 export KMP_STACKSIZE=100M
@@ -42,11 +59,14 @@ ln -sf "../$COMMON/phase.txt"     INPUT/phase.txt
 ln -sf "../$COMMON/thermo.dat"    INPUT/thermo.dat
 ln -sf "../$SOD/INPUT/ic_x1.tec"  INPUT/ic.tec
 ln -sf "../$SOD/INPUT/bc_x1.txt"  INPUT/bc.txt
+# Boundary conditions of the coarse grid (50 cells) for the multigrid case:
+# the same faces, with the cell indices of the coarse grid
+awk '{ if ($5 == 2) $2 = 50; if ($5 >= 3 && $2 > 50) next; print }' "$SOD/INPUT/bc_x1.txt" > INPUT/bc2.txt
 
 # prepare <run directory>
 prepare() {
   rm -rf "$1"; mkdir -p "$1/INPUT" "$1/OUTPUT"
-  for f in phase.txt thermo.dat ic.tec bc.txt; do
+  for f in phase.txt thermo.dat ic.tec bc.txt bc2.txt; do
     ln -s "../../../../INPUT/$f" "$1/INPUT/$f"
   done
 }
@@ -94,8 +114,43 @@ write_ini() {
   } > "$dir/input.ini"
 }
 
+# run_case <case> <total> <first part>: full run against split run + restart
+run_case() {
+  local case=$1 total=$2 first=$3
+  prepare "runs/$case/full"
+  write_ini "runs/$case/full" "$case" "$total" true;          solve "runs/$case/full" full
+  prepare "runs/$case/split"
+  write_ini "runs/$case/split" "$case" "$first" true;         solve "runs/$case/split" first
+  write_ini "runs/$case/split" "$case" "$((total - first))" false; solve "runs/$case/split" restart
+  python3 -B "$CHECK" "runs/$case/full/OUTPUT" "runs/$case/split/OUTPUT" > "runs/$case/compare.log" 2>&1
+  local rc=$?
+  sed "s/^Restart (vtk raw)/  $case/" "runs/$case/compare.log"
+  return $rc
+}
+
 mkdir -p runs
 status=0
+run_case steady 40 20 || status=1
+
+# dtime: the premise is that the first part ends strictly between two outputs of
+# the full run, with outputs before and after it (checked on the full run)
+run_case dtime 50 25 || status=1
+python3 -B - runs/dtime/full/OUTPUT 25 <<'EOF' || status=1
+import sys
+from pathlib import Path
+from vtk_time import time_of
+out, split = Path(sys.argv[1]), int(sys.argv[2])
+times = sorted(time_of(p) for p in out.glob('field[0-9]*.vtm'))
+rows = [l.split() for l in (out / 'residual-history.dat').read_text().splitlines() if l.strip()]
+t_split = float(rows[split - 1][1])
+ok = any(t < t_split for t in times) and any(t > t_split for t in times) and all(t != t_split for t in times)
+print('  dtime: %d time-based outputs in the full run, the first part ends at t = %.6g %s'
+      % (len(times), t_split, 'between two of them' if ok else '(premise not met)'))
+sys.exit(0 if ok else 1)
+EOF
+
+run_case multigrid 30 15 || status=1   # with levels, level1-iter counts the iterations on the fine level
+
 # transient: 10 steady iterations, then a time-accurate restart for 5 steps
 prepare runs/transient/split
 write_ini runs/transient/split transient 10 true;  solve runs/transient/split steady
@@ -137,5 +192,5 @@ EOF
 if [[ $status -ne 0 ]]; then
   fail "a restart does not carry on the counters"
 fi
-echo "RestartCounters: ok — a transient from a steady vtk raw solution starts at t = 0, and the probes of a new run write the rows of their dtime and diter"
+echo "RestartCounters: ok — steady, dtime and multigrid restarts reproduce the uninterrupted runs bit for bit, a transient from a steady solution starts at t = 0, and the probes of a new run write the rows of their dtime and diter"
 exit 0

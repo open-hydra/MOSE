@@ -103,4 +103,30 @@ every rank stops, also when one rank alone holds the value.
 
 ## Restart
 
-When resuming from a previous run (`newrun = false` in `input.ini`), MOSE reads the initial condition from the latest solution file in `OUTPUT/` instead of from `INPUT/`. The solution files share the same format as the IC file (whichever was used) and are loaded through ORION. The flow field, physical time, and iteration counter are all restored.
+When resuming from a previous run (`newrun = false` in `input.ini`), MOSE reads the initial condition from the latest solution file in `OUTPUT/` instead of from `INPUT/`: `OUTPUT/field.*`, written at the end of a run, or else the highest-numbered `OUTPUT/field<N>.*` (`sol-overwrite = false`). The file is read through ORION, in the `sol-format` format. The flow field is restored, with the physical time of a time-accurate run and the global iteration count of a steady run.
+
+### Exact restart with `sol-format = vtk raw`
+
+A vtk raw solution stores every value with all its bits, and the field solution also stores, as field data of its `.vts` files, the counters that decide what the run does and writes next:
+
+| Field data | Content |
+|------------|---------|
+| `TIME` | Physical time; −1 in a steady run |
+| `CYCLE` | Global iteration count, over all grid levels: first column of `residual-history.dat`, probe rows with `diter` |
+| `MOSE_ITERATION` | Iteration count of the grid level of the solution: CFL ramp (`cfl-rise-threshold`), `sol-diter`, `res-diter` |
+| `MOSE_OUTPUT_NUMBER` | Number of the last numbered solution (`sol-overwrite = false`) |
+| `MOSE_GRID_LEVEL` | Grid level being solved (multigrid sequence) |
+| `MOSE_LAST_OUTPUT_TIME` | Time of the last time-based solution (`sol-dtime`) |
+
+A restart from such a solution goes on as the uninterrupted run would: within the limits below, the run split in two parts writes the same files as the run in one go, byte for byte, numbered solutions, `residual-history.dat` and probe files included.
+
+The counters are taken only from a solution written by a run of the same kind, steady or time-accurate (a steady run writes its solutions at `TIME` = −1). A time-accurate restart from a steady solution starts a new transient at t = 0, with the counters of a new run.
+
+Time-based probe rows (`dtime`) fall on the multiples of `dtime`. A restart that goes on in time writes next the row of the first multiple its time has not reached, whatever the format of the solution; a transient started from a steady vtk solution starts again from the first one.
+
+### Limits
+
+- **Tecplot formats.** The solution holds no counters: the restart restores the field, the time or the global iteration count, and starts the other counters as a new run does. The CFL ramp starts again, `sol-diter` counts from the restart, the numbered solutions start again from `field1` (replacing those of the first part) and a multigrid sequence starts again from the coarsest level. Tecplot ASCII keeps 15 significant digits, so the restarted run is close to the uninterrupted one, not identical. For an exact restart use `sol-format = vtk raw`.
+- **A run that ends on an output iteration.** The last iteration of a run writes the final solution `field.*` (with `wall.*` and `diagnostic.*`) and its row of `residual-history.dat`, but not the numbered or time-based solution, nor the probe rows, that fall due there. A restart from it does not write them either: the following numbered solutions get a number one lower, a time-based solution due there is written at the first iteration after the restart (and the next ones shift with it), and the probe rows due there are missing. End the first part between two outputs and two probe rows.
+- **Multigrid.** A run ends on the finest grid level, where `field` and `field<N>` are written: from vtk raw, the restart goes on on the finest level, without solving the coarser ones again. A solution written while a coarser level was being solved (`field-prolongated`) is not read by a restart. Renamed `field` by hand, it goes on on its grid level, from iteration 0 of that level and from the solution restricted again from the finest level, which differs from the solution of that level (restriction after prolongation does not give it back): the run does not reproduce the uninterrupted one.
+- **Preconditioning.** The reference velocity Ur is recomputed from the restored solution. With the rotation–curvature correction of the SST model it would also need the velocity gradient of the last stage, which the solution does not hold; `turbulence` does not accept that combination today.

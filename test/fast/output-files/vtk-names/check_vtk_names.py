@@ -5,6 +5,8 @@ must parse as XML, every block file it lists must exist relative to it or to
 OUTPUT/vtk (where MOSE writes them), the XML part of every .vts (everything
 before the raw appended data, if any) must parse, and the names of the cell
 data arrays must be the variables MOSE writes for this case, without quotes.
+Field data (TIME, CYCLE and the counters a restart reads back) are global
+values, not variables, and are not counted.
 
 Usage: python check_vtk_names.py <OUTPUT directory>
 Exit 0 = pass, 1 = fail.
@@ -58,8 +60,9 @@ for name, expected in EXPECTED.items():
         except ET.ParseError as e:
             fail.append(f"{vts.name}: not well-formed XML ({e})")
             continue
+        field_data = {id(a) for fd in root.iter("FieldData") for a in fd.iter("DataArray")}
         names = [a.get("Name") for a in root.iter("DataArray")
-                 if a.get("Name") not in ("Points", "TIME")]
+                 if id(a) not in field_data and a.get("Name") != "Points"]
         if names != expected:
             fail.append(f"{vts.name}: variable names {names}, expected {expected}")
 

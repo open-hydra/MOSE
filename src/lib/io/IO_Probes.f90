@@ -7,7 +7,7 @@ module MOSE_IO_Probes
 
   implicit none
   private
-  public :: Setup_Probes, Write_Probes_Data
+  public :: Setup_Probes, Write_Probes_Data, Restart_Probes
 
   type :: real_ptr
     real(R8), pointer :: p
@@ -196,6 +196,33 @@ contains
     self%M = norm2(self%P(nu:nw))/speed_of_sound
 
   end subroutine Update
+
+
+  !> \brief Time counter of the time-based probe rows at a restart.
+  !> \details Write_Probes_Data writes a time-based row when time >= dtime*ntime and then counts
+  !>          it, so the rows fall on the multiples of dtime, from the first (ntime starts at 1 in a
+  !>          new run). A restart that goes on in time (resume) takes for ntime the first multiple
+  !>          its time has not reached, computed with the same product as Write_Probes_Data so that an
+  !>          exact multiple counts as written; otherwise, and in a steady run (time < 0), the rows
+  !>          start again from the first one.
+  subroutine Restart_Probes ( time, resume )
+    implicit none
+    real(R8), intent(in) :: time
+    logical,  intent(in) :: resume
+    ! Local
+    integer :: i
+
+    do i = 1, nprobes
+      probe(i)%ntime = 1
+      if (.not. resume .or. time < 0.d0) cycle
+      if (time / probe(i)%dtime >= 0.5_R8 * real(huge(1), R8)) cycle
+      probe(i)%ntime = max(0, int(time / probe(i)%dtime) - 1)
+      do while ( time >= probe(i)%dtime * probe(i)%ntime )
+        probe(i)%ntime = probe(i)%ntime + 1
+      enddo
+    enddo
+
+  end subroutine Restart_Probes
 
 
   subroutine Write_Probes_Data( iter, time )

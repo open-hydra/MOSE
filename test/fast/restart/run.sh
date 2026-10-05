@@ -2,12 +2,19 @@
 #===============================================================================
 #  Restart round-trip (fast tier, I3/F6)
 #
-#  Verifies that stopping a run, writing a solution and restarting (newrun=false,
-#  which reads OUTPUT/field.tec) reproduces the uninterrupted run:
+#  Verifies that stopping a run, writing a solution and restarting (newrun=false)
+#  reproduces the uninterrupted run:
 #     A : N iterations in one go
 #     B : N/2 iterations -> restart -> N/2 more
-#  A and B must match to solution-file round-trip precision.  Reuses the coarse
-#  Sod inputs (test/1D/Sod79); no new mesh/IC data is stored here.
+#  1. Tecplot ASCII (OUTPUT/field.tec): A and B must match to the round-trip
+#     precision of the file (15 significant digits).
+#  2. vtk raw: A and B must be identical bit for bit, counters included: the
+#     runs write numbered solutions every 10 iterations (sol-overwrite = false)
+#     and ramp the CFL number over the first 40 iterations, so the restart must
+#     also carry on the iteration count, the output numbering and the
+#     iteration column of residual-history.dat.
+#  Reuses the coarse Sod inputs (test/1D/Sod79); no new mesh/IC data is stored
+#  here.
 #     C : probes at a restart. Two probes on cells of the tube, by index (pA on
 #         cell 50, pB on cell 45: the nodes of this 1-D mesh lie on the planes
 #         j = 0 and k = 0), one row per iteration: 20 iterations in one go,
@@ -43,6 +50,17 @@ ln -sf "../$COMMON/phase.txt"     INPUT/phase.txt
 ln -sf "../$COMMON/thermo.dat"    INPUT/thermo.dat
 ln -sf "../$SOD/INPUT/ic_x1.tec"  INPUT/ic.tec
 ln -sf "../$SOD/INPUT/bc_x1.txt"  INPUT/bc.txt
+SOLVER="$HERE/bin/MOSE"
+
+# solve <directory> <log file> <label>: the solver must exit 0 and report no
+# error (it exits 0 also when it stops on NaN or p<0, so the log is checked too)
+solve() {
+  ( cd "$1" && "$SOLVER" > "$2" 2>&1 ) || { tail -5 "$1/$2"; echo "Restart: FAIL — solver exited non-zero ($3)"; exit 1; }
+  if command grep -q -E 'ERROR|NaN or p<0' "$1/$2"; then
+    command grep -E 'ERROR|NaN or p<0' "$1/$2" | head -3
+    echo "Restart: FAIL — the solver stopped with an error ($3)"; exit 1
+  fi
+}
 
 write_ini() {  # <iter-threshold> <newrun>
   cat > input.ini <<EOF
@@ -67,22 +85,67 @@ EOF
 # --- A: uninterrupted N-iteration run --------------------------------------
 write_ini "$N" true
 rm -f OUTPUT/field*.tec
-"$LOCAL" > OUTPUT/solve_full.log 2>&1
+solve . OUTPUT/solve_full.log "Tecplot ASCII, full run"
 [[ -f OUTPUT/field.tec ]] || { echo "Restart: FAIL — no field.tec from full run"; exit 1; }
 cp OUTPUT/field.tec field_full.tec
 
 # --- B: N/2 then restart for the remaining N/2 -----------------------------
 write_ini "$HALF" true
 rm -f OUTPUT/field*.tec
-"$LOCAL" > OUTPUT/solve_half.log 2>&1
+solve . OUTPUT/solve_half.log "Tecplot ASCII, first half"
 [[ -f OUTPUT/field.tec ]] || { echo "Restart: FAIL — no field.tec from first half"; exit 1; }
 
 write_ini "$HALF" false
-"$LOCAL" > OUTPUT/solve_restart.log 2>&1
+solve . OUTPUT/solve_restart.log "Tecplot ASCII, restart"
 [[ -f OUTPUT/field.tec ]] || { echo "Restart: FAIL — no field.tec from restart"; exit 1; }
 cp OUTPUT/field.tec field_restart.tec
 
-python3 -B check_restart.py field_full.tec field_restart.tec
+python3 -B check_restart.py field_full.tec field_restart.tec || exit 1
+
+# --- 2. vtk raw, bit for bit -----------------------------------------------
+write_ini_vtk() {  # <iter-threshold> <newrun>
+  cat > input.ini <<EOF
+[MOSE-Parameters]
+iter-threshold = $1
+newrun = $2
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.9
+cfl-rise-threshold = 40
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+
+[MOSE-IO]
+sol-format = vtk raw
+sol-diter = 10
+sol-overwrite = false
+EOF
+}
+
+prepare() {  # <run directory>
+  rm -rf "$1"; mkdir -p "$1/INPUT" "$1/OUTPUT"
+  for f in phase.txt thermo.dat ic.tec bc.txt; do
+    ln -s "../../../INPUT/$f" "$1/INPUT/$f"
+  done
+}
+
+prepare runs/full
+( cd runs/full && write_ini_vtk "$N" true ); solve runs/full solve_full.log "vtk raw, full run"
+[[ -f runs/full/OUTPUT/field.vtm ]] || { echo "Restart (vtk raw): FAIL — no field.vtm from full run"; exit 1; }
+
+prepare runs/restart
+( cd runs/restart && write_ini_vtk "$HALF" true ); solve runs/restart solve_half.log "vtk raw, first half"
+[[ -f runs/restart/OUTPUT/field.vtm ]] || { echo "Restart (vtk raw): FAIL — no field.vtm from first half"; exit 1; }
+( cd runs/restart && write_ini_vtk "$HALF" false ); solve runs/restart solve_restart.log "vtk raw, restart"
+
+python3 -B check_restart_vtk.py runs/full/OUTPUT runs/restart/OUTPUT
 status=$?
 
 # --- C: probes at a restart, the file of one of them removed ----------------

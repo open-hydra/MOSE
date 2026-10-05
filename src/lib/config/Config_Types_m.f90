@@ -37,6 +37,19 @@ module MOSE_Config_Types_m
   !! ------------------------------------------------------
   !! Input-Output -----------------------------------------
   !! ------------------------------------------------------
+  !> Counters stored with every vtk solution (field data of its .vts files) and read back by a
+  !> restart, so that the restarted run goes on as the uninterrupted one would: CFL ramp and
+  !> output cadence, output numbering, residual history and probe rows, multigrid level.
+  type :: restart_counters_t
+    logical   :: found = .false.            ! The restart solution holds the counters
+    logical   :: steady = .false.           ! The restart solution is a steady one (vtk: negative TIME)
+    integer   :: cycle = 0                  ! Iteration count over all grid levels (CYCLE)
+    integer   :: iteration = 0              ! Iteration count of the grid level of the solution
+    integer   :: output_number = 0          ! Number of the last numbered solution
+    integer   :: grid_level = 1             ! Grid level being solved
+    real(R8)  :: last_output_time = 0._R8   ! Time of the last time-based solution
+  end type restart_counters_t
+
   type :: io_t
     character(len=llen)  :: warning_message
     character(len=llen)  :: error_message
@@ -61,6 +74,8 @@ module MOSE_Config_Types_m
     integer              :: Onwall
     integer              :: unitRES             ! Residuals file unit
     character(len=llen)  :: unitRES_format      ! Format for residual_history_file
+    integer              :: output_number = 0   ! Number of the last numbered solution (sol-overwrite = false)
+    type(restart_counters_t) :: restart         ! Counters read with a vtk restart solution
   end type io_t
 
   type :: io_probes_t

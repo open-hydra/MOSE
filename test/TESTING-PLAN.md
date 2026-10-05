@@ -46,7 +46,7 @@ nightly/local tier.
 | Chemistry | frozen, finite-rate, equilibrium | all (needs Cantera/Sundials) | can't run in CI |
 | Multi-block | core feature | faces between blocks: one block against two and records sorted against reversed, bit for bit (`Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder`; with MPI `MPIConnectionFlux`, `MPIConnectionOrder`) | 3-D faces with permuted index directions, connections with multigrid and with RANS untested |
 | Ablative wall BCs (503/504/505) | melting, pyrolysis, surface reactions | 503/504 vs closed form (`AblatingWall`) | 505 needs a CO/CO2 thermo table |
-| Restart | core feature | Tecplot ASCII round trip (`Restart`); the start of a transient from a steady `vtk raw` solution (`Restart`/`RestartCounters`) | Tecplot ASCII keeps 15 significant digits and no counters |
+| Restart | core feature | Tecplot ASCII round trip; `vtk raw` bit for bit, counters included (`Restart`, `MPIRestart`) | Tecplot ASCII keeps 15 significant digits and no counters |
 | I/O formats | tec ascii/bin, vtk ascii/raw | ascii; `vtk raw` files are well-formed XML with the right names (`OutputFiles`/`VtkNames`) and hold raw appended data (`OutputFiles`/`VtkRawFormat`) | round-trip untested |
 | Parallelism | OpenMP, MPI | 1 vs 4 threads (`OpenMPEquiv`); MPI ranks × threads bit-identical in the `needs-mpi` tier (`test/mpi/`) | MPI tier runs only in MPI builds, not on the CI runner |
 | 3D | full | source terms only | no 3D NS verification |
@@ -111,9 +111,13 @@ nightly/local tier.
   tier. Four blocks at a vertex and 3-D faces with permuted directions are not covered.
 - ☑ **I3 — Restart round-trip**: N steps vs (N/2 → write → restart → N/2); match to
   ~2e-15. *Done:* `test/fast/restart` (restart = `newrun=false`, reads OUTPUT/field.tec).
-  `test/fast/restart/restart-counters` (`Restart`/`RestartCounters`) covers a transient started from a
-  steady solution, and the rows of the probes of a new run (by time from the first
-  multiple of dtime).
+  With `sol-format = vtk raw` the same test asks for identical bits, iteration counters
+  and output numbering included; *MPI variant (needs-mpi tier):* `test/mpi/restart`
+  (`MPIRestart`, 2 ranks × 2 threads). `test/fast/restart/restart-counters` (`Restart`/`RestartCounters`)
+  covers the other counters: steady runs (global iteration count, probes, diagnostic
+  output), time-based output, the multigrid level, a transient started from a steady
+  solution, and
+  the rows of the probes of a new run (by time from the first multiple of dtime).
 - ☑ **I4 — Conservation invariant**: closed slip-wall box, shock-tube IC; total mass
   conserved to round-off (~2e-13). *Done:* `test/fast/conservation`. (Energy invariant
   is a possible future addition.)
@@ -187,7 +191,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F23 | Rotating frame (Sod tube, rigid-body frame) with two `stationary-face-<n>` entries | the run ends within 60 s with exit code 0; the set-up summary lists the two stationary patches | ☑ `BoundaryConditions`/`RotatingFrame` | <1 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
-Current `ctest -L fast`: **20 tests, ~117 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **20 tests, ~118 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, InputChecks,
 TimeIntegration, BoundaryConditions, Conservation, OpenMPEquiv, Connections,
 Restart, OutputFiles, MMSResiduals, AblatingWall, MeshGeometry, QCR2000Stress).
