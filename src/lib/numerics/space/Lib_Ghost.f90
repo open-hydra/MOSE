@@ -701,9 +701,10 @@ contains
         ! NOTE: the extrapolation of the turbulence variables is done in BC routines, due
         ! to the fact that omega_wall needs to be set to extrapolate its value in ghost cell
 
-        ! Other variables copied
+        ! Other variables copied: species, pressure, soot and passive scalars (np:nt-1).
+        ! Not the RANS variables (nt:nprim): the wall BC routine has just set their ghost.
         domain%blk(bm)%P (1:nsc,ig,jg,kg) = domain%blk(bm)%P (1:nsc,im,jm,km)
-        domain%blk(bm)%P (np:nprim,ig,jg,kg) = domain%blk(bm)%P (np:nprim,im,jm,km)
+        domain%blk(bm)%P (np:nt-1,ig,jg,kg) = domain%blk(bm)%P (np:nt-1,im,jm,km)
       endif
     enddo
 
