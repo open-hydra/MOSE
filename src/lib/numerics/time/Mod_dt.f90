@@ -3,10 +3,14 @@ module MOSE_Mod_dt
 
   implicit none
   private
-  public :: Compute_dt, Set_Global_dt
+  public :: Compute_dt, Set_Global_dt, Turbulence_Stiffness
 
 contains
 
+  !> Local time step of every cell (blk%dtlocal) and its minimum over the domain (domain%dtglobal, on input an upper
+  !> bound). In time-accurate RANS runs the turbulence sources are explicit and the step includes their stiffness:
+  !> Compute_dt first calls Turbulence_Stiffness, so the stiffness is that of the current state. Call it outside OpenMP
+  !> parallel regions.
   subroutine Compute_dt ( domain, cfl, vnn, rampa_iter )
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
@@ -25,8 +29,9 @@ contains
     dtglobal = domain % dtglobal
 
     ! Time-accurate RANS runs: the turbulence sources are explicit (the point-implicit factor serves steady runs
-    ! only), and their stiffness, evaluated on the current state (Turbulence_Stiffness), enters the step
+    ! only), and their stiffness, evaluated here on the current state, enters the step
     explicit_sources = obj_time_scheme%time_accurate .and. model == 2
+    if ( explicit_sources ) call Turbulence_Stiffness ( domain )
 
     do b = 1, domain % nb ! loop over blocks
       if (.not. is_local_block(b)) cycle
@@ -198,6 +203,29 @@ contains
       end subroutine compute
 
   end subroutine Compute_dt
+
+
+  !> Stiffness of the turbulence sources of every cell on the current state of the domain: blk%stiff = d, the
+  !> derivative of the destruction (Spalart-Allmaras 2 c_w1 f_w nu~/y^2; SST and Wilcox 2006 max(beta* omega,
+  !> 2 beta omega)), written by the source routines. It fills the ghost cells and evaluates the turbulence sources as
+  !> the first stage of a step does, without the fluxes, so it is collective (MPI ghost exchange) and must be called
+  !> outside OpenMP parallel regions, by all processes. It leaves in blk%r a residual that nobody may use: the next stage
+  !> starts by zeroing the residuals, and its own ghost fill replaces the ghost values set here. Compute_dt calls it in
+  !> time-accurate RANS runs; call it alone only when the stiffness is needed without the step.
+  subroutine Turbulence_Stiffness ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Lib_Ghost, only: Fill_Ghost_Cell, Ghost_Wall_Extrapolation
+    use MOSE_Lib_RANS,  only: RANS_Source_Terms
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+
+    !$omp parallel
+    call Fill_Ghost_Cell ( domain )
+    call Ghost_Wall_Extrapolation ( domain )
+    call RANS_Source_Terms ( domain )
+    !$omp end parallel
+
+  end subroutine Turbulence_Stiffness
 
 
   subroutine Set_Global_dt ( domain )

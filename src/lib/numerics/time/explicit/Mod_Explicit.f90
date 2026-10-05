@@ -56,8 +56,6 @@ contains
       domain(level) % time = domain(level) % time + domain(level) % dtglobal
     else
       domain(level) % dtglobal = 1d5
-      ! Time-accurate RANS runs: stiffness of the explicit turbulence sources on the current state, for the step
-      if ( obj_time_scheme%time_accurate .and. model == 2 ) call Turbulence_Stiffness ( domain(level) )
       call Compute_dt ( domain(level), obj_time_scheme%cfl, obj_time_scheme%vnn, obj_time_scheme%rampa_cfl_iter )  ! Compute local and minimum time step
       if ( obj_time_scheme%time_accurate ) then
         call Set_Global_dt ( domain(level) )  ! Time-accurate: apply global minimum time step
@@ -187,25 +185,6 @@ contains
     endif
 
   end subroutine Explicit_Step
-
-
-  !> Stiffness of the turbulence sources on the current state (time-accurate RANS runs): one evaluation of the
-  !> sources fills blk%stiff for Compute_dt. The residual it leaves is discarded: the first stage starts by zeroing
-  !> the residuals, and its own ghost fill replaces the ghost values set here.
-  subroutine Turbulence_Stiffness ( domain )
-    use MOSE_Advanced_Types_m
-    use MOSE_Lib_Ghost, only: Fill_Ghost_Cell, Ghost_Wall_Extrapolation
-    use MOSE_Lib_RANS,  only: RANS_Source_Terms
-    implicit none
-    type(MOSE_domain_type), intent(inout) :: domain
-
-    !$omp parallel
-    call Fill_Ghost_Cell ( domain )
-    call Ghost_Wall_Extrapolation ( domain )
-    call RANS_Source_Terms ( domain )
-    !$omp end parallel
-
-  end subroutine Turbulence_Stiffness
 
 
   subroutine Copy_State ( domain )

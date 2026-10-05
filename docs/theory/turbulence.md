@@ -189,8 +189,8 @@ f_{r1} = (1 + c_{r1})\,\frac{2\,r^\ast}{1 + r^\ast}\,
   \bigl(1 - c_{r3}\arctan(c_{r2}\,\tilde{r})\bigr) - c_{r1}
 $$
 
-bounded to $[0,\;1.25]$, with constants $c_{r1} = 1$, $c_{r2} = 2$,
-$c_{r3} = 1$.  Production is multiplied by $\max(1,\,f_{r1})$.
+with constants $c_{r1} = 1$, $c_{r2} = 12$, $c_{r3} = 1$ (NASA Turbulence Modeling Resource,
+SA-RC). Production is multiplied by $f_{r1}$, which is not bounded and can be negative.
 
 MOSE evaluates the Lagrangian derivative $DS_{ij}/Dt = \partial S_{ij}/\partial t + u_k\,\partial
 S_{ij}/\partial x_k$ with its convective part only. Without the time term the correction holds for
@@ -611,8 +611,9 @@ For the example above: `k = 2.4699e-4`, `omega = 1215.8`.
 The turbulence source terms are added to the residual and advanced with the same explicit
 Runge–Kutta stages as the mean flow. Their destruction parts are stiff near walls: for the
 $k$–$\omega$ models $\omega$ grows like $1/y^2$ towards the wall, and an explicit stage on
-$\dot q = -d\,q$ gives $q\,(1 - \Delta t\,d)$, negative for $\Delta t\,d > 1$. Here $q$ is the
-conserved turbulence variable and $d$ the derivative of its destruction:
+$\dot q = -D(q)$ gives $q - \Delta t\,D = q\,(1 - \Delta t\,D/q)$, negative for $\Delta t\,D/q > 1$. Here
+$q$ is the conserved turbulence variable; the destruction rate $D/q$ is at most $d$, the derivative
+of the destruction ($d/2$ for $\tilde\nu$ and $\omega$, whose destruction is quadratic):
 
 | Model | Equation | $d = \partial D/\partial q$ |
 |-------|----------|------------------------------|
@@ -675,6 +676,15 @@ S. Osher, *J. Comput. Phys.* 77, 1988, Proposition 2.1 of its report version, IC
 The destruction of $\tilde\nu$ and of $\omega$ is quadratic, $D = (d/2)\,q$, which leaves them a
 margin of 2. Where the destruction is faster than the transport, as in the wall cells of fine
 meshes, above all with SST, the step is smaller than the convective and diffusive limits.
+
+The bound covers the destruction only. Three sinks stay outside it: the cross-diffusion of SST,
+$2(1-F_1)\,\rho\,\sigma_{\omega 2}\,\nabla k\cdot\nabla\omega/\omega$, negative where $\nabla
+k\cdot\nabla\omega < 0$ (Wilcox 2006 switches its cross-diffusion off there); with `sst-production =
+compressible`, the dilatation part of the production of SST, $-\tfrac23\rho k\,\nabla\cdot\mathbf{u}$
+and $-\tfrac23\gamma\rho\omega\,\nabla\cdot\mathbf{u}$, negative where the flow expands; and the
+production of SA-R and SA-RC, which can be negative («the SA-RC production term can be negative»,
+NASA Turbulence Modeling Resource). Like the transport, they can make a stage negative, and the count
+at the end of the run shows it.
 
 The rates are those of the state at the start of the step, so the bound holds through the stages
 as long as the stiffness does not grow much within one step. An impulsive start of a

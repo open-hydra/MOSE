@@ -124,7 +124,8 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # and in diffusion-dominated cells (heat conduction, species), with Heun and RK3;
 # heat conduction on 3-D rhombohedra at 115 degrees with Heun at vnn 0.5.
 # Turbulence sources in time-accurate runs: nu~, k and omega converge with the
-# order of Heun and RK3, and no stage makes them negative near a wall.
+# order of Heun and RK3, and no stage makes them negative near a wall; SST-RC
+# prints the start-up warnings of k-omega models and of -RC.
 mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;3D")
 
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.

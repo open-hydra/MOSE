@@ -3,7 +3,7 @@ module MOSE_Lib_Newstate
 
   implicit none
   private
-  public :: Newstate_Conservative, Newstate_Primitive, Report_Negative_Turbulence
+  public :: Newstate_Conservative, Newstate_Primitive, Count_Negative_Turbulence, Report_Negative_Turbulence
 
   !> Cell updates of this process in which a stage made nu~, k or omega negative, before the realizability floor
   integer(I8) :: n_negative_turbulence = 0
@@ -475,15 +475,9 @@ contains
       if ( prim(s) < 1d-20 ) prim(s) = 1d-20
     enddo
 
-    ! Realizability for turbulence. A stage that made nu~, k or omega negative is counted (one-equation and
-    ! two-equation models, whose variables are all positive), see Report_Negative_Turbulence
+    ! Realizability for turbulence, after counting a stage that made nu~, k or omega negative
     if (model==2) then
-      if ( nrans <= 2 ) then
-        if ( any( prim(nt:nprim) < 0d0 ) ) then
-          !$omp atomic
-          n_negative_turbulence = n_negative_turbulence + 1
-        end if
-      end if
+      call Count_Negative_Turbulence( prim )
       call RANS_Enforce_Realizability( prim(nt:) )
     endif
 
@@ -496,6 +490,24 @@ contains
     endif
 
   end subroutine Check_And_Fix_State
+
+
+  !> Counts one cell update whose stage made nu~, k or omega negative, before the realizability floor (one- and
+  !> two-equation models, whose variables are all positive; thread-safe: atomic only when it happens). Check_And_Fix_State
+  !> calls it; an integrator with its own update of the cells calls it in the same way, on the updated primitive
+  !> vector and before RANS_Enforce_Realizability, so that Report_Negative_Turbulence counts its stages too.
+  subroutine Count_Negative_Turbulence ( prim )
+    use MOSE_Global_m, only: model, nt, nprim, nrans
+    implicit none
+    real(R8), intent(in) :: prim(:)
+
+    if ( model /= 2 .or. nrans > 2 ) return
+    if ( any( prim(nt:nprim) < 0d0 ) ) then
+      !$omp atomic
+      n_negative_turbulence = n_negative_turbulence + 1
+    end if
+
+  end subroutine Count_Negative_Turbulence
 
 
   !> One line at the end of a RANS run: how many cell updates had a stage that made nu~, k or omega negative, so

@@ -10,7 +10,7 @@ contains
 
   subroutine Assign_Setup()
     use MOSE_Config_Types_m
-    use MOSE_Global_m,            only: model, nsc
+    use MOSE_Global_m,            only: model, nsc, nRANS
     use MOSE_IO_Solution,         only: Setup_Input_Solution
     use MOSE_Mod_Space,           only: Setup_Space_Scheme
     use MOSE_Mod_Riemann,         only: Assign_Riemann_Solver
@@ -140,8 +140,13 @@ contains
     if (model == 2 .and. obj_time_scheme%time_accurate) then
       if (obj_rans%point_implicit) obj_time_scheme%warning_message = '[WARNING] point-implicit is not applied in '// &
         'time-accurate runs: the turbulence sources are explicit, and the time step includes their stiffness.'
-      if (obj_rans%SpalartShur) obj_rans%warning_message = '[WARNING] The rotation-curvature correction (-RC) omits '// &
-        'the time derivative of the strain-rate tensor: it holds for steady flows only.'
+      ! k-omega models: the stiffness of the step is that of the start of the step, which does not see the omega that
+      ! the wall raises during the first step of a start far from the wall value
+      if (nRANS == 2 .and. obj_time_scheme%rampa_cfl_iter == 0) obj_rans%warning_message = '[WARNING] k-omega, '// &
+        'time-accurate, no cfl-rise-threshold: omega 100 times or more below its wall value in diffusion-limited '// &
+        'wall cells can turn negative at the first step.'
+      ! The warning of the rotation-curvature correction (-RC), which SST-RC needs next to the k-omega one above, is
+      ! written by Print_Warnings (Wrap_Setup)
     end if
 
   end subroutine Assign_Setup

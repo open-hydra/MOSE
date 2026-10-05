@@ -8,6 +8,9 @@
 #           100 steps at cfl 0.8, 200 at 0.4 and 400 at 0.2 end at the same
 #           time (the step is set by cells whose state does not change), and
 #           the observed order must be at least 1.8 with Heun and 2.7 with RK3;
+#    warn   one step of SST-RC with RK3 on the case of SST, with no
+#           cfl-rise-threshold: the start-up warnings of the k-omega models and
+#           of the rotation-curvature correction must both be printed;
 #    pos    near-wall turbulence far above its equilibrium decays faster than
 #           the transport acts: no stage may make nu~, k or omega negative
 #           (count printed by the solver at the end of the run), and the step
@@ -87,6 +90,18 @@ EOF
   fi
   cp OUTPUT/field.tec "OUTPUT/$6.tec"
 }
+
+echo "-- start-up warnings, SST-RC, RK3, no cfl-rise-threshold, one step --"
+python3 -B make_case.py order-SST || exit 1
+if solve order-SST-RC RK3 0.8 0.4 1 warn-SST-RC; then
+  if grep -a -q '^\[WARNING\] k-omega, time-accurate, no cfl-rise-threshold' OUTPUT/warn-SST-RC.log &&
+     grep -a -q '^\[WARNING\] The rotation-curvature correction (-RC)' OUTPUT/warn-SST-RC.log; then
+    echo "  [ok  ] the k-omega and the -RC warnings are both printed"
+  else
+    echo "  [FAIL] a start-up warning is missing (see OUTPUT/warn-SST-RC.log)"
+    fail=1
+  fi
+fi
 
 for model in SA SST; do
   python3 -B make_case.py "order-$model" || exit 1
