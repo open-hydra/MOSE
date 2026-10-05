@@ -159,7 +159,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F5d | Residual smoothing with time-accurate runs | refused at set-up, no solution; steady runs keep it | ☑ `InputChecks`/`IRSTimeAccurate` | <1 s |
 | F5e | Time control (1-D duct, time-dependent inlet 402) | order in time ≥ 1.8 (RK2, RK3); table held before its first instant; time-threshold reached | ☑ `TimeIntegration`/`TimeControl` | ~5 s |
 | F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart` | ~1 s |
-| I11 | Wall output in vtk raw (2x2-block box of 8 × 8 cells, adiabatic no-slip walls (301) on its four sides, 5 RK3 steps) | the run ends; every wall file `wallB<b>F<f>.vts` has the extent of its face (WholeExtent and Piece Extent, from `fieldBlock<b>.vts`) and its points, as raw appended data | ☑ `OutputFiles`/`WallOutput` | <1 s |
+| I11 | Wall output in vtk raw (2x2-block box of 8 × 8 cells, adiabatic no-slip walls (301) on its four sides, 5 RK3 steps) | the run ends; every wall file `wallB<b>F<f>.vts` has the extent of its face (WholeExtent and Piece Extent, from `fieldBlock<b>.vts`), its points and one value of each wall variable per cell, as raw appended data | ☑ `OutputFiles`/`WallOutput` | <1 s |
 | I5 | Serial vs OpenMP equivalence: the Sod tube; a chimera case, a block overset on another whose four chimera faces meet at its edges (Navier–Stokes; it passes on the parent of its commit too: the race it guards shows under ThreadSanitizer with Archer, in three runs of three) | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~3 s |
 | I12 | Names of the VTK outputs (steady viscous run on a 2 × 2-block box with no-slip walls, 5 iterations, `vtk raw`) | every `.vts` that `field.vtm`, `wall.vtm` and `diagnostic.vtm` list parses as XML, and its data arrays are named as the variables that MOSE writes for the case (field, walls, diagnostic), with no other array | ☑ `OutputFiles`/`VtkNames` | <1 s |
 | I13 | `vtk raw` solutions as raw appended data (the Sod tube of `test/1D/Sod79`, 10 iterations, a numbered solution every 3, steady with the diagnostic output after each solution, and time-accurate) | every data array of every block file of every `.vtm` in `OUTPUT/` is `format="appended"`, with the raw appended data in the file | ☑ `OutputFiles`/`VtkRawFormat` | <1 s |
@@ -184,7 +184,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F23 | Rotating frame (Sod tube, rigid-body frame) with two `stationary-face-<n>` entries | the run ends within 60 s with exit code 0; the set-up summary lists the two stationary patches | ☑ `BoundaryConditions`/`RotatingFrame` | <1 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
-Current `ctest -L fast`: **20 tests, ~141 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **20 tests, ~117 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, InputChecks,
 TimeIntegration, BoundaryConditions, Conservation, OpenMPEquiv, Connections,
 Restart, OutputFiles, MMSResiduals, AblatingWall, MeshGeometry, QCR2000Stress).

@@ -1,12 +1,15 @@
-"""Wall outputs in vtk raw: every wallB<b>F<f>.vts has the extent of face f of block b and its points.
+"""Wall outputs in vtk raw: every wallB<b>F<f>.vts has the extent of face f of block b and its values.
 
 For each OUTPUT/vtk/wallB<b>F<f>.vts the extent of block b is the WholeExtent of
 fieldBlock<b>.vts (0 NI 0 NJ 0 NK), in whatever vtk format the field is written; the wall
 file must have the extent of face f, the one of the block with the direction normal to
 the face collapsed to its first index (0 0 0 NJ 0 NK for faces 1 and 2, 0 NI 0 0 0 NK for
-faces 3 and 4, 0 NI 0 NJ 0 0 for faces 5 and 6), as WholeExtent and as Piece Extent, and
-its Points array must hold three values for each of the points of that extent. Every array
-of a wall file must be raw appended data, whose values are counted from its size header.
+faces 3 and 4, 0 NI 0 NJ 0 0 for faces 5 and 6), as WholeExtent and as Piece Extent; its
+Points array must hold three values for each of the points of that extent, and each
+CellData array one value for each of its cells (a collapsed direction counts one layer of
+cells, as in the cell-centered ordered data of the Tecplot format and in the writers of
+ORION). Every array of a wall file must be raw appended data, whose values are counted
+from its size header.
 
 Usage: python check_wall_vts.py <OUTPUT/vtk directory> <label>
 Exit 0 = pass, 1 = fail.
@@ -67,8 +70,11 @@ for wall in sorted(vtk.glob("wallB*F*.vts")):
     want[2 * d + 1] = want[2 * d]
     whole, piece, arrays = parse(wall)
     npts = 1
+    ncell = 1
     for e in range(3):
-        npts *= want[2 * e + 1] - want[2 * e] + 1
+        n = want[2 * e + 1] - want[2 * e]
+        npts *= n + 1
+        ncell *= max(n, 1)
     if whole != want or piece != want:
         fail.append(f"{wall.name}: extent {whole} (piece {piece}), {want} expected")
     if not any(s == "Points" for s, _ in arrays):
@@ -77,8 +83,11 @@ for wall in sorted(vtk.glob("wallB*F*.vts")):
         if nval is None:
             fail.append(f"{wall.name}: {section} {name}: not raw appended data")
             continue
-        if section == "Points" and nval != npts * ncomp:
-            fail.append(f"{wall.name}: {section} {name}: {nval} values, {npts * ncomp} expected")
+        expected = (npts if section in ("Points", "PointData") else ncell) * ncomp
+        if nval != expected:
+            fail.append(f"{wall.name}: {section} {name}: {nval} values, {expected} expected")
+    if not any(s == "CellData" for s, _ in arrays):
+        fail.append(f"{wall.name}: no CellData")
 
 for line in fail:
     print("  " + line)
