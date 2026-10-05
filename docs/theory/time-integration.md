@@ -144,34 +144,69 @@ path is faster per step but less conservative.
 
 ## Stability Conditions
 
-### CFL condition
+### Local time step
 
-The convective time-step limit in direction $d$ for cell $i$ is
-
-$$
-\Delta t_{\text{CFL},\,i}^{(d)} =
-\frac{\Delta x_d}{\bigl|\mathbf{v}\!\cdot\!\hat{\mathbf{e}}_d\bigr| + a}
-\;\times\;\text{CFL}
-$$
-
-### VNN condition
-
-When a turbulence model is active, the viscous (von Neumann) stability
-limit is
+Each cell $i$ gets a local time step that combines convection and diffusion in one additive rule
+(W. Hundsdorfer, *Numerical Solution of Advection–Diffusion–Reaction Equations*, lecture notes,
+Thomas Stieltjes Institute, 2000, §6 and §9.3; A. Arnone, M.-S. Liou, L. A. Povinelli, *Multigrid
+Time-Accurate Integration of Navier–Stokes Equations*, NASA TM-106373, 1993, eq. 26–28):
 
 $$
-\Delta t_{\text{VNN},\,i}^{(d)} =
-\frac{\rho\,(\Delta x_d)^2}{\mu_\ell + \mu_t}\;\times\;\text{VNN}
+\frac{1}{\Delta t_i} =
+\frac{1}{\text{CFL}} \sum_{d=1}^{n_d} \Bigl( \bigl|\mathbf{v}\cdot\nabla\xi_d\bigr| + a\,\bigl|\nabla\xi_d\bigr| \Bigr)
+\;+\; \frac{D_{\max}}{\text{VNN}} \sum_{d=1}^{n_d} \bigl|\nabla\xi_d\bigr|^2 ,
 $$
+
+where $\nabla\xi_d$ is the row $d$ of the cell metric (its modulus is the inverse of the width of the
+cell across its faces of direction $d$), $n_d$ the number of computational directions (one cell in
+$k$ gives $n_d = 2$), $a$ the speed of sound and $D_{\max}$ the largest diffusivity of the equations:
+
+$$
+D_{\max} = \max\!\left(
+\frac{4}{3}\,\frac{\mu_\ell + \mu_t}{\rho},\;
+\frac{k_\ell + \mu_t\,c_p/\text{Pr}_t}{\rho\,c_v},\;
+D_s,\;
+\frac{\mu_\ell + \rho\tilde\nu}{\sigma\,\rho}
+\right).
+$$
+
+The conductivity acts on the internal energy $\rho c_v T$, so the energy diffusivity is
+$\gamma\nu/\text{Pr} \approx 1.94\,\nu$ in air, larger than the momentum one; $D_s$ are the species
+diffusivities (more than one species only); the last term enters with Spalart–Allmaras
+($\sigma = 2/3$). The $k$ and $\omega$ diffusivities of SST and Wilcox 2006,
+$(\mu_\ell + \sigma\mu_t)/\rho$ with $\sigma \le 1$, stay below the momentum one. Euler runs have
+no diffusive term.
+
+In 3-D, on a cell whose three directions are skewed against each other, the viscous rate is
+multiplied by $F = (2 + m + 1/m)/4$: with $a$, $b$, $c$ the cosines of the angles between the three
+$\nabla\xi_d$, where $a^2 + b^2 + c^2 + 2abc > 1$, $m + 1$ is the largest eigenvalue of the
+$3\times3$ matrix of the cosines ($m$ the largest root of $m^3 - (a^2+b^2+c^2)\,m - 2abc = 0$).
+There the spectral radius of the viscous operator exceeds $4D_{\max}\sum_d|\nabla\xi_d|^2$ by a
+factor below $9/8$, which $F$ bounds (exactly on rhombohedra); elsewhere, orthogonal cells and cells
+with one direction orthogonal to the other two included, $F = 1$, and in 2-D the rate holds as it
+is.
+
+Without dimensional splitting the convective limits of the directions add up: an explicit scheme
+on square 2-D cells needs $\tau(|a_x|/\Delta x + |a_y|/\Delta y) \le C_0$, not the largest of the two
+terms (Hundsdorfer, §9.3); the convective and diffusive rates add up in the same way.
+With the linearised MUSCL–upwind advection and central diffusion, a von Neumann analysis gives the
+stability limits below; at the worst cell Péclet number the additive law is exact.
+
+| Scheme | CFL ≤ | VNN ≤ |
+|---|---|---|
+| Heun (`RK2`) | 1 | 1/2 |
+| `RK3` | 1.17 | 0.62 |
+| explicit Euler (`euler`) | 1 with first-order reconstruction; unstable with MUSCL | 1/2 |
+
+The limiter may need less near discontinuities. With preconditioning, $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$
+is replaced by the preconditioned eigenvalue $\bigl(u_n (1-\alpha) + c^\ast\bigr)|\nabla\xi_d|$.
 
 ### Global time step
 
-The actual time step is the global minimum:
+In a time-accurate run all cells advance with the smallest local step:
 
 $$
-\Delta t = \min_{i,\,d}\!\bigl[\min\!\bigl(
-  \Delta t_{\text{CFL},\,i}^{(d)},\;
-  \Delta t_{\text{VNN},\,i}^{(d)}\bigr)\bigr]
+\Delta t = \min_i \Delta t_i .
 $$
 
 !!! tip "CFL ramp-up"

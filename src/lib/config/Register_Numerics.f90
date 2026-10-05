@@ -30,8 +30,11 @@ contains
     call reg%add( trim(section), 'time-scheme', obj_time_scheme%solver_type, 'euler', 'Time integration solver', 'euler, RK2, RK3', .true. )
 
     ! Stability coefficients and related options
-    call reg%add( trim(section), 'cfl', obj_time_scheme%cfl, '0.5', 'CFL number', '> 0', .true. )
-    call reg%add( trim(section), 'vnn', obj_time_scheme%vnn, '0.3', 'VNN parameter', '> 0', .false. )
+    call reg%add( trim(section), 'cfl', obj_time_scheme%cfl, '0.5', &
+                  'CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17)', '> 0', .true. )
+    call reg%add( trim(section), 'vnn', obj_time_scheme%vnn, '0.3', &
+                  'Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62)', &
+                  '> 0', .false. )
     call reg%add( trim(section), 'cfl-rise-threshold', obj_time_scheme%rampa_cfl_iter, '0', 'CFL rise threshold', '>= 0', .false. )
 
     ! Time-accurate switch

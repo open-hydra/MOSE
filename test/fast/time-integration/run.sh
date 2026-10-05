@@ -10,13 +10,14 @@
 #  test:
 #    TimeControl (time-control): boundary data in time, time tables and stop
 #      rules
+#    LocalTimeStep (local-time-step): stability of the local time step
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(time-control)
+PARTS=(time-control local-time-step)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

@@ -47,8 +47,8 @@
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | time-scheme | euler | euler, RK2, RK3 | yes | Time integration solver |
-| cfl | 0.5 | > 0 | yes | CFL number |
-| vnn | 0.3 | > 0 |  no | VNN parameter |
+| cfl | 0.5 | > 0 | yes | CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17) |
+| vnn | 0.3 | > 0 |  no | Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62) |
 | cfl-rise-threshold | 0 | >= 0 |  no | CFL rise threshold |
 | time-accurate | .false. | logical | yes | Time accurate switch |
 | integration-variables | cons | cons ,  prim , prec |  no | Integration variables (cons/prim/prec) |

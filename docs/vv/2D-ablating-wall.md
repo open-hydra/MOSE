@@ -42,7 +42,15 @@ $c_p T_w$ and the analysis below is free of table interpolation error.
 | CFL / VNN | 0.5 / 0.5 |
 | Space reconstruction | MUSCL, Van Leer limiter |
 | Riemann solver | HLLC |
-| Iterations | 4000 |
+| Iterations | 4000 (`melting-inert`: 8000) |
+
+The run is a pseudo-time march (local time stepping) that is stopped before full convergence. The
+inert-surface check (no blowing, $|\rho v| < 5\times10^{-2}$ kg m⁻² s⁻¹) looks at the start-up flow
+while it decays, so `melting-inert` runs 8000 iterations, in its own directory: they bring the inert
+case to the pseudo-time that 4000 iterations reached before the additive local time step, whose step
+is about half as large in these cells (largest gas temperature 534.66 against 534.67 K, largest
+$|\rho v|$ 4.475e-2 against 4.485e-2; 5.56e-2 after 4000 iterations). The other configurations pass
+their checks with 4000.
 
 ---
 

@@ -120,7 +120,10 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # Time control: second order in time with a time-dependent inlet (BC 402,
 # boundary data at the stage times), time tables before their first instant,
 # res-threshold not ending a time-accurate run.
-mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D")
+# Local time step: stable on square and skewed 2-D cells, on cubic 3-D cells
+# and in diffusion-dominated cells (heat conduction, species), with Heun and RK3;
+# heat conduction on 3-D rhombohedra at 115 degrees with Heun at vnn 0.5.
+mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;3D")
 
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
 mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")
