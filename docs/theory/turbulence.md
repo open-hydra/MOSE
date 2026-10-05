@@ -676,6 +676,13 @@ The destruction of $\tilde\nu$ and of $\omega$ is quadratic, $D = (d/2)\,q$, whi
 margin of 2. Where the destruction is faster than the transport, as in the wall cells of fine
 meshes, above all with SST, the step is smaller than the convective and diffusive limits.
 
+The rates are those of the state at the start of the step, so the bound holds through the stages
+as long as the stiffness does not grow much within one step. An impulsive start of a
+$k$–$\omega$ model from a state far from the wall value of $\omega$ is the exception: during the
+first step the wall condition raises $\omega$ in the wall cells by orders of magnitude, and with
+the full step the explicit destruction overshoots ($\omega < 0$, then the floor and a very large
+$\mu_t$). Start such runs with the CFL ramp (`cfl-rise-threshold`).
+
 At the end of a RANS run MOSE prints how many cell updates had a stage that made $\tilde\nu$, $k$ or
 $\omega$ negative before the realizability floor:
 
