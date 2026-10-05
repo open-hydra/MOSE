@@ -162,6 +162,14 @@ point-implicit factor, then continues it at half the (cfl, vnn) and with implici
 residual smoothing: the wall shear and heat flux must not move, to 1e-9. Its 14 000
 iterations per model (~20–40 s) put it in the **validation** tier as well.
 
+`WedgeAxisStep` ([`2D/viscous/wedge-axis-step`](2D/viscous/wedge-axis-step)) checks the local time step
+next to the axis of a 1° wedge (diffusion-dominated, Prandtl number 10, a little swirl; square
+cells, cells twice as long in x, and a mesh with the axis on the last j face): 2000 steps
+at RK3 vnn 0.62 and Heun vnn 0.5 with no NaN; and, on cells four times as long in x with
+the Prandtl number of air and with 0.9, 2000 steps at the recommended vnn (RK3 0.5, Heun
+0.4). Its eight runs of 2000 iterations (~155 s of CPU, TIMEOUT 600 s) put it in the
+**validation** tier too.
+
 ---
 
 ## 5. Infrastructure (do this first)

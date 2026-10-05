@@ -180,6 +180,18 @@ mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")
 # it converges 14 000 iterations per model.
 mose_add_fast_script(PointImplicitSteady 2D/viscous/point-implicit-steady "validation;numerics;2D")
 
+# Local time step next to the axis of the wedge (BC 200): the stress on the wedge
+# faces stiffens the rows next to the axis. At the largest vnn the step rule
+# declares stable (RK3 0.62, Heun 0.5), on square and on elongated cells, and at
+# the recommended vnn (RK3 0.5, Heun 0.4) on cells four times as long in x, with
+# Prandtl 0.72 and 0.9, no NaN.
+# Validation tier: eight runs of 2000 iterations, 155 s of CPU at one thread on
+# a loaded machine (163 s of wall time), hence a TIMEOUT of its own.
+mose_add_fast_script(WedgeAxisStep 2D/viscous/wedge-axis-step "validation;numerics;2D")
+if(TEST WedgeAxisStep)
+    set_tests_properties(WedgeAxisStep PROPERTIES TIMEOUT 600)
+endif()
+
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
 # which is an exact steady solution, checked against its closed form. These
 # boundary conditions have no other coverage in the suite.

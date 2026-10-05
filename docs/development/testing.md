@@ -48,6 +48,7 @@ test/
 │       ├── flat-plate-turbulent/
 │       ├── Flat_Plate_SGGLRR/
 │       ├── mms/                   # residuals/: right-hand sides on manufactured fields (RANS, wedge)
+│       ├── wedge-axis-step/       # Local time step next to the axis of the wedge (validation tier)
 │       ├── point-implicit-steady/ # Steady state with the point-implicit factor independent of the time step
 │       └── swbli/
 ├── mpi/                       # MPI tier (needs-mpi): make_case.py
@@ -231,7 +232,15 @@ L1 convergence against it, and regenerates the V&V figure. `PointImplicitSteady`
 cost, 14 000 iterations per model: the steady state of a short hypersonic plate
 with the point-implicit factor (Spalart–Allmaras, SST) does not depend on the
 time step, and implicit residual smoothing does not move it either (wall shear
-and heat flux to 1e-9). Run them with `ctest -L validation`.
+and heat flux to 1e-9). `WedgeAxisStep`
+(`test/2D/viscous/wedge-axis-step`) is there for its cost too, eight runs of
+2000 iterations (~155 s of CPU): on a diffusion-dominated 1° wedge (Prandtl number 10) the local time
+step keeps the rows next to the axis stable at the largest vnn the rule
+declares, RK3 0.62 and Heun 0.5, on square cells, on cells twice as long in x
+and with the axis on the last j face, and at the recommended vnn, RK3 0.5 and
+Heun 0.4, on cells four times as long in x with the Prandtl number of air and
+with 0.9.
+Run them with `ctest -L validation`.
 
 ### MPI tier contents
 

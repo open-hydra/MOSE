@@ -312,6 +312,15 @@ carry a relative error of order $\delta^2$ that the mesh does not reduce
 ($\delta^2/12$ of the hoop stress $2\mu u_r/r^2$ in the radial balance,
 $2.5\times10^{-5}$ for $\delta = 1^\circ$). Keep the wedge thin.
 
+Next to the axis the hoop stress also stiffens the explicit step. In the radial
+momentum of the first row of cells, at $r \approx \Delta r/2$, it is a damping
+$(2\mu+\lambda)\,u_r/r^2 \approx \tfrac{16}{3}\,\mu\,u_r/\Delta r^2$ ($\mu$ with
+the eddy viscosity), with couplings to the neighbours through $\lambda\,\nabla\cdot\mathbf{u}$.
+The local time step includes them ([Time Integration](time-integration.md#local-time-step)),
+so the `vnn` limits of the rule hold next to the axis too; without them, at a
+Prandtl number of 10, the first rows broke down at the `vnn` the rule declares
+stable (test `WedgeAxisStep`).
+
 The 3-D rotational periodicity (type `200` with more than one cell in $k$)
 computes the inviscid flux only. On a planar 2-D mesh (faces 5 and 6 parallel,
 no wedge angle) type `200` makes the image the cell itself, and the fluxes of
