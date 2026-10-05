@@ -196,7 +196,10 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # the set-up warnings say so.
 # Implicit residual smoothing is a steady-state accelerator: a time-accurate
 # run that asks for it (irs = true or irs-beta > 0) is refused at set-up.
-mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;numerics;1D")
+# Block-to-rank assignment from INPUT/decomposition.map on one rank: a map
+# with every block on rank 0 gives the bits of the run without it; maps that
+# do not fit the mesh or the run stop it at setup with the fault named.
+mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;numerics;1D;2D")
 
 # Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).
 # Spalart-Allmaras with variable density: the right-hand side of the equation
@@ -307,4 +310,10 @@ if(USE_MPI)
     # The 2-D case of ConnectionOrder with one block per rank: sorted and
     # reversed records give the one-rank bits.
     mose_add_mpi_script(MPIConnectionOrder mpi/connection-order "needs-mpi;implementation;2D")
+
+    # Block-to-rank assignment from INPUT/decomposition.map: on 2 and 4 ranks
+    # every map (MOSE's own assignment as MDB writes it, permutations, an idle
+    # rank 0, 110 blocks) gives the one-rank field; a map for other ranks stops
+    # every rank with the same message.
+    mose_add_mpi_script(MPIDecompositionMap mpi/decomposition-map "needs-mpi;implementation;2D")
 endif()

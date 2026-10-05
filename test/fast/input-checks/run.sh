@@ -13,13 +13,15 @@
 #      reconstruction
 #    IRSTimeAccurate (irs-time-accurate): implicit residual smoothing in
 #      time-accurate runs
+#    DecompositionMap (decomposition-map): block-to-rank map of
+#      INPUT/decomposition.map
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(exit-codes limiter-defaults irs-time-accurate)
+PARTS=(exit-codes limiter-defaults irs-time-accurate decomposition-map)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

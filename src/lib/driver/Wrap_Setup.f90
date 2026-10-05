@@ -102,8 +102,13 @@ contains
     ! MPI: partition blocks once on finest-level cell counts (restriction and
     ! prolongation are block-local, so a block must live on the same rank at
     ! every level), then build per-level ghost/chimera communication schedules.
+    ! The rank of every block comes from INPUT/<prefix>decomposition.map when the
+    ! case has one (the map of the ATLAS mesh decomposer), otherwise from the LPT.
     call partition_blocks(simulation%domain(1)%nb, &
-      [(product(simulation%domain(1)%blk(ios)%dim(1:3)), ios=1, simulation%domain(1)%nb)])
+      [(product(simulation%domain(1)%blk(ios)%dim(1:3)), ios=1, simulation%domain(1)%nb)], &
+      reshape([(simulation%domain(1)%blk(ios)%dim(1:3), ios=1, simulation%domain(1)%nb)], &
+              [3, simulation%domain(1)%nb]), &
+      'INPUT/'//trim(MOSE_phase_prefix)//'decomposition.map')
 
     ! Ownership is known: allocate the state arrays only where they are needed.
     ! Every block still gets its mesh -- Setup_Metrics reads donor nodes and

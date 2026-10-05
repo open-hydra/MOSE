@@ -43,7 +43,8 @@ my_case/
 │   ├── thermo.dat            ← thermodynamic property tables
 │   ├── ...                   ← other mixture files (chemistry, transport, etc.)
 │   ├── ic.*                  ← initial condition grid + flow field
-│   └── bc.txt                ← face-by-face boundary condition data
+│   ├── bc.txt                ← face-by-face boundary condition data
+│   └── decomposition.map     ← block-to-rank assignment (optional, MPI runs)
 └── OUTPUT/                   ← created at runtime
     ├── field.*               ← solution fields (when sol-overwrite = true)
     ├── field1.*              ← solution snapshots (when sol-overwrite = false)

@@ -26,7 +26,8 @@ test/
 │   ├── input-checks/          # Input checks
 │   │   ├── exit-codes/        # Runs stopped on an error end with a non-zero exit code and their message
 │   │   ├── limiter-defaults/  # The reconstruction that runs is the declared one
-│   │   └── irs-time-accurate/ # Residual smoothing refused in time-accurate runs
+│   │   ├── irs-time-accurate/ # Residual smoothing refused in time-accurate runs
+│   │   └── decomposition-map/ # Block-to-rank map on one rank: same bits, misfit maps stop
 │   ├── connections/           # Faces between blocks
 │   │   ├── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
 │   │   ├── connection-flux/   # One flux per face between blocks: one block = two blocks, conservation
@@ -63,12 +64,13 @@ test/
 │       ├── wedge-axis-step/       # Local time step next to the axis of the wedge (validation tier)
 │       ├── point-implicit-steady/ # Steady state with the point-implicit factor independent of the time step
 │       └── swbli/
-├── mpi/                       # MPI tier (needs-mpi): make_case.py
+├── mpi/                       # MPI tier (needs-mpi): make_case.py, write_map.py
 │   ├── boundary-records/      # Boundary records
 │   ├── connection-flux/       # Faces between ranks
 │   ├── connection-order/      # The 2-D case of ConnectionOrder with one block per rank
 │   ├── vertex-stencil/        # Viscous connection stencil at a vertex shared by four blocks
-│   └── thread-funnel/         # MPI calls only from the main thread (MPI_THREAD_FUNNELED)
+│   ├── thread-funnel/         # MPI calls only from the main thread (MPI_THREAD_FUNNELED)
+│   └── decomposition-map/     # Block-to-rank maps on 2 and 4 ranks: the one-rank field
 ├── 3D/                        # 3-D validation cases
 │   └── coriolis-channel/
 ├── Pressure_Centrifugal_eq/   # Rotating-frame equilibrium case
@@ -245,6 +247,7 @@ seconds on a CI runner.
 | `MMSResiduals` | on a constructed field with variable density and nu~, the right-hand side of the equation for rho nu~ converges with second order to the standard conservation form of Spalart–Allmaras; with SA-RC and SST-RC, the change of rho nu~ (rho k and rho omega) in one step of a 3-D flow with vorticity along x, y and z is the same as for the flow turned in space (x to y, y to z, z to x), cell by cell: the rotation tensor W_ij = (∂u_i/∂x_j − ∂u_j/∂x_i)/2 is a tensor; with SA-RC in a frame turning about z, a uniform shear changes rho nu~ by the production with the f_r1 of the specification, whose r~ takes the rotation of the frame, and a uniform flow, whose vorticity is zero, runs and keeps rho nu~; on air at rest next to a wall, and off the wall row of air flowing along it on cells stretched along the flow, SA-RC changes rho nu~ as SA does; on Homann's axisymmetric stagnation-point flow and on a polynomial field with dilatation and swirl (2-D wedge of 1°, axis included) the viscous force converges with second order to the Navier–Stokes one, the stress on the wedge faces included; with nu~ = a y over a wall, fluid at rest (an equilibrium of the equation for chi -> 0), the right-hand side of rho nu~ vanishes in the wall cells too, where the source terms must see grad nu~ = a from the wall value nu~ = 0 | `test/2D/viscous/mms/residuals` |
 | `Connections`/`ConnectionFlux` | a periodic shock tube as one block and as two blocks gives the same bits, and conserves mass, momentum and energy to 1e-13, with HLLC, HLLC+Tramel, HLLC+Chen (shock sensor) and HLLC-PC (preconditioned, on a low Mach number wave) | `test/fast/connections/connection-flux` |
 | `Connections`/`ConnectionOrder` | two 2-D blocks whose index directions are permuted across the cut (face 4 of one on face 2 of the other, two faces of the same parity) give the same bits with the records of `bc.txt` sorted and reversed (Navier–Stokes, HLLC+Tramel, a shock leaving the cut); with the block below the cut one cell thick across it, or two cells thick with two multigrid levels (one at level 2), the run stops at set-up with a message that names the record, the block across, its cells and the level | `test/fast/connections/connection-order` |
+| `InputChecks`/`DecompositionMap` | on one rank, an `INPUT/decomposition.map` with every block on rank 0 gives the bits of the run without it and the setup log names the file; maps that do not fit the mesh or the run (a block line missing or one too many, blocks out of order, other sizes or cell counts, a rank the run does not have, no rank column) stop the run at setup with the fault named | `test/fast/input-checks/decomposition-map` |
 | `MeshGeometry`/`WallDistance` | the distance to the wall read back from the Spalart–Allmaras source is the exact distance to the wall surface (convex corner, curved wall, nozzle lip on a wedge), and to its periodic images (channel and pipe periodic in x, 3-D sector, the channel with its periodic sides matched to 1e-8, 3-D slab periodic in k, 3-D channel periodic in x and z with periods a hundredth of its height, the 2-D channel ten periods from the origin, a staggered row of plane blades longer than the period, a 3-D block periodic along three nearly dependent translations, the 2-D channel turned by 30 degrees with its coordinates rounded to 5 and to 4 significant digits); the stop at set-up of that channel rounded to 2 digits, whose periodic sides do not match to 1e-2 of its cells; on a 3-D wall of twisted faces, the start-up report of the bound of the error | `test/fast/mesh-geometry/wall-distance` |
 | `MeshGeometry`/`MeshType` | a plane slab is plane and a wedge is a wedge whatever the direction of j (wall distance within 1e-9), also a wedge of 5 degrees in two blocks written with 5 significant digits and a plane slab far from the x axis, which a small turn nearly fits; the set-up summary names the type; a wedge written with 2 significant digits, too few to tell it, a plane slab whose k planes are not parallel (2 % of its thickness), 3-D sectors of 90 degrees whose periodic plane misses the turn by half a cell (100 cells in k) or a tenth (20 cells), and a wedge block with a plane block stop the run; a 3-D slab periodic in k keeps a uniform flow within 1e-12 | `test/fast/mesh-geometry/mesh-type` |
 | `Connections`/`SectorRadial` | a 3-D sector closed by the rotational periodicity (type 200 on the k faces, -45 to 45 degrees) keeps a radial flow its own mirror image across z = 0 within 1e-10 | `test/fast/connections/sector-radial` |
@@ -276,7 +279,8 @@ its own small multi-block case, with
 `MPIConnectionFlux` and `MPIConnectionOrder`, with the generator of their fast tests,
 launches the solver itself through the MPI launcher CMake found
 (`MPIEXEC_EXECUTABLE`, at most 4 ranks) and checks an invariant of the parallel
-run; all but `MPIThreadFunnel` compare the `vtk raw` output files byte by byte.
+run; all but `MPIThreadFunnel` compare output files byte by byte (`vtk raw`, and Tecplot ASCII
+for the 110 blocks of `MPIDecompositionMap`).
 
 | Test | Asserts | Lives in |
 |------|---------|----------|
@@ -285,6 +289,7 @@ run; all but `MPIThreadFunnel` compare the `vtk raw` output files byte by byte.
 | `MPIThreadFunnel` | with `MPI_THREAD_FUNNELED`, every MPI call comes from the thread that initialised MPI: a probe library preloaded into the solver (`mpi_thread_probe.c`, built with the tests) counts no MPI call from other threads on any rank, on 2×2, 2×4 and 2×2 with implicit residual smoothing in a steady run (MPI ranks × OpenMP threads), checks that every run uses the requested threads, and sees the halo exchange on every rank; the largest tag of the point-to-point calls is at most 32767, the least `MPI_TAG_UB` the MPI standard allows | `test/mpi/thread-funnel` |
 | `MPIConnectionFlux` | the two-block cases of `Connections`/`ConnectionFlux` with one block per rank (block cut and periodic connection between ranks) give the one-rank and the one-block solutions bit for bit, and conserve | `test/mpi/connection-flux` |
 | `MPIConnectionOrder` | the 2-D case of `Connections`/`ConnectionOrder` with one block per rank (the cut, inviscid and viscous shares, between ranks): 2 ranks with the records of `bc.txt` sorted and reversed give the one-rank solution bit for bit | `test/mpi/connection-order` |
+| `MPIDecompositionMap` | the block-to-rank assignment read from `INPUT/decomposition.map` (written by [`test/mpi/write_map.py`](https://github.com/open-hydra/MOSE/blob/main/test/mpi/write_map.py) in the format of the ATLAS mesh decomposer) does not change the solution: a strip of four viscous blocks on 2 ranks (MOSE's own assignment, the strip in halves, three blocks on one rank, every block on rank 1) and on 4 ranks in reverse order, a 2×2 box on 2 ranks (diagonal blocks together) and 4 ranks, and 110 blocks on 2 and 4 ranks give the field of one rank without a map, byte for byte (`vtk raw`; Tecplot ASCII for the 110 blocks); a map for other ranks stops every rank with the same message | `test/mpi/decomposition-map` |
 
 Run the tier from the build directory of an MPI build:
 
