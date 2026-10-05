@@ -155,7 +155,7 @@ fast pre-push suite (~4 s for the three solved grids).
 converges a short hypersonic plate (6 × 16 cells, Spalart–Allmaras and SST) with the
 point-implicit factor, then continues it at half the (cfl, vnn) and with implicit
 residual smoothing: the wall shear and heat flux must not move, to 1e-9. Its 14 000
-iterations per model (~15 s) put it in the **validation** tier as well.
+iterations per model (~20–40 s) put it in the **validation** tier as well.
 
 ---
 

@@ -653,7 +653,10 @@ calculations» (H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1). Like any 
 implicit operator of a delta form, it leaves the steady state where the residual vanishes
 (T. H. Pulliam, *Time Accuracy and the Use of Implicit Methods*, AIAA Paper 93-3360, eq. 8): the
 converged solution is that of $F + S = 0$, whatever the time step, and the factor only lets
-steady runs keep the mean-flow CFL near walls.
+steady runs keep the mean-flow CFL near walls. The residuals of $\tilde\nu$, $k$ and $\omega$ printed during
+the run (the change of the variable over the step) are scaled by the same factor, so near walls they
+are smaller than without it; the convergence check `res-threshold` uses the density residual and is
+not affected.
 
 Up to this version the factor divided the source alone,
 $q^{n+1} = q^n + \Delta t\,\bigl(F + S/(1 + \Delta t\,d)\bigr)$, and the converged solution, wall shear
