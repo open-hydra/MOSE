@@ -42,9 +42,21 @@ $$
 + \underbrace{\frac{1}{\sigma}\Bigl[
   \nabla\!\cdot\!\bigl((\mu + \rho\tilde\nu)\,\nabla\tilde\nu\bigr)
   + c_{b2}\,\rho\,|\nabla\tilde\nu|^2
+  - (\nu + \tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu
 \Bigr]}_{\text{Diffusion}}
 - \underbrace{c_{w1}\,f_w\,\rho\!\left(\frac{\tilde\nu}{y}\right)^{\!2}}_{\text{Destruction}}
 $$
+
+This is the conservation form of the original equation, which has no density and holds for
+compressible flows too: it is $\rho$ times the original equation plus $\tilde\nu$ times the
+continuity equation (S. R. Allmaras, F. T. Johnson, P. R. Spalart, *Modifications and
+Clarifications for the Implementation of the Spalart–Allmaras Turbulence Model*, ICCFD7-1902,
+2012, eq. 9; NASA Turbulence Modeling Resource, Spalart–Allmaras page). Since
+$\rho\,\nabla\cdot\bigl((\nu+\tilde\nu)\nabla\tilde\nu\bigr) = \nabla\cdot\bigl(\rho(\nu+\tilde\nu)\nabla\tilde\nu\bigr)
+- (\nu+\tilde\nu)\nabla\rho\cdot\nabla\tilde\nu$, the last diffusion term is needed wherever density
+and $\tilde\nu$ vary together (boundary layers at high Mach number, shocks): without it, as in
+implementations that put the density inside the derivatives, the predictions of supersonic flows
+change (NASA Turbulence Modeling Resource, Note 4).
 
 ### Model constants
 

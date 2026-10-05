@@ -161,6 +161,11 @@ mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D"
 # thermo or transport output stops with a message that says so.
 mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
 
+# Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).
+# Spalart-Allmaras with variable density: the right-hand side of the equation
+# for rho nu~ converges to the standard conservation form.
+mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D")
+
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
 # which is an exact steady solution, checked against its closed form. These
 # boundary conditions have no other coverage in the suite.

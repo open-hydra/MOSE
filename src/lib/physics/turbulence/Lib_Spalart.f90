@@ -110,9 +110,9 @@ contains
     integer :: i, j, k
     real(R8) :: rho, Rgas, nit, mil, Gradvel(3,3), Gradnit(3), omega(3), Om, abs_Eij, Wij(3,3)
     real(R8) :: Eij(3,3), chi, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, rstar, D2, rtilde
-    real(R8) :: Production, Diffusion, Destruction, Source, fnu, d, fv2_
+    real(R8) :: Production, Diffusion, Destruction, Source, fnu, d, fv2_, Gradrho(3)
 
-    !$omp do collapse (3) private ( rho, Rgas, nit, mil, Gradvel, Gradnit, omega, Om, abs_Eij, Wij ), &
+    !$omp do collapse (3) private ( rho, Rgas, nit, mil, Gradvel, Gradnit, omega, Om, abs_Eij, Wij, Gradrho ), &
     !$omp private ( Eij, chi, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, rstar, D2, rtilde ), &
     !$omp private ( Production, Diffusion, Destruction, Source, fnu, d, fv2_, i, j, k)
     
@@ -193,7 +193,18 @@ contains
 
       Gradnit2 = Sum ( Gradnit**2 )              ! ni-tilde gradient squared
 
-      Diffusion = cb2 / sigma * Gradnit2         ! Non-conservative Diffusion term
+      ! Density gradient, same differences
+      Gradrho(1) = ( sum( Prim(1:nsc,i+1,j,k) ) - sum( Prim(1:nsc,i-1,j,k) ) ) * 0.5d0
+      Gradrho(2) = ( sum( Prim(1:nsc,i,j+1,k) ) - sum( Prim(1:nsc,i,j-1,k) ) ) * 0.5d0
+      Gradrho(3) = ( sum( Prim(1:nsc,i,j,k+1) ) - sum( Prim(1:nsc,i,j,k-1) ) ) * 0.5d0
+      Gradrho = Matmul ( Gradrho, M(i,j,k) % c )
+
+      ! Diffusion terms outside the flux div((mu + rho nu~) grad nu~)/sigma: the cb2 term and, with variable density,
+      ! -(nu + nu~) grad rho . grad nu~ / sigma, which makes this conservation form equal to the original equation
+      ! (S. R. Allmaras, F. T. Johnson, P. R. Spalart, ICCFD7-1902, 2012, eq. 9). The source below is multiplied by
+      ! rho, so the second term enters divided by rho.
+      Diffusion = cb2 / sigma * Gradnit2 &
+                - ( mil / rho + nit ) * Dot_Product ( Gradrho, Gradnit ) / ( sigma * rho )
 
       ! Destruction term computation
       r_Fun = nit / ( Stilde * cK**2 * d**2 )
