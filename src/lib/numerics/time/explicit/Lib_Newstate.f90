@@ -461,12 +461,13 @@ contains
     integer, intent(in) :: b, i, j, k
     integer :: s
 
-    ! Bail out on NaN or negative pressure (product trick is expensive; use
-    ! any(isnan()) + separate pressure check instead)
-    if ( any( isnan(prim(1:nprim)) ) .or. prim(np) < 0d0 ) then
+    ! Bail out on a value that is not finite (NaN or infinity) or on a negative pressure. STOP 1, not
+    ! mpi_abort_all: this runs inside OpenMP threads and MPI is initialised FUNNELED; the non-zero exit code makes
+    ! the launcher end the other ranks.
+    if ( any( Not_Finite(prim(1:nprim)) ) .or. prim(np) < 0d0 ) then
       write(*,'(A,4I4)') "Integration failed at b, i, j, k:", b, i, j, k
       write(*,*) prim(1:nprim)
-      write(*,'(A)') "NaN or p<0 detected"
+      write(*,'(A)') "NaN, infinity or p<0 detected"
       stop 1
     endif
 
@@ -524,6 +525,20 @@ contains
                                          nint(total, I8)
 
   end subroutine Report_Negative_Turbulence
+
+
+  !> .true. for NaN and infinities, the values with all the exponent bits set. The test reads the bits:
+  !> -ffast-math (-ffinite-math-only), an option of the RELEASE build, lets gfortran fold isnan, ieee_is_nan and
+  !> ieee_is_finite to constants.
+  elemental logical function Not_Finite ( x )
+    use iso_fortran_env, only: int64
+    implicit none
+    real(R8), intent(in) :: x
+    integer(int64), parameter :: expo = int(z'7FF', int64)
+
+    Not_Finite = iand ( shiftr ( transfer ( x, 0_int64 ), 52 ), expo ) == expo
+
+  end function Not_Finite
 
 
 end module MOSE_Lib_Newstate

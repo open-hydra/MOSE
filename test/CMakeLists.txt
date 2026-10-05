@@ -185,12 +185,13 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # test/fast/input-checks, run one after the other by
 # test/fast/input-checks/run.sh.
 # Exit codes of the error stops: a run that MOSE stops on an error ends with a
-# non-zero exit code and its message. Default Schmidt number (schmidt = 0,
-# multicomponent diffusion): the Sod tube as a viscous mixture of four species,
-# without a diffusion table, stops at setup; so does a probe of an unknown
-# variable. A steady run with a soot model ends normally and its diagnostic
-# output names every variable it writes; a steady single-species run without
-# thermo or transport output stops with a message that says so.
+# non-zero exit code and its message: the Sod tube as a viscous mixture of four
+# species without a diffusion table, a run that diverges, a NaN in the initial
+# condition, an initial condition with too few variables, a rotating frame
+# with a zero axis, a probe of an unknown variable. A steady run with a soot
+# model ends normally and its diagnostic output names every variable it writes;
+# a steady single-species run without thermo or transport output stops with a
+# message that says so.
 # Limiter defaults: the reconstruction that runs is the declared one (MUSCL
 # without flux-limiter = van Leer; first-order ignores a given limiter), and
 # the set-up warnings say so.

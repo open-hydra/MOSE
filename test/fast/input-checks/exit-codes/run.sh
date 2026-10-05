@@ -2,10 +2,11 @@
 #===============================================================================
 #  Exit codes of the error stops (fast tier)
 #
-#  A run that MOSE stops on an error must end with a non-zero exit code and
-#  its message, and write no solution. Reuses the inputs of the 100-cell Sod
-#  tube (test/1D/Sod79) and the gas of test/1D/diff1; no new mesh or IC data
-#  is stored here.
+#  A run that MOSE stops on an error must end with a non-zero exit code, so
+#  that scripts and CI see the failure, and with its message, not with a
+#  crash signal; it writes no solution. Reuses the inputs of the 100-cell Sod
+#  tube (test/1D/Sod79) and the gases of test/common and test/1D/diff1; no
+#  new mesh or IC data is stored here.
 #
 #  Unknown probe variable. A probe that asks for a variable MOSE does not
 #  know must stop the run at set-up with exit status 1 and a message naming
@@ -48,6 +49,17 @@
 #  Spalart-Allmaras and no soot, which runs to the end with SA, the run must
 #  stop at set-up with exit code 1 to 128 and the message, and write no
 #  diagnostic output.
+#
+#  Error stops. Each case below breaks the Sod tube in one way: a run that
+#  diverges (CFL 20; stop inside the OpenMP loop of the state update), an
+#  initial condition with a NaN velocity in one cell (the same stop: the
+#  check of the state update must catch a value that is not finite in any
+#  build; -ffast-math, an option of the RELEASE build, lets gfortran fold
+#  isnan to false), an initial condition with fewer variables than the model
+#  needs (set-up), a rotating frame with an axis of zero length (set-up).
+#  The exit code must be between 1 and 128 (128 is what ifx gives to ERROR
+#  STOP; above 128 the shell reports a signal) and the log must hold the
+#  message.
 #===============================================================================
 set -uo pipefail
 
@@ -58,6 +70,8 @@ MASTER=../../../../bin/MOSE
 LOCAL=./bin/MOSE
 SOD=../../../1D/Sod79/INPUT
 MIX=../../../1D/diff1/INPUT
+COMMON=../../../common/Air
+VISC=../../../common/Air-viscous
 ERR='Sc<=0 (multicomponent diffusion) requires a binary diffusion table'
 
 ulimit -s unlimited 2>/dev/null || true
@@ -243,6 +257,69 @@ else
   echo "  [FAIL] sacomp: exit code $rc (required 1 to 128, no diagnostic output), message \"$SACOMP\" $(grep -a -q -- "$SACOMP" OUTPUT/soot-sacomp.log && echo found || echo missing) (see OUTPUT/soot-sacomp.log)"
   fail=1
 fi
+
+# write_case <tag> <physics lines> [other sections]: the Sod tube and its input.ini
+write_case() {
+  local tag="$1" physics="$2" extra="${3:-}"
+  rm -f INPUT/*
+  if [[ "$physics" == *navier-stokes* ]]; then
+    ln -sf "../$VISC/phase.txt" INPUT/phase.txt; ln -sf "../$VISC/thermo.dat" INPUT/thermo.dat
+    ln -sf "../$VISC/transport.dat" INPUT/transport.dat
+  else
+    ln -sf "../$COMMON/phase.txt" INPUT/phase.txt; ln -sf "../$COMMON/thermo.dat" INPUT/thermo.dat
+  fi
+  if [[ "$tag" == nan-ic ]]; then
+    python3 -B make_case.py nan "$SOD" || exit 1
+  else
+    python3 -B make_case.py sod "$SOD" || exit 1
+  fi
+  local cfl=0.9
+  [[ "$tag" == diverge ]] && cfl=20
+  cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 50
+newrun = true
+
+[MOSE-Physics]
+$physics
+
+[MOSE-Numerics]
+cfl = $cfl
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+$extra
+EOI
+}
+
+# run_case <tag> <message expected in the log> <physics lines> [other sections]
+run_case() {
+  local tag="$1" message="$2"
+  write_case "$tag" "$3" "${4:-}"
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  local rc=$?
+  if [[ $rc -ge 1 && $rc -le 128 ]] && grep -a -q -- "$message" "OUTPUT/$tag.log"; then
+    echo "  [ok  ] $tag: exit code $rc, \"$message\""
+  else
+    echo "  [FAIL] $tag: exit code $rc (required 1 to 128), message \"$message\" $(grep -a -q -- "$message" "OUTPUT/$tag.log" && echo found || echo missing) (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+}
+
+echo "-- exit codes of the error stops --"
+run_case diverge  "Integration failed"              "equations = euler"
+run_case nan-ic   "Integration failed"              "equations = euler"
+run_case ic-vars  "Number of variables in IOfield"  "equations = navier-stokes
+turbulence = SA
+schmidt = 0.7"
+run_case rot-axis "Rotation axis has zero length"   "equations = euler
+rotational-frame = rigid-body" "
+[MOSE-Rotating-Frame]
+omega = 1.0
+axis = 0.0 0.0 0.0"
 
 if [[ $fail -ne 0 ]]; then
   echo "ExitCodes: FAILED"

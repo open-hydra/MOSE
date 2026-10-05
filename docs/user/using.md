@@ -130,6 +130,20 @@ MOSE prints diagnostic information to the console during loading and iteration. 
 !!! tip "Loading checks"
     If any issue occurs during loading (e.g., missing files, format errors), MOSE will print an error message and exit, so the successful loading message is a good sign that the case is set up correctly.
 
+!!! note "Exit code"
+    A run that MOSE stops on an error — at loading, at set-up, or because the solution diverges («Integration failed at
+    b, i, j, k», then «NaN, infinity or p<0 detected») — ends with a non-zero exit code, so that scripts and job
+    schedulers see the failure: 1 where MOSE ends with `stop 1`; otherwise that of `ERROR STOP` (128 with ifx, 1 with
+    gfortran) or, when the error stops every rank of an MPI run, the one the MPI launcher gives for `MPI_ABORT` with
+    error code 1. A divergence is caught on any value that is not finite (NaN, infinity) or on a negative pressure,
+    also in RELEASE builds with fast math.
+
+    Known limit: errors raised inside the ORION library, which reads and writes the solution files, still end with
+    code 0, because ORION stops with `STOP`. For example, a binary Tecplot file (`ic-format = tecplot binary`) in a
+    build without TecIO ends with «You can not read in binary format without compiling against TecIO» and exit code
+    0. MOSE cannot refuse that input beforehand: whether TecIO is compiled in is known only inside ORION (its `TECIO`
+    macro). Check the end of the log, not only the exit code, when a run reads or writes binary files.
+
 ```
  =========================================================================================
  Loading

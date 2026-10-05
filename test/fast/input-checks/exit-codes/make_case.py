@@ -1,6 +1,13 @@
 """Inputs of the ExitCodes fast test.
 
+Every case starts from the 100-cell Sod tube of test/1D/Sod79 (INPUT/ic_x1.tec, INPUT/bc_x1.txt); run.sh breaks it in one way,
+mostly through input.ini, so the inputs here are the Sod ones, or the Sod ones changed in one value.
+
 Usage (from test/fast/input-checks/exit-codes):
+  python3 -B make_case.py sod SOD_INPUT_DIR
+      writes INPUT/ic.tec and INPUT/bc.txt, copies of the Sod ones.
+  python3 -B make_case.py nan SOD_INPUT_DIR
+      the same, with the velocity u of cell 50 written as NaN in INPUT/ic.tec.
   python3 -B make_case.py mixture SOD_IC OUT
       writes OUT: the 100-cell Sod tube of SOD_IC (one species, rho1) as a
       mixture of the four species of test/1D/diff1 (order of its
@@ -21,7 +28,9 @@ Usage (from test/fast/input-checks/exit-codes):
       of the diagnostic REF (the same run without soot: plain, or sa-plain
       with Spalart-Allmaras) within 1e-6.
 """
+import os
 import re
+import shutil
 import sys
 
 Y_AIR = (0.0, 0.0, 0.767, 0.233)
@@ -29,9 +38,11 @@ SOOT_SPECIES = (("C2H2", 26.038, "C2H4"), ("O2", 31.998, "O2"), ("N2", 28.014, "
                 ("CO", 28.010, "CO"), ("C(gr)", 12.011, "C"))
 Y_SOOT = (0.05, 0.233, 0.716999, 0.0, 0.0, 1.0e-6)
 RHO_S, U_S, P_S, NP_S, MU_S = 1.16, 10.0, 1.0e5, 1.0e14, 1.8e-5
+NAN_CELL = 50
 
 
-def mixture(src, out):
+def read_tube(src):
+    """Header, zone line and the values of a Sod tube in block format: nodes x, y, z, then cells rho1, u, v, w, p."""
     with open(src) as f:
         lines = f.read().split('\n')
     header, zone = lines[0], lines[1]
@@ -41,6 +52,30 @@ def mixture(src, out):
     nodes, cells = ni * nj * nk, (ni - 1) * max(nj - 1, 1) * max(nk - 1, 1)
     vals = ' '.join(lines[2:]).split()
     assert len(vals) == 3 * nodes + 5 * cells, (len(vals), nodes, cells)
+    return header, zone, nodes, cells, vals
+
+
+def sod(sod_dir):
+    for name, src in (("ic.tec", "ic_x1.tec"), ("bc.txt", "bc_x1.txt")):
+        dst = os.path.join("INPUT", name)
+        if os.path.lexists(dst):
+            os.remove(dst)
+        shutil.copyfile(os.path.join(sod_dir, src), dst)
+
+
+def nan(sod_dir):
+    sod(sod_dir)
+    header, zone, nodes, cells, vals = read_tube(os.path.join(sod_dir, "ic_x1.tec"))
+    vals[3 * nodes + cells + NAN_CELL - 1] = 'NaN'          # u of cell NAN_CELL
+    os.remove(os.path.join("INPUT", "ic.tec"))
+    with open(os.path.join("INPUT", "ic.tec"), 'w') as f:
+        f.write(header + '\n' + zone + '\n')
+        for v in vals:
+            f.write(' %s\n' % v)
+
+
+def mixture(src, out):
+    header, zone, nodes, cells, vals = read_tube(src)
     xyz, rho, uvwp = vals[:3 * nodes], vals[3 * nodes:3 * nodes + cells], vals[3 * nodes + cells:]
     species = [['%.15E' % (float(r) * y) for r in rho] for y in Y_AIR]
     zone = zone.replace('[4-8]=CELLCENTERED', '[4-11]=CELLCENTERED')
@@ -133,7 +168,11 @@ def diagnostic_check(diag, ref, expected):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) == 4 and sys.argv[1] == 'mixture':
+    if len(sys.argv) == 3 and sys.argv[1] == 'sod':
+        sod(sys.argv[2])
+    elif len(sys.argv) == 3 and sys.argv[1] == 'nan':
+        nan(sys.argv[2])
+    elif len(sys.argv) == 4 and sys.argv[1] == 'mixture':
         mixture(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 6 and sys.argv[1] == 'soot':
         soot(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
