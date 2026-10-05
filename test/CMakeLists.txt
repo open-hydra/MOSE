@@ -128,6 +128,7 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # prints the start-up warnings of k-omega models and of -RC; the
 # vortex-stretching function of Wilcox 2006 on a 3-D flow; the asymptotic omega
 # wall value of Wilcox 2006 and SST.
+# Quasi-2D case with symmetry k faces: round-off in w must not grow.
 mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;3D")
 
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.

@@ -3,7 +3,7 @@ module MOSE_Mod_Fluxes
 
   implicit none
   private :: Fluxes_blk
-  public  :: Zero_Residuals, Internal_Fluxes
+  public  :: Zero_Residuals, Internal_Fluxes, Setup_Quasi2D_W, Zero_W_Residual
 
 contains
 
@@ -32,6 +32,102 @@ contains
     enddo
 
   end subroutine Zero_Residuals
+
+
+  !> Planar quasi-2D case (one cell in k, ndir = 2, no wedge angle) whose k faces are all symmetry planes
+  !> (300): the two mirror planes one cell apart give w the mode dw/dt = -2 a w / dz (a the speed of
+  !> sound), far outside the stability region of the explicit schemes at the time step of the in-plane
+  !> cells, so round-off in w grows until the run fails. As in planar codes, which do not solve the third
+  !> direction, the z velocity is then set to zero and the z momentum is not integrated: w = 0 at every
+  !> step, also when the initial field has w /= 0 (a field restarted from a run hit by the mode, or a 3-D
+  !> field), which a frozen rho w would carry as an error on p and u. Null (0) or periodic (200) k faces,
+  !> and axisymmetric wedges (delthe /= 0, where the cell-centre w of a cell off the wedge mid-plane
+  !> carries part of the radial velocity), are left as they are. The k faces must also be planes normal to z
+  !> (the x and y components of the unit normal of every k face at most tol_plane): the planar flow has
+  !> w = 0. A layer whose thickness varies in the plane (k faces not normal to z) gives the gas a z velocity
+  !> next to an inclined face, and freezing it would change the flow (the mass flow, the pressure): w is then
+  !> integrated, with a warning, and its mode across the layer can limit the time step.
+  !> Called after the initial field is in place and before the ghost cells and the coarse multigrid levels
+  !> are filled from it.
+  subroutine Setup_Quasi2D_W ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m,    only: ndir, freeze_w, nw
+    use MOSE_Lib_Metrics, only: delthe
+    use MOSE_Mod_MPI,     only: mpi_is_root, is_local_block, mpi_allreduce_max_r8
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    ! Local
+    real(R8), parameter :: tol_plane = 1.0e-10_R8   ! Largest off-axis component of the unit normal of a face of a plane
+    integer  :: i, j, k, b, nk, nsym, n(3)
+    real(R8) :: offk, offk_all
+
+    nk = 0
+    nsym = 0
+    do i = 1, domain % nbound
+      if ( domain % bc(i) % f < 5 ) cycle
+      nk = nk + 1
+      if ( domain % bc(i) % type == 300 ) nsym = nsym + 1
+    enddo
+    ! No wedge: delthe exactly zero, written as two ordered comparisons (same result, also for -0 and NaN)
+    freeze_w = ( ndir == 2 .and. delthe >= 0d0 .and. delthe <= 0d0 .and. nk > 0 .and. nsym == nk )
+
+    ! The k faces must be planes normal to z; the largest value over the blocks of every rank, so that every rank takes
+    ! the same decision
+    if ( freeze_w ) then
+      offk = 0.0_R8
+      do b = 1, domain % nb
+        if (.not. is_local_block(b)) cycle
+        n = domain % blk(b) % dim
+        do k = 0, n(3); do j = 1, n(2); do i = 1, n(1)
+          offk = max ( offk, abs(domain % blk(b) % dir(3) % f(i,j,k) % N(1)), abs(domain % blk(b) % dir(3) % f(i,j,k) % N(2)) )
+        enddo; enddo; enddo
+      enddo
+      call mpi_allreduce_max_r8 ( offk, offk_all )
+      if ( .not. offk_all <= tol_plane ) then
+        if ( mpi_is_root ) write(*,'(A,ES9.2,A)') &
+          ' [WARNING] Quasi-2D case with symmetry (300) k faces that are not planes normal to z (unit normal off z by up to', &
+          offk_all, '): the z velocity is integrated, and its mode across the layer can limit the time step.'
+        freeze_w = .false.
+      endif
+    endif
+
+    if ( .not. freeze_w ) return
+
+    do b = 1, domain % nb
+      if (.not. is_local_block(b)) cycle
+      domain % blk(b) % P(nw,:,:,:) = 0.0_R8
+    enddo
+
+    if ( mpi_is_root ) write(*,'(A)') &
+      ' [WARNING] Quasi-2D case with symmetry (300) k faces: the z velocity is set to zero and not integrated.'
+
+  end subroutine Setup_Quasi2D_W
+
+
+  !> With freeze_w, zero the z-momentum residual before the stage update (see Setup_Quasi2D_W).
+  subroutine Zero_W_Residual ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m, only: nw
+    use MOSE_Mod_MPI,  only: is_local_block
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    ! Local
+    integer :: b, j, k, n(3)
+
+    do b = 1, domain % nb
+      if (.not. is_local_block(b)) cycle
+
+      n = domain % blk(b) % dim
+
+      !$omp do collapse (2)
+      do k = 1, n(3)
+      do j = 1, n(2)
+        domain % blk(b) % R(nw,1:n(1),j,k) = 0.0_R8
+      enddo; enddo
+
+    enddo
+
+  end subroutine Zero_W_Residual
 
 
   subroutine Internal_Fluxes ( domain )
