@@ -219,6 +219,12 @@ $$
 \Delta t = \min_i \Delta t_i .
 $$
 
+In time-accurate RANS runs the turbulence sources are explicit, and each local step also includes
+their stiffness, the derivative $d_i$ of the destruction terms evaluated at the start of the step:
+$1/\Delta t_i$ gains the term $d_i$, so that $\Delta t\,d_i \le 1$ and no stage makes $\tilde\nu$, $k$ or
+$\omega$ negative through their destruction
+([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)).
+
 !!! tip "CFL ramp-up"
 
     During the initial transient MOSE supports a linear CFL ramp from a

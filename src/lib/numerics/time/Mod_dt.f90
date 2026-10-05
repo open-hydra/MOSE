@@ -11,6 +11,7 @@ contains
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
     use MOSE_Lib_RANS
+    use MOSE_Config_Types_m, only: obj_time_scheme
     use MOSE_Mod_MPI, only: is_local_block, mpi_allreduce_min_r8
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
@@ -18,18 +19,26 @@ contains
     integer, intent(in)  :: rampa_iter
     ! Local
     integer  :: i, j, k, b
-    real(R8) :: dtcell, dtglobal, dtglobal_mpi
+    real(R8) :: dtcell, dtglobal, dtglobal_mpi, dstiff
+    logical  :: explicit_sources
 
     dtglobal = domain % dtglobal
+
+    ! Time-accurate RANS runs: the turbulence sources are explicit (the point-implicit factor serves steady runs
+    ! only), and their stiffness, evaluated on the current state (Turbulence_Stiffness), enters the step
+    explicit_sources = obj_time_scheme%time_accurate .and. model == 2
 
     do b = 1, domain % nb ! loop over blocks
       if (.not. is_local_block(b)) cycle
       !$omp parallel
-      !$omp do collapse(3) private ( dtcell ), reduction ( min : dtglobal )
+      !$omp do collapse(3) private ( dtcell, dstiff ), reduction ( min : dtglobal )
       do k = 1, domain % blk(b) % dim(3)
       do j = 1, domain % blk(b) % dim(2)
       do i = 1, domain % blk(b) % dim(1)
         
+        dstiff = 0d0
+        if ( explicit_sources ) dstiff = domain%blk(b)%stiff(i,j,k)
+
         ! Compute local cell dt according to CFL and VNN numbers
         call compute ( rhoi = domain%blk(b)%p(1:nsc,i,j,k), &
                        Ur = domain%blk(b)%Ur(i,j,k), &
@@ -37,6 +46,7 @@ contains
                        p = domain%blk(b)%p(np,i,j,k), &
                        rans_ = domain%blk(b)%P(nt:nprim,i,j,k), &
                        met = domain%blk(b)%m(i,j,k)%c, &
+                       stiff = dstiff, &
                        dtmin = dtcell, &
                        cfl = cfl, &
                        vnn = vnn )
@@ -71,7 +81,11 @@ contains
       ! worst cell Peclet number the additive law is exact). In 3-D, on a cell skewed in all three pairs of directions, the
       ! viscous rate takes the factor (2 + m + 1/m)/4 below, which bounds the excess of the spectral radius of the viscous
       ! operator over 4 D_max sum_d |grad xi_d|^2 there.
-      subroutine compute ( rhoi, Ur, vel, p, rans_, met, dtmin, cfl, vnn )
+      ! With explicit turbulence sources (time-accurate RANS runs) the stiffness d of their destruction adds to the
+      ! rates with the constant 1: 1/dt += d, so that dt d <= 1. A forward-Euler stage then keeps nu~, k and omega
+      ! positive, and so do Heun and RK3, convex combinations of forward-Euler stages (Hundsdorfer 2000, sec. 6.2,
+      ! theorem 6.4 and the explicit trapezoidal rule; C.-W. Shu, S. Osher, J. Comput. Phys. 77, 1988).
+      subroutine compute ( rhoi, Ur, vel, p, rans_, met, stiff, dtmin, cfl, vnn )
         use MOSE_Global_m
         use MOSE_Config_Types_m, only: obj_prec, obj_sim_param, obj_rans
         use FLINT_Lib_Thermodynamic
@@ -79,6 +93,7 @@ contains
         implicit none
         real(R8), intent(in)  :: rhoi(nsc), vel(3), p, rans_(:)
         real(R8), intent(in)  :: met(3,3), cfl, vnn, Ur
+        real(R8), intent(in)  :: stiff    ! stiffness of the explicit turbulence sources, 0 without them [1/s]
         real(R8), intent(out) :: dtmin
         ! Local
         real(R8), parameter :: sigma_SA = 2d0/3d0   ! diffusion constant of Spalart-Allmaras (Lib_Spalart.f90)
@@ -177,6 +192,8 @@ contains
         if ( model==2 .and. nRANS==1 ) Dmax = max ( Dmax, ( mil + rans_(1) ) / ( sigma_SA * rho ) )
 
         dtmin = 1d0 / ( rate_c / cfl + Dmax * rate_v / vnn )
+
+        if ( stiff > 0d0 ) dtmin = 1d0 / ( 1d0 / dtmin + stiff )
 
       end subroutine compute
 

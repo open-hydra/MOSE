@@ -11,13 +11,15 @@
 #    TimeControl (time-control): boundary data in time, time tables and stop
 #      rules
 #    LocalTimeStep (local-time-step): stability of the local time step
+#    TurbulenceSources (turbulence-sources): turbulence sources in
+#      time-accurate runs
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(time-control local-time-step)
+PARTS=(time-control local-time-step turbulence-sources)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

@@ -26,15 +26,18 @@ contains
 
   subroutine Wilcox2006_Source_Terms ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rans
+    use MOSE_Config_Types_m, only: obj_rans, obj_time_scheme
     use MOSE_Mod_MPI, only: is_local_block
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: b
-    logical :: k_energy_coupling
+    logical :: k_energy_coupling, point_implicit
 
     k_energy_coupling = obj_rans%k_energy_coupling
+    ! The point-implicit factor serves steady runs only: in time-accurate runs the sources are explicit and their
+    ! stiffness enters the time step (Compute_dt)
+    point_implicit = obj_rans%point_implicit .and. .not. obj_time_scheme%time_accurate
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
@@ -44,16 +47,17 @@ contains
                         domain % blk(b) % M,       &
                         domain % blk(b) % vol,     &
                         domain % blk(b) % dtlocal, &
+                        domain % blk(b) % stiff,   &
                         domain % blk(b) % dim,     &
                         k_energy_coupling,         &
-                        obj_rans%point_implicit )
+                        point_implicit )
 
     enddo
 
   end subroutine Wilcox2006_Source_Terms
 
 
-  subroutine Wilcox_Blk ( Prim, Res, M, Volume, dt, n, k_energy_coupling, point_implicit )
+  subroutine Wilcox_Blk ( Prim, Res, M, Volume, dt, stiff, n, k_energy_coupling, point_implicit )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -67,6 +71,7 @@ contains
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
+    real(R8), dimension(n(1), n(2), n(3)), intent(out) :: stiff  ! largest destruction rate: max(beta* omega, 2 beta omega)
     ! Local
     integer :: i, j, k, ii, jj, kk
     real(R8) :: rho, kap, ome, Gradvel(3,3), Divel, Sij(3,3), Sij_bar(3,3), diag, ome_hat, mi_t, Tij(3,3), Prod(2)
@@ -166,6 +171,9 @@ contains
       ! Source terms
       Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
+
+      ! Stiffness of the destruction terms (derivatives with respect to k and omega)
+      stiff(i,j,k) = max ( beta_star * ome, 2d0 * beta * ome )
 
       ! Point-implicit (Patankar) treatment of the destruction terms.
       fk = 1d0 ; fw = 1d0

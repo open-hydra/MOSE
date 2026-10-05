@@ -29,7 +29,8 @@ test/
 │   │   └── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
 │   └── time-integration/      # Time integration
 │       ├── time-control/      # Time-dependent inlet order, time tables, stop criteria
-│       └── local-time-step/   # Local time step stable on square/skewed/cubic cells and in diffusive cells
+│       ├── local-time-step/   # Local time step stable on square/skewed/cubic cells and in diffusive cells
+│       └── turbulence-sources/ # Time order and positivity of the turbulence sources in time-accurate runs
 ├── 2D/                        # 2-D validation cases
 │   ├── euler/                 # Inviscid cases
 │   │   ├── oblique-shock/
@@ -209,6 +210,7 @@ seconds on a CI runner.
 | `Restart` | split + restart reproduces the uninterrupted run; at a restart a missing probe file is written again and an existing one is appended to, with the rows of the uninterrupted run | `test/fast/restart` |
 | `InputChecks`/`ExitCodes` | a run stopped on an error ends with a non-zero exit code and its message and writes no solution: the Sod tube as a viscous mixture of four species, without `schmidt` and `diffusion.dat`, stops at setup; so does a run with a probe of an unknown variable, with exit status 1 and the name of the variable; a steady run with a soot model, with and without Spalart–Allmaras, ends normally and its diagnostic output names every variable it writes; a steady single-species run with sol-variables = none stops with a message that names thermo or transport | `test/fast/input-checks/exit-codes` |
 | `TimeIntegration`/`LocalTimeStep` | the step is stable at cfl 0.8 on square and on skewed 2-D cells and on cubic 3-D cells, in diffusion-dominated cells set by heat conduction and by species diffusion with the default cfl and vnn (Heun, RK3), and in the 1-D shock tube at cfl 0.99; on a periodic block of 8³ rhombohedra with every edge angle at 115°, where the viscous operator exceeds the rate 4 D sum_d |grad xi_d|^2 by 1.0365, heat conduction with Heun at vnn 0.5 decays over 600 steps | `test/fast/time-integration/local-time-step` |
+| `TimeIntegration`/`TurbulenceSources` | in time-accurate runs with Spalart–Allmaras and SST, nu~, k and omega converge in time with the order of Heun (≥ 1.8) and RK3 (≥ 2.7), and no stage makes them negative when near-wall turbulence decays faster than the transport acts | `test/fast/time-integration/turbulence-sources` |
 
 A few heavier checks carry the `validation` (not `fast`) label because they
 need reference data or plotting — for example `ShuOsherConvergence`, a 4-grid

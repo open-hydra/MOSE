@@ -192,6 +192,12 @@ $$
 bounded to $[0,\;1.25]$, with constants $c_{r1} = 1$, $c_{r2} = 2$,
 $c_{r3} = 1$.  Production is multiplied by $\max(1,\,f_{r1})$.
 
+MOSE evaluates the Lagrangian derivative $DS_{ij}/Dt = \partial S_{ij}/\partial t + u_k\,\partial
+S_{ij}/\partial x_k$ with its convective part only. Without the time term the correction holds for
+steady flows only: «Without the time term, the model is not correct in a time-dependent flowfield»
+(NASA Turbulence Modeling Resource, Spalart–Allmaras page, SA-RC). Time-accurate runs with the
+correction print a warning at start-up.
+
 ---
 
 ## Menter SST $k$–$\omega$ — Two-Equation Model
@@ -420,7 +426,7 @@ $$
 $$
 
 with the same source as the $k$ equation (including its
-[point-implicit](#point-implicit-patankar-destruction) factor), so $E_m + k$ is
+[point-implicit](#steady-runs-point-implicit-factor) factor), so $E_m + k$ is
 conserved.  This is the total-energy form of TMR [11] and Wilcox [4] written for
 $E_m$: subtracting the $k$ equation from the equation for $E = E_m + k$ leaves
 exactly this sink, and the diffusion of $k$ in the two equations cancels.  The
@@ -602,30 +608,11 @@ For the example above: `k = 2.4699e-4`, `omega = 1215.8`.
 
 ## Numerical treatment of the source terms
 
-### Point-implicit (Patankar) destruction
-
-The turbulence source terms are added to the residual and advanced with the
-same explicit Runge–Kutta step as the mean flow.  The **destruction** terms,
-however, are stiff near walls — for $k$–$\omega$ models the wall value
-$\omega_\text{wall}=6\nu/(\beta_1 y^2)$ grows like $1/y^2$, so on a fine
-near-wall grid the explicit stability limit $\Delta t < 1/(\beta\,\omega)$ is
-easily violated and $k$/$\omega$ diverge while the mean flow stays healthy
-(typically at a multigrid fine-grid transition).
-
-To remove this restriction MOSE treats the destruction terms
-**point-implicitly**.  Writing the update for a conserved turbulence
-variable $q=\rho\phi$ as $q^{n+1}=q^n+\Delta t\,S(q)$ and linearising only
-the (stabilising) destruction part $D$,
-
-$$
-\Delta q = \Delta t\,\bigl[S^n - d\,\Delta q\bigr]
-\;\Longrightarrow\;
-\Delta q = \frac{\Delta t\,S^n}{1 + \Delta t\,d}, \qquad
-d \equiv \frac{\partial D}{\partial q}\ge 0 .
-$$
-
-In practice the net source increment is simply divided by $(1+\Delta t\,d)$,
-using the local time step $\Delta t$.  The destruction Jacobians are
+The turbulence source terms are added to the residual and advanced with the same explicit
+Runge–Kutta stages as the mean flow. Their destruction parts are stiff near walls: for the
+$k$–$\omega$ models $\omega$ grows like $1/y^2$ towards the wall, and an explicit stage on
+$\dot q = -d\,q$ gives $q\,(1 - \Delta t\,d)$, negative for $\Delta t\,d > 1$. Here $q$ is the
+conserved turbulence variable and $d$ the derivative of its destruction:
 
 | Model | Equation | $d = \partial D/\partial q$ |
 |-------|----------|------------------------------|
@@ -633,45 +620,67 @@ using the local time step $\Delta t$.  The destruction Jacobians are
 | SST / Wilcox | $\omega$ | $2\,\beta\,\omega$ |
 | SA | $\tilde\nu$ | $2\,c_{w1}\,f_w\,\tilde\nu/y^2$ |
 
-Because the factor multiplies only the *increment*, it vanishes at
-convergence ($\Delta q\to0$) and therefore **does not change the converged,
-zero-residual solution** — it only enlarges the stable time step. This makes
-SST/Wilcox run at the mean-flow CFL independent of near-wall spacing.
+($y$ the wall distance; $f_w$ is held fixed.) Steady and time-accurate runs treat this
+stiffness in two different ways.
 
-!!! warning "Effect on time-accurate (URANS) runs"
-    For **steady** computations (local time-stepping) the treatment is exact:
-    at convergence the residual is zero, so the factor has no effect on the
-    result.
+### Steady runs: point-implicit factor
 
-    For **time-accurate** runs it *does* enter the solution.  Dividing the
-    destruction increment by $(1+\Delta t\,d)$ is a backward-Euler
-    linearisation, so it formally reduces the turbulence **source** to
-    first-order in time wherever $\Delta t\,d$ is not small — i.e. near walls,
-    where $d\approx\beta\,\omega_\text{wall}\propto 1/y^2$ and
-    $\Delta t\,d\gg 1$ even at a modest CFL.  Note that:
+With `point-implicit = .true.` (the default) the source $S = P - D$ of each turbulence equation
+is divided by $1 + \Delta t\,d$, with the local time step $\Delta t$ of the cell:
 
-    - only the turbulence *destruction* is affected — the mean-flow equations
-      and the turbulence production/diffusion/convection retain the full
-      Runge–Kutta order;
-    - the terms made implicit are exactly the *stiff, fast* ones, whose
-      near-wall relaxation time is far shorter than any resolved URANS scale,
-      so the physically relevant (resolved-scale) accuracy is essentially
-      unchanged — the first-order error lives only in the unresolved fast
-      transient.
+$$
+q^{n+1} = q^n + \Delta t \left( F(q^n) + \frac{S(q^n)}{1 + \Delta t\,d} \right),
+$$
 
-    Disabling `point-implicit` for a URANS run does **not** recover accuracy
-    for free: the explicit near-wall $\omega$ source then violates its
-    stability limit and diverges.  To genuinely verify temporal convergence,
-    set `point-implicit = .false.` **and** reduce $\Delta t$ until
-    $\Delta t\,\beta\,\omega_\text{wall} < 1$ in the first off-wall cell
-    (usually impractically small).  For production URANS the recommendation is
-    to leave the treatment enabled.
-
-The treatment is enabled by default and controlled by
+where $F$ stands for the fluxes. The factor comes from a backward-Euler linearisation of the
+destruction, $S(q^{n+1}) \approx S(q^n) - d\,(q^{n+1} - q^n)$, written for the source alone, as in the
+source-term linearisation of Patankar (*Numerical Heat Transfer and Fluid Flow*, 1980; see
+S. Kopecz, A. Meister, arXiv:1702.04589, sec. 2). It multiplies the whole source, production
+included, not only the destruction. The point-implicit form of Bussing and Murman (AIAA Paper
+85-0331, 1985; written out by H. C. Yee and J. L. Shinn, NASA TM-89415, 1986, eq. 3.1) applies the
+factor to the whole increment, fluxes included; MOSE applies it to the source alone. The factor
+lets steady runs keep the mean-flow CFL near walls. Since it multiplies the source alone, it does
+not vanish at convergence: the converged steady solution depends on the local time step.
 
 ```ini
 [MOSE-Turbulence]
-point-implicit = .true.   ; (default) point-implicit turbulence destruction
+point-implicit = .true.   ; (default) point-implicit factor on the turbulence sources, steady runs
+```
+
+### Time-accurate runs: explicit sources
+
+In time-accurate runs the factor is not applied, whatever `point-implicit` says, and a warning at
+start-up recalls it. Since $S/(1 + \Delta t\,d) = S - \Delta t\,d\,S + O(\Delta t^2)$, the factor would
+make the turbulence equations, and the mean flow through $\mu_t$, first-order accurate in time.
+With the $k$–$\omega$ models the error of the factor would not even vanish when the mesh and the
+step are refined together, as in an explicit run, whose global step goes as $h^2$ in the wall cells: in
+the first cell $\omega \approx 6\nu/(\beta_1 y^2)$ gives $\Delta t\,d \approx 24.7$ `vnn` at every level (7.4 at
+`vnn = 0.3`, a factor of 0.12), and the next two cells stay of order one. With Spalart–Allmaras
+$\Delta t\,d \approx 1.64\,f_w\,y_1^+$ at `vnn = 0.3` ($y_1^+$ the height of the first cell in wall units): it
+vanishes as the mesh is refined, but is of order one at the usual heights.
+The sources are explicit, like the fluxes, and the local time step of each cell
+([Time Integration](time-integration.md#local-time-step)) includes their stiffness:
+
+$$
+\frac{1}{\Delta t_i} = \bigl(\text{convective and diffusive rates}\bigr) + d_i ,
+\qquad d_i = \max_q \frac{\partial D_q}{\partial q} ,
+$$
+
+with the rates $d$ of the table, evaluated on the state at the start of the step (one evaluation
+of the sources before the first stage). Then $\Delta t\,d \le 1$: a forward-Euler stage cannot make
+$\tilde\nu$, $k$ or $\omega$ negative through their destruction, and neither can Heun and RK3, whose
+stages are convex combinations of forward-Euler stages (W. Hundsdorfer, *Numerical Solution of
+Advection–Diffusion–Reaction Equations*, lecture notes, 2000, §6.2, Theorem 6.4; C.-W. Shu,
+S. Osher, *J. Comput. Phys.* 77, 1988, Proposition 2.1 of its report version, ICASE Report 87-33).
+The destruction of $\tilde\nu$ and of $\omega$ is quadratic, $D = (d/2)\,q$, which leaves them a
+margin of 2. Where the destruction is faster than the transport, as in the wall cells of fine
+meshes, above all with SST, the step is smaller than the convective and diffusive limits.
+
+At the end of a RANS run MOSE prints how many cell updates had a stage that made $\tilde\nu$, $k$ or
+$\omega$ negative before the realizability floor:
+
+```text
+ Turbulence variables below zero after a stage (set to the floor): 0
 ```
 
 ### Relation to under-relaxation

@@ -40,7 +40,7 @@ contains
 
   subroutine Spalart_Source_Terms ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rans
+    use MOSE_Config_Types_m, only: obj_rans, obj_time_scheme
     use MOSE_Lib_Fluid, only : Vorticity_Vector, Vorticity_Tensor
     use MOSE_Lib_SpalartShur, only : Compute_Velocity_Gradient, Compute_RC_Terms
     use MOSE_Mod_MPI, only: is_local_block
@@ -49,11 +49,14 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: b
-    logical :: SpalartShur, SAR, SAcomp
+    logical :: SpalartShur, SAR, SAcomp, point_implicit
 
     SpalartShur = obj_rans%SpalartShur
     SAR         = obj_rans%SAR
     SAcomp      = obj_rans%SAcomp
+    ! The point-implicit factor serves steady runs only: in time-accurate runs the source is explicit and its
+    ! stiffness enters the time step (Compute_dt)
+    point_implicit = obj_rans%point_implicit .and. .not. obj_time_scheme%time_accurate
 
     if ( SpalartShur ) then
       call Compute_Velocity_Gradient ( domain )
@@ -73,16 +76,18 @@ contains
                            domain % blk(b) % rc_term1,     &
                            domain % blk(b) % rc_term2,     &
                            domain % blk(b) % dtlocal,      &
+                           domain % blk(b) % stiff,        &
                            domain % blk(b) % dim,          &
                            SpalartShur, SAR, SAcomp,       &
-                           obj_rans%point_implicit         )
+                           point_implicit                  )
     
     end do
 
   end subroutine Spalart_Source_Terms
 
 
-  subroutine SA_Source_Blk ( Prim, Res, M, yn, k_rough, vol, gradv, rc1, rc2, dt, n, SpalartShur, SAR, SAcomp, point_implicit )
+  subroutine SA_Source_Blk ( Prim, Res, M, yn, k_rough, vol, gradv, rc1, rc2, dt, stiff, n, SpalartShur, SAR, SAcomp, &
+                             point_implicit )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -100,6 +105,7 @@ contains
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
+    real(R8), dimension(n(1), n(2), n(3)), intent(out) :: stiff  ! d(destruction)/d(nu~) = 2 cw1 fw nu~/d^2
     ! Local
     integer :: i, j, k
     real(R8) :: rho, Rgas, nit, mil, Gradvel(3,3), Gradnit(3), omega(3), Om, abs_Eij, Wij(3,3)
@@ -198,6 +204,9 @@ contains
 
       if ( SAcomp ) call Compressibility_Correction &
       ( nit, rho, chi, Prim(1:nsc,i,j,k), Prim(np,i,j,k), Rgas, Om, Production )
+
+      ! Stiffness of the destruction term (its derivative with respect to nu~ at fixed fw)
+      stiff(i,j,k) = 2d0 * cw1 * fw * nit / d**2
 
       ! Point-implicit (Patankar) treatment of the SA destruction term
       fnu = 1d0

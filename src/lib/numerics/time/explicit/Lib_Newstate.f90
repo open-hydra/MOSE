@@ -1,9 +1,12 @@
 module MOSE_Lib_Newstate
-  use iso_fortran_env, only: I4 => int32, R8 => real64
+  use iso_fortran_env, only: I4 => int32, I8 => int64, R8 => real64
 
   implicit none
   private
-  public :: Newstate_Conservative, Newstate_Primitive
+  public :: Newstate_Conservative, Newstate_Primitive, Report_Negative_Turbulence
+
+  !> Cell updates of this process in which a stage made nu~, k or omega negative, before the realizability floor
+  integer(I8) :: n_negative_turbulence = 0
 
 contains
 
@@ -472,8 +475,17 @@ contains
       if ( prim(s) < 1d-20 ) prim(s) = 1d-20
     enddo
 
-    ! Realizability for turbulence
-    if (model==2) call RANS_Enforce_Realizability( prim(nt:) )
+    ! Realizability for turbulence. A stage that made nu~, k or omega negative is counted (one-equation and
+    ! two-equation models, whose variables are all positive), see Report_Negative_Turbulence
+    if (model==2) then
+      if ( nrans <= 2 ) then
+        if ( any( prim(nt:nprim) < 0d0 ) ) then
+          !$omp atomic
+          n_negative_turbulence = n_negative_turbulence + 1
+        end if
+      end if
+      call RANS_Enforce_Realizability( prim(nt:) )
+    endif
 
     ! Floor soot variables
     if (nsoot == 2) then
@@ -484,6 +496,22 @@ contains
     endif
 
   end subroutine Check_And_Fix_State
+
+
+  !> One line at the end of a RANS run: how many cell updates had a stage that made nu~, k or omega negative, so
+  !> that the realizability floor changed the solution (collective: every rank calls it).
+  subroutine Report_Negative_Turbulence ()
+    use MOSE_Global_m, only: model, nrans
+    use MOSE_Mod_MPI,  only: mpi_is_root, mpi_allreduce_sum_r8
+    implicit none
+    real(R8) :: total
+
+    if ( model /= 2 .or. nrans > 2 ) return
+    call mpi_allreduce_sum_r8 ( real(n_negative_turbulence, R8), total )
+    if ( mpi_is_root ) write(*,'(A,I0)') ' Turbulence variables below zero after a stage (set to the floor): ', &
+                                         nint(total, I8)
+
+  end subroutine Report_Negative_Turbulence
 
 
 end module MOSE_Lib_Newstate

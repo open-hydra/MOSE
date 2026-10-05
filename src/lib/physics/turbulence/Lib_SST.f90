@@ -58,7 +58,7 @@ contains
 
   subroutine SST_Source_Terms ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rans
+    use MOSE_Config_Types_m, only: obj_rans, obj_time_scheme
     use MOSE_Lib_SpalartShur, only : Compute_Velocity_Gradient, Compute_RC_Terms
     use MOSE_Mod_MPI, only: is_local_block
 
@@ -66,10 +66,13 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: b
-    logical :: SpalartShur, k_energy_coupling
+    logical :: SpalartShur, k_energy_coupling, point_implicit
       
     SpalartShur       = obj_rans%SpalartShur
     k_energy_coupling = obj_rans%k_energy_coupling
+    ! The point-implicit factor serves steady runs only: in time-accurate runs the sources are explicit and their
+    ! stiffness enters the time step (Compute_dt)
+    point_implicit = obj_rans%point_implicit .and. .not. obj_time_scheme%time_accurate
 
     if ( SpalartShur ) then
       call Compute_Velocity_Gradient ( domain )
@@ -88,17 +91,18 @@ contains
                      domain % blk(b) % rc_term1,     &
                      domain % blk(b) % rc_term2,     &
                      domain % blk(b) % dtlocal,      &
+                     domain % blk(b) % stiff,        &
                      domain % blk(b) % dim,          &
                      SpalartShur, k_energy_coupling, &
-                     obj_rans%point_implicit, obj_rans%sst_compressible )
+                     point_implicit, obj_rans%sst_compressible )
 
     end do
 
   end subroutine SST_Source_Terms
 
 
-  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, point_implicit, &
-                       compressible )
+  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, stiff, n, SpalartShur, k_energy_coupling, &
+                       point_implicit, compressible )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -115,6 +119,7 @@ contains
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
+    real(R8), dimension(n(1), n(2), n(3)), intent(out) :: stiff  ! largest destruction rate: max(beta* omega, 2 beta omega)
     ! Local
     integer :: i, j, k, ii, jj
     real(R8) :: rho, Rgas, mil, kap, ome, dist, Gradvel(3,3), Divel, Sij(3,3), S, Wij(3,3), diag, mi_t, F(2)
@@ -213,6 +218,9 @@ contains
       ! Source terms
       Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
+
+      ! Stiffness of the destruction terms (derivatives with respect to k and omega)
+      stiff(i,j,k) = max ( beta_star * ome, 2d0 * beta * ome )
 
       ! Point-implicit (Patankar) treatment of the destruction terms.
       fk = 1d0 ; fw = 1d0

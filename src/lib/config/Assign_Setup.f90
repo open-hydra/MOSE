@@ -136,6 +136,13 @@ contains
       obj_transport%error_message = &
         '[ERROR] Sc<=0 (multicomponent diffusion) requires a binary diffusion table (INPUT/diffusion.dat)'
     end if
+    ! Turbulence sources in time-accurate runs
+    if (model == 2 .and. obj_time_scheme%time_accurate) then
+      if (obj_rans%point_implicit) obj_time_scheme%warning_message = '[WARNING] point-implicit is not applied in '// &
+        'time-accurate runs: the turbulence sources are explicit, and the time step includes their stiffness.'
+      if (obj_rans%SpalartShur) obj_rans%warning_message = '[WARNING] The rotation-curvature correction (-RC) omits '// &
+        'the time derivative of the strain-rate tensor: it holds for steady flows only.'
+    end if
 
   end subroutine Assign_Setup
 

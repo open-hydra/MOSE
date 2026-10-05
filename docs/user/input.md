@@ -64,7 +64,11 @@ Each cell takes the largest explicit step that keeps it stable, from one rule
   over the directions: in air the energy one, $\gamma\nu/\text{Pr} \approx 1.94\,\nu$;
   with Spalart–Allmaras also $(\nu + \tilde\nu)/\sigma$;
 - the convective and the diffusive rates **add up**: a cell where both matter gets a step
-  smaller than either limit alone.
+  smaller than either limit alone;
+- in time-accurate RANS runs the stiffness of the turbulence sources adds up as well, with no
+  parameter: near walls, where the destruction of $k$, $\omega$ or $\tilde\nu$ is fast, the step can
+  be smaller than the convective and diffusive limits
+  ([theory](../theory/turbulence.md#time-accurate-runs-explicit-sources)).
 
 The rule used to take the smallest of the direction limits, the edge length of the cell
 instead of its width, and the smaller of the convective and the viscous limit, with the
