@@ -105,7 +105,7 @@
 |-----------|---------|---------|----------|-------------|
 | Prt | 0.85 | > 0 |  no | Turbulent Prandtl number |
 | Sct | 0.90 | > 0 |  no | Turbulent Schmidt number |
-| point-implicit | .true. | logical |  no | Point-implicit (Patankar) factor on the turbulence source terms, steady runs only (time-accurate runs: explicit sources, stiffness in the time step) |
+| point-implicit | .true. | logical |  no | Point-implicit factor 1/(1 + dt d) on the increment of the turbulence equations, steady runs only (time-accurate runs: explicit sources, stiffness in the time step) |
 | omega-wall-bc | practical | practical, asymptotic |  no | Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2)) or asymptotic (6*nu/(beta1*y^2), exact y->0 limit, for wall-resolved meshes) |
 | sst-production | incompressible | incompressible, compressible |  no | SST production (NASA TMR naming): incompressible (P = mu_t*S^2, SST-2003m) or compressible (P = tau_ij*du_i/dx_j, SST-2003e, as OpenFOAM kOmegaSST: adds -2/3*mu_t*divU^2 - 2/3*rho*k*divU, and -2/3*gamma*rho*omega*divU to the omega equation) |
 | k-energy-coupling | .false. | logical |  no | Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants |

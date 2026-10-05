@@ -222,11 +222,16 @@ contains
       ! Stiffness of the destruction terms (derivatives with respect to k and omega)
       stiff(i,j,k) = max ( beta_star * ome, 2d0 * beta * ome )
 
-      ! Point-implicit (Patankar) treatment of the destruction terms.
+      ! Point-implicit factors of steady runs. Each multiplies the whole increment of its row: the fluxes already in
+      ! Res (Internal_Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not depend
+      ! on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1;
+      ! T. H. Pulliam, AIAA Paper 93-3360, eq. 8)
       fk = 1d0 ; fw = 1d0
       if ( point_implicit ) then
         fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
         fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
+        Res(nt,  i,j,k) = Res(nt,  i,j,k) * fk
+        Res(nt+1,i,j,k) = Res(nt+1,i,j,k) * fw
       end if
 
       Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk

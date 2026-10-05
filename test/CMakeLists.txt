@@ -166,6 +166,11 @@ mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
 # for rho nu~ converges to the standard conservation form.
 mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D")
 
+# Steady state with the point-implicit factor: it must not depend on the time
+# step (a short hypersonic plate, Spalart-Allmaras and SST). Validation tier:
+# it converges 14 000 iterations per model.
+mose_add_fast_script(PointImplicitSteady 2D/viscous/point-implicit-steady "validation;numerics;2D")
+
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
 # which is an exact steady solution, checked against its closed form. These
 # boundary conditions have no other coverage in the suite.

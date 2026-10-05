@@ -219,10 +219,15 @@ contains
       ! Stiffness of the destruction term (its derivative with respect to nu~ at fixed fw)
       stiff(i,j,k) = 2d0 * cw1 * fw * nit / d**2
 
-      ! Point-implicit (Patankar) treatment of the SA destruction term
+      ! Point-implicit factor of steady runs. It multiplies the whole increment of the row: the fluxes already in
+      ! Res(nt) (Internal_Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not
+      ! depend on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986,
+      ! eq. 3.1; T. H. Pulliam, AIAA Paper 93-3360, eq. 8)
       fnu = 1d0
-      if ( point_implicit ) &
+      if ( point_implicit ) then
         fnu = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * cw1 * fw * nit / d**2 )
+        Res(nt,i,j,k) = Res(nt,i,j,k) * fnu
+      end if
 
       ! Source multiplied by rho since the SA equation is integrated in conservative form
       Source = rho * ( Production + Diffusion - Destruction ) * vol(i,j,k) * fnu

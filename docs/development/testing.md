@@ -45,6 +45,7 @@ test/
 │       ├── flat-plate-turbulent/
 │       ├── Flat_Plate_SGGLRR/
 │       ├── mms/                   # residuals/: RANS right-hand sides on manufactured fields
+│       ├── point-implicit-steady/ # Steady state with the point-implicit factor independent of the time step
 │       └── swbli/
 ├── 3D/                        # 3-D validation cases
 │   └── coriolis-channel/
@@ -218,8 +219,12 @@ A few heavier checks carry the `validation` (not `fast`) label because they
 need reference data or plotting — for example `ShuOsherConvergence`, a 4-grid
 Shu–Osher Richardson study (N=200/400/800/1600) that estimates a grid-independent
 solution by Richardson extrapolation, asserts a sane observed order and monotone
-L1 convergence against it, and regenerates the V&V figure. Run them with
-`ctest -L validation`.
+L1 convergence against it, and regenerates the V&V figure. `PointImplicitSteady`
+(`test/2D/viscous/point-implicit-steady`) is there for its
+cost, 14 000 iterations per model: the steady state of a short hypersonic plate
+with the point-implicit factor (Spalart–Allmaras, SST) does not depend on the
+time step, and implicit residual smoothing does not move it either (wall shear
+and heat flux to 1e-9). Run them with `ctest -L validation`.
 
 The broader plan — coverage map, remaining gaps, and the rationale behind
 the tiering — lives in

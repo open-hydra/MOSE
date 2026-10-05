@@ -414,8 +414,8 @@ about a quarter of the sublayer value in the first cell.  In the
 1 mm, so a code-to-code comparison must apply the condition in the same way.
 
 Either value grows as $1/y_c^2$ under grid refinement, which is the origin of the
-near-wall stiffness handled by the [point-implicit source
-treatment](#numerical-treatment-of-the-source-terms).
+near-wall stiffness handled by the [numerical treatment of the source
+terms](#numerical-treatment-of-the-source-terms).
 
 ### Energy coupling (`k-energy-coupling`)
 
@@ -638,34 +638,39 @@ stiffness in two different ways.
 
 ### Steady runs: point-implicit factor
 
-With `point-implicit = .true.` (the default) the source $S = P - D$ of each turbulence equation
-is divided by $1 + \Delta t\,d$, with the local time step $\Delta t$ of the cell:
+With `point-implicit = .true.` (the default) the increment of each turbulence equation is divided
+by $1 + \Delta t\,d$, with the local time step $\Delta t$ of the cell:
 
 $$
-q^{n+1} = q^n + \Delta t \left( F(q^n) + \frac{S(q^n)}{1 + \Delta t\,d} \right),
+q^{n+1} = q^n + \frac{\Delta t}{1 + \Delta t\,d}\,\bigl( F(q^n) + S(q^n) \bigr),
 $$
 
-where $F$ stands for the fluxes. The factor comes from a backward-Euler linearisation of the
-destruction, $S(q^{n+1}) \approx S(q^n) - d\,(q^{n+1} - q^n)$, written for the source alone, as in the
-source-term linearisation of Patankar (*Numerical Heat Transfer and Fluid Flow*, 1980; see
-S. Kopecz, A. Meister, arXiv:1702.04589, sec. 2). It multiplies the whole source, production
-included, not only the destruction. The point-implicit form of Bussing and Murman (AIAA Paper
-85-0331, 1985; written out by H. C. Yee and J. L. Shinn, NASA TM-89415, 1986, eq. 3.1) applies the
-factor to the whole increment, fluxes included; MOSE applies it to the source alone. The factor
-lets steady runs keep the mean-flow CFL near walls. Since it multiplies the source alone, it does
-not vanish at convergence: the converged steady solution depends on the local time step.
+where $F$ stands for the fluxes and $S = P - D$ for the source (in each Runge–Kutta stage, with the
+residual of the stage). This is the point-implicit form of Bussing and Murman,
+$D\,\Delta q = \Delta t\,(F + S)$ with $D = 1 - \Delta t\,\partial S/\partial q$ approximated by its
+destruction part $1 + \Delta t\,d$, in its first-order form, «suitable for steady-state
+calculations» (H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1). Like any approximation of the
+implicit operator of a delta form, it leaves the steady state where the residual vanishes
+(T. H. Pulliam, *Time Accuracy and the Use of Implicit Methods*, AIAA Paper 93-3360, eq. 8): the
+converged solution is that of $F + S = 0$, whatever the time step, and the factor only lets
+steady runs keep the mean-flow CFL near walls.
+
+Up to this version the factor divided the source alone,
+$q^{n+1} = q^n + \Delta t\,\bigl(F + S/(1 + \Delta t\,d)\bigr)$, and the converged solution, wall shear
+and heat flux included, depended on the local time step. Steady solutions computed with the default
+change accordingly.
 
 ```ini
 [MOSE-Turbulence]
-point-implicit = .true.   ; (default) point-implicit factor on the turbulence sources, steady runs
+point-implicit = .true.   ; (default) point-implicit factor on the turbulence increment, steady runs
 ```
 
 ### Time-accurate runs: explicit sources
 
 In time-accurate runs the factor is not applied, whatever `point-implicit` says, and a warning at
-start-up recalls it. Since $S/(1 + \Delta t\,d) = S - \Delta t\,d\,S + O(\Delta t^2)$, the factor would
-make the turbulence equations, and the mean flow through $\mu_t$, first-order accurate in time.
-With the $k$–$\omega$ models the error of the factor would not even vanish when the mesh and the
+start-up recalls it. Since $(F + S)/(1 + \Delta t\,d) = (F + S)(1 - \Delta t\,d) + O(\Delta t^2)$, the factor
+would make the turbulence equations, and the mean flow through $\mu_t$, first-order accurate in
+time. With the $k$–$\omega$ models the error of the factor would not even vanish when the mesh and the
 step are refined together, as in an explicit run, whose global step goes as $h^2$ in the wall cells: in
 the first cell $\omega \approx 6\nu/(\beta_1 y^2)$ gives $\Delta t\,d \approx 24.7$ `vnn` at every level (7.4 at
 `vnn = 0.3`, a factor of 0.12), and the next two cells stay of order one. With Spalart–Allmaras

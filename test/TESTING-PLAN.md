@@ -151,6 +151,12 @@ The 4-grid Shu–Osher Richardson study (`ShuOsherConvergence`) uses the N=1600
 solution and matplotlib, so it lives in the **validation** tier rather than the
 fast pre-push suite (~4 s for the three solved grids).
 
+`PointImplicitSteady` ([`2D/viscous/point-implicit-steady`](2D/viscous/point-implicit-steady))
+converges a short hypersonic plate (6 × 16 cells, Spalart–Allmaras and SST) with the
+point-implicit factor, then continues it at half the (cfl, vnn) and with implicit
+residual smoothing: the wall shear and heat flux must not move, to 1e-9. Its 14 000
+iterations per model (~15 s) put it in the **validation** tier as well.
+
 ---
 
 ## 5. Infrastructure (do this first)
