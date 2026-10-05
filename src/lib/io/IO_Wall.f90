@@ -162,7 +162,8 @@ contains
 
 
   !> Compute wall BC properties on all ranks (local blocks only), reduce to root,
-  !> and fill IOwall on root. Collective — all ranks must call.
+  !> and fill IOwall on root. Collective — all ranks must call. The residual and
+  !> the ghost cells are left as they were: an output does not change the state.
   subroutine Extract_Properties_From_BC ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
@@ -182,6 +183,8 @@ contains
     integer :: n_wall_total, wall_i, ii, nrec
     real(R8), allocatable :: wall_buf(:)
     integer, allocatable  :: order(:), first(:,:), next(:,:)
+    integer  :: Ig, Jg, Kg
+    real(R8) :: r_keep(nprim), g_keep(nprim)   ! residual of the wall cell and its ghost cell, before the call
 
     ! Count total BC cells across all viscous faces
     n_wall_total = 0
@@ -232,6 +235,17 @@ contains
           Jm = domain % bc(i) % j
           Km = domain % bc(i) % k
           Fm = domain % bc(i) % f
+
+          ! The wall flux routines below are called for the wall properties (Ovar)
+          ! only, but they also add the wall flux to the residual of the wall cell
+          ! and rewrite the RANS variables of its ghost cell. The diagnostic output,
+          ! written next, prints that residual: keep both and put them back.
+          Ig = Im - guide(Fm,1)
+          Jg = Jm - guide(Fm,2)
+          Kg = Km - guide(Fm,3)
+          r_keep = domain % blk(Bm) % r (:,Im,Jm,Km)
+          g_keep = domain % blk(Bm) % P (:,Ig,Jg,Kg)
+
           Ovar = 0d0
           select case ( domain % bc(i) % type )
 
@@ -270,6 +284,10 @@ contains
                 call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
 
           end select
+
+          domain % blk(Bm) % r (:,Im,Jm,Km) = r_keep
+          domain % blk(Bm) % P (:,Ig,Jg,Kg) = g_keep
+
           wall_buf(8*(wall_i-1)+1 : 8*wall_i) = Ovar
         enddo
 

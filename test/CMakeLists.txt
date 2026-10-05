@@ -192,6 +192,8 @@ mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D"
 # VTK outputs (field, wall, diagnostic) are well-formed XML with the right names.
 # vtk raw outputs (field and diagnostic, steady and time-accurate) hold raw
 # appended data in every block file, as sol-format asks.
+# Wall output and residual: the wall output must not change the residual that
+# the diagnostic output prints next (a converged laminar hypersonic plate).
 mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 
 # Input checks (InputChecks): the parts below, each in its folder of
