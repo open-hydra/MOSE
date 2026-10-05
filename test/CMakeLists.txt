@@ -180,6 +180,8 @@ mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
 # with SA.
 # Part 4: the viscous force on the axisymmetric wedge (Homann's flow and a field
 # with dilatation and swirl) converges to the Navier-Stokes one with second order.
+# Part 5: next to a wall the Spalart-Allmaras sources see the gradient of nu~
+# that the wall value nu~ = 0 gives (linear profile at rest).
 mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")
 
 # Steady state with the point-implicit factor: it must not depend on the time

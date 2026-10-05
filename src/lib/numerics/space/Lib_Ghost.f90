@@ -712,12 +712,20 @@ contains
       if ( Is_Wall( domain%bc(i)%type ) ) then
         ! Invert the velocity components
         domain%blk(bm)%P (nu:nw,ig,jg,kg) = - domain%blk(bm)%P (nu:nw,im,jm,km)
-        ! NOTE: the extrapolation of the turbulence variables is done in BC routines, due
-        ! to the fact that omega_wall needs to be set to extrapolate its value in ghost cell
 
-        ! Other variables copied
+        ! Other variables copied, but not the turbulence variables (the last nrans):
+        ! the wall flux routines set their ghost values from the wall values,
+        ! Z_ghost = 2 Z_wall - Z_cell (RANS_Extrapolate_Wall; S. L. Krist, R. T. Biedron,
+        ! C. L. Rumsey, CFL3D User's Manual 5.0, NASA/TM-1998-208444, eq. H-186), and
+        ! the source terms of the wall cells must see those (Wall_RANS_Ghosts sets them
+        ! where no boundary fluxes come first)
         domain%blk(bm)%P (1:nsc,ig,jg,kg) = domain%blk(bm)%P (1:nsc,im,jm,km)
-        domain%blk(bm)%P (np:nprim,ig,jg,kg) = domain%blk(bm)%P (np:nprim,im,jm,km)
+        domain%blk(bm)%P (np:nprim-nrans,ig,jg,kg) = domain%blk(bm)%P (np:nprim-nrans,im,jm,km)
+        ! The walls coupled to another solver (103, 104) have no such routine (BC_Fluxes gives
+        ! them the inviscid wall flux and the flux of the other solver only): their turbulence
+        ! variables are copied from the cell, as the other variables
+        if ( domain%bc(i)%type == 103 .or. domain%bc(i)%type == 104 ) &
+          domain%blk(bm)%P (nprim-nrans+1:nprim,ig,jg,kg) = domain%blk(bm)%P (nprim-nrans+1:nprim,im,jm,km)
       endif
     enddo
 

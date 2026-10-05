@@ -607,9 +607,32 @@ defined in `Mod_RANS`:
 | `RANS_Diffusive_Flux` | Turbulent diffusion terms for $k$, $\omega$, $\tilde\nu$ |
 | `Stress_Vector` | Viscous + Reynolds stress on a face |
 | `RANS_Set_Wall_Values` | Set turbulence BC at walls |
-| `RANS_Extrapolate_Wall` | Ghost-cell extrapolation for RANS variables |
+| `RANS_Extrapolate_Wall` | Ghost-cell value of the RANS variables at walls, $2Z_\text{wall} - Z_\text{cell}$ |
 
 This design allows switching models at run time without recompilation.
+
+### Wall ghost cells of the turbulence variables
+
+Behind a viscous wall the ghost cell of each turbulence variable takes the value that puts the wall
+value on the face,
+
+$$
+Z_\text{ghost} = 2\,Z_\text{wall} - Z_\text{cell}, \qquad Z = \tilde\nu,\ k,\ \omega ,
+$$
+
+with the wall values of the models above (`RANS_Extrapolate_Wall`). It is the rule of CFL3D,
+«the actual wall boundary conditions for the turbulence quantities (unlike the primitive variables)
+are applied at ghost cells» (S. L. Krist, R. T. Biedron, C. L. Rumsey, *CFL3D User's Manual
+(Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). The wall flux routines set these
+values; the source terms read them in the gradients of the wall cells: the $c_{b2}$ term of SA and
+its term $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST,
+the cross-diffusion of Wilcox 2006. They do so at every stage
+and in the stiffness pass of time-accurate runs (`Turbulence_Stiffness`), which calls the wall flux
+routines for this alone (`Wall_RANS_Ghosts`). With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$
+term of the wall cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell
+that copied the cell, as MOSE did before, gave $a/2$. The other primitive variables are copied into
+the wall ghost cells, with the velocity reversed (`Ghost_Wall_Extrapolation`); the fluxes through the
+first interior faces use the second-order extrapolation of `Fill_Ghost_Cell`.
 
 ### Blowing / wall-suction correction
 
@@ -743,7 +766,8 @@ $$
 $$
 
 with the rates $d$ of the table, evaluated on the state at the start of the step (one evaluation
-of the sources before the first stage). Then $\Delta t\,d \le 1$: a forward-Euler stage cannot make
+of the sources before the first stage, with the wall ghost cells of the turbulence variables set
+from the wall values as in the stages). Then $\Delta t\,d \le 1$: a forward-Euler stage cannot make
 $\tilde\nu$, $k$ or $\omega$ negative through their destruction, and neither can Heun and RK3, whose
 stages are convex combinations of forward-Euler stages (W. Hundsdorfer, *Numerical Solution of
 Advection–Diffusion–Reaction Equations*, lecture notes, 2000, §6.2, Theorem 6.4; C.-W. Shu,
