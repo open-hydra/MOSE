@@ -245,7 +245,9 @@ contains
       else
         IOfield(m)%tec%extension = '.szplt'
         IOfield(m)%tec%format = 'binary'
-        IOfield(m)%vtk%format = 'binary'
+        ! vtk raw: raw binary data appended to each .vts file, as the wall and diagnostic outputs.
+        ! The diagnostic output writes with these IOfields and sets the same format.
+        IOfield(m)%vtk%format = 'raw'
       endif
     end do
 

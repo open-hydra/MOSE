@@ -281,7 +281,7 @@ Controlled by `sol-format` in `[MOSE-IO]`:
 | `tecplot ascii` | Tecplot ASCII (`.tec`) — default |
 | `tecplot binary` | Tecplot binary (`.szplt`) — requires TecIO |
 | `vtk ascii` | VTK ASCII (`.vts`) |
-| `vtk raw` | VTK binary (`.vts`) |
+| `vtk raw` | VTK binary (`.vts`): the data of the field, wall and diagnostic outputs in raw binary, appended to each file |
 
 ### Output Variables
 

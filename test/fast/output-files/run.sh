@@ -10,13 +10,14 @@
 #  test:
 #    WallOutput (wall-output): wall output files
 #    VtkNames (vtk-names): names and times of the VTK outputs
+#    VtkRawFormat (vtk-raw-format): vtk raw solutions as raw appended data
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(wall-output vtk-names)
+PARTS=(wall-output vtk-names vtk-raw-format)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi
