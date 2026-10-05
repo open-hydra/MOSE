@@ -259,8 +259,9 @@ contains
   !>          go. A row holds ncol values; written list-directed it may take more than one line, and a
   !>          row starts on a new line: the values are counted to find where each row starts. A time is
   !>          compared as printed, to 1e-12 relative: the row of the step of the solution may print its
-  !>          time rounded up in the last digit. The file is truncated and closed; a missing file is
-  !>          left alone.
+  !>          time rounded up in the last digit. A last row with fewer than ncol values (a file cut in
+  !>          the middle of a row) is dropped too. The file is truncated and closed, and ends with a
+  !>          newline (End_With_Newline); a missing file is left alone.
   subroutine Drop_Rows_After ( file, ncol, iteration, time )
     implicit none
     character(len=*), intent(in) :: file
@@ -268,13 +269,14 @@ contains
     real(R8),         intent(in) :: time
     ! Local
     character(len=32768) :: line
-    integer              :: unit, ios, nkeep, nval, k, k1, k2, it
+    integer              :: unit, ios, nkeep, nrow, nval, k, k1, k2, it
     real(R8)             :: t
     logical              :: later
 
     open(newunit=unit,file=file,status='OLD',action='READWRITE',iostat=ios)
     if (ios /= 0) return
     nkeep = 0
+    nrow  = 0
     nval  = 0
     do
       read(unit,'(A)',iostat=ios) line
@@ -292,6 +294,8 @@ contains
           if (ios == 0) later = it > iteration
         endif
         if (later) exit
+        ! Lines kept before the row that starts here
+        nrow = nkeep
       endif
       ! Values on the line
       do k = 1, len_trim(line)
@@ -299,14 +303,42 @@ contains
       enddo
       nkeep = nkeep + 1
     enddo
+    ! A last row with fewer than ncol values is cut: drop it from its first line
+    if (mod(nval, ncol) /= 0) nkeep = nrow
     rewind(unit)
     do k = 1, nkeep
-      read(unit,'(A)')
+      read(unit,'(A)',iostat=ios) line
+      if (ios /= 0) exit
     enddo
     endfile(unit)
     close(unit)
+    call End_With_Newline ( file )
 
   end subroutine Drop_Rows_After
+
+
+  !> \brief End a file with a newline if its last line has none.
+  !> \details A history file cut by hand may end without a newline; the rows that a restart then
+  !>          writes in append mode would go on that line. Read and written as a stream of bytes.
+  subroutine End_With_Newline ( file )
+    use iso_fortran_env, only: int64
+    implicit none
+    character(len=*), intent(in) :: file
+    ! Local
+    integer        :: unit, ios
+    integer(int64) :: nbytes
+    character      :: last
+
+    open(newunit=unit,file=file,access='STREAM',form='UNFORMATTED',status='OLD',action='READWRITE',iostat=ios)
+    if (ios /= 0) return
+    inquire(unit=unit,size=nbytes)
+    if (nbytes > 0) then
+      read(unit,pos=nbytes,iostat=ios) last
+      if (ios == 0 .and. last /= new_line('a')) write(unit,pos=nbytes+1,iostat=ios) new_line('a')
+    endif
+    close(unit)
+
+  end subroutine End_With_Newline
 
 
   subroutine Write_Probes_Data( iter, time )

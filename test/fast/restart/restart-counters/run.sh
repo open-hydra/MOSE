@@ -36,6 +36,12 @@
 #              also hold rows 21 to 25, which the restart must not keep twice.
 #              In the run in one go, p1 writes one row per multiple of its
 #              dtime, from the first, and p2 only rows of iterations.
+#   probes-cut the first part of probes, then the files cut by hand after the
+#              rows of iteration 20, without a newline at the end:
+#              residual-history.dat ends with its complete row of iteration
+#              20, p2.txt with the first characters of its next row ("2" of
+#              24). The restart drops the broken row, ends each file with a
+#              newline and goes on as the run in one go of probes.
 #
 #  Reuses the Sod inputs (test/1D/Sod79); nothing else is stored here.
 #===============================================================================
@@ -177,6 +183,7 @@ write_ini runs/probes/full probes 50 true;    solve runs/probes/full full
 prepare runs/probes/split
 write_ini runs/probes/split probes 25 true;   solve runs/probes/split first
 rm -f runs/probes/split/OUTPUT/field.vtm
+rm -rf runs/probes-cut; mkdir -p runs/probes-cut; cp -R runs/probes/split runs/probes-cut/split   # first part of probes-cut
 write_ini runs/probes/split probes 30 false;  solve runs/probes/split restart
 python3 -B "$CHECK" runs/probes/full/OUTPUT runs/probes/split/OUTPUT > runs/probes/compare.log 2>&1 || status=1
 sed "s/^Restart (vtk raw)/  probes/" runs/probes/compare.log
@@ -202,8 +209,36 @@ print('  probes: p1 %d time rows from t = %.6g (%s), p2 %d rows, %d of them by t
 sys.exit(0 if ok1 and ok2 else 1)
 EOF
 
+# probes-cut: the first part of probes (25 iterations, field.vtm removed, copied above before the restart of probes),
+# then residual-history.dat and p2.txt cut by hand after the rows of iteration 20, as a user may cut them, with no
+# newline at the end: the history ends with its complete row of iteration 20, p2.txt (rows at iterations 4, 8, ...,
+# 24) with the first characters of its row of iteration 24, up to the "2". The restart must give the files of the
+# run in one go of probes.
+python3 -B - runs/probes-cut/split/OUTPUT <<'EOF' || status=1
+import re
+import sys
+from pathlib import Path
+out = Path(sys.argv[1])
+h = out / 'residual-history.dat'
+rows = [l for l in h.read_text().splitlines() if l.strip()]
+keep = [l for l in rows if int(l.split()[0]) <= 20]
+h.write_text('\n'.join(keep))
+p = out / 'p2.txt'
+text = p.read_text()
+values = list(re.finditer(r'\S+', text))
+ok = len(keep) == 20 and len(values) == 24 and values[20].group() == '24'
+if ok:
+    p.write_text(text[:values[20].start() + 1])
+print('  probes-cut: residual-history.dat cut after iteration 20 without a newline, p2.txt after "%s" (%s)'
+      % (p.read_text()[-12:].replace('\n', '\\n'), 'ok' if ok else 'unexpected first part'))
+sys.exit(0 if ok else 1)
+EOF
+write_ini runs/probes-cut/split probes 30 false;  solve runs/probes-cut/split restart
+python3 -B "$CHECK" runs/probes/full/OUTPUT runs/probes-cut/split/OUTPUT > runs/probes-cut/compare.log 2>&1 || status=1
+sed "s/^Restart (vtk raw)/  probes-cut/" runs/probes-cut/compare.log
+
 if [[ $status -ne 0 ]]; then
   fail "a restart does not carry on the counters"
 fi
-echo "RestartCounters: ok — steady, dtime, multigrid and probes restarts reproduce the uninterrupted runs bit for bit, and a transient from a steady solution starts at t = 0"
+echo "RestartCounters: ok — steady, dtime, multigrid and probes restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline, and a transient from a steady solution starts at t = 0"
 exit 0
