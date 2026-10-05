@@ -26,7 +26,9 @@ test/
 │   ├── input-checks/          # Input checks
 │   │   └── exit-codes/        # Runs stopped on an error end with a non-zero exit code and their message
 │   ├── connections/           # Faces between blocks
-│   │   └── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
+│   │   ├── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
+│   │   ├── connection-flux/   # One flux per face between blocks: one block = two blocks, conservation
+│   │   └── connection-order/  # Faces between blocks of the same parity: any order of bc.txt, same bits
 │   └── time-integration/      # Time integration
 │       ├── time-control/      # Time-dependent inlet order, time tables, stop criteria
 │       ├── local-time-step/   # Local time step stable on square/skewed/cubic cells and in diffusive cells
@@ -52,7 +54,9 @@ test/
 │       ├── point-implicit-steady/ # Steady state with the point-implicit factor independent of the time step
 │       └── swbli/
 ├── mpi/                       # MPI tier (needs-mpi): make_case.py
-│   └── boundary-records/      # Boundary records
+│   ├── boundary-records/      # Boundary records
+│   ├── connection-flux/       # Faces between ranks
+│   └── connection-order/      # The 2-D case of ConnectionOrder with one block per rank
 ├── 3D/                        # 3-D validation cases
 │   └── coriolis-channel/
 ├── Pressure_Centrifugal_eq/   # Rotating-frame equilibrium case
@@ -222,6 +226,8 @@ seconds on a CI runner.
 | `QCR2000Stress` | the quadratic constitutive relation QCR2000, called as the solver calls the stress (laminar viscosity, then eddy viscosity) on a 3-D velocity gradient, gives tau_QCR · n of the definition with the eddy viscosity alone and the laminar stress with the laminar viscosity alone | `test/unit/qcr2000_check.f90` |
 | `TimeIntegration`/`TurbulenceSources` | in time-accurate runs with Spalart–Allmaras and SST, nu~, k and omega converge in time with the order of Heun (≥ 1.8) and RK3 (≥ 2.7), and no stage makes them negative when near-wall turbulence decays faster than the transport acts; a time-accurate SST-RC run with no cfl-rise-threshold prints both the k-omega and the -RC start-up warnings; with Wilcox 2006, one step of a 3-D linear flow changes rho omega by the source with the vortex-stretching function f_beta of the specification, chi_w = W_ij W_jk S^_ki/(beta* omega)^3 with the off-diagonal part of S^; with omega-wall-bc = asymptotic, a channel at rest whose omega is the wall value 6 nu/(beta d^2) of the model (beta_0 for Wilcox 2006, beta_1 for SST) changes rho omega in the wall cells by the destruction alone | `test/fast/time-integration/turbulence-sources` |
 | `MMSResiduals` | on a constructed field with variable density and nu~, the right-hand side of the equation for rho nu~ converges with second order to the standard conservation form of Spalart–Allmaras; with SA-RC and SST-RC, the change of rho nu~ (rho k and rho omega) in one step of a 3-D flow with vorticity along x, y and z is the same as for the flow turned in space (x to y, y to z, z to x), cell by cell: the rotation tensor W_ij = (∂u_i/∂x_j − ∂u_j/∂x_i)/2 is a tensor; with SA-RC in a frame turning about z, a uniform shear changes rho nu~ by the production with the f_r1 of the specification, whose r~ takes the rotation of the frame, and a uniform flow, whose vorticity is zero, runs and keeps rho nu~; on air at rest next to a wall, and off the wall row of air flowing along it on cells stretched along the flow, SA-RC changes rho nu~ as SA does; on Homann's axisymmetric stagnation-point flow and on a polynomial field with dilatation and swirl (2-D wedge of 1°, axis included) the viscous force converges with second order to the Navier–Stokes one, the stress on the wedge faces included | `test/2D/viscous/mms/residuals` |
+| `Connections`/`ConnectionFlux` | a periodic shock tube as one block and as two blocks gives the same bits, and conserves mass, momentum and energy to 1e-13, with HLLC, HLLC+Tramel, HLLC+Chen (shock sensor) and HLLC-PC (preconditioned, on a low Mach number wave) | `test/fast/connections/connection-flux` |
+| `Connections`/`ConnectionOrder` | two 2-D blocks whose index directions are permuted across the cut (face 4 of one on face 2 of the other, two faces of the same parity) give the same bits with the records of `bc.txt` sorted and reversed (Navier–Stokes, HLLC+Tramel, a shock leaving the cut) | `test/fast/connections/connection-order` |
 
 A few heavier checks carry the `validation` (not `fast`) label because they
 need reference data or plotting — for example `ShuOsherConvergence`, a 4-grid
@@ -245,15 +251,15 @@ Run them with `ctest -L validation`.
 ### MPI tier contents
 
 Builds with `USE_MPI=ON` also register a `needs-mpi` tier. Each test generates
-its own small multi-block case with
-[`test/mpi/make_case.py`](https://github.com/open-hydra/MOSE/blob/main/test/mpi/make_case.py),
-launches the solver itself through the MPI launcher CMake found
-(`MPIEXEC_EXECUTABLE`, at most 4 ranks) and asserts **bit-for-bit** invariants
-of the parallel solution, comparing the `vtk raw` output files byte by byte.
+its own small multi-block case, launches the solver itself through the MPI
+launcher CMake found (`MPIEXEC_EXECUTABLE`, at most 4 ranks) and asserts
+**bit-for-bit** invariants of the parallel solution.
 
 | Test | Asserts | Lives in |
 |------|---------|----------|
 | `MPIBoundaryRecords` | a strip of four viscous blocks (inlet, outlet, wall, symmetry and block-cut records) gives the same solution on 1×1, 2×1, 4×1 and 2×2 (MPI ranks × OpenMP threads); the same case with the `bc.txt` records in reverse order gives the same solution as the ordered file, on 1 and 2 ranks, with and without threads | `test/mpi/boundary-records` |
+| `MPIConnectionFlux` | the two-block cases of `Connections`/`ConnectionFlux` with one block per rank (block cut and periodic connection between ranks) give the one-rank and the one-block solutions bit for bit, and conserve | `test/mpi/connection-flux` |
+| `MPIConnectionOrder` | the 2-D case of `Connections`/`ConnectionOrder` with one block per rank (the cut, inviscid and viscous shares, between ranks): 2 ranks with the records of `bc.txt` sorted and reversed give the one-rank solution bit for bit | `test/mpi/connection-order` |
 
 Run the tier from the build directory of an MPI build:
 

@@ -145,7 +145,14 @@ mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D"
 # linear field next to chimera faces, also at the edges of the block face, in
 # 2-D, in 3-D and on a 2-D axisymmetric wedge (against the same mesh as one
 # block).
-mose_add_fast_script(Connections fast/connections "fast;numerics;2D")
+# Faces between blocks (101, 201): one flux per face. A periodic shock tube as
+# one block and as two blocks gives the same bits, and conserves mass,
+# momentum and energy, with and without shock sensor and preconditioning.
+# Faces between blocks of the same parity (face 4 of one block on face 2 of
+# the other, index directions permuted): the record that computes the flux
+# of the face does not follow the order of bc.txt; sorted and reversed
+# records give the same bits.
+mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;1D;2D")
 
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
 # at a restart a missing probe file is written again, an existing one appended,
@@ -208,9 +215,9 @@ set_tests_properties(QCR2000Stress PROPERTIES LABELS "fast;physics;unit" TIMEOUT
 
 # ===========================================================================
 #  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
-#  Each test generates its own small multi-block case (test/mpi/make_case.py)
-#  and launches the solver itself through the MPI launcher CMake found, with
-#  at most 4 ranks; it asserts bit-for-bit invariants of the parallel run.
+#  Each test generates its own small multi-block case and launches the solver
+#  itself through the MPI launcher CMake found, with at most 4 ranks; it
+#  asserts bit-for-bit invariants of the parallel run.
 # ===========================================================================
 if(USE_MPI)
     function(mose_add_mpi_script NAME DIR)
@@ -232,4 +239,12 @@ if(USE_MPI)
     # Boundary records: the boundary-flux loop gives the same bits on any
     # ranks x threads layout and for any order of the records in bc.txt.
     mose_add_mpi_script(MPIBoundaryRecords mpi/boundary-records "needs-mpi;implementation;2D")
+
+    # Faces between ranks: the two-block cases of ConnectionFlux with one block
+    # per rank give the one-rank and the one-block bits, and conserve.
+    mose_add_mpi_script(MPIConnectionFlux mpi/connection-flux "needs-mpi;implementation;1D")
+
+    # The 2-D case of ConnectionOrder with one block per rank: sorted and
+    # reversed records give the one-rank bits.
+    mose_add_mpi_script(MPIConnectionOrder mpi/connection-order "needs-mpi;implementation;2D")
 endif()

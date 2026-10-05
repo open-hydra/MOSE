@@ -41,7 +41,7 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
 | IRS / multigrid / CFL-ramp | yes | implicit only | no dedicated check |
 | Turbulence | SA(+R/RC/comp), SST, Wilcox2006 | SA, SST, Wilcox2006 (flat plate) | RC/comp variants untested |
 | Chemistry | frozen, finite-rate, equilibrium | all (needs Cantera/Sundials) | can't run in CI |
-| Multi-block | core feature | implicit only | **no interface correctness test** |
+| Multi-block | core feature | faces between blocks: one block against two and records sorted against reversed, bit for bit (`Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder`; with MPI `MPIConnectionFlux`, `MPIConnectionOrder`) | 3-D faces with permuted index directions, connections with multigrid and with RANS untested |
 | Ablative wall BCs (503/504/505) | melting, pyrolysis, surface reactions | 503/504 vs closed form (`AblatingWall`) | 505 needs a CO/CO2 thermo table |
 | Restart | core feature | none | untested |
 | I/O formats | tec ascii/bin, vtk ascii/raw | ascii only | round-trip untested |
@@ -98,8 +98,14 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
 ### Implementation / infrastructure (also serve as fast tests)
 - ☐ **I1 — Freestream preservation / GCL**: uniform flow on a stretched, curvilinear,
   multi-block mesh; assert residual stays at machine-zero.
-- ☐ **I2 — Single-block vs multi-block equivalence**: same problem as 1 block and 2×2
-  blocks; fields identical to round-off. Direct halo/interface-flux test.
+- ◐ **I2 — Single-block vs multi-block equivalence**: same problem as 1 block and 2×2
+  blocks; fields identical to round-off. Direct halo/interface-flux test. *Done for two
+  blocks:* `test/fast/connections/connection-flux` (`Connections`/`ConnectionFlux`, a periodic shock tube as one and
+  as two blocks, bit for bit, and conservation) and `test/fast/connections/connection-order`
+  (`Connections`/`ConnectionOrder`, two 2-D blocks with permuted index directions, the `bc.txt` records
+  sorted and reversed); with one block per MPI rank, `test/mpi/connection-flux`
+  (`MPIConnectionFlux`) and `test/mpi/connection-order` (`MPIConnectionOrder`), needs-mpi
+  tier. Four blocks at a vertex and 3-D faces with permuted directions are not covered.
 - ☑ **I3 — Restart round-trip**: N steps vs (N/2 → write → restart → N/2); match to
   ~2e-15. *Done:* `test/fast/restart` (restart = `newrun=false`, reads OUTPUT/field.tec).
 - ☑ **I4 — Conservation invariant**: closed slip-wall box, shock-tube IC; total mass
@@ -124,7 +130,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F1 | Freestream preservation (stretched multi-block) | residual ≈ machine-zero | ☐ | <2 s |
 | F2 | Sod coarse (existing) | shock/contact positions, positivity | ☑ `Sod79` | ~1 s |
 | F3 | Conservation in closed box | mass conserved to round-off | ☑ `Conservation` | <1 s |
-| F4 | Single- vs multi-block equivalence | identical field | ☐ | <3 s |
+| F4 | Single- vs multi-block equivalence | identical field | ☑ `Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder` (I7, I7b) | see I7, I7b |
 | F5 | Riemann smoke matrix | no NaN, ρ,p>0 | ☑ `RiemannSmoke` | ~4 s |
 | F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
 | F5e | Time control (1-D duct, time-dependent inlet 402) | order in time ≥ 1.8 (RK2, RK3); table held before its first instant; time-threshold reached | ☑ `TimeIntegration`/`TimeControl` | ~5 s |
@@ -139,9 +145,11 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F11 | Local time step (square and skewed 2-D cells, cubic 3-D cells, heat-conduction and species-diffusion cells, 1-D at cfl 0.99; heat conduction on a periodic block of 8³ rhombohedra at 115°, Heun at vnn 0.5, 600 steps) | stable, uniform state kept, no NaN; the temperature wave of the rhombohedra decays | ☑ `TimeIntegration`/`LocalTimeStep` | ~9 s |
 | F12 | Turbulence sources in time-accurate runs (wall channel, SA and SST, Heun and RK3; SST-RC, RK3, one step); Wilcox 2006 on a 3-D linear flow, divergence-free, with S^ zero on the diagonal (cube of 6³ cells), one step; Wilcox 2006 and SST with omega-wall-bc = asymptotic on the channel at rest, omega at the wall value 6 nu/(beta d²) of the model, one step | time order of nu~, k, omega ≥ 1.8 (Heun) and ≥ 2.7 (RK3); no negative stage value; the start-up warnings of k-omega and of -RC both printed (SST-RC); change of rho omega = dt (2 gamma rho S:S - beta_0 f_beta rho omega²) within 1e-6; in the wall cells, change of rho omega = -dt beta rho omega² (the destruction alone) within 1e-6 | ☑ `TimeIntegration`/`TurbulenceSources` | ~9 s |
 | F13 | Spalart–Allmaras on constructed fields: variable density (periodic field, no wall); SA-RC and SST-RC on a 3-D flow with vorticity along x, y and z (cube of 8³ cells) and on the same flow turned (x to y, y to z, z to x), one step each; SA-RC on a uniform shear in a frame turning about z and on a uniform flow (8 × 8 cells), one step each; SA-RC and SA on air at rest next to a wall and on air flowing along it on cells stretched along the flow (8 × 8 cells), one step each; the viscous stress on the axisymmetric wedge (200): Homann's stagnation-point flow and a polynomial field with dilatation and swirl (1° wedge, axis included) | right-hand side of rho nu~ = standard conservation form, error < 0.02 and order > 1.5; change of rho nu~ (rho k and rho omega with SST-RC) the same in corresponding cells of the two 3-D runs within 1e-9 of its largest value; change of rho nu~ = dt rho c_b1 f_r1 S~ nu~ with the f_r1 of the specification within 1e-6 (shear), no NaN and no change (uniform); the same change of rho nu~ with SA-RC and SA within 1e-12 (rest; stream, off the wall row); viscous force vs exact: Homann, radial and axial error < 0.02 and order > 1.5, azimuthal zero; polynomial, radial and azimuthal error < 0.02 and order > 1.5, axial exact | ☑ `MMSResiduals` | ~6 s |
+| I7 | Faces between blocks (101, 201): periodic shock tube as one and as two blocks, HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC (low Mach) | two blocks = one block bit for bit; mass, momentum, energy conserved to 1e-13 | ☑ `Connections`/`ConnectionFlux` | ~2 s |
+| I7b | Faces between blocks of the same parity (2-D, index directions permuted across the cut), HLLC+Tramel, Navier–Stokes | bc.txt records sorted = reversed, bit for bit | ☑ `Connections`/`ConnectionOrder` | <1 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
-Current `ctest -L fast`: **17 tests, ~87 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **17 tests, ~88 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, TimeIntegration,
 Conservation, OpenMPEquiv, Connections, Restart, InputChecks, MMSResiduals,
 AblatingWall, QCR2000Stress).

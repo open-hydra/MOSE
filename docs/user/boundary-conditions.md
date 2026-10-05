@@ -89,6 +89,8 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 
 `d11, d12, d21, d22` are the $2 \times 2$ index-direction cosine matrix mapping source to target indices.
 
+The two records of a connection face (`101`, `201`) must point at each other (each one's `bs is js ks fs` is the other's block, cell and face, not its own); MOSE stops at setup otherwise. The flux of the face is computed once, by the record of the cell on the low-index side (between faces of the same parity, by the record with the smaller block, face, k, j, i, whatever the order of the records in the file), and given with the opposite sign to the other cell, also across MPI ranks (see [Spatial Discretization](../theory/numerics.md#faces-between-blocks), which states when it is bit for bit the flux of the unsplit mesh). With `preconditioning-Ur-smooth` greater than 0 the smoothing of the preconditioning reference velocity next to such a face also sees the cell across it, with its value at the start of the stage.
+
 ### Euler Boundaries
 
 | Type | Name | Data line |

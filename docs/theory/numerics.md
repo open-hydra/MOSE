@@ -326,6 +326,48 @@ computes the inviscid flux only. On a planar 2-D mesh (faces 5 and 6 parallel,
 no wedge angle) type `200` makes the image the cell itself, and the fluxes of
 the two faces cancel.
 
+## Faces Between Blocks
+
+A face shared by two blocks (block connection `101`, periodic connection `201`)
+has one flux, computed once and given to both cells with opposite signs, as an
+interior face. Of the two boundary records of the face, the one of the cell on
+the low-index side (whose face is 2, 4 or 6 while the other is 1, 3 or 5)
+computes the inviscid and the viscous flux with the shock sensor of its cell,
+as the interior face between cells $n$ and $n+1$ uses that of cell $n$, and with
+the preconditioning reference velocity $U_r$ of both cells (the ghost cell
+carries that of the other block). When the two faces have the same parity, as
+where blocks meet with their index directions permuted, the record with the
+smaller (block, face, $k$, $j$, $i$) computes it, so that the result does not
+depend on the order of the records in `bc.txt`. The face therefore conserves
+mass, momentum and energy exactly whatever the Riemann solver, the shock sensor
+and the preconditioning, on any number of MPI ranks; between ranks the other
+cell's share travels in one more message per Runge–Kutta stage.
+
+The inviscid flux of a face between blocks is, bit for bit, that of the same
+face in the unsplit mesh when three conditions hold: the index directions of
+the two blocks agree across the face; the two blocks store the nodes of the
+common face with the same bits (the ghost cell takes its geometry from the
+nodes of the other block, so nodes that differ in the last digits give a
+slightly different face); and `preconditioning-Ur-smooth = 0`. This is an
+identity of the fluxes, not of the solution: in 2-D and 3-D a cell next to the
+cut adds the flux of the face between blocks after those of its interior faces,
+so its sum is taken in another order than in the unsplit mesh and the two
+solutions differ at round-off. Only in 1-D, where a cell sums two face fluxes,
+is the solution of an inviscid run on the split mesh the same bit for bit (the
+viscous flux of a face between blocks has its own stencil, below).
+
+With `preconditioning-Ur-smooth` greater than 0 the max-dilation of $U_r$ in a
+cell next to a face between blocks also sees the cell across the face, through
+the ghost cell, with its value at the start of the stage; before the flux of
+these faces was computed once, the ghost held $U_r = 0$ and the smoothing
+ignored that neighbour. Neither is the unsplit mesh, where the smoothing sees
+the new value of the neighbour, so with the smoothing on a split mesh does not
+give the fluxes of the unsplit one bit for bit.
+
+The viscous flux of a face between blocks uses its own stencil (the two
+tangential gradients of the two cells, averaged) and the inverse-mean face
+metric, not those of an interior face.
+
 ---
 
 ## References
