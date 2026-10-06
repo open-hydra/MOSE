@@ -275,6 +275,13 @@ range from 0.1 to 0.2.
     - Pass the smoothed residual to the next direction
 3. Use the smoothed residual in the RK stage
 
+By default (`irs-variables = flow`) only the flow residuals (species,
+momentum, energy) are smoothed; the turbulence equations then advance
+with the same local time step without smoothing, and above the explicit
+limit they become the unstable part. `irs-variables = all` smooths every
+residual, as the flow ones. Smoothing changes the path to the steady
+state, not the steady state itself (a zero residual stays zero).
+
 ---
 
 ## Multigrid Acceleration

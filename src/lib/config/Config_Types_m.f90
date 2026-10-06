@@ -117,6 +117,7 @@ module MOSE_Config_Types_m
     character(len=llen) :: description
     ! USER-DRFINED INPUTS
     real(R8)  :: beta
+    character(len=llen) :: variables   ! flow (species, momentum, energy) or all (also RANS, soot, passive scalars)
     ! Useful variables
     logical   :: enabled
   end type irs_t

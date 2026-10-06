@@ -55,6 +55,7 @@
 | integration-variables | cons | cons ,  prim , prec |  no | Integration variables (cons/prim/prec) |
 | irs | .false. | logical |  no | Implicit Residual Smoothing |
 | irs-beta | 0.0 | >= 0 |  no | IRS beta parameter |
+| irs-variables | flow | flow, all |  no | Residuals smoothed by IRS: flow (species, momentum, energy) or all (also the RANS, soot and passive-scalar equations) |
 | preconditioning-Uref | 0.0 | >= 0 |  no | Reference velocity for preconditioning |
 | preconditioning-Mach | 0.0 | >= 0 |  no | Mach target for preconditioning |
 | preconditioning-eps-min | 0.05 | in (0, 1) |  no | Low-Mach cutoff for Ur |

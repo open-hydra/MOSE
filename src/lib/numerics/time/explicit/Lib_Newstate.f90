@@ -28,10 +28,13 @@ contains
     integer :: n_rk
     logical :: irs_enabled
     real(R8) :: irs_beta, strangcoeff
+    integer  :: irs_nsm
 
     n_rk        = obj_time_scheme%n_RK
     irs_enabled = obj_irs%enabled
     irs_beta    = obj_irs%beta
+    irs_nsm     = np
+    if ( trim(obj_irs%variables) == 'all' ) irs_nsm = nprim
     strangcoeff = obj_chemistry%strangcoeff
 
     ! ------------------------------------------------------------------
@@ -54,7 +57,7 @@ contains
       enddo
 
       ! PHASE 2: smooth residuals (serial across blocks by design)
-      call Residual_Smoothing( domain, irs_beta )
+      call Residual_Smoothing( domain, irs_beta, irs_nsm )
 
       ! PHASE 3: update state after smoothing
       do b = 1, domain%nb
@@ -183,10 +186,13 @@ contains
     integer :: n_rk
     logical :: irs_enabled
     real(R8) :: irs_beta, strangcoeff
+    integer  :: irs_nsm
 
     n_rk        = obj_time_scheme%n_RK
     irs_enabled = obj_irs%enabled
     irs_beta    = obj_irs%beta
+    irs_nsm     = np
+    if ( trim(obj_irs%variables) == 'all' ) irs_nsm = nprim
     strangcoeff = obj_chemistry%strangcoeff
     
     if ( irs_enabled ) then
@@ -196,7 +202,7 @@ contains
     ! ------------------------------------------------------------------
 
       ! PHASE 1: compute residuals only (no state update yet)
-      call Residual_Smoothing( domain, irs_beta )
+      call Residual_Smoothing( domain, irs_beta, irs_nsm )
 
       ! PHASE 2: convert residual to primitive space only
       do b = 1, domain%nb

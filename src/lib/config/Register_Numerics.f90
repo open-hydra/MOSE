@@ -53,6 +53,9 @@ contains
     obj_irs%error_message   = 'none'
     call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', 'Implicit Residual Smoothing', 'logical', .false. )
     call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', 'IRS beta parameter', '>= 0', .false. )
+    call reg%add( trim(section), 'irs-variables', obj_irs%variables, 'flow', &
+                  'Residuals smoothed by IRS: flow (species, momentum, energy) or all (also the RANS, '// &
+                  'soot and passive-scalar equations)', 'flow, all', .false. )
 
     ! Preconditioning controls (used when integration-variables = prec)
     obj_prec%description     = 'none'
