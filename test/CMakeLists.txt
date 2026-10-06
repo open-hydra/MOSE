@@ -216,6 +216,14 @@ endif()
 # diffusion table with a single species.
 mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;physics;2D")
 
+# Mesh geometry (MeshGeometry): the parts below, each in its folder of
+# test/fast/mesh-geometry, run one after the other by
+# test/fast/mesh-geometry/run.sh.
+# Wall distance: the distance to the wall of the turbulence models is the
+# minimum distance to the wall surface (convex corner, curved wall, nozzle lip
+# on an axisymmetric wedge), read back from the Spalart-Allmaras source.
+mose_add_fast_script(MeshGeometry fast/mesh-geometry "fast;physics;2D")
+
 # Quadratic constitutive relation QCR2000: a unit check of the stress as the
 # solver calls it (laminar viscosity, then eddy viscosity), against the
 # definition. QCR2000 is not selectable from the input, so no run passes there.

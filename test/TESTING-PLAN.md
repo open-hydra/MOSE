@@ -149,12 +149,13 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | I7 | Faces between blocks (101, 201): periodic shock tube as one and as two blocks, HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC (low Mach) | two blocks = one block bit for bit; mass, momentum, energy conserved to 1e-13 | ☑ `Connections`/`ConnectionFlux` | ~2 s |
 | I7b | Faces between blocks of the same parity (2-D, index directions permuted across the cut), HLLC+Tramel, Navier–Stokes; the same with the block below the cut one cell thick across it, and two cells thick with two multigrid levels | bc.txt records sorted = reversed, bit for bit; the thin blocks stop the run at set-up with a non-zero exit code and the message (the record, the block across, its cells, the level) | ☑ `Connections`/`ConnectionOrder` | <1 s |
 | F17 | Inlets: the ambient inlet (407) with the flow direction `normal` (planar duct, air entering at 50 m/s) | same field as the equivalent angles bit for bit, no transverse velocity | ☑ `BoundaryConditions`/`Inlets` | <1 s |
+| F18 | Wall distance (fluid at rest, nu~ uniform; convex corner of two walls, curved wall under a leaning mesh, nozzle lip on a 1° wedge) | distance read back from the Spalart–Allmaras source = exact distance to the wall within 1e-9 | ☑ `MeshGeometry`/`WallDistance` | ~3 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
-Current `ctest -L fast`: **18 tests, ~95 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **19 tests, ~95 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, TimeIntegration,
 BoundaryConditions, Conservation, OpenMPEquiv, Connections, Restart,
-InputChecks, MMSResiduals, AblatingWall, QCR2000Stress).
+InputChecks, MMSResiduals, AblatingWall, MeshGeometry, QCR2000Stress).
 
 The time is CPU time at one thread, one test at a time, measured on one machine
 (load average ~190 on 192 logical CPUs), where the 12 fast tests of main take ~41 s.

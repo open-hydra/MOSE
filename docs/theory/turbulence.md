@@ -640,6 +640,35 @@ An optional correction (`blowing_corr`) modifies the wall boundary-layer
 treatment for SST and Wilcox 2006 models in the presence of wall
 injection or suction.
 
+### Wall distance
+
+The distance $y$ of the models (SA, the SST blending functions, the wall
+value of $\omega$) is the minimum distance from the cell centre, the mean of
+its eight nodes, to the wall surface, as the NASA Turbulence Modeling
+Resource requires (ref. 13). It is not the distance to the nearest wall node
+or face centre, which differs from it wherever the grid lines are not normal
+to the wall; next to a convex corner or at the end of a wall it is the
+distance to the corner or the end.
+
+- Each face of a wall boundary (types 301, 302, 503–505) is taken as the four
+  triangles between its centre and its sides, which are the face itself when
+  the face is plane, as on every 2-D and axisymmetric mesh. The distance to a
+  triangle is the distance to its plane when the projection of the point falls
+  inside it, otherwise the distance to the nearest side.
+- On a 2-D axisymmetric wedge (BC 200) the distance is measured in the
+  meridional plane $(x, r)$, $r = \sqrt{y^2+z^2}$, from the cell centre to the
+  wall curve. This is the distance to the wall surface of revolution, and it
+  does not depend on the angle of the wedge. A wall on the faces of the wedge
+  (faces 5–6) stops the run.
+- A k-d tree over the face centres, with the radius of each face, finds the
+  nearest face: the exact distance is computed only for the faces whose centre
+  lies within the best distance found so far plus their radius.
+- Each cell takes the sand-grain roughness $k_s$ of the face that gives the
+  minimum distance; between faces at the same distance, the first one in the
+  boundary file.
+
+Test `MeshGeometry`/`WallDistance`.
+
 ---
 
 ## Freestream and inlet values ($k$, $\omega$, $\tilde\nu$)
@@ -861,3 +890,7 @@ fallback when a model's destruction Jacobian is not readily available.
     <https://tmbwg.github.io/turbmodels/implementrans.html>.
 12. D. C. Wilcox, "Formulation of the k-ω turbulence model revisited,"
     *AIAA J.*, 46(11), pp. 2823–2838, 2008, doi:10.2514/1.36541.
+13. NASA Langley Research Center, Turbulence Modeling Resource, "The
+    Spalart–Allmaras Turbulence Model",
+    https://turbmodels.larc.nasa.gov/spalart.html (TMBWG/turbmodels commit
+    20a39f5, consulted 2026-09-29): minimum distance to the wall.

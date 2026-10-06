@@ -8,6 +8,14 @@ module MOSE_Lib_Metrics
   implicit none
   real(R8), public :: delthe = 0d0  ! grid axisymmetric angle
 
+  ! Wall faces of Compute_Yn, read by Wall_Face_Distance while the k-d tree is queried: for face n, wall_corner(:,1:4,n)
+  ! are its corners in cyclic order and wall_corner(:,0,n) their mean; on an axisymmetric wedge (wall_meridional) the
+  ! corners are in the meridional plane (x, r, 0), where corners 1 and 2 are the ends of the trace of the face.
+  real(R8), allocatable :: wall_corner(:,:,:)
+  logical               :: wall_meridional = .false.
+  private :: wall_corner, wall_meridional
+  private :: Cell_Centre, Meridional, Wall_Face_Distance, Point_Segment_Distance, Point_Triangle_Distance, Cross3
+
 contains
 
   subroutine Check_Mesh_Type( domain )
@@ -385,9 +393,9 @@ contains
     type(MOSE_block_type), dimension(nb), intent(inout)  :: blk
     type(MOSE_bc_type), dimension(nbound), intent(in)    :: bc
     ! Local
-    real(R8), dimension(nbound) :: facex, facey, facez, facekr
-    real(R8) :: x1, x2, x3, x4, y1, y2, y3, y4, z1, z2, z3, z4
-    integer :: Fm, Bm, Im, Jm, Km, l, b, nwall
+    real(R8), dimension(nbound) :: facex, facey, facez, facekr, facer
+    real(R8) :: corner(3,4)
+    integer :: Fm, Bm, Im, Jm, Km, l, b, nwall, n
     integer :: i1, j1, k1, i2, j2, k2, i3, j3, k3, i4, j4, k4
     logical, dimension(nb) :: needs_yn
     type(kdtree_t) :: wall_tree
@@ -397,13 +405,28 @@ contains
     logical, parameter  :: DEBUG_KDTREE = .false.
     real(R8), parameter :: KDTREE_TOL   = 1.0e-10_R8
 
+    ! The distance is the minimum distance from the cell centre to the wall surface
+    ! (NASA Turbulence Modeling Resource, Spalart-Allmaras page: not the distance to
+    ! the nearest wall node or face centre; next to a convex corner, the distance to
+    ! the corner). On a 2-D axisymmetric wedge it is measured in the meridional plane
+    ! (x, r), from the wall curve: that is the distance to the wall surface of
+    ! revolution, whatever the angle of the wedge. Same wedge test as the wedge
+    ! stress (Lib_BC_Fluxes_Rotational), delthe of either sign.
+    wall_meridional = ndir == 2 .and. .not. ( delthe >= 0d0 .and. delthe <= 0d0 )
+
+    nwall = 0
+    do l = 1, nbound
+      if ( Is_Wall(bc(l) % type) ) nwall = nwall + 1
+    enddo
+    allocate ( wall_corner(3, 0:4, max(nwall,1)) )
+
     nwall=0
-    
+
     ! bc vector processing.
     do l = 1, nbound
 
       if ( Is_Wall(bc(l) % type) ) then
-        
+
         Bm = bc(l) % b
         Im = bc(l) % i
         Jm = bc(l) % j
@@ -453,32 +476,42 @@ contains
             k4 = Km - mod(Fm,2)
         end select
 
-        ! Boundary face nodes.
-        x1 = blk(Bm) % node(i1,j1,k1) % c(1)
-        x2 = blk(Bm) % node(i2,j2,k2) % c(1)
-        x3 = blk(Bm) % node(i3,j3,k3) % c(1)
-        x4 = blk(Bm) % node(i4,j4,k4) % c(1)
+        ! Boundary face nodes, in cyclic order around the face.
+        corner(:,1) = blk(Bm) % node(i1,j1,k1) % c
+        corner(:,2) = blk(Bm) % node(i2,j2,k2) % c
+        corner(:,3) = blk(Bm) % node(i4,j4,k4) % c
+        corner(:,4) = blk(Bm) % node(i3,j3,k3) % c
 
-        y1 = blk(Bm) % node(i1,j1,k1) % c(2)
-        y2 = blk(Bm) % node(i2,j2,k2) % c(2)
-        y3 = blk(Bm) % node(i3,j3,k3) % c(2)
-        y4 = blk(Bm) % node(i4,j4,k4) % c(2)
+        if ( wall_meridional ) then
+          ! Faces 1-4 of a wedge cell cross the meridional plane along a segment,
+          ! whose ends are nodes 1 and 2 (the same x and r as nodes 4 and 3).
+          if ( Fm > 4 ) error stop 'Compute_Yn: a wall on a face of the axisymmetric wedge (faces 5-6) is not possible'
+          wall_corner(:,1,nwall) = Meridional ( corner(:,1) )
+          wall_corner(:,2,nwall) = Meridional ( corner(:,2) )
+          wall_corner(:,3,nwall) = wall_corner(:,2,nwall)
+          wall_corner(:,4,nwall) = wall_corner(:,1,nwall)
+        else
+          wall_corner(:,1:4,nwall) = corner
+        end if
 
-        z1 = blk(Bm) % node(i1,j1,k1) % c(3)
-        z2 = blk(Bm) % node(i2,j2,k2) % c(3)
-        z3 = blk(Bm) % node(i3,j3,k3) % c(3)
-        z4 = blk(Bm) % node(i4,j4,k4) % c(3)
-        
-        ! Face center coordinates.
-        facex(nwall) = 0.25d0*( x1 + x2 + x3 + x4 )
-        facey(nwall) = 0.25d0*( y1 + y2 + y3 + y4 )
-        facez(nwall) = 0.25d0*( z1 + z2 + z3 + z4 )
+        ! Face centre (mean of the corners) and radius: every point of the face lies
+        ! within the radius of the centre, with a margin for round-off.
+        wall_corner(:,0,nwall) = 0.25d0 * ( wall_corner(:,1,nwall) + wall_corner(:,2,nwall) + &
+                                            wall_corner(:,3,nwall) + wall_corner(:,4,nwall) )
+        facex(nwall) = wall_corner(1,0,nwall)
+        facey(nwall) = wall_corner(2,0,nwall)
+        facez(nwall) = wall_corner(3,0,nwall)
+        facer(nwall) = 0d0
+        do n = 1, 4
+          facer(nwall) = max ( facer(nwall), norm2 ( wall_corner(:,n,nwall) - wall_corner(:,0,nwall) ) )
+        enddo
+        facer(nwall) = facer(nwall) * ( 1d0 + 1d-10 )
 
         ! Face sand-grain roughness, inherited by the cells it is nearest to.
         facekr(nwall) = bc(l) % k_rough
-      
+
       endif
-    
+
     enddo
 
     ! After bc processing nwall is the viscous face counter.
@@ -504,13 +537,15 @@ contains
         if (.not. needs_yn(b)) cycle
         blk(b) % yn ( 1:blk(b)%dim(1), 1:blk(b)%dim(2), 1:blk(b)%dim(3) ) = 1d8
       enddo
+      deallocate ( wall_corner )
       return
     end if
 
-    ! One k-d tree over the wall-face centroids, shared by every block and
-    ! thread: O(log nwall) per cell instead of a full scan, same distance to
-    ! the last bit.
-    call kdtree_build ( wall_tree, facex, facey, facez, nwall )
+    ! One k-d tree over the wall-face centres, with the face radii, shared by every
+    ! block and thread: it hands the exact point-face distance only the faces that
+    ! can still be nearer than the nearest found so far (centre within that
+    ! distance plus the face radius).
+    call kdtree_build ( wall_tree, facex(1:nwall), facey(1:nwall), facez(1:nwall), nwall, facer(1:nwall) )
 
     ! Compute distance in block b by querying the shared k-d tree.
     do b = 1, nb
@@ -523,16 +558,17 @@ contains
     if ( DEBUG_KDTREE ) then
       do b = 1, nb
         if (.not. needs_yn(b)) cycle
-        call Validate_Tree_Yn ( blk(b), facex, facey, facez, nwall, b )
+        call Validate_Tree_Yn ( blk(b), nwall, b )
       enddo
     end if
 
     call kdtree_free ( wall_tree )
+    deallocate ( wall_corner )
 
     contains
 
       subroutine Wall_Distance_Blk ( blk, tree, face_kr )
-        use MOSE_Lib_KDTree, only: kdtree_t, kdtree_nearest
+        use MOSE_Lib_KDTree, only: kdtree_t, kdtree_nearest_object
         implicit none
         type(MOSE_block_type), intent(inout) :: blk
         type(kdtree_t), intent(in)           :: tree
@@ -547,14 +583,10 @@ contains
         do j = 1, blk % dim(2)
         do i = 1, blk % dim(1)
 
-          ! Cell center coordinates.
-          center = 1d0/8d0 * ( blk % node(i  ,j  ,k  ) % c + blk % node(i  ,j-1,k  ) % c + &
-                              blk % node(i  ,j-1,k-1) % c + blk % node(i  ,j  ,k-1) % c + &
-                              blk % node(i-1,j  ,k  ) % c + blk % node(i-1,j-1,k  ) % c + &
-                              blk % node(i-1,j-1,k-1) % c + blk % node(i-1,j  ,k-1) % c )
+          center = Cell_Centre ( blk, i, j, k )
 
-          ! Nearest wall-face centroid via the k-d tree.
-          call kdtree_nearest ( tree, center(1), center(2), center(3), dist, iface )
+          ! Nearest wall face via the k-d tree, exact point-face distance.
+          call kdtree_nearest_object ( tree, center(1), center(2), center(3), Wall_Face_Distance, dist, iface )
           blk % yn (i,j,k) = dist
           blk % k_rough (i,j,k) = face_kr(iface)
 
@@ -567,12 +599,11 @@ contains
       !> Brute-force check of the k-d tree result: recompute each cell's
       !> nearest-wall distance against the full face list, compare with
       !> `blk%yn`, and abort past KDTREE_TOL.
-      subroutine Validate_Tree_Yn ( blk, fx, fy, fz, nwall_, b_id )
+      subroutine Validate_Tree_Yn ( blk, nwall_, b_id )
         use MOSE_Mod_MPI, only: mpi_rank_
         implicit none
         type(MOSE_block_type), intent(in)           :: blk
         integer, intent(in)                         :: nwall_
-        real(R8), intent(in), dimension(nwall_)     :: fx, fy, fz
         integer, intent(in)                         :: b_id
         ! Local
         integer :: i, j, k, ll
@@ -587,14 +618,11 @@ contains
         do j = 1, blk % dim(2)
         do i = 1, blk % dim(1)
 
-          center = 1d0/8d0 * ( blk % node(i  ,j  ,k  ) % c + blk % node(i  ,j-1,k  ) % c + &
-                              blk % node(i  ,j-1,k-1) % c + blk % node(i  ,j  ,k-1) % c + &
-                              blk % node(i-1,j  ,k  ) % c + blk % node(i-1,j-1,k  ) % c + &
-                              blk % node(i-1,j-1,k-1) % c + blk % node(i-1,j  ,k-1) % c )
+          center = Cell_Centre ( blk, i, j, k )
 
           dbrute = 1d8
           do ll = 1, nwall_
-            dummy = sqrt( (center(1) - fx(ll))**2 + (center(2) - fy(ll))**2 + (center(3) - fz(ll))**2 )
+            dummy = Wall_Face_Distance ( ll, center(1), center(2), center(3) )
             if (dummy < dbrute) dbrute = dummy
           enddo
 
@@ -614,6 +642,124 @@ contains
       end subroutine Validate_Tree_Yn
 
   end subroutine Compute_Yn
+
+
+  !> Point where the wall distance of cell (i,j,k) is measured: the mean of its
+  !> eight nodes, in the meridional plane (x, r, 0) on an axisymmetric wedge.
+  function Cell_Centre ( blk, i, j, k ) result ( center )
+    implicit none
+    type(MOSE_block_type), intent(in) :: blk
+    integer, intent(in)               :: i, j, k
+    real(R8)                          :: center(3)
+    ! Local
+    integer :: a, b, c
+
+    center = 0d0
+    do c = k-1, k
+    do b = j-1, j
+    do a = i-1, i
+      if ( wall_meridional ) then
+        center = center + Meridional ( blk % node(a,b,c) % c )
+      else
+        center = center + blk % node(a,b,c) % c
+      end if
+    enddo; enddo; enddo
+    center = center / 8d0
+
+  end function Cell_Centre
+
+
+  !> (x, y, z) -> (x, r, 0), with r = sqrt(y^2 + z^2) the distance from the x axis.
+  pure function Meridional ( p ) result ( q )
+    implicit none
+    real(R8), intent(in) :: p(3)
+    real(R8)             :: q(3)
+
+    q = [ p(1), sqrt ( p(2)**2 + p(3)**2 ), 0d0 ]
+
+  end function Meridional
+
+
+  !> Distance from (x,y,z) to wall face i of Compute_Yn (kdtree_object_distance):
+  !> the segment of the face in the meridional plane on an axisymmetric wedge;
+  !> otherwise the four triangles between the face centre and the sides, which are
+  !> the face itself when it is plane, as on every 2-D and wedge mesh.
+  function Wall_Face_Distance ( i, x, y, z ) result ( d )
+    implicit none
+    integer, intent(in)  :: i
+    real(R8), intent(in) :: x, y, z
+    real(R8)             :: d
+    ! Local
+    real(R8) :: p(3)
+
+    p = [ x, y, z ]
+    if ( wall_meridional ) then
+      d = Point_Segment_Distance ( p, wall_corner(:,1,i), wall_corner(:,2,i) )
+    else
+      d = min ( Point_Triangle_Distance ( p, wall_corner(:,0,i), wall_corner(:,1,i), wall_corner(:,2,i) ), &
+                Point_Triangle_Distance ( p, wall_corner(:,0,i), wall_corner(:,2,i), wall_corner(:,3,i) ), &
+                Point_Triangle_Distance ( p, wall_corner(:,0,i), wall_corner(:,3,i), wall_corner(:,4,i) ), &
+                Point_Triangle_Distance ( p, wall_corner(:,0,i), wall_corner(:,4,i), wall_corner(:,1,i) ) )
+    end if
+
+  end function Wall_Face_Distance
+
+
+  !> Distance from p to the segment ab (a point if a = b).
+  pure function Point_Segment_Distance ( p, a, b ) result ( d )
+    implicit none
+    real(R8), intent(in) :: p(3), a(3), b(3)
+    real(R8)             :: d
+    ! Local
+    real(R8) :: ab(3), ap(3), l2, t
+
+    ab = b - a
+    ap = p - a
+    l2 = dot_product ( ab, ab )
+    t  = 0d0
+    if ( l2 > 0d0 ) t = min ( max ( dot_product ( ap, ab ) / l2, 0d0 ), 1d0 )
+    d = norm2 ( ap - t * ab )
+
+  end function Point_Segment_Distance
+
+
+  !> Distance from p to the triangle abc. The triangle is convex: if the projection
+  !> of p on its plane falls inside it (on the inner side of the three sides), the
+  !> distance is the one from the plane; otherwise the nearest point lies on a side.
+  !> A triangle with no area next to its sides (a degenerate face) has no plane and
+  !> is treated as its sides.
+  pure function Point_Triangle_Distance ( p, a, b, c ) result ( d )
+    implicit none
+    real(R8), intent(in) :: p(3), a(3), b(3), c(3)
+    real(R8)             :: d
+    ! Local
+    real(R8) :: n(3), n2, e2
+
+    n  = Cross3 ( b - a, c - a )
+    n2 = dot_product ( n, n )
+    e2 = max ( sum ( (b - a)**2 ), sum ( (c - b)**2 ), sum ( (a - c)**2 ) )
+    if ( n2 > ( 1d-12 * e2 )**2 ) then
+      if ( dot_product ( Cross3 ( b - a, p - a ), n ) >= 0d0 .and. &
+           dot_product ( Cross3 ( c - b, p - b ), n ) >= 0d0 .and. &
+           dot_product ( Cross3 ( a - c, p - c ), n ) >= 0d0 ) then
+        d = abs ( dot_product ( p - a, n ) ) / sqrt ( n2 )
+        return
+      end if
+    end if
+    d = min ( Point_Segment_Distance ( p, a, b ), Point_Segment_Distance ( p, b, c ), &
+              Point_Segment_Distance ( p, c, a ) )
+
+  end function Point_Triangle_Distance
+
+
+  pure function Cross3 ( u, v ) result ( w )
+    implicit none
+    real(R8), intent(in) :: u(3), v(3)
+    real(R8)             :: w(3)
+
+    w = [ u(2)*v(3) - u(3)*v(2), u(3)*v(1) - u(1)*v(3), u(1)*v(2) - u(2)*v(1) ]
+
+  end function Cross3
   
 
   subroutine Yn_Connection ( Im, Jm, Km, Fm, blkm, Is, Js, Ks, blks )
