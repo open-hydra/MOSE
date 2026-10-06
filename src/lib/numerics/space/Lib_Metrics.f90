@@ -531,13 +531,14 @@ contains
   end subroutine Compute_Metric_Tensor
 
   
-  subroutine Compute_Yn ( blk, bc, nb, nbound )
+  subroutine Compute_Yn ( blk, bc, nb, nbound, report )
     use MOSE_Lib_KDTree, only: kdtree_t, kdtree_build, kdtree_free
     use MOSE_Mod_MPI,    only: is_local_block, mpi_is_root, mpi_abort_all
     implicit none
     integer, intent(in)                                  :: nb, nbound
     type(MOSE_block_type), dimension(nb), intent(inout)  :: blk
     type(MOSE_bc_type), dimension(nbound), intent(in)    :: bc
+    logical, intent(in), optional                        :: report   ! report the twist of the wall faces (root only)
     ! Local
     real(R8), allocatable :: facex(:), facey(:), facez(:), facekr(:), facer(:)
     real(R8) :: corner(3,4)
@@ -675,10 +676,70 @@ contains
       enddo
     end if
 
+    ! Twisted wall faces in 3-D: the distance is exact only to within the gap between
+    ! the four triangles of a face and the face; report its largest bound relative to
+    ! the distance of the cell next to the face (docs/theory/turbulence.md).
+    if ( present(report) ) then
+      if ( report .and. mpi_is_root .and. .not. wall_meridional ) call Report_Twist ( )
+    end if
+
     call kdtree_free ( wall_tree )
     deallocate ( wall_corner, img_shift, img_angle )
 
     contains
+
+      !> Start-up report on twisted wall faces. The four triangles of a wall face lie within min(|T|/16, |T_n|/2) of
+      !> the face, the bilinear surface through its corners: T is the twist c1 - c2 + c3 - c4, T_n its part along the
+      !> normal of the face (cross product of the diagonals), and the second bound holds when the face, projected on
+      !> the plane of that normal, is convex; a plane face has T_n = 0 and its triangles are the face. The report gives
+      !> the largest bound over the distance of the cell next to the face, which bounds the relative error of that
+      !> distance; nothing is printed when every face is plane to the resolution of its coordinates.
+      subroutine Report_Twist ( )
+        implicit none
+        ! Local
+        integer  :: l, n, k, worst(4)
+        real(R8) :: c(3,4), t(3), nrm(3), bound, ratio, rmax
+        logical  :: convex
+
+        rmax = 0d0
+        worst = 0
+        n = 0
+        do l = 1, nbound
+          if ( .not. Is_Wall(bc(l) % type) ) cycle
+          n = n + 1
+          c = wall_corner(:,1:4,n)
+          t = c(:,1) - c(:,2) + c(:,3) - c(:,4)
+          bound = norm2 ( t ) / 16d0
+          nrm = Cross3 ( c(:,3) - c(:,1), c(:,4) - c(:,2) )
+          if ( norm2 ( nrm ) > 0d0 ) then
+            convex = .true.
+            do k = 1, 4
+              if ( dot_product ( Cross3 ( c(:,mod(k,4)+1) - c(:,k), c(:,mod(k+1,4)+1) - c(:,mod(k,4)+1) ), nrm ) <= 0d0 ) &
+                convex = .false.
+            enddo
+            if ( convex ) bound = min ( bound, abs ( dot_product ( t, nrm ) ) / ( 2d0 * norm2 ( nrm ) ) )
+          end if
+          if ( bound <= 64d0 * epsilon(1d0) * maxval ( abs ( c ) ) ) cycle
+          ratio = bound / blk(bc(l)%b) % yn ( bc(l)%i, bc(l)%j, bc(l)%k )
+          if ( ratio > rmax ) then
+            rmax = ratio
+            worst = [ bc(l)%b, bc(l)%i, bc(l)%j, bc(l)%k ]
+          end if
+        enddo
+        if ( rmax > 0d0 ) then
+          if ( rmax > 1d-2 ) then
+            write(*,'(A,ES10.3,A,I0,A,I0,A,I0,A,I0,A)') ' [WARNING] Wall distance: twisted wall faces, error bound up to ', &
+              rmax, ' of the distance of the cell next to the face (block ', worst(1), ', cell ', worst(2), ' ', worst(3), &
+              ' ', worst(4), '; docs/theory/turbulence.md)'
+          else
+            write(*,'(A,ES10.3,A,I0,A,I0,A,I0,A,I0,A)') '   Wall distance: twisted wall faces, error bound up to ', &
+              rmax, ' of the distance of the cell next to the face (block ', worst(1), ', cell ', worst(2), ' ', worst(3), &
+              ' ', worst(4), ')'
+          end if
+        end if
+
+      end subroutine Report_Twist
+
 
       !> Corners of face Fm of cell (Im, Jm, Km) of a block, in cyclic order around the face.
       function Face_Corners ( blk, Im, Jm, Km, Fm ) result ( corner )

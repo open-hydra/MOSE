@@ -65,7 +65,7 @@ contains
     if (model>1) then
 
       ! Compute wall minimum distance => block%yn
-      call Compute_Yn ( domain % blk(:), domain % bc, domain % nb, domain % nbound ) 
+      call Compute_Yn ( domain % blk(:), domain % bc, domain % nb, domain % nbound, report = domain % mg_level == 1 )
       
       !$omp parallel
       ! Set wall-distance in connected cells

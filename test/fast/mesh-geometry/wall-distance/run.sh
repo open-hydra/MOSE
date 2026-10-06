@@ -18,7 +18,10 @@
 #  only, and a 3-D slab periodic in k by type 200, each with the wall on part
 #  of the period only. On the cells that do not touch the wall, d must equal
 #  the exact distance to the wall of the mesh and its periodic images within
-#  1e-9 (1e-6 for the channel matched to 1e-8).
+#  1e-9 (1e-6 for the channel matched to 1e-8). On a 3-D wall of twisted
+#  faces, where the four triangles of a face are not the face, the run must
+#  report at start-up the largest bound of their gap over the distance of the
+#  cell next to the face; on plane faces it must report nothing.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -85,11 +88,33 @@ for name in corner arc lip periodic pipe sector noisy span; do
   errors+=("$name=$err")
 done
 
+fail=0
 if python3 -B make_case.py check "${errors[@]}"; then
   echo "  [ok  ] exact distance to the wall"
-  echo "WallDistance: all checks passed"
-  exit 0
+else
+  echo "  [FAIL] the distance is not the minimum distance to the wall"
+  fail=1
 fi
-echo "  [FAIL] the distance is not the minimum distance to the wall"
-echo "WallDistance: FAILED"
-exit 1
+
+echo "-- twisted wall faces in 3-D: the start-up report of the error bound --"
+python3 -B make_case.py case twist || exit 1
+"$LOCAL" > OUTPUT/twist.log 2>&1
+if python3 -B make_case.py twist OUTPUT/twist.log; then
+  echo "  [ok  ] reported"
+else
+  echo "  [FAIL] the twist of the wall faces is not reported, or not right (see OUTPUT/twist.log)"
+  fail=1
+fi
+for name in corner arc lip periodic pipe sector noisy span; do
+  if grep -a -q 'twisted wall faces' "OUTPUT/$name.log"; then
+    echo "  [FAIL] $name: a twist reported on plane wall faces"
+    fail=1
+  fi
+done
+
+if [[ $fail -ne 0 ]]; then
+  echo "WallDistance: FAILED"
+  exit 1
+fi
+echo "WallDistance: all checks passed"
+exit 0

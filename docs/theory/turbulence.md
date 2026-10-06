@@ -694,7 +694,11 @@ distance to the corner or the end.
     distance for $t = 0.1$ and $h = 10^{-4}$. On a smooth wall $|\mathbf{T}|$
     falls as the square of the face size, so the error falls with refinement.
     2-D and axisymmetric meshes are not affected: their wall faces are plane,
-    and the four triangles are the face.
+    and the four triangles are the face. At start-up MOSE reports the largest
+    gap bound of the wall faces over the distance of the cell next to the face,
+    $\min(|\mathbf{T}|/16, |\mathbf{T}_n|/2)/y$ with $\mathbf{T}_n$ the part of
+    the twist along the normal of the face (zero on a plane face; the second
+    bound holds on faces convex in that plane), as a warning above 1 %.
 
 Test `MeshGeometry`/`WallDistance`.
 

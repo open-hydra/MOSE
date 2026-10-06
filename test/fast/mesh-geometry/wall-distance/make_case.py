@@ -47,6 +47,13 @@ Usage (from the test directory):
                                                noisy or span
   python3 -B make_case.py error NAME FILE      prints the largest relative error of d read from FILE (a diagnostic.tec)
   python3 -B make_case.py check N1=E1 ...      exit status 0 when the error of every case is below its tolerance
+  python3 -B make_case.py case twist           INPUT/ic.tec and INPUT/bc.txt of the 3-D case with twisted wall faces
+  python3 -B make_case.py twist LOG            exit status 0 when LOG reports the twist of the wall faces of the twist case
+
+The twist case is a 3-D block whose wall, on the j = 1 face, is the surface y = 2 (x - 0.5)(z - 0.5): every wall face is a
+bilinear surface with twist 2 dx dz = 1/32 along y, and the four triangles of a face lie within 1/512 of it. MOSE reports
+at start-up the largest of that bound over the distance of the cell next to the face; it must match the value computed
+here (the distance of that cell to the four triangles of the faces, as MOSE takes it) within 1e-3, the printed precision.
 """
 import math
 import os
@@ -361,6 +368,106 @@ def periodic_error(name, path):
     print(f"{err:.3e} {len(ref)} 0")
 
 
+TWIST = (8, 6, 8)
+
+
+def twist_nodes():
+    """Node coordinates (x, y, z) of the twist case as MOSE reads them, by (i, j, k)."""
+    ni, nj, nk = TWIST
+    out = {}
+    for k in range(nk + 1):
+        for j in range(nj + 1):
+            for i in range(ni + 1):
+                x, z = i / ni, k / nk
+                eta = 1.0e-3 * (1.6 ** j - 1.0) / 0.6
+                out[(i, j, k)] = tuple(float(fmt(v)) for v in (x, 2.0 * (x - 0.5) * (z - 0.5) + eta, z))
+    return out
+
+
+def write_twist_case():
+    ni, nj, nk = TWIST
+    xyz = twist_nodes()
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    nc = ni * nj * nk
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoNuTilde"\n')
+        f.write(f" ZONE  T = B1-IG, I={ni + 1}, J={nj + 1}, K={nk + 1}, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-9]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for c in range(3):
+            for k in range(nk + 1):
+                for j in range(nj + 1):
+                    for i in range(ni + 1):
+                        f.write(f" {fmt(xyz[(i, j, k)][c])}\n")
+        for v in (RHO, 0.0, 0.0, 0.0, P0, RHO * NUT):
+            f.write(f" {fmt(v)}\n" * nc)
+    out = []
+    for k in range(1, nk + 1):
+        for j in range(1, nj + 1):
+            out += ['%9d %7d %7d %7d %7d %7d\n' % (1, 1, j, k, 1, 300), '%9d %7d %7d %7d %7d %7d\n' % (1, ni, j, k, 2, 300)]
+        for i in range(1, ni + 1):
+            out += ['%9d %7d %7d %7d %7d %7d\n' % (1, i, 1, k, 3, 301), WALL_LINE]
+            out += ['%9d %7d %7d %7d %7d %7d\n' % (1, i, nj, k, 4, 300)]
+    for j in range(1, nj + 1):
+        for i in range(1, ni + 1):
+            out += ['%9d %7d %7d %7d %7d %7d\n' % (1, i, j, 1, 5, 300), '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, nk, 6, 300)]
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(out))
+
+
+def twist_expected():
+    """Largest min(|T|/16, |T_n|/2) of the wall faces over the distance of their cell, with the distance MOSE takes:
+    the cell centre to the four triangles between the face centre and its sides, minimum over the wall faces."""
+    ni, nj, nk = TWIST
+    xyz = twist_nodes()
+
+    def sub(u, v):
+        return [u[0] - v[0], u[1] - v[1], u[2] - v[2]]
+
+    def dot(u, v):
+        return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
+
+    def cross(u, v):
+        return [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+
+    faces = {}
+    for k in range(nk):
+        for i in range(ni):
+            faces[(i + 1, k + 1)] = [xyz[(i, 0, k)], xyz[(i + 1, 0, k)], xyz[(i + 1, 0, k + 1)], xyz[(i, 0, k + 1)]]
+
+    def fan(p, c):
+        m = [sum(q[n] for q in c) / 4.0 for n in range(3)]
+        return min(triangle_distance(p, m, c[n], c[(n + 1) % 4]) for n in range(4))
+
+    best = 0.0
+    for (i, k), c in faces.items():
+        t = [c[0][n] - c[1][n] + c[2][n] - c[3][n] for n in range(3)]
+        bound = math.sqrt(dot(t, t)) / 16.0
+        nrm = cross(sub(c[2], c[0]), sub(c[3], c[1]))
+        if all(dot(cross(sub(c[(n + 1) % 4], c[n]), sub(c[(n + 2) % 4], c[(n + 1) % 4])), nrm) > 0.0 for n in range(4)):
+            bound = min(bound, abs(dot(t, nrm)) / (2.0 * math.sqrt(dot(nrm, nrm))))
+        corners = [xyz[(i - 1 + a, b, k - 1 + cc)] for a in (0, 1) for b in (0, 1) for cc in (0, 1)]
+        p = [sum(q[n] for q in corners) / 8.0 for n in range(3)]
+        d = min(fan(p, f) for f in faces.values())
+        best = max(best, bound / d)
+    return best
+
+
+def twist_check(log):
+    want = twist_expected()
+    got = None
+    for line in open(log, errors="replace"):
+        m = re.search(r"twisted wall faces, error bound up to\s+([0-9.Ee+-]+)", line)
+        if m:
+            got = float(m.group(1))
+    if got is None:
+        print(f"    no report of the twist in {log} (expected {want:.3e})")
+        sys.exit(1)
+    print(f"    reported {got:.3e}, expected {want:.3e}")
+    sys.exit(0 if abs(got / want - 1.0) <= 1.0e-3 else 1)
+
+
 def fv1(chi):
     return chi ** 3 / (chi ** 3 + CV1 ** 3)
 
@@ -423,12 +530,16 @@ def check(pairs):
 
 def main():
     what = sys.argv[1]
-    if what == "case":
+    if what == "case" and sys.argv[2] == "twist":
+        write_twist_case()
+    elif what == "case":
         (write_periodic_case if sys.argv[2] in PERIODIC else write_case)(sys.argv[2])
     elif what == "error":
         (periodic_error if sys.argv[2] in PERIODIC else error)(sys.argv[2], sys.argv[3])
     elif what == "check":
         check(sys.argv[2:])
+    elif what == "twist":
+        twist_check(sys.argv[2])
     else:
         sys.exit(f"unknown request {what}")
 
