@@ -344,8 +344,9 @@ contains
 
   !> Metric (J^T)^-1 of face f of cell (i,j,k) of block b, or of the cell itself when f = 0 (kind: which one). The run
   !> stops when the three differences of the stencil do not span the space, |det J^T| <= 1e-12 |D_a x| |D_b x| |D_c x|:
-  !> a collapsed face or cell (around a polar line of a 3-D mesh), or a degenerate cell, where the metric is not defined.
-  !> A declared limit of diffusive-metric = stencil, which inverse-mean does not have.
+  !> a degenerate face or cell, where the metric is not defined. A declared limit of diffusive-metric = stencil, which
+  !> inverse-mean does not have. (A wall on a face of zero area, as on the axis of a 3-D mesh around it, stops before, in
+  !> Wall_Face_Stencils.)
   function Face_Inverse ( JT, b, i, j, k, f, kind ) result ( Mf )
     use MOSE_Lib_Diffusive, only: Inverse3
     use MOSE_Mod_MPI, only: mpi_abort_all
@@ -368,8 +369,8 @@ contains
       else
         write(*,'(A,I0,A,3(1X,I0),A)') ' [ERROR] diffusive-metric = stencil: block ', b, ', cell', i, j, k, ' ('//kind//')'
       end if
-      write(*,'(A)') ' [ERROR]   collapsed face or cell (as around a polar line of a 3-D mesh): the metric of the stencil'
-      write(*,'(A)') ' [ERROR]   is not defined there. The differences of the cell centres it takes:'
+      write(*,'(A)') ' [ERROR]   degenerate face or cell: the metric of the stencil is not defined there. The differences'
+      write(*,'(A)') ' [ERROR]   of the cell centres it takes:'
       do t = 1, 3
         write(*,'(A,I0,A,3(1X,ES14.6))') ' [ERROR]   difference ', t, ':', JT(:,t)
       enddo
@@ -559,7 +560,7 @@ contains
   subroutine Wall_Face_Stencils ( domain, xc )
     use MOSE_Advanced_Types_m
     use MOSE_Lib_Diffusive, only: Inverse3
-    use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Mod_MPI, only: is_local_block, mpi_abort_all
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     type(centres_t), intent(in) :: xc(:)
@@ -594,6 +595,13 @@ contains
           if ( .not. Is_Wall(typ) ) cycle
           c = [domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k]
           call Face_Centre_Normal ( domain % blk(b) % node, c(1), c(2), c(3), f, xf, nf )
+          if ( .not. ( norm2(nf) > 0d0 ) ) then
+            ! a wall on a face of zero area (an axis): along the axis the centres of its neighbours coincide
+            write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] diffusive-metric = stencil: block ', b, ', cell', c, ', face ', &
+                                                  f, ' (wall): a wall on a face of zero area (an axis).'
+            write(*,'(A)') ' [ERROR]   Its gradient is not defined there: use the symmetry condition (300) on the axis.'
+            call mpi_abort_all ( 'wall on a face of zero area (see above)' )
+          end if
           Ac = Inverse3 ( domain % blk(b) % M(c(1),c(2),c(3)) % c )        ! columns: the edges of the cell
           JT = 0d0
           JT(:,dir) = Modfm3_Of(f) * ( xc(b) % x(:,c(1),c(2),c(3)) - xf )

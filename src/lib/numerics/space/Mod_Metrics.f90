@@ -63,6 +63,9 @@ contains
       call Compute_Norm_Area ( domain % blk(b) )
     enddo
 
+    ! A viscous run on the 2-D axisymmetric wedge stops when the axis is exactly at r = 0 (Check_Wedge_Axis)
+    if ( model > 0 ) call Check_Wedge_Axis ( domain )
+
     if (model>1) then
 
       ! Compute wall minimum distance => block%yn
@@ -156,5 +159,41 @@ contains
     if ( obj_space_scheme % stencil_metric .and. model > 0 ) call Setup_Stencil_Metrics ( domain )
 
   end subroutine Setup_Metrics
+
+
+  !> A viscous run on the 2-D axisymmetric wedge (type 200 on the k faces, one cell in k) stops at setup when a boundary
+  !> face has zero area, that is when the axis is exactly at r = 0, with every diffusive-metric. The faces of the wedge
+  !> (BC_Rotational_Periodic_Visc) take the derivative in r across the axis with the ghost cell one cell away, but behind a
+  !> face of zero area the ghost cell is a copy of the cell (Ghost_Symmetry with a zero normal): they see half of
+  !> d u_r/dr, and the hoop stress of the first row of cells is wrong (by 1/6 of it in a Homann flow). The meshes of MOSE
+  !> put the axis nodes at a small radius, 1e-6 of the radial size of the first cell.
+  subroutine Check_Wedge_Axis ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m, only: ndir
+    use MOSE_Lib_Metrics, only: delthe
+    use MOSE_Lib_BC_Fluxes, only: Face_Index
+    use MOSE_Mod_MPI, only: is_local_block, mpi_abort_all
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    ! Local
+    integer :: r, b, dir, fi, fj, fk
+
+    ! Not a wedge: the same test as BC_Rotational_Periodic_Visc (delthe exactly zero, as two ordered comparisons)
+    if ( ndir == 3 .or. ( delthe >= 0d0 .and. delthe <= 0d0 ) ) return
+    do r = 1, domain % nbound
+      b = domain % bc(r) % b
+      if ( .not. is_local_block(b) ) cycle
+      call Face_Index ( domain % bc(r) % f, dir, domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k, fi, fj, fk )
+      if ( domain % blk(b) % dir(dir) % f(fi,fj,fk) % a > 0d0 ) cycle
+      write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] block ', b, ', cell', domain % bc(r) % i, domain % bc(r) % j, &
+                                            domain % bc(r) % k, ', face ', domain % bc(r) % f, &
+                                            ': a face of zero area on the 2-D axisymmetric wedge (type 200):'
+      write(*,'(A)') ' [ERROR]   the axis is exactly at r = 0, and the hoop stress of the first row of cells would be wrong'
+      write(*,'(A)') ' [ERROR]   (by 1/6 of it in a Homann flow). Put the axis nodes at a small radius, 1e-6 of the radial'
+      write(*,'(A)') ' [ERROR]   size of the first cell, as the meshes of MOSE do.'
+      call mpi_abort_all ( 'axis of the 2-D axisymmetric wedge at r = 0 (see above)' )
+    enddo
+
+  end subroutine Check_Wedge_Axis
 
 end module MOSE_Mod_Metrics

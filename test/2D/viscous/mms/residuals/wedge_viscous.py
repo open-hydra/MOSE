@@ -53,22 +53,21 @@ viscous flux), with errors over the largest exact force of the same component:
   swirl   radial and azimuthal  error below 0.02 on N = 64 and observed order above 1.5 on the cells with r >= L/2 (next to
                   the axis the error of these cubic fields is of first order in the mesh);
           axial   below 1e-9 (exact for a quadratic u_x; the tau_xtheta of the two faces cancel).
-Axis at r = 0 (homann, N = 32): the faces on the axis have zero area, no normal and no viscous flux, and their ghost cells
-copy the cells. The viscous force must be that of the mesh with the axis at 1e-6 dr: their largest difference, over the
-largest exact force of the same component, below 1e-5 (the meshes differ by 1e-6 dr at the axis; on the radial velocity
-a r f', linear in r, and the axial one, constant in r, the derivatives across the axis are exact with both ghost cells,
-the mirror image and the copy of the cell), apart from the radial force of the first row. There the faces of the wedge
-(BC_Rotational_Periodic_Visc, with every diffusive-metric) take the derivative in r across the axis with the ghost cell
-one cell away, which on an axis of zero area is a copy of the cell: half of d u_r/dr, and lambda div(u) in tau_thetatheta
-wrong by mu a f'/3, 1/6 of the hoop term 2 mu a f'/r. That difference is printed, not checked: MOSE's meshes put the
-axis at a small radius.
+Axis at r = 0 on the wedge (homann, N = 32, option axis0): the faces on the axis have zero area and no normal, and their
+ghost cells copy the cells. The faces of the wedge (BC_Rotational_Periodic_Visc) take the derivative in r across the axis
+with the ghost cell one cell away: there they would see half of d u_r/dr, and the hoop stress of the first row would be
+wrong (lambda div(u) in tau_thetatheta by mu a f'/3, 1/6 of the hoop term 2 mu a f'/r). A viscous run must stop at setup
+with the message on the axis at r = 0, with diffusive-metric = stencil and inverse-mean, without NaN before it.
 Polar line of a 3-D mesh (python3 -B wedge_viscous.py polar AXIS): the same box in x and r, 360 degrees around the axis in 8
-cells closed by a face between the block and itself (101), the axis nodes at r = 0, air at rest, faces 400 on i = 1,
-i = N and j = N and of type AXIS on the axis (j = 1):
-  300  symmetry: the faces on the axis have zero area, as in the wedge; the Navier-Stokes step must complete;
-  302  wall at 300 K: along the axis the centres of the wall faces coincide, so the differences of the wall gradient
-       around it are zero and its metric is not defined. The run must stop at setup with the message that names the
-       block, the cell and the face (a declared limit; diffusive-metric = inverse-mean runs there), without NaN before.
+cells closed by a face between the block and itself (101), 5 x 4 cells in x and r, the axis nodes at r = 0, a linear
+velocity U + G x with every entry of G (G_POLAR) at the cell centres, faces 400 on i = 1, i = N and j = N and of type
+AXIS on the axis (j = 1):
+  300  symmetry: the faces on the axis have zero area, and their ghost cells copy the cells, which the stencil metric
+       places at the cell: the viscous force of the cells with no face 400, the first row next to the axis included, must
+       vanish to round-off, below 1e-11 of mu |G| (sum of the face areas)/volume, as for any linear field;
+  302  wall at 300 K: a wall on faces of zero area, whose gradient is not defined. The run must stop at setup with the
+       message that names the block, the cell and the face and says to use the symmetry condition (300) on the axis,
+       without NaN before it.
 
 Usage (from the test directory), FIELD = homann or swirl:
   python3 -B wedge_viscous.py case FIELD N [axis0]            INPUT/ic.tec and INPUT/bc.txt (axis0: axis nodes at r = 0)
@@ -78,12 +77,13 @@ Usage (from the test directory), FIELD = homann or swirl:
                                                            azimuthal on r >= L/2, axial
   python3 -B wedge_viscous.py check FIELD E32 E64              exit status 0 when the errors on N = 32 and N = 64 pass
                                                            (E32, E64: the five numbers printed by 'error')
+  python3 -B wedge_viscous.py axisstop LOG                     exit status 0 when the run of LOG stopped at setup with the message
+                                                           on the axis at r = 0 of the wedge, without NaN or trap
   python3 -B wedge_viscous.py polar AXIS                       INPUT/ic.tec and INPUT/bc.txt of the polar mesh (AXIS: 300 or 302)
+  python3 -B wedge_viscous.py linear NS_FILE EU_FILE           exit status 0 when the viscous force of the linear field on the
+                                                           polar mesh vanishes (300 on the axis)
   python3 -B wedge_viscous.py stopped LOG                      exit status 0 when the run of LOG stopped at setup with the message
-                                                           on the collapsed wall faces of the axis, without NaN or trap
-  python3 -B wedge_viscous.py axis FIELD NS0 EU0 NS EU        largest difference of the viscous force between the mesh with the
-                                                           axis at r = 0 (NS0, EU0) and the one at 1e-6 dr (NS, EU); exit
-                                                           status 0 when it is below 1e-5
+                                                           on the wall faces of zero area on the axis, without NaN or trap
 """
 import math
 import os
@@ -193,16 +193,46 @@ def write_case(field, n, axis0=False):
         out.write("".join(rows))
 
 
-POLAR_N = (4, 3, 8)                 # polar mesh: cells along x, r and around the axis
+POLAR_N = (5, 4, 8)                 # polar mesh: cells along x, r and around the axis
+U_POLAR = (10.0, -3.0, 2.0)          # polar mesh: u = U_POLAR + G_POLAR x, a linear field with every gradient entry, m/s
+G_POLAR = ((1.0e3, 1.2e3, -0.7e3), (0.5e3, 2.0e3, 0.9e3), (-1.1e3, 0.4e3, -1.5e3))   # 1/s
+
+
+def polar_nodes():
+    """Nodes of the polar mesh, X[k][j][i] = (x, y, z): the axis row at r = 0, the last plane around the axis the first one."""
+    ni, nj, nk = POLAR_N
+    dx, dr = SIZE / ni, SIZE / nj
+    nodes = []
+    for k in range(nk + 1):
+        theta = 2.0 * math.pi * (k % nk) / nk
+        nodes.append([[(i * dx, j * dr * math.cos(theta), j * dr * math.sin(theta)) for i in range(ni + 1)]
+                      for j in range(nj + 1)])
+    return nodes
+
+
+def polar_cell(nodes, i, j, k):
+    """The eight nodes of cell (i, j, k) (0-based), in the order of their offsets (di, dj, dk)."""
+    return [nodes[k + c][j + b][i + a] for c in (0, 1) for b in (0, 1) for a in (0, 1)]
+
+
+def polar_velocity(xc):
+    return tuple(U_POLAR[m] + sum(G_POLAR[m][n] * xc[n] for n in range(3)) for m in range(3))
 
 
 def write_polar(axis_type):
-    """The 3-D mesh around the axis (see the module docstring): air at rest, axis faces of type axis_type."""
+    """The 3-D mesh around the axis (see the module docstring): the linear velocity U_POLAR + G_POLAR x at the cell
+    centres (the mean of the eight nodes, as MOSE takes them), axis faces of type axis_type."""
     ni, nj, nk = POLAR_N
-    dx, dr = SIZE / ni, SIZE / nj
+    nodes = polar_nodes()
     for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
         if os.path.lexists(p):
             os.remove(p)
+    vel = []
+    for k in range(nk):
+        for j in range(nj):
+            for i in range(ni):
+                cell = polar_cell(nodes, i, j, k)
+                vel.append(polar_velocity([sum(p[n] for p in cell) / 8.0 for n in range(3)]))
     nc = ni * nj * nk
     with open("INPUT/ic.tec", "w") as out:
         out.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
@@ -210,12 +240,10 @@ def write_polar(axis_type):
                   "VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED), SOLUTIONTIME=0.0\n")
         for comp in range(3):
             for k in range(nk + 1):
-                theta = 2.0 * math.pi * (k % nk) / nk        # the last plane is the first one, to the bit
                 for j in range(nj + 1):
                     for i in range(ni + 1):
-                        val = (i * dx, j * dr * math.cos(theta), j * dr * math.sin(theta))[comp]
-                        out.write(f" {val:.16E}\n")
-        for col in ([RHO0] * nc, [0.0] * nc, [0.0] * nc, [0.0] * nc, [P0] * nc):
+                        out.write(f" {nodes[k][j][i][comp]:.16E}\n")
+        for col in ([RHO0] * nc, [v[0] for v in vel], [v[1] for v in vel], [v[2] for v in vel], [P0] * nc):
             out.write("".join(f" {x:.16E}\n" for x in col))
 
     def rec(i, j, k, face, t):
@@ -241,16 +269,79 @@ def write_polar(axis_type):
         out.write("".join(rows))
 
 
+def polar_scale(nodes, i, j, k):
+    """mu |G| (sum of the face areas)/volume of cell (i, j, k): the size of the viscous force of one face. Faces: the
+    area vector is half the cross product of the diagonals, the centre the mean of the four nodes; the volume is
+    (1/3) sum over the faces of centre . area vector, with the area vectors outwards."""
+    n = polar_cell(nodes, i, j, k)
+
+    def sub(a, b):
+        return tuple(a[m] - b[m] for m in range(3))
+
+    def cross(a, b):
+        return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+    faces = [(0, 2, 6, 4), (1, 5, 7, 3), (0, 4, 5, 1), (2, 3, 7, 6), (0, 1, 3, 2), (4, 6, 7, 5)]   # outward, right hand
+    total, vol = 0.0, 0.0
+    for f in faces:
+        p = [n[q] for q in f]
+        av = tuple(0.5 * c for c in cross(sub(p[2], p[0]), sub(p[3], p[1])))
+        xc = [sum(q[m] for q in p) / 4.0 for m in range(3)]
+        total += math.sqrt(sum(c * c for c in av))
+        vol += sum(xc[m] * av[m] for m in range(3)) / 3.0
+    gnorm = math.sqrt(sum(G_POLAR[m][n] ** 2 for m in range(3) for n in range(3)))
+    return MU * gnorm * total / abs(vol)
+
+
+def polar_linear(ns_path, eu_path):
+    """The linear field on the polar mesh with symmetry on the axis: the viscous force (momentum) of the cells with no
+    face 400 must vanish, below 1e-11 of polar_scale, the first row next to the axis included."""
+    ns, n = read_zone(ns_path)
+    eu, _ = read_zone(eu_path)
+    ni, nj, nk = POLAR_N
+    nodes = polar_nodes()
+    worst, worst_row1 = 0.0, 0.0
+    for k in range(nk):
+        for j in range(nj - 1):
+            for i in range(1, ni - 1):
+                q = (k * nj + j) * ni + i
+                e = max(abs(c) for c in viscous_rhs(ns, eu, q)) / polar_scale(nodes, i, j, k)
+                worst = max(worst, e)
+                if j == 0:
+                    worst_row1 = max(worst_row1, e)
+    print(f"    linear velocity on the polar mesh, symmetry on the axis: largest |viscous force| / scale {worst:.3e}, "
+          f"on the first row next to the axis {worst_row1:.3e}")
+    sys.exit(0 if worst <= 1.0e-11 else 1)
+
+
+def clean_stop(text):
+    """The run aborted (mpi_abort_all) with no NaN and no floating-point trap before it."""
+    return "ABORT:" in text and not re.search(r"NaN|Floating-point exception|SIGFPE|Program received signal", text)
+
+
 def stopped(log):
-    """The run stopped at setup with the message on a collapsed wall face of the axis (block 1, a cell of the first row,
-    face 3), with no NaN and no floating-point trap before it."""
+    """The run stopped at setup with the message on a wall face of zero area on the axis (block 1, a cell of the first
+    row, face 3) and the remedy, with no NaN and no floating-point trap before it."""
     text = open(log, errors="replace").read()
-    head = re.search(r"\[ERROR\] diffusive-metric = stencil: block 1, cell +(\d+) +1 +(\d+), face 3 \(wall\)", text)
-    collapsed = "collapsed face or cell" in text and "diffusive-metric = inverse-mean does not" in text
-    clean = "ABORT:" in text and not re.search(r"NaN|Floating-point exception|SIGFPE|Program received signal", text)
-    print(f"    message on a wall face of the axis: {'yes' if head else 'no'}; collapsed face and remedy named: "
-          f"{'yes' if collapsed else 'no'}; clean stop without NaN or trap: {'yes' if clean else 'no'}")
-    sys.exit(0 if head and collapsed and clean else 1)
+    head = re.search(r"\[ERROR\] diffusive-metric = stencil: block 1, cell +(\d+) +1 +(\d+), face 3 \(wall\): a wall on a "
+                     r"face of zero area", text)
+    remedy = "use the symmetry condition (300) on the axis" in text
+    clean = clean_stop(text)
+    print(f"    message on a wall face of the axis: {'yes' if head else 'no'}; remedy named: {'yes' if remedy else 'no'}; "
+          f"clean stop without NaN or trap: {'yes' if clean else 'no'}")
+    sys.exit(0 if head and remedy and clean else 1)
+
+
+def axis_stop(log):
+    """The viscous run on the wedge with the axis at r = 0 stopped at setup with the message on the axis (block 1, a cell
+    of the first row, face 3), with no NaN and no floating-point trap before it."""
+    text = open(log, errors="replace").read()
+    head = re.search(r"\[ERROR\] block 1, cell +(\d+) +1 +1, face 3: a face of zero area on the 2-D axisymmetric wedge", text)
+    remedy = "the axis is exactly at r = 0" in text and "Put the axis nodes at a small radius" in text
+    clean = clean_stop(text)
+    print(f"    message on the axis at r = 0: {'yes' if head else 'no'}; remedy named: {'yes' if remedy else 'no'}; "
+          f"clean stop without NaN or trap: {'yes' if clean else 'no'}")
+    sys.exit(0 if head and remedy and clean else 1)
 
 
 def read_zone(path):
@@ -334,58 +425,6 @@ def errors_swirl(ns_path, eu_path):
     return err[1] / fmax[1], err_far[1] / fmax[1], err[2] / fmax[2], err_far[2] / fmax[2], err[0] / fmax[0]
 
 
-def largest_exact(field, n):
-    """Largest exact viscous force of each component over the cells, axial, radial, azimuthal (homann: the radial one for
-    the azimuthal, which is zero), on the mesh with the axis at 1e-6 dr."""
-    rn = radii(n)
-    dx = SIZE / n
-    f = homann(n) if field == "homann" else None
-    fmax = [0.0, 0.0, 0.0]
-    for j in range(n):
-        rc = 0.5 * (rn[j] + rn[j + 1])
-        for i in range(n):
-            if field == "homann":
-                fex = (-2.0 * RHO0 * A * math.sqrt(A * NU) * f[i][2], RHO0 * A * A * rc * f[i][3], 0.0)
-            else:
-                fex = swirl_force((i + 0.5) * dx, rc)
-            for k in range(3):
-                fmax[k] = max(fmax[k], abs(fex[k]))
-    if field == "homann":
-        fmax[2] = fmax[1]
-    return fmax
-
-
-def axis_difference(ns0_path, eu0_path, ns_path, eu_path):
-    """Homann: largest difference of the viscous right-hand side between the mesh with the axis at r = 0 (ns0, eu0) and
-    the one with the axis at 1e-6 dr (ns, eu), on the cells of the checks, over the largest exact force of the same
-    component: (difference, row of the cell) for the axial, radial (rows 2 and above) and azimuthal components; and the
-    largest radial difference on the first row over the hoop term 2 mu a f'/r."""
-    ns0, n = read_zone(ns0_path)
-    eu0, n0 = read_zone(eu0_path)
-    ns, n1 = read_zone(ns_path)
-    eu, n2 = read_zone(eu_path)
-    assert n == n0 == n1 == n2
-    fmax = largest_exact("homann", n)
-    rn = radii(n)
-    f = homann(n)
-    worst = [(0.0, 0), (0.0, 0), (0.0, 0)]
-    first_row = 0.0
-    for j in range(n - 1):
-        rc = 0.5 * (rn[j] + rn[j + 1])
-        for i in range(1, n - 1):
-            q = j * n + i
-            a = viscous_rhs(ns0, eu0, q)
-            b = viscous_rhs(ns, eu, q)
-            for k in range(3):
-                if k == 1 and j == 0:
-                    first_row = max(first_row, abs(a[1] - b[1]) / (2.0 * MU * A * f[i][1] / rc))
-                    continue
-                d = abs(a[k] - b[k]) / fmax[k]
-                if d > worst[k][0]:
-                    worst[k] = (d, j + 1)
-    return worst, first_row
-
-
 def order(e32, e64):
     return math.log2(e32 / e64) if e32 > 0 and e64 > 0 else float("nan")
 
@@ -433,6 +472,10 @@ def main():
         return
     if what == "stopped":
         stopped(sys.argv[2])
+    if what == "axisstop":
+        axis_stop(sys.argv[2])
+    if what == "linear":
+        polar_linear(sys.argv[2], sys.argv[3])
     field = sys.argv[2] if len(sys.argv) > 2 else ""
     if field not in FIELDS:
         sys.exit(f"unknown field {field}: use one of {', '.join(FIELDS)}")
@@ -446,16 +489,6 @@ def main():
         a64 = [float(v) for v in sys.argv[4].split(",")]
         ok = (check_homann if field == "homann" else check_swirl)(a32, a64)
         sys.exit(0 if ok else 1)
-    elif what == "axis":
-        if field != "homann":
-            sys.exit("axis: homann only")
-        worst, first_row = axis_difference(*sys.argv[3:7])
-        names = ("axial", "radial (rows 2 and above)", "azimuthal")
-        print("    axis at r = 0 against the axis at 1e-6 dr, largest difference of the viscous force over the largest exact "
-              "force: " + ", ".join(f"{nm} {d:.3e} (row {j})" for nm, (d, j) in zip(names, worst)))
-        print(f"    radial force of the first row, difference over the hoop term: {first_row:.3e} (not checked: the faces of "
-              "the wedge take d u_r/dr across the axis at half its value there, 1/6 of the hoop term)")
-        sys.exit(0 if max(d for d, _ in worst) < 1.0e-5 else 1)
     else:
         sys.exit(f"unknown request {what}")
 

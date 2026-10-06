@@ -57,13 +57,14 @@
 #     next to the axis it must match the hoop stress 2 mu u_r/r^2) and axial
 #     components, the azimuthal one staying zero; swirl, the radial and
 #     azimuthal components on the cells with r >= L/2, the axial one exact.
-#     Axis at r = 0: the faces on the axis have zero area; on homann, N = 32,
-#     the viscous force must be that of the mesh with the axis at 1e-6 dr
-#     (1e-5). Polar line of a 3-D mesh (360 degrees around the axis): with
-#     symmetry on the axis the Navier-Stokes step completes; with a wall on the
-#     axis the metric of the wall gradient is not defined, and the run must
-#     stop at setup with the message that names the face (a declared limit),
-#     without NaN before it.
+#     Axis at r = 0 on the wedge: the faces of the wedge would get the hoop
+#     stress of the first row wrong, so a viscous run must stop at setup and
+#     say why, with diffusive-metric = stencil and inverse-mean. Polar line of
+#     a 3-D mesh (360 degrees around the axis, axis at r = 0): with symmetry on
+#     the axis the viscous force of a linear velocity field must vanish to
+#     round-off, next to the axis too; with a wall on the axis the run must
+#     stop at setup with the message that names the face and the remedy
+#     (symmetry on the axis), without NaN before it.
 #  5. Spalart-Allmaras next to a wall (wall_gradient.py): a column of fluid
 #     at rest over an isothermal wall with nu~ = a y, chi below 1e-3: the
 #     linear profile is an equilibrium of the Spalart-Allmaras equation
@@ -254,7 +255,7 @@ for kind in rest stream; do
   fi
 done
 
-# wedge_ini <equations>: one explicit Euler step with local time stepping
+# wedge_ini <equations> [diffusive-metric]: one explicit Euler step with local time stepping
 wedge_ini() {
   cat > input.ini <<EOF
 [MOSE-Parameters]
@@ -276,6 +277,7 @@ space-reconstruction = MUSCL
 flux-limiter = vanleer
 riemann-solver = HLLC
 EOF
+  if [[ -n ${2:-} ]]; then echo "diffusive-metric = $2" >> input.ini; fi
 }
 
 # wedge_step <equations> <tag>: run it, keep OUTPUT/diagnostic.tec as OUTPUT/diagnostic-<tag>.tec
@@ -315,22 +317,30 @@ for field in homann swirl; do
   fi
 done
 
-echo "-- the axis at r = 0: faces of zero area on the axis of the wedge (homann, N = 32) --"
+echo "-- the axis at r = 0 on the wedge (homann, N = 32): a declared stop of the viscous runs --"
 python3 -B wedge_viscous.py case homann 32 axis0 || exit 1
-wedge_step navier-stokes homann-ns-n32-axis0
-wedge_step euler homann-eu-n32-axis0
-if python3 -B wedge_viscous.py axis homann OUTPUT/diagnostic-homann-ns-n32-axis0.tec OUTPUT/diagnostic-homann-eu-n32-axis0.tec \
-     OUTPUT/diagnostic-homann-ns-n32.tec OUTPUT/diagnostic-homann-eu-n32.tec; then
-  echo "  [ok  ] the viscous force is that of the mesh with the axis at 1e-6 dr"
+for metric in stencil inverse-mean; do
+  wedge_ini navier-stokes "$metric"
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/axis0-$metric.log" 2>&1
+  if python3 -B wedge_viscous.py axisstop "OUTPUT/axis0-$metric.log"; then
+    echo "  [ok  ] $metric: the run stops at setup and says why"
+  else
+    echo "  [FAIL] $metric: no stop with the message on the axis at r = 0 (see OUTPUT/axis0-$metric.log)"
+    fail=1
+  fi
+done
+
+echo "-- polar line of a 3-D mesh, symmetry on the axis: a linear velocity field --"
+python3 -B wedge_viscous.py polar 300 || exit 1
+wedge_step navier-stokes polar-300-ns
+wedge_step euler polar-300-eu
+if python3 -B wedge_viscous.py linear OUTPUT/diagnostic-polar-300-ns.tec OUTPUT/diagnostic-polar-300-eu.tec; then
+  echo "  [ok  ] no viscous force, next to the axis too"
 else
-  echo "  [FAIL] the viscous force changes when the faces on the axis have zero area"
+  echo "  [FAIL] the viscous force of a linear field does not vanish on the polar mesh"
   fail=1
 fi
-
-echo "-- polar line of a 3-D mesh, symmetry on the axis --"
-python3 -B wedge_viscous.py polar 300 || exit 1
-wedge_step navier-stokes polar-300
-echo "  [ok  ] the Navier-Stokes step completes"
 
 echo "-- polar line of a 3-D mesh, wall on the axis: a declared limit of the stencil metric --"
 python3 -B wedge_viscous.py polar 302 || exit 1
@@ -338,9 +348,9 @@ wedge_ini navier-stokes
 rm -f OUTPUT/diagnostic.tec
 "$LOCAL" > OUTPUT/polar-302.log 2>&1
 if python3 -B wedge_viscous.py stopped OUTPUT/polar-302.log; then
-  echo "  [ok  ] the run stops at setup and names the face"
+  echo "  [ok  ] the run stops at setup, names the face and the remedy"
 else
-  echo "  [FAIL] the run does not stop with the message on the collapsed wall faces (see OUTPUT/polar-302.log)"
+  echo "  [FAIL] the run does not stop with the message on the wall faces of the axis (see OUTPUT/polar-302.log)"
   fail=1
 fi
 
