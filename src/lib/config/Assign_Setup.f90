@@ -65,6 +65,7 @@ contains
     end if
     ! Implicit residual smoothing
     if (obj_irs%beta>0d0) obj_irs%enabled = .true.
+    obj_irs%at_setup = obj_irs%enabled
     ! Preconditioning
     if ( trim(obj_time_scheme%integration_variables) == 'prec' ) then
       obj_prec%enabled = .true.

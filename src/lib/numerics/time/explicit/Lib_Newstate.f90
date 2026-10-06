@@ -5,6 +5,13 @@ module MOSE_Lib_Newstate
   private
   public :: Newstate_Conservative, Newstate_Primitive
 
+  !> IRS positivity fallbacks of this rank (cell updates that took their own residual), reported and
+  !> reset by MOSE_postprocess every shell-diter iterations.
+  integer, public :: irs_fallbacks = 0
+
+  real(R8), parameter :: IRS_SPECIES_TOL = 1d-6   ! partial density down to -tol * rho: left to the floor
+  integer,  parameter :: IRS_HALVINGS    = 10     ! own update halved down to 2**-10, then not applied
+
 contains
 
   ! ===========================================================================
@@ -52,6 +59,7 @@ contains
           call Scale_Residual_Cons( domain%blk(b)%r(:,i,j,k),      &
                                     domain%blk(b)%dtlocal(i,j,k),  &
                                     domain%blk(b)%vol(i,j,k), strangcoeff )
+          domain%blk(b)%rs0(:,i,j,k) = domain%blk(b)%r(:,i,j,k)      ! the cell's own update, kept
         enddo; enddo; enddo
         !$omp end do
       enddo
@@ -69,6 +77,7 @@ contains
           call Update_State_Cons_IRS( domain%blk(b)%P(:,i,j,k),   &
                                       domain%blk(b)%PO(:,i,j,k),  &
                                       domain%blk(b)%r(:,i,j,k),   &
+                                      domain%blk(b)%rs0(:,i,j,k), &
                                       irk, n_rk, b, i, j, k )
         enddo; enddo; enddo
         !$omp end do
@@ -105,13 +114,20 @@ contains
       residual = -residual / volume * dt * strangcoeff
     end subroutine Scale_Residual_Cons
 
-    ! Apply RK stage + cons2prim after IRS smoothing
-    subroutine Update_State_Cons_IRS( prim, primold, residual, irk, n_rk, b, i, j, k )
+    ! Apply RK stage + cons2prim after IRS smoothing.
+    ! Positivity: the smoothed update of a cell mixes its neighbours' updates. In a nearly empty cell
+    ! next to dense ones (a jet expanding into still gas, at a start or after a prolongation) it can
+    ! take more of a species, or more energy, than the cell holds. If the new state is not admissible
+    ! (Admissible_State), the cell takes its own update (residual_own, the scaled residual before
+    ! smoothing), halved until it is; with no update at all the stage is a convex combination of
+    ! admissible states, which is admissible. An admissible smoothed update is used as before.
+    subroutine Update_State_Cons_IRS( prim, primold, residual, residual_own, irk, n_rk, b, i, j, k )
       implicit none
       real(R8), intent(inout) :: prim(nprim), residual(nprim)
-      real(R8), intent(in)    :: primold(nprim)
+      real(R8), intent(in)    :: primold(nprim), residual_own(nprim)
       integer,  intent(in)    :: irk, n_rk, b, i, j, k
-      real(R8) :: rho, Rgas, temperature, consold(nprim), cons(nprim)
+      real(R8) :: rho, Rgas, temperature, consold(nprim), cons(nprim), prim_new(nprim), theta
+      integer  :: n
 
       consold(1:np) = prim2cons( primold(1:np) )
       cons   (1:np) = prim2cons( prim   (1:np) )
@@ -120,15 +136,26 @@ contains
         cons   (np+1:nprim) = prim   (np+1:nprim)
       endif
 
-      cons = RK_stage( irk, n_rk, cons, consold, residual )
-
       ! Reuse current prim pressure/density for temperature guess (cheap)
       call co_rotot_Rtot( prim(1:nsc), rho, Rgas )
       temperature = prim(np) / ( rho * Rgas )
 
-      prim(1:np) = cons2prim( cons(1:np), temperature )
-      if (nprim > np) prim(np+1:nprim) = cons(np+1:nprim)
+      call Stage_To_Prim( irk, n_rk, cons, consold, residual, temperature, prim_new )
 
+      if ( .not. Admissible_State( prim_new ) ) then
+        !$omp atomic
+        irs_fallbacks = irs_fallbacks + 1
+        theta = 1d0
+        do n = 0, IRS_HALVINGS
+          call Stage_To_Prim( irk, n_rk, cons, consold, theta * residual_own, temperature, prim_new )
+          if ( Admissible_State( prim_new ) ) exit
+          theta = 0.5d0 * theta
+        enddo
+        if ( .not. Admissible_State( prim_new ) ) &
+          call Stage_To_Prim( irk, n_rk, cons, consold, 0d0 * residual_own, temperature, prim_new )
+      endif
+
+      prim = prim_new
       call check_and_fix_state( prim, b, i, j, k )
 
     end subroutine Update_State_Cons_IRS
@@ -489,6 +516,42 @@ contains
     endif
 
   end subroutine Check_And_Fix_State
+
+
+  ! RK stage with the given (scaled) residual, as primitives: the update of Update_State_Cons_IRS.
+  subroutine Stage_To_Prim ( irk, n_rk, cons, consold, residual, temperature, prim )
+    use MOSE_Global_m
+    use FLINT_Lib_Thermodynamic
+    use MOSE_Lib_RK
+    implicit none
+    integer,  intent(in)  :: irk, n_rk
+    real(R8), intent(in)  :: cons(nprim), consold(nprim), residual(nprim), temperature
+    real(R8), intent(out) :: prim(nprim)
+    real(R8) :: new(nprim)
+
+    new = RK_stage( irk, n_rk, cons, consold, residual )
+    prim(1:np) = cons2prim( new(1:np), temperature )
+    if (nprim > np) prim(np+1:nprim) = new(np+1:nprim)
+
+  end subroutine Stage_To_Prim
+
+
+  ! A state the update may produce: finite, positive density and pressure, and no partial density
+  ! below -IRS_SPECIES_TOL times the density (smaller negatives are floored by Check_And_Fix_State).
+  logical function Admissible_State ( prim )
+    use MOSE_Global_m
+    implicit none
+    real(R8), intent(in) :: prim(nprim)
+    real(R8) :: rho
+
+    Admissible_State = .false.
+    if ( any( isnan(prim(1:nprim)) ) ) return
+    rho = sum( prim(1:nsc) )
+    if ( rho <= 0d0 .or. prim(np) <= 0d0 ) return
+    if ( any( prim(1:nsc) < -IRS_SPECIES_TOL * rho ) ) return
+    Admissible_State = .true.
+
+  end function Admissible_State
 
 
 end module MOSE_Lib_Newstate

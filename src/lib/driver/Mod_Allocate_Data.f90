@@ -241,7 +241,7 @@ contains
 
     ! Temp storage for residuals in IRS
     if ( obj_irs%enabled ) then
-      allocate( blk % RS1, blk % RS2, mold = blk % R )
+      allocate( blk % RS0, blk % RS1, blk % RS2, mold = blk % R )
     end if
 
     call First_Touch_Block( blk )
@@ -317,6 +317,7 @@ contains
       !$omp do collapse(2) schedule(static)
       do k = lbound(blk%RS1,4), ubound(blk%RS1,4)
         do j = lbound(blk%RS1,3), ubound(blk%RS1,3)
+          blk % RS0(:,:,j,k) = 0.0d0
           blk % RS1(:,:,j,k) = 0.0d0
           blk % RS2(:,:,j,k) = 0.0d0
         end do
@@ -431,6 +432,7 @@ contains
       ! Computation arrays — free on all ranks
       if (allocated(domain%blk(b)%PO))           deallocate(domain%blk(b)%PO)
       if (allocated(domain%blk(b)%R))            deallocate(domain%blk(b)%R)
+      if (allocated(domain%blk(b)%RS0))          deallocate(domain%blk(b)%RS0)
       if (allocated(domain%blk(b)%RS1))          deallocate(domain%blk(b)%RS1)
       if (allocated(domain%blk(b)%RS2))          deallocate(domain%blk(b)%RS2)
       if (allocated(domain%blk(b)%dtlocal))      deallocate(domain%blk(b)%dtlocal)

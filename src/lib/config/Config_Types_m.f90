@@ -120,6 +120,7 @@ module MOSE_Config_Types_m
     character(len=llen) :: variables   ! flow (species, momentum, energy) or all (also RANS, soot, passive scalars)
     ! Useful variables
     logical   :: enabled
+    logical   :: at_setup = .false.            ! IRS on at setup: only then are its arrays allocated
   end type irs_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------

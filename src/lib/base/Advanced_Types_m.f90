@@ -45,6 +45,7 @@ module MOSE_Advanced_Types_m
     real(R8), dimension(:,:,:,:), allocatable :: P, PO                 ! Primitive variables at time n and n-1: { rho(s) vel p rho*r }, r generic RANS variable
     real(R8), dimension(:,:,:,:), allocatable :: R                     ! Residuals
     real(R8), dimension(:,:,:,:), allocatable :: RS1, RS2              ! Implicit smoothing residuals (temporary storage)
+    real(R8), dimension(:,:,:,:), allocatable :: RS0                   ! IRS: the scaled residual before smoothing (positivity fallback)
     real(R8), dimension(:,:,:), allocatable   :: dtlocal               ! Local time step
     real(R8), dimension(:,:,:), allocatable   :: beta                  ! Shock detector flag
     real(R8), dimension(:,:,:), allocatable   :: Ur                    ! Preconditioning reference velocity

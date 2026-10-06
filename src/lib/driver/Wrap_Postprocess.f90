@@ -6,6 +6,7 @@ module MOSE_Wrap_Postprocess
   public :: MOSE_postprocess
 
   integer, private :: id_stampa=0
+  logical, private :: irs_runtime_warned = .false.
   character(81), private :: RANS_shell_format  =    "('MOSE | Iter =', i9, ' | Global iter =', i9, ' | Density residual =', E13.6)"
   character(69), private :: URANS_shell_format =    "('MOSE | Iter =', i9, ' | Time =', E13.6,  ' | Delta t =', E13.6)"
   character(96), private :: RANS_shell_format_MG  = "('MOSE Grid Level', i2, ' | Iter =', i9, ' | Global iter =', i9, ' | Density residual =', E13.6)"
@@ -25,7 +26,8 @@ contains
     use MOSE_Lib_RotatingFrame, only: RF_Torque_Walls
     use MOSE_Mod_Multigrid,  only: Prolongation
     use MOSE_Read_Ini,       only: Read_Inifile_Runtime
-    use MOSE_Mod_MPI,        only: mpi_is_root
+    use MOSE_Mod_MPI,        only: mpi_is_root, mpi_reduce_sum_r8
+    use MOSE_Lib_Newstate,   only: irs_fallbacks
     use MOSE_Mod_Timers,     only: timer_summary
     use IR_precision
     implicit none
@@ -33,6 +35,7 @@ contains
     ! Local
     character(len=llen) :: solfile, dgsfile, wallfile, mgsol, mgwall
     integer  :: m, level
+    real(R8) :: nfall
 
     level = obj_multigrid%MG_level
 
@@ -238,9 +241,35 @@ contains
 
     endif
 
+    ! IRS positivity fallbacks (Lib_Newstate) since the last report, summed over the ranks
+    if ( obj_irs%at_setup .and. mod(simulation%domain(level) % iter, obj_io%shell_diter) == 0d0 ) then
+      nfall = real(irs_fallbacks, R8)
+      call mpi_reduce_sum_r8( nfall )
+      if ( mpi_is_root .and. nfall > 0.5d0 ) write(*,'(A,I0,A,I0)') ' IRS: positivity fallback in ', &
+        nint(nfall), ' cell updates (own update used) since the last report, level ', level
+      irs_fallbacks = 0
+    endif
+
     ! Update input data
     if ( mod (simulation%domain(level) % iter, obj_io%ini_diter) == 0d0 ) then
       call Read_Inifile_Runtime()
+      ! level<n>-iter (multigrid) and iter-threshold (one level) take effect at runtime: the stop
+      ! test (Mod_Explicit) uses each level's itermax, set from them at setup.
+      if ( obj_multigrid%MGL > 1 ) then
+        do m = 1, obj_multigrid%MGL
+          simulation%domain(m)%itermax = obj_multigrid%iter_threshold(m)
+        enddo
+      else
+        simulation%domain(1)%itermax = obj_sim_param%iter_threshold
+      endif
+      ! IRS can only be switched on at setup, where its arrays are allocated: irs = true added to a
+      ! run started without it is ignored (irs = false, irs-beta and irs-variables do act at runtime).
+      if ( obj_irs%enabled .and. .not. obj_irs%at_setup ) then
+        if ( mpi_is_root .and. .not. irs_runtime_warned ) write(*,'(A)') &
+          ' WARNING: IRS cannot be switched on at runtime (start with irs-beta > 0): irs ignored'
+        irs_runtime_warned = .true.
+        obj_irs%enabled = .false.
+      endif
     end if
     
 

@@ -282,6 +282,30 @@ limit they become the unstable part. `irs-variables = all` smooths every
 residual, as the flow ones. Smoothing changes the path to the steady
 state, not the steady state itself (a zero residual stays zero).
 
+IRS is switched on only at setup (`irs-beta > 0`), where its arrays are
+allocated; `irs-beta` and `irs-variables` can change at runtime, `irs = false`
+switches it off, and `irs = true` added to a run started without IRS is
+ignored with a warning.
+
+### Positivity fallback (conservative update)
+
+The smoothed update of a cell is a weighted mean of its own and its
+neighbours' updates. In a nearly empty cell next to dense ones (a jet
+expanding into still gas at a start, or after a multigrid prolongation) it
+can remove more of a species, or more energy, than the cell holds: a
+negative partial density or pressure, and the run stops. Before the RK
+stage is accepted, the new state is checked: finite, positive density and
+pressure, no partial density below $-10^{-6}\rho$ (smaller negatives are
+floored as without IRS). If the check fails, the cell takes its own scaled
+residual instead (kept before smoothing), halved up to 10 times until the
+state passes, and otherwise no update in that stage. With no update the
+stage is a convex combination of the two previous admissible states, so it
+is admissible. A cell whose smoothed update passes is updated exactly as
+before. The number of fallbacks, summed over the ranks, is printed every
+`shell-diter` iterations when it is not zero. A fallback is a local reduction
+of the step during a transient; at a steady state the update vanishes and
+the solution is unchanged.
+
 ---
 
 ## Multigrid Acceleration
@@ -322,6 +346,16 @@ in each spatial direction to accelerate convergence to steady state.
     $n_j = n_k = 1$). If this is not met, grid generation / setup will reject the
     mesh. Choose $n_i$ (and $n_j$ in 2-D) accordingly **before** generating the
     grid — the hierarchy is built from this mesh, not the other way around.
+
+### Level schedule
+
+The levels run in sequence, coarsest first: level $n$ runs `level<n>-iter`
+iterations (or until `res-threshold` / `time-threshold`, which act on every
+level), then its solution is prolongated onto level $n-1$. Every start begins
+on the coarsest level, restricting the initial field to it. `level<n>-iter`
+(and `iter-threshold` without multigrid) is re-read with `input.ini` every
+`ini-diter` iterations: lowering it below the iterations already done ends
+the current level at the next re-read.
 
 ### Restriction (fine → coarse)
 

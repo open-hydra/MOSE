@@ -8,7 +8,7 @@
 | newrun | true | true , false |  no | Start a new simulation (false = restart) |
 | res-threshold | 1e-10 | > 0 |  no | Residual convergence threshold |
 | time-threshold | 1e30 | > 0 |  no | Maximum simulation time |
-| iter-threshold | 1000000000 | > 0 |  no | Maximum number of iterations |
+| iter-threshold | 1000000000 | > 0 |  no | Maximum number of iterations (re-read at runtime) |
 
 ## MOSE-IO
 
@@ -53,7 +53,7 @@
 | dt-method | directional | directional, summed, additive |  no | Local time step: directional (cfl and vnn per direction, minimum over directions), summed (cfl and vnn bound the sum over directions; vnn also covers energy and turbulence diffusion; dt is the smaller of the two limits) or additive (as summed, but the convective and diffusive fractions add: 1/dt = Lc/cfl + Ld/vnn per equation) |
 | time-accurate | .false. | logical | yes | Time accurate switch |
 | integration-variables | cons | cons ,  prim , prec |  no | Integration variables (cons/prim/prec) |
-| irs | .false. | logical |  no | Implicit Residual Smoothing |
+| irs | .false. | logical |  no | Implicit Residual Smoothing (switched on only at setup) |
 | irs-beta | 0.0 | >= 0 |  no | IRS beta parameter |
 | irs-variables | flow | flow, all |  no | Residuals smoothed by IRS: flow (species, momentum, energy) or all (also the RANS, soot and passive-scalar equations) |
 | preconditioning-Uref | 0.0 | >= 0 |  no | Reference velocity for preconditioning |
@@ -73,8 +73,8 @@
 
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
-| level1-iter | 0 | >= 0 |  no | Iterations for multigrid level 1 |
-| level2-iter | 0 | >= 0 |  no | Iterations for multigrid level 2 |
+| level1-iter | 0 | >= 0 |  no | Iterations for multigrid level 1 (re-read at runtime) |
+| level2-iter | 0 | >= 0 |  no | Iterations for multigrid level 2 (re-read at runtime) |
 
 ## MOSE-Physics
 
