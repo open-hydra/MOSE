@@ -66,6 +66,10 @@
 #     too: there the source terms must see grad nu~ = a, from the wall
 #     value nu~ = 0 (ghost cell -nu~), not a/2 from a ghost cell that
 #     copies the cell.
+#     The same with cells growing by 1.2 from the wall, and on skewed cells
+#     (2-D and 3-D) with the density linear along the wall, where the ghost
+#     cell of the wall copies the density and the terms in grad rho must stay
+#     zero.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -301,7 +305,6 @@ for field in homann swirl; do
   fi
 done
 
-echo "-- 5. Spalart-Allmaras next to a wall: right-hand side of rho nu~ for a linear profile --"
 cat > input.ini <<EOF
 [MOSE-Parameters]
 iter-threshold = 1
@@ -326,18 +329,49 @@ space-reconstruction = MUSCL
 flux-limiter = vanleer
 riemann-solver = HLLC
 EOF
-python3 -B wall_gradient.py case || exit 1
-rm -f OUTPUT/field.tec OUTPUT/diagnostic.tec
-"$LOCAL" > OUTPUT/wall-gradient.log 2>&1
-if [[ ! -f OUTPUT/field.tec || ! -f OUTPUT/diagnostic.tec ]] || grep -a -qE 'NaN|Integration failed' OUTPUT/wall-gradient.log; then
-  echo "  [FAIL] the run did not complete (see OUTPUT/wall-gradient.log)"
-  fail=1
-elif python3 -B wall_gradient.py check OUTPUT/field.tec OUTPUT/diagnostic.tec; then
+
+# solve <case> [uni]: one explicit step, outputs kept as OUTPUT/wall-{field,diagnostic}-<case>[-uni].tec
+solve() {
+  local tag="$1${2:+-$2}"
+  python3 -B wall_gradient.py case "$@" || exit 1
+  rm -f OUTPUT/field.tec OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/wall-run-$tag.log" 2>&1
+  if [[ ! -f OUTPUT/field.tec || ! -f OUTPUT/diagnostic.tec ]] || grep -a -qE 'NaN|Integration failed' "OUTPUT/wall-run-$tag.log"; then
+    echo "  [FAIL] the run $tag did not complete (see OUTPUT/wall-run-$tag.log)"
+    echo "MMSResiduals: FAILED"
+    exit 1
+  fi
+  mv OUTPUT/field.tec "OUTPUT/wall-field-$tag.tec"
+  mv OUTPUT/diagnostic.tec "OUTPUT/wall-diagnostic-$tag.tec"
+}
+
+echo "-- 5. Spalart-Allmaras next to a wall: right-hand side of rho nu~ for a linear profile --"
+solve uniform
+if python3 -B wall_gradient.py check OUTPUT/wall-field-uniform.tec OUTPUT/wall-diagnostic-uniform.tec; then
   echo "  [ok  ] the source terms see the wall value nu~ = 0 in the wall cells"
 else
-  echo "  [FAIL] the source terms of the wall cells see a wrong gradient of nu~"
-  fail=1
+  echo "  [FAIL] the source terms of the wall cells see a wrong gradient of nu~"; fail=1
 fi
+
+echo "-- the same on cells growing by 1.2 from the wall --"
+solve stretched
+if python3 -B wall_gradient.py check OUTPUT/wall-field-stretched.tec OUTPUT/wall-diagnostic-stretched.tec stretched; then
+  echo "  [ok  ] the cell gradients take the differences of the cell centres"
+else
+  echo "  [FAIL] the cell gradients of the stretched cells are wrong"; fail=1
+fi
+
+echo "-- skewed cells, rho linear along the wall: the terms in grad rho (2-D and 3-D) --"
+for case in skewed skewed3d; do
+  solve "$case"
+  solve "$case" uni
+  if python3 -B wall_gradient.py checkdiff "$case" "OUTPUT/wall-field-$case.tec" "OUTPUT/wall-diagnostic-$case.tec" \
+       "OUTPUT/wall-field-$case-uni.tec" "OUTPUT/wall-diagnostic-$case-uni.tec"; then
+    echo "  [ok  ] $case: the copied density of the wall ghost cells sits at the cell itself"
+  else
+    echo "  [FAIL] $case: grad rho of the wall cells takes a wrong normal component"; fail=1
+  fi
+done
 
 if [[ $fail -ne 0 ]]; then
   echo "MMSResiduals: FAILED"

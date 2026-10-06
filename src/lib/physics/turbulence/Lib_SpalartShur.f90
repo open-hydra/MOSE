@@ -14,15 +14,19 @@ contains
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
     use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
+    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
 
     implicit none
-    type(MOSE_domain_type), intent(inout) :: domain
+    type(MOSE_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b, i, j, k, n
     real(R8), dimension(3,3) :: vel_diff
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:)   ! cell metric of the sources (Source_Metrics)
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
+      call Source_Metrics ( domain % blk(b), Mi )
       !$omp do collapse(3) private(vel_diff)
       do k = 1, domain % blk(b) % dim(3)
       do j = 1, domain % blk(b) % dim(2)
@@ -31,7 +35,7 @@ contains
         vel_diff(:,1) = ( domain%blk(b)%P(nu:nw,i+1,j,k) - domain%blk(b)%P(nu:nw,i-1,j,k) )/2d0
         vel_diff(:,2) = ( domain%blk(b)%P(nu:nw,i,j+1,k) - domain%blk(b)%P(nu:nw,i,j-1,k) )/2d0
         vel_diff(:,3) = ( domain%blk(b)%P(nu:nw,i,j,k+1) - domain%blk(b)%P(nu:nw,i,j,k-1) )/2d0
-        domain%blk(b)%vel_gradient(i,j,k)%c = matmul ( vel_diff + 1d-40, domain%blk(b)%m(i,j,k)%c )
+        domain%blk(b)%vel_gradient(i,j,k)%c = matmul ( vel_diff + 1d-40, Mi(i,j,k)%c )
       end do ; end do ; end do
 
       ! Extrapolation in ghost cells -as second derivatives must be computed
@@ -76,17 +80,21 @@ contains
     use MOSE_Lib_Fluid, only: Strain_Tensor, Vorticity_Vector, Vorticity_Tensor
     use MOSE_Lib_RotatingFrame, only: obj_rot
     use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
+    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
 
     implicit none
-    type(MOSE_domain_type), intent(inout) :: domain
+    type(MOSE_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b, i, j, k, ii, jj, kk
     real(R8), dimension(3,3,3) :: strain_gradient
     real(R8), dimension(3,3) :: Sij, Wij, strain_transport, c
     real(R8) :: omega(3), S, O, rtilde
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:), Ma(:,:,:)   ! Ma: the velocity gradient copied behind every boundary face
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
+      call Source_Metrics ( domain % blk(b), Mi, Ma=Ma )
       !$omp do collapse(3) private (i, j, k, ii, jj, kk, strain_gradient), &
       !$omp private (Sij, Wij, strain_transport, c, omega, S, O, rtilde)
       do k = 1, domain % blk(b) % dim(3)
@@ -104,7 +112,7 @@ contains
         ! Transformation component by component
         do ii = 1, 3
         do jj = 1, 3
-          strain_gradient(ii,jj,:) = matmul ( strain_gradient(ii,jj,:), domain%blk(b)%m(i,j,k)%c )
+          strain_gradient(ii,jj,:) = matmul ( strain_gradient(ii,jj,:), Ma(i,j,k)%c )
         enddo
         enddo
 

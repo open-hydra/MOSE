@@ -65,11 +65,14 @@ contains
     use MOSE_Config_Types_m, only: obj_rans, obj_time_scheme
     use MOSE_Lib_SpalartShur, only : Compute_Velocity_Gradient, Compute_RC_Terms
     use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
+    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
 
     implicit none
-    type(MOSE_domain_type), intent(inout) :: domain
+    type(MOSE_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:)   ! cell metric of the sources (Source_Metrics)
     logical :: SpalartShur, k_energy_coupling, point_implicit
       
     SpalartShur       = obj_rans%SpalartShur
@@ -86,9 +89,10 @@ contains
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
+      call Source_Metrics ( domain % blk(b), Mi )
       call SST_Blk ( domain % blk(b) % P,            &
                      domain % blk(b) % r,            &
-                     domain % blk(b) % M,            &
+                     Mi,                            &
                      domain % blk(b) % vol,          &
                      domain % blk(b) % yn,           &
                      domain % blk(b) % vel_gradient, &

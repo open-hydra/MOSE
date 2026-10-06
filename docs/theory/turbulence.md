@@ -634,6 +634,34 @@ that copied the cell, as MOSE did before, gave $a/2$. The other primitive variab
 the wall ghost cells, with the velocity reversed (`Ghost_Wall_Extrapolation`); the fluxes through the
 first interior faces use the second-order extrapolation of `Fill_Ghost_Cell`.
 
+### Cell gradients of the source terms
+
+The source terms take, in every cell, the central differences of the values along the three index
+directions and map them to Cartesian components with a cell metric. With
+`diffusive-metric = stencil` the metric is $M_s = (J_c^{T})^{-1}$ with
+$J_c^{T}(:,d) = (\mathbf{x}_{c+e_d} - \mathbf{x}_{c-e_d})/2$, the same central differences of the
+cell centres (the mean of the eight nodes): the gradient of a linear field is exact on stretched,
+skewed and non-smooth cells (along an index direction with one cell, the edge of the cell and no
+difference). On a mesh of equal parallelograms these gradients are the reference gradient of [14]
+(Eq. 1), second order on smooth structured meshes. In a wall cell, for a field that is not linear,
+the reflected ghost value $2\phi_\text{wall} - \phi_\text{cell}$ makes the gradient first order, as
+the Green–Gauss gradient is in the boundary cells of [14] (Eq. 13).
+The ghost cells sit where their value is right when the sources are computed: behind a
+wall the velocity and the turbulence variables, whose ghost values are $2\phi_\text{wall} -
+\phi_\text{cell}$, at the reflection of the cell centre in the face centre; the densities, the pressure
+and the other copied variables at the cell itself, which makes the difference across the wall cell
+one-sided and exact for any linear field; behind the other faces the ghost cells of the fluxes, at
+the positions of the face metric ([Numerics](numerics.md)): behind a zero-gradient face (0,
+401-407, 420), whose ghost cell copies the cell, the cell itself, so the difference across the
+boundary cell is one-sided there too. SA-RC copies the velocity gradient of the
+cell into the ghost cells of every boundary face, so its strain gradient takes the cell itself there.
+The metrics are computed once at setup (`Cell_Source_Metrics`) and chosen in one place
+(`Source_Metrics`) by the source terms of SA, SA-RC, SST, Wilcox 2006 and SSG/LRR and by the eddy
+viscosity of the output. With `inverse-mean` and `mean` the metric is that of the cell, as before:
+the central difference across a cell next to a jump of size $r$ is then wrong by $(r-1)/4$, on a
+skewed wall cell a copied density takes a normal gradient it does not have (part 5 of `MMSResiduals`),
+and next to a zero-gradient face the normal component is half the one-sided difference.
+
 ### Blowing / wall-suction correction
 
 An optional correction (`blowing_corr`) modifies the wall boundary-layer
@@ -989,3 +1017,7 @@ fallback when a model's destruction Jacobian is not readily available.
     Spalart–Allmaras Turbulence Model",
     https://turbmodels.larc.nasa.gov/spalart.html (TMBWG/turbmodels commit
     20a39f5, consulted 2026-09-29): minimum distance to the wall.
+14. A. Syrakos, S. Varchanis, Y. Dimakopoulos, A. Goulas, J. Tsamopoulos, "A
+    critical analysis of some popular methods for the discretisation of the
+    gradient operator in finite volume methods," *Phys. Fluids*, 29, 127103,
+    2017, doi:10.1063/1.4997682.

@@ -20,10 +20,32 @@ not used: in the wall cells it also holds the wall flux that the wall output add
 rows next to the wall (the top rows feel the symmetry plane) the right-hand side must stay below 0.05 of
 (cb2/sigma) rho a^2.
 
+The same on cells that are not uniform, where the cell gradients of the source terms must take the differences of the cell
+centres, and the ghost cells of the wall the position at which their value is right:
+  stretched  4 x 12 cells growing by r = 1.2 from the wall (first cell 6 um; the rows next to the symmetry plane, the last
+             two, are not checked): with the metric of the cell the central difference across the wall cell gives
+             (1 + (r - 1)/4) a, and the cb2 term about 0.1 of the scale. The fluxes take the diffusion coefficient
+             (mu + rho nu~)/sigma of a face from the mean of its two cells, which is the value at the midpoint of their
+             centres, not at the face: on these cells the flux divergence differs from rho a^2/sigma by (rho a^2/sigma)
+             ((c_top - y_top) - (c_bot - y_bot))/h, c the midpoints, y the faces (the wall face is exact), that is
+             (r - 1)/4 in the wall cell and (r - 1)^2/(4 r) in the others, over cb2 in units of the scale. The check is
+             on the right-hand side less this term;
+  skewed     6 x 16 cells skewed by 20 degrees (x += y tan 20), the sides x = const of 400 type (their columns are not
+             checked), with T and so rho linear along the wall (T = T0 + 2000 K/m (x - x_mid), wall at T(x)). rho is copied
+             into the ghost cell of the wall: at the cell itself the copy is right for any linear field, at the reflection
+             2 x_f - x_c it is not and grad rho takes a normal component, which the term -(nu + nu~) grad rho . grad nu~ /
+             sigma turns into about 0.3 of the scale. The wall distance of MOSE is that to the nearest wall face centre, not y, on skewed cells:
+             the equilibrium does not hold, so the same column at uniform T is solved too and the difference of
+             (right-hand side)/rho between the two runs, over (cb2/sigma) a^2, is checked; it holds the terms in grad rho;
+  skewed3d   the same in 3-D: 5 x 16 x 5 cells, x += y tan 20, z += y tan 10, T linear in x and z, the sides of 400 type.
+
 Usage (from the test directory):
-  python3 -B wall_gradient.py case                 INPUT/ic.tec and INPUT/bc.txt
-  python3 -B wall_gradient.py check FIELD DIAG     exit status 0 when the right-hand side passes
+  python3 -B wall_gradient.py case [CASE [uni]]   INPUT/ic.tec and INPUT/bc.txt; CASE uniform (default), stretched, skewed,
+                                              skewed3d; uni: at uniform temperature (skewed cases)
+  python3 -B wall_gradient.py check FIELD DIAG [CASE]                    exit status 0 when the right-hand side passes
+  python3 -B wall_gradient.py checkdiff CASE FIELD DIAG FIELD_UNI DIAG_UNI   the same for the skewed cases
 """
+import math
 import os
 import re
 import sys
@@ -35,6 +57,9 @@ SIGMA, CB2 = 2.0 / 3.0, 0.622       # Spalart-Allmaras
 NI, NJ, DX, DY = 4, 16, 1.0e-4, 1.0e-5
 A = 6.6e-5
 ROWS = 14
+R_STRETCH, DY1_STRETCH, NJ_STRETCH = 1.2, 6.0e-6, 12   # first cell 6 um: rho nu~ = 2.3e-10 there, above the floor of
+                                                         # 1e-10 that MOSE keeps; 12 rows: chi below 1.6e-3 at the top
+TX, TZ = 2000.0, 1000.0             # K/m: temperature gradient along the wall of the skewed cases
 
 
 def write_case():
@@ -80,6 +105,86 @@ def write_case():
         f.write("".join(out))
 
 
+def layout(case):
+    """Nodes X[k][j][i] (x, y, z), cells per direction, and the type of the i and k sides."""
+    if case == 'stretched':
+        ni, nj, nk = NI, NJ_STRETCH, 1
+        ys = [0.0]
+        for j in range(nj):
+            ys.append(ys[-1] + DY1_STRETCH * R_STRETCH ** j)
+        nodes = [[[(i * DX, ys[j], k * DX) for i in range(ni + 1)] for j in range(nj + 1)] for k in range(nk + 1)]
+        return nodes, (ni, nj, nk), 201, 0
+    if case == 'skewed':
+        ni, nj, nk = 6, NJ, 1
+        tx, tz = math.tan(math.radians(20.0)), 0.0
+    else:
+        ni, nj, nk = 5, NJ, 5
+        tx, tz = math.tan(math.radians(20.0)), math.tan(math.radians(10.0))
+    nodes = [[[(i * DX + j * DY * tx, j * DY, k * DX + j * DY * tz) for i in range(ni + 1)] for j in range(nj + 1)]
+             for k in range(nk + 1)]
+    return nodes, (ni, nj, nk), 400, (400 if nk > 1 else 0)
+
+
+def centre(nodes, i, j, k):
+    """Mean of the eight nodes of cell (i, j, k), 0-based."""
+    return tuple(sum(nodes[k + c][j + b][i + a][d] for a in (0, 1) for b in (0, 1) for c in (0, 1)) / 8.0 for d in range(3))
+
+
+def temperature(case, x, uni):
+    if case in ('uniform', 'stretched') or uni:
+        return T0
+    nodes, (ni, nj, nk), _, _ = layout(case)
+    xm, zm = 0.5 * ni * DX, 0.5 * nk * DX
+    return T0 + TX * (x[0] - xm) + (TZ * (x[2] - zm) if nk > 1 else 0.0)
+
+
+def write_case_general(case, uni):
+    nodes, (ni, nj, nk), side_i, side_k = layout(case)
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    cells = [centre(nodes, i, j, k) for k in range(nk) for j in range(nj) for i in range(ni)]
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoNuTilde"\n')
+        f.write(f" ZONE  T = B1-IG, I={ni + 1}, J={nj + 1}, K={nk + 1}, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-9]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for c in range(3):
+            for k in range(nk + 1):
+                for j in range(nj + 1):
+                    for i in range(ni + 1):
+                        f.write(f" {nodes[k][j][i][c]:.16E}\n")
+        rho = [P0 / (RGAS * temperature(case, x, uni)) for x in cells]
+        n = ni * nj * nk
+        zero = [0.0] * n
+        for col in (rho, zero, zero, zero, [P0] * n, [r * A * x[1] for r, x in zip(rho, cells)]):
+            f.write("".join(f" {v:.16E}\n" for v in col))
+
+    def rec(i, j, k, face, t):
+        return '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, k, face, t)
+
+    def con(*a):
+        return '%10d %7d %7d %7d %7d %7d %7d %7d %7d\n' % a
+
+    out = []
+    for k in range(1, nk + 1):
+        for j in range(1, nj + 1):
+            if side_i == 201:
+                out += [rec(1, j, k, 1, 201), con(1, ni, j, k, 2, 1, 0, 0, 1)]
+                out += [rec(ni, j, k, 2, 201), con(1, 1, j, k, 1, 1, 0, 0, 1)]
+            else:
+                out += [rec(1, j, k, 1, side_i), rec(ni, j, k, 2, side_i)]
+    for k in range(1, nk + 1):
+        for i in range(1, ni + 1):
+            xf = [0.25 * sum(nodes[k - 1 + c][0][i - 1 + a][d] for a in (0, 1) for c in (0, 1)) for d in range(3)]
+            out += [rec(i, 1, k, 3, 302), f"    {temperature(case, xf, uni):.16E}, 0.000000E+00, 0.000000E+00,\n"]
+            out.append(rec(i, nj, k, 4, 300))
+    for j in range(1, nj + 1):
+        for i in range(1, ni + 1):
+            out += [rec(i, j, 1, 5, side_k), rec(i, j, nk, 6, side_k)]
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(out))
+
+
 def read_zone(path):
     """Cell values of a one-zone MOSE ASCII file (BLOCK packing), names quoted or not."""
     with open(path) as f:
@@ -108,12 +213,77 @@ def check(field, diag):
     sys.exit(0 if max(wall, rest) < 0.05 else 1)
 
 
+def check_general(case, field, diag):
+    """stretched: the right-hand side of rho nu~ over (cb2/sigma) rho a^2, as for the uniform column."""
+    nodes, (ni, nj, nk), _, _ = layout(case)
+    f, d = read_zone(field), read_zone(diag)
+    cells = [centre(nodes, i, j, k) for k in range(nk) for j in range(nj) for i in range(ni)]
+    rho = P0 / (RGAS * T0)
+    scale = CB2 / SIGMA * rho * A * A
+    rhs = [(new - rho * A * x[1]) / t / scale for new, x, t in zip(f["rhoNuTilde"], cells, d["dt"])]
+    # less the flux divergence error of the mean of the two cells as the face value of the diffusion coefficient
+    yf = [nodes[0][j][0][1] for j in range(nj + 1)]
+    yc = [cells[j * ni][1] for j in range(nj)]
+    mid = [0.0] + [0.5 * (yc[j - 1] + yc[j]) for j in range(1, nj)]          # mid[j]: face j, 0 = wall (exact there)
+    for j in range(nj - 1):
+        top = mid[j + 1] - yf[j + 1]
+        bot = (mid[j] - yf[j]) if j > 0 else 0.0
+        pred = (top - bot) / (yf[j + 1] - yf[j]) / CB2
+        for i in range(ni):
+            rhs[j * ni + i] -= pred
+    wall = max(abs(rhs[j * ni + i]) for j in range(1) for i in range(ni))
+    rows = min(ROWS, nj - 2)
+    rest = max(abs(rhs[j * ni + i]) for j in range(1, rows) for i in range(ni))
+    print(f"    {case}: right-hand side of rho nu~ over (cb2/sigma) rho a^2, less the term of the face coefficient: wall "
+          f"cells {wall:.3e}, rows 2 to {rows} {rest:.3e}")
+    sys.exit(0 if max(wall, rest) < 0.05 else 1)
+
+
+def check_diff(case, field, diag, field_uni, diag_uni):
+    """skewed cases: (right-hand side)/rho with T linear along the wall minus the same at uniform T, over (cb2/sigma) a^2,
+    in the cells not next to a 400 side."""
+    nodes, (ni, nj, nk), _, side_k = layout(case)
+    cells = [centre(nodes, i, j, k) for k in range(nk) for j in range(nj) for i in range(ni)]
+    out = []
+    for fld, dg, uni in ((field, diag, False), (field_uni, diag_uni, True)):
+        f, d = read_zone(fld), read_zone(dg)
+        r = []
+        for new, x, t in zip(f["rhoNuTilde"], cells, d["dt"]):
+            rho = P0 / (RGAS * temperature(case, x, uni))
+            r.append((new - rho * A * x[1]) / t / rho)
+        out.append(r)
+    scale = CB2 / SIGMA * A * A
+    wall, rest = 0.0, 0.0
+    for k in range(nk):
+        if nk > 1 and k in (0, nk - 1):
+            continue
+        for j in range(ROWS):
+            for i in range(1, ni - 1):
+                c = (k * nj + j) * ni + i
+                e = abs(out[0][c] - out[1][c]) / scale
+                if j == 0:
+                    wall = max(wall, e)
+                else:
+                    rest = max(rest, e)
+    print(f"    {case}: (right-hand side)/rho, T along the wall minus uniform T, over (cb2/sigma) a^2: wall cells "
+          f"{wall:.3e}, rows 2 to {ROWS} {rest:.3e}")
+    sys.exit(0 if max(wall, rest) < 0.05 else 1)
+
+
 def main():
     what = sys.argv[1]
     if what == "case":
-        write_case()
+        case = sys.argv[2] if len(sys.argv) > 2 else 'uniform'
+        if case == 'uniform':
+            write_case()
+        else:
+            write_case_general(case, len(sys.argv) > 3 and sys.argv[3] == 'uni')
     elif what == "check":
+        if len(sys.argv) > 4 and sys.argv[4] != 'uniform':
+            check_general(sys.argv[4], sys.argv[2], sys.argv[3])
         check(sys.argv[2], sys.argv[3])
+    elif what == "checkdiff":
+        check_diff(*sys.argv[2:7])
     else:
         sys.exit(f"unknown request {what}")
 
