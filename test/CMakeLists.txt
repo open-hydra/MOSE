@@ -222,7 +222,9 @@ mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;phys
 # Wall distance: the distance to the wall of the turbulence models is the
 # minimum distance to the wall surface (convex corner, curved wall, nozzle lip
 # on an axisymmetric wedge), read back from the Spalart-Allmaras source.
-mose_add_fast_script(MeshGeometry fast/mesh-geometry "fast;physics;2D")
+# Mesh type: a plane 2-D mesh, an axisymmetric wedge and a 3-D slab periodic in
+# k are told apart by every node of every block; blocks that disagree stop.
+mose_add_fast_script(MeshGeometry fast/mesh-geometry "fast;implementation;physics;2D")
 
 # Quadratic constitutive relation QCR2000: a unit check of the stress as the
 # solver calls it (laminar viscosity, then eddy viscosity), against the

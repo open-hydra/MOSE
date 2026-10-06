@@ -37,7 +37,8 @@ test/
 │   ├── boundary-conditions/   # Boundary conditions
 │   │   └── inlets/            # Inlet boundary conditions: direction normal, total conditions
 │   └── mesh-geometry/         # Mesh geometry
-│       └── wall-distance/     # Distance to the wall = exact distance to the wall surface
+│       ├── wall-distance/     # Distance to the wall = exact distance to the wall surface
+│       └── mesh-type/         # Plane mesh, wedge or periodic sector from every node
 ├── unit/                      # Unit checks of library functions, built against the library
 │   └── qcr2000_check.f90      # QCR2000 stress, called as the solver calls it, against its definition
 ├── 2D/                        # 2-D validation cases
@@ -234,6 +235,7 @@ seconds on a CI runner.
 | `Connections`/`ConnectionFlux` | a periodic shock tube as one block and as two blocks gives the same bits, and conserves mass, momentum and energy to 1e-13, with HLLC, HLLC+Tramel, HLLC+Chen (shock sensor) and HLLC-PC (preconditioned, on a low Mach number wave) | `test/fast/connections/connection-flux` |
 | `Connections`/`ConnectionOrder` | two 2-D blocks whose index directions are permuted across the cut (face 4 of one on face 2 of the other, two faces of the same parity) give the same bits with the records of `bc.txt` sorted and reversed (Navier–Stokes, HLLC+Tramel, a shock leaving the cut); with the block below the cut one cell thick across it, or two cells thick with two multigrid levels (one at level 2), the run stops at set-up with a message that names the record, the block across, its cells and the level | `test/fast/connections/connection-order` |
 | `MeshGeometry`/`WallDistance` | the distance to the wall read back from the Spalart–Allmaras source is the exact distance to the wall surface (convex corner, curved wall, nozzle lip on a wedge) | `test/fast/mesh-geometry/wall-distance` |
+| `MeshGeometry`/`MeshType` | a plane slab is plane and a wedge is a wedge whatever the direction of j (wall distance within 1e-9), also a wedge of 5 degrees in two blocks written with 5 significant digits and a plane slab far from the x axis, which a small turn nearly fits; the set-up summary names the type; a wedge written with 2 significant digits, too few to tell it, a plane slab whose k planes are not parallel (2 % of its thickness), 3-D sectors of 90 degrees whose periodic plane misses the turn by half a cell (100 cells in k) or a tenth (20 cells), and a wedge block with a plane block stop the run; a 3-D slab periodic in k keeps a uniform flow within 1e-12 | `test/fast/mesh-geometry/mesh-type` |
 
 A few heavier checks carry the `validation` (not `fast`) label because they
 need reference data or plotting — for example `ShuOsherConvergence`, a 4-grid

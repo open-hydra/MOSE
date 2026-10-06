@@ -57,6 +57,25 @@ my_case/
 !!! warning
     MOSE reads the grid geometry directly from the initial condition file (the `x`, `y`, `z` node coordinates). There is no separate mesh file.
 
+!!! note "Mesh type"
+    MOSE takes the type of the mesh from the nodes of every block. The mesh is 3-D if a block has more than one cell
+    in $k$, 2-D if not and a block has more than one cell in $j$, 1-D otherwise. A 2-D mesh is an axisymmetric wedge
+    when, in every block, the $k = 1$ node plane is the $k = 0$ plane turned about the $x$ axis by the same angle ($x$
+    and $r = \sqrt{y^2+z^2}$ kept, nodes on the axis included); it is plane when no block is so turned, and a mesh
+    with blocks of both kinds stops the run. In 3-D, type `200` on faces 5 and 6 closes a sector: the last $k$ node
+    plane of the block is the first one turned about the $x$ axis by the same angle in every such block, or translated
+    (a periodicity with no rotation); otherwise the run stops. Every node is checked against the average move of the
+    nodes per cell in $k$, the largest move of a node from the first $k$ node plane to the last over the cells between
+    them (the thickness of a 2-D block): a block is turned when its nodes match the turn to within 1 % of that move
+    and better than a translation, translated when they match a translation to within 1 % of it and better than a
+    turn, and the angles of the blocks agree to 1 %. So the round-off of the coordinates in the file has to stay below
+    1 % of a cell in $k$, and a plane slab far from the $x$ axis, which a small turn nearly fits, stays plane. In a
+    wedge whose two planes lie symmetric about $z = 0$ ($y$ the same in both), four significant digits are enough at
+    any angle, three are not in general. A 2-D block nearer a turn than a translation, or nearer
+    a translation than a turn, but not to 1 %, stops the run: write its coordinates with more digits, or make its $k$
+    planes parallel for a plane mesh. The set-up summary names the type, as `Mesh type`: 1-D, 2-D plane, 2-D
+    axisymmetric wedge with its angle in degrees, 3-D, or 3-D with the angle of its sectors.
+
 ---
 
 ## Running the Solver

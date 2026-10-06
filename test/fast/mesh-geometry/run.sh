@@ -10,13 +10,14 @@
 #  test:
 #    WallDistance (wall-distance): distance to the wall of the turbulence
 #      models
+#    MeshType (mesh-type): type of the mesh, told by its nodes
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(wall-distance)
+PARTS=(wall-distance mesh-type)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

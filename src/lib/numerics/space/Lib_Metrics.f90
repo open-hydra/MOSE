@@ -18,59 +18,205 @@ module MOSE_Lib_Metrics
 
 contains
 
+  !> Mesh type, from the nodes of every block.
+  !>  - ndir is the number of index directions with more than one cell: 3 if a block has more than one cell in k,
+  !>    otherwise 2 if a block has more than one cell in j, otherwise 1.
+  !>  - delthe is the angle of the axisymmetric wedge of a 2-D mesh, or of the sectors closed by the rotational
+  !>    periodicity (type 200 on faces 5 and 6) of a 3-D mesh, and 0 otherwise. A 2-D mesh is a wedge when, in every
+  !>    block, the k = 1 node plane is the k = 0 plane turned about the x axis by the same angle; it is plane when no
+  !>    block is so turned. In 3-D the k = dim(3) node plane of every block with a type-200 face is the k = 0 plane turned
+  !>    about the x axis by the same angle, or translated (delthe = 0). Every node is checked (Node_Planes); blocks that
+  !>    disagree stop the run.
+  !>  - The angle is the azimuth turned by the node (0,1) of the block, as it always was, or by the node farthest from
+  !>    the axis when that one lies on it. The angles of two blocks agree when they differ by at most ETA of the angle.
+  !>  - The checks are relative to the move of the nodes per cell in k, the largest move of a node from one plane to the
+  !>    other over the cells between them (the thickness of a 2-D block), not to the size of the coordinates: the
+  !>    coordinates of a mesh are written with a finite number of digits, and their round-off, relative to that move, is
+  !>    what a turn or a translation leaves over. A check relative to the size of the coordinates, at 1e-6 of it, fails a
+  !>    wedge of 5 degrees written with 5 significant digits, which is then taken for a plane mesh, and passes a plane slab
+  !>    far from the x axis, which is then taken for a wedge. A 2-D block nearer a turn than a translation, or nearer a
+  !>    translation than a turn, but not to within ETA of its thickness, stops the run: its nodes are written with too
+  !>    few digits to tell its type, or its k planes are neither parallel nor turned about the x axis.
   subroutine Check_Mesh_Type( domain )
+    use MOSE_Mod_MPI, only: mpi_abort_all
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
-    real(R8) :: theta1, theta2, theta(2)
-    real(R8) :: r0, r1  ! radius sqrt(y^2+z^2) at k=0 and k=1 probe node
+    real(R8), parameter :: TOL = 1d-6, ETA = 1d-2, PI = 3.141592653589793d0
+    integer  :: b, l, nb, nturn, nmove
+    real(R8) :: sr, ang, ang_b, fit, fit_move
+    logical  :: turned, moved, nearer_turn, nearer_move
+    logical, allocatable :: sector(:)
+    character(len=512) :: msg   ! room for the longest message: 255 characters and the block number
 
-    ! Mesh definition (2D,2Daxi,3D)
-    if (domain%Blk(1)%dim(3)>1) then
-      ! 3D
-      ndir = 3
-      associate( node => domain%Blk(1)%node, jm => domain%Blk(1)%dim(2), km => domain%Blk(1)%dim(3) )
-        theta1 = atan2( node(0,1,0)%c(3),node(0,1,0)%c(2) ) ! computes axisymmetric angle
-        theta2 = atan2( node(0,1,km)%c(3),node(0,1,km)%c(2) )
-        theta(1) = theta2-theta1
-        theta1 = atan2( node(0,jm,0)%c(3), node(0,jm,0)%c(2) )
-        theta2 = atan2( node(0,jm,km)%c(3), node(0,jm,km)%c(2) )
-        theta(2) = theta2-theta1
+    nb = domain % nb
+
+    ndir = 1
+    do b = 1, nb
+      if ( domain % Blk(b) % dim(2) > 1 ) ndir = max ( ndir, 2 )
+      if ( domain % Blk(b) % dim(3) > 1 ) ndir = 3
+    enddo
+
+    ! Size of the distance from the x axis, to tell a probe node on the axis
+    sr = 0d0
+    do b = 1, nb
+      associate ( node => domain % Blk(b) % node )
+        sr = max ( sr, maxval ( sqrt ( node(:,:,:) % c(2)**2 + node(:,:,:) % c(3)**2 ) ) )
       end associate
-      if ( (theta(1)-theta(2)) < 1.d-5 ) then
-        delthe = theta(1)
-      else
-        delthe = 0d0
-      endif
-    elseif (domain%Blk(1)%dim(3)==1 .and. domain%Blk(1)%dim(2)==1) then
-      ! 1D
-      ndir = 1
-      delthe = 0d0
-    else
-      ! 2D
-      ndir = 2
-      associate( node => domain%Blk(1)%node, jm => domain%Blk(1)%dim(2) )
-        theta1 = atan2( node(0,1,0)%c(3),node(0,1,0)%c(2) ) ! computes axisymmetric angle
-        theta2 = atan2( node(0,1,1)%c(3),node(0,1,1)%c(2) )
-        theta(1) = theta2-theta1
-        theta1 = atan2( node(0,jm,0)%c(3), node(0,jm,0)%c(2) )
-        theta2 = atan2( node(0,jm,1)%c(3), node(0,jm,1)%c(2) )
-        ! For true axisymmetry, the radius r=sqrt(y^2+z^2) must be conserved between k-planes.
-        ! A flat-plate mesh with z(k=0)=0 at the wall (y=0) gives r=0, which would
-        ! falsely satisfy the theta-difference check. Guard against this degenerate case.
-        r0 = sqrt( node(0,1,0)%c(2)**2 + node(0,1,0)%c(3)**2 )
-        r1 = sqrt( node(0,1,1)%c(2)**2 + node(0,1,1)%c(3)**2 )
+    enddo
+
+    delthe = 0d0
+    select case ( ndir )
+
+      case ( 2 )
+        ! Wedge if every block is turned by the same angle; plane if none is
+        nturn = 0
+        do b = 1, nb
+          call Node_Planes ( domain % Blk(b), 1, sr, TOL, ETA, turned, ang_b, moved, fit, nearer_turn, fit_move, &
+                             nearer_move )
+          if ( nearer_turn .and. .not. turned ) then
+            write(msg,'(A,I0,A,ES10.3,A,ES9.2,A)') '[ERROR] Mesh type: block ', b, ' is nearer a wedge of angle ', ang_b, &
+              ' rad than a plane block, but its nodes match the turn only to ', fit, ' of its thickness (1e-2 needed):'// &
+              ' write the node coordinates with more significant digits'
+            call mpi_abort_all ( trim(msg) )
+          end if
+          if ( nearer_move .and. .not. moved ) then
+            write(msg,'(A,I0,A,ES9.2,A)') '[ERROR] Mesh type: block ', b, ' is nearer a plane block than a wedge, but its'// &
+              ' k = 1 node plane is the k = 0 plane translated only to ', fit_move, ' of its thickness (1e-2 needed):'// &
+              ' its k planes must be parallel, or the coordinates written with more significant digits'
+            call mpi_abort_all ( trim(msg) )
+          end if
+          if ( .not. turned ) cycle
+          nturn = nturn + 1
+          if ( nturn == 1 ) then
+            ang = ang_b
+          elseif ( abs ( ang_b - ang ) > ETA * abs ( ang ) ) then
+            write(msg,'(A,I0,A,ES12.5,A,ES12.5,A)') '[ERROR] Mesh type: block ', b, ' is a wedge of angle ', ang_b, &
+              ' rad, another block one of ', ang, ' rad'
+            call mpi_abort_all ( trim(msg) )
+          end if
+        enddo
+        if ( nturn == nb ) then
+          delthe = ang
+        elseif ( nturn > 0 ) then
+          write(msg,'(A,I0,A,I0,A)') '[ERROR] Mesh type: ', nturn, ' of the ', nb, &
+            ' blocks of the 2-D mesh are axisymmetric wedges (k = 1 plane turned about the x axis), the others are not'
+          call mpi_abort_all ( trim(msg) )
+        end if
+
+      case ( 3 )
+        ! Sectors closed by the rotational periodicity: the blocks with a type-200 face on faces 5-6
+        allocate ( sector(nb) )
+        sector = .false.
+        do l = 1, domain % nbound
+          if ( domain % bc(l) % type == 200 .and. domain % bc(l) % f >= 5 ) sector(domain % bc(l) % b) = .true.
+        enddo
+        nturn = 0
+        nmove = 0
+        do b = 1, nb
+          if ( .not. sector(b) ) cycle
+          call Node_Planes ( domain % Blk(b), domain % Blk(b) % dim(3), sr, TOL, ETA, turned, ang_b, moved, fit, &
+                             nearer_turn, fit_move, nearer_move )
+          if ( turned ) then
+            nturn = nturn + 1
+            if ( nturn == 1 ) then
+              ang = ang_b
+            elseif ( abs ( ang_b - ang ) > ETA * abs ( ang ) ) then
+              write(msg,'(A,I0,A,ES12.5,A,ES12.5,A)') '[ERROR] Mesh type: block ', b, ' is a sector of angle ', ang_b, &
+                ' rad, another block one of ', ang, ' rad'
+              call mpi_abort_all ( trim(msg) )
+            end if
+          elseif ( moved ) then
+            nmove = nmove + 1
+          else
+            write(msg,'(A,I0,A,ES9.2,A,ES9.2,A)') '[ERROR] Mesh type: block ', b, ' has type 200 on its k faces, but its'// &
+              ' last k node plane is neither the first one turned about the x axis nor translated, to 1e-2 of the move of'// &
+              ' its nodes per cell in k (the turn fits to ', fit, ', the translation to ', fit_move, ')'
+            call mpi_abort_all ( trim(msg) )
+          end if
+        enddo
+        if ( nturn > 0 .and. nmove > 0 ) then
+          call mpi_abort_all ( '[ERROR] Mesh type: type 200 closes sectors turned about the x axis in some blocks and'// &
+                               ' translated ones in others' )
+        end if
+        if ( nturn > 0 ) delthe = ang
+        deallocate ( sector )
+
+    end select
+
+  contains
+
+    !> Compare the node planes k = 0 and k = ktop of a block. The thickness of the block is the largest move of a node
+    !> from the plane 0 to the plane ktop (its largest component), and cell = thickness / ktop the move per cell in k (in
+    !> 2-D, ktop = 1, the thickness). turned: every node of the plane ktop is the node of the plane 0 turned about the x
+    !> axis by ang, with |ang| > tol, to within eta of cell, and closer than as a translation. moved: every node is the
+    !> node of the plane 0 translated by the move of the node (0,0), to within eta of cell, and closer than as a turn.
+    !> Comparing the two keeps a wedge from passing for a translation and a slab far from the axis, which a small turn
+    !> nearly fits, from passing for a wedge; taking cell, not the thickness, keeps a periodic plane of a sector of many
+    !> cells that does not match by a fraction of a cell from passing for a turn. fit, fit_move: the misfits of the turn
+    !> and of the translation over cell; nearer_turn: |ang| > tol and the turn fits better than the translation;
+    !> nearer_move: the translation fits better than the turn.
+    subroutine Node_Planes ( blk, ktop, sr, tol, eta, turned, ang, moved, fit, nearer_turn, fit_move, nearer_move )
+      type(MOSE_block_type), intent(in) :: blk
+      integer, intent(in)               :: ktop
+      real(R8), intent(in)              :: sr, tol, eta
+      logical, intent(out)              :: turned, moved, nearer_turn, nearer_move
+      real(R8), intent(out)             :: ang, fit, fit_move
+      ! Local
+      integer  :: i, j, i0, j0
+      real(R8) :: theta1, theta2, ca, sa, rmax, r, a(3), c(3), shift(3), turn_off, move_off, thick, cell
+
+      associate ( node => blk % node )
+        ! Probe node: (0,1), or the node of the plane 0 farthest from the axis when (0,1) lies on it
+        i0 = 0
+        j0 = 1
+        if ( sqrt ( node(0,1,0)%c(2)**2 + node(0,1,0)%c(3)**2 ) <= tol * sr ) then
+          rmax = -1d0
+          do j = 0, blk % dim(2)
+            do i = 0, blk % dim(1)
+              r = sqrt ( node(i,j,0)%c(2)**2 + node(i,j,0)%c(3)**2 )
+              if ( r > rmax ) then
+                rmax = r
+                i0 = i
+                j0 = j
+              end if
+            enddo
+          enddo
+        end if
+        theta1 = atan2 ( node(i0,j0,0)%c(3), node(i0,j0,0)%c(2) )
+        theta2 = atan2 ( node(i0,j0,ktop)%c(3), node(i0,j0,ktop)%c(2) )
+        ang = theta2 - theta1
+        if ( ang >  pi ) ang = ang - 2d0 * pi
+        if ( ang < -pi ) ang = ang + 2d0 * pi
+
+        ca = cos ( ang )
+        sa = sin ( ang )
+        shift = node(0,0,ktop)%c - node(0,0,0)%c
+        turn_off = 0d0
+        move_off = 0d0
+        thick    = 0d0
+        do j = 0, blk % dim(2)
+          do i = 0, blk % dim(1)
+            a = node(i,j,0)%c
+            c = node(i,j,ktop)%c
+            turn_off = max ( turn_off, abs ( c(1) - a(1) ), abs ( c(2) - ( a(2) * ca - a(3) * sa ) ), &
+                                       abs ( c(3) - ( a(2) * sa + a(3) * ca ) ) )
+            move_off = max ( move_off, maxval ( abs ( c - a - shift ) ) )
+            thick    = max ( thick, maxval ( abs ( c - a ) ) )
+          enddo
+        enddo
+        cell = thick / ktop
+        nearer_turn = abs ( ang ) > tol .and. turn_off < move_off
+        nearer_move = move_off < turn_off
+        turned = nearer_turn .and. turn_off <= eta * cell
+        moved  = nearer_move .and. move_off <= eta * cell
+        fit      = huge ( 1d0 )
+        fit_move = huge ( 1d0 )
+        if ( cell > 0d0 ) fit = turn_off / cell
+        if ( cell > 0d0 ) fit_move = move_off / cell
       end associate
-      theta(2) = theta2-theta1
-      if ( (theta(1)-theta(2)) < 1.d-5 .and. &
-           r0 > 1.d-10 .and. abs(r0-r1) < 1.d-5*r0 ) then
-        ! 2Daxi
-        delthe = theta(1)
-      else
-        ! 2D
-        delthe = 0.d0
-      endif
-    endif
+
+    end subroutine Node_Planes
 
   end subroutine Check_Mesh_Type
 

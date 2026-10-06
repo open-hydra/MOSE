@@ -402,9 +402,11 @@ contains
       use IR_Precision,   only: str  
       use MOSE_IO_BC,     only: Print_BC_Summary
       use MOSE_IO_Probes, only: nprobes
+      use MOSE_Lib_Metrics, only: delthe
       implicit none
       ! Local
       character(llen) :: eosword
+      character(len=16) :: angle
       integer :: b, total_cells, k
 
       ! ----- Domain topology -----
@@ -422,6 +424,26 @@ contains
       write(*,'(A,T35,I0)') '   Blocks', simulation%domain(1)%nb
       write(*,'(A,T35,I0)') '   Cells', total_cells
       write(*,'(A,T35,I0)') '   Boundary faces', simulation%domain(1)%nbound
+      ! The type of the mesh, which Check_Mesh_Type takes from the nodes. delthe exactly zero (no wedge, no sector) is
+      ! written as two ordered comparisons, as in the rest of the code: the same result as == 0, also for -0 and NaN,
+      ! with no compiler warning on the equality of reals
+      write(angle,'(F16.6)') delthe * 180d0 / acos ( -1d0 )
+      select case ( ndir )
+        case ( 1 )
+          write(*,'(A,T35,A)') '   Mesh type', '1-D'
+        case ( 2 )
+          if ( delthe >= 0d0 .and. delthe <= 0d0 ) then
+            write(*,'(A,T35,A)') '   Mesh type', '2-D, plane'
+          else
+            write(*,'(A,T35,A)') '   Mesh type', '2-D, axisymmetric wedge of '//trim(adjustl(angle))//' degrees'
+          end if
+        case default
+          if ( delthe >= 0d0 .and. delthe <= 0d0 ) then
+            write(*,'(A,T35,A)') '   Mesh type', '3-D'
+          else
+            write(*,'(A,T35,A)') '   Mesh type', '3-D, sectors of '//trim(adjustl(angle))//' degrees (type 200)'
+          end if
+      end select
       if ( obj_multigrid%MGL > 1 ) &
         write(*,'(A,T35,I0)') '   Multigrid levels', obj_multigrid%MGL
 
