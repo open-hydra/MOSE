@@ -130,6 +130,20 @@ def coords(name):
     return out
 
 
+def sorted_bc(text):
+    """The records of bc.txt face by face, block by block (the documented order), each with its data lines; the order
+    within a face is kept. A record line holds six integers; the lines after it, up to the next one, are its data."""
+    recs = []
+    for line in text.splitlines(True):
+        tok = line.split()
+        if len(tok) == 6 and all(t.lstrip("-").isdigit() for t in tok):
+            recs.append([(int(tok[0]), int(tok[4])), line])
+        else:
+            recs[-1][1] += line
+    recs.sort(key=lambda r: r[0])
+    return "".join(r[1] for r in recs)
+
+
 def write_case(name):
     ni, nj = SIZES[name]
     xyz = coords(name)
@@ -160,7 +174,7 @@ def write_case(name):
     for face in (5, 6):
         out += [rec(i, j, face, kface) for j in range(1, nj + 1) for i in range(1, ni + 1)]
     with open("INPUT/bc.txt", "w") as f:
-        f.write("".join(out))
+        f.write(sorted_bc("".join(out)))
 
 
 def plane(name, p):
@@ -286,7 +300,7 @@ def write_periodic_case(name):
         for i in range(1, ni + 1):
             out += [rec(i, j, 1, 5, kface), rec(i, j, nk, 6, kface)]
     with open("INPUT/bc.txt", "w") as f:
-        f.write("".join(out))
+        f.write(sorted_bc("".join(out)))
 
 
 def triangle_distance(p, a, b, c):
@@ -413,7 +427,7 @@ def write_twist_case():
         for i in range(1, ni + 1):
             out += ['%9d %7d %7d %7d %7d %7d\n' % (1, i, j, 1, 5, 300), '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, nk, 6, 300)]
     with open("INPUT/bc.txt", "w") as f:
-        f.write("".join(out))
+        f.write(sorted_bc("".join(out)))
 
 
 def twist_expected():

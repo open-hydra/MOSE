@@ -212,6 +212,20 @@ def faces_2d(b, ni, nj, types):
     return out
 
 
+def sorted_bc(text):
+    """The records of bc.txt face by face, block by block (the documented order), each with its data lines; the order
+    within a face is kept. A record line holds six integers; the lines after it, up to the next one, are its data."""
+    recs = []
+    for line in text.splitlines(True):
+        tok = line.split()
+        if len(tok) == 6 and all(t.lstrip("-").isdigit() for t in tok):
+            recs.append([(int(tok[0]), int(tok[4])), line])
+        else:
+            recs[-1][1] += line
+    recs.sort(key=lambda r: r[0])
+    return "".join(r[1] for r in recs)
+
+
 def write_case(name):
     for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
         if os.path.lexists(p):
@@ -266,7 +280,7 @@ def write_case(name):
     else:
         sys.exit(f"unknown case {name}")
     with open("INPUT/bc.txt", "w") as f:
-        f.write("".join(recs))
+        f.write(sorted_bc("".join(recs)))
 
 
 def read_zones(path):
