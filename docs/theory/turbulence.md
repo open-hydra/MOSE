@@ -667,6 +667,21 @@ distance to the corner or the end.
   minimum distance; between faces at the same distance, the first one in the
   boundary file.
 
+!!! warning "Twisted wall faces in 3-D"
+    A wall face whose corners $\mathbf{x}_1 \ldots \mathbf{x}_4$ (in cyclic
+    order) are not coplanar is the bilinear surface through them, with twist
+    $\mathbf{T} = \mathbf{x}_1 - \mathbf{x}_2 + \mathbf{x}_3 - \mathbf{x}_4$.
+    The four triangles lie within $|\mathbf{T}|/16$ of it, so the distance is
+    exact only to within $|\mathbf{T}|/16$: a relative error up to
+    $(|\mathbf{T}|/16)/y$, small next to cells thicker than $|\mathbf{T}|/16$
+    and of order one or more in thinner ones. On a unit face twisted by
+    $t = |\mathbf{T}|$, at height $h$ above it, the largest error is 6 % for
+    $t = h = 0.1$, 62 % for $t = 10^{-2}$ and $h = 10^{-3}$, and 62 times the
+    distance for $t = 0.1$ and $h = 10^{-4}$. On a smooth wall $|\mathbf{T}|$
+    falls as the square of the face size, so the error falls with refinement.
+    2-D and axisymmetric meshes are not affected: their wall faces are plane,
+    and the four triangles are the face.
+
 Test `MeshGeometry`/`WallDistance`.
 
 ---
