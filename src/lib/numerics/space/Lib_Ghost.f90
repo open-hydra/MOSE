@@ -87,6 +87,8 @@ contains
           call Ghost_Symmetry ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(410)
           call Ghost_Q2D_Mapped ( domain % bc(i), domain % blk(Bm), domain % time )
+        case(400) ! extrapolation: linear, limited towards zero-gradient
+          call Ghost_Extrapolate_Limited ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(0,401:407,420) ! inlet/outlet/extrapolation: zero-gradient
           call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(102)
@@ -366,6 +368,64 @@ contains
     enddo
       
   end subroutine Ghost_ZG_Extrapolate
+
+
+  subroutine Ghost_Extrapolate_Limited ( Im, Jm, Km, Fm, blk )
+    implicit none
+    integer, intent(in) :: Im, Jm, Km, Fm
+    type(MOSE_block_type), intent(inout) :: blk
+    ! Local
+    real(R8), parameter :: lo = 0.5d0, hi = 2d0
+    integer  :: g, v, dir
+    real(R8) :: q1(nprim), d(nprim), Pg(nprim), psi
+    logical  :: positive(nprim)
+
+    ! Linear extrapolation from the boundary cell q1 and its inner neighbour q2, one psi per
+    ! ghost cell for all variables: g(1) = q1 + psi(1) d, g(2) = g(1) + psi(2) d, d = q1 - q2,
+    ! 0 <= psi(2) <= psi(1) <= 1. psi is the largest value that keeps every positive variable
+    ! (species densities, p, RANS variables) within [lo, hi] times its boundary-cell value,
+    ! so psi = 1 is linear extrapolation and psi = 0 zero gradient. Unlike the quadratic
+    ! extrapolation it cannot amplify a perturbation of the boundary cell, nor drive the
+    ! ghost density or rho*nu_tilde through zero.
+
+    dir = (Fm + 1) / 2
+    if ( blk % dim(dir) < 2 ) then
+      ! No inner neighbour along the normal (e.g. the j faces of a 1D case)
+      call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, blk )
+      return
+    endif
+
+    positive = .false.
+    positive(1:nsc) = .true.
+    positive(np)    = .true.
+    select case (nrans)
+      case(1,2) ! SA: rho*nu_tilde; SST and k-omega: rho*k, rho*omega
+        positive(nt:nt+nrans-1) = .true.
+      case(7)   ! SSG/LRR: the normal stresses and omega (the shear stresses have no sign)
+        positive(nt:nt+2) = .true.
+        positive(nt+6)    = .true.
+    end select
+
+    q1 = blk % P (:,Im,Jm,Km)
+    d  = q1 - blk % P (:,Im+guide(Fm,1),Jm+guide(Fm,2),Km+guide(Fm,3))
+
+    Pg  = q1
+    psi = 1d0
+    do g = 1, gc
+      do v = 1, nprim
+        if ( .not. positive(v) ) cycle
+        if ( d(v) > 0d0 ) then
+          psi = min ( psi, ( hi * q1(v) - Pg(v) ) / d(v) )
+        elseif ( d(v) < 0d0 ) then
+          psi = min ( psi, ( Pg(v) - lo * q1(v) ) / ( - d(v) ) )
+        endif
+      enddo
+      psi = max ( psi, 0d0 )
+      Pg = Pg + psi * d
+      blk % P (:,Im-guide(Fm,1)*g,Jm-guide(Fm,2)*g,Km-guide(Fm,3)*g) = Pg
+    enddo
+
+  end subroutine Ghost_Extrapolate_Limited
 
 
   subroutine Ghost_Chimera ( nb, Blk, bc )

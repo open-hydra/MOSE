@@ -93,6 +93,11 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 | `300` | Symmetry / slip wall | — |
 | `400` | Extrapolation | — |
 
+`400`: the boundary flux is the inviscid flux of the boundary-cell state. The ghost cells
+(used by the reconstruction and the gradients next to the boundary) are extrapolated linearly
+from the two cells inside, with the slope reduced towards zero gradient wherever a species
+density, the pressure or a RANS variable would leave [1/2, 2] times its boundary-cell value.
+
 ### Inlet / Outlet
 
 | Type | Name | Data line (comma-separated) |
