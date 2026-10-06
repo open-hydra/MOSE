@@ -302,13 +302,22 @@ value is right for a linear field:
   the same position, an approximation, since their values come from donor cells
   or from a file;
 - zero-gradient faces (`0`, `401`–`407`, `420`): the cell itself;
-- symmetry (`300`): the mirror image of the cell across the face;
+- symmetry (`300`): the mirror image of the cell across the face; on a face of
+  zero area (an axis at $r = 0$) the cell itself, since the ghost value there is
+  a copy of the cell, and the viscous flux of that face is zero;
 - 3-D rotational periodicity (`200`): the cell at the other end, rotated by the
   angle of the sector.
 
 $M_f$ is computed once at setup and stored on every face of the blocks of each
 rank, 27 values per cell (the mesh does not move); the cell centres come from
-the nodes, which every rank holds, so no message is needed.
+the nodes, which every rank holds, so no message is needed. Where a face or a
+cell collapses, the differences of its stencil can stop spanning the space and
+the metric is not defined there: the run stops at setup with a message that
+names the block, the cell and the face, a declared limit of `stencil`
+(`inverse-mean` does not need this metric). This is the case of a wall on the
+axis of a 3-D mesh around it (a polar line), whose wall faces all have their
+centre on the axis, and of degenerate cells; the same axis with a symmetry
+condition (`300`) runs.
 
 In one dimension $M = 1/h$, so `mean` divides the difference across the face by
 the mean of $1/h$ instead of the centre-to-centre distance. With a cell-size
@@ -429,6 +438,16 @@ rotated ghost cells divided by the $k$ edge of the cell, which is a chord: they
 carry a relative error of order $\delta^2$ that the mesh does not reduce
 ($\delta^2/12$ of the hoop stress $2\mu u_r/r^2$ in the radial balance,
 $2.5\times10^{-5}$ for $\delta = 1^\circ$). Keep the wedge thin.
+
+Put the axis nodes at a small radius, as MOSE's meshes do ($10^{-6}\,\Delta r$).
+On an axis at $r = 0$ the faces on the axis have zero area and no normal, so
+their ghost cells copy the cells, and the wedge faces of the first row of cells,
+which take the derivative in $r$ across the axis with the ghost cell one cell
+away, see half of $\partial u_r/\partial r$: in Homann's flow the radial force of
+those cells is then wrong by $1/6$ of the hoop stress $2\mu u_r/r^2$, with every
+`diffusive-metric`. With `inverse-mean` and `mean` the faces $i$ of those cells
+do the same, and their axial force is wrong too; with `stencil` they take the
+ghost cell at the cell itself.
 
 Next to the axis the hoop stress also stiffens the explicit step. In the radial
 momentum of the first row of cells, at $r \approx \Delta r/2$, it is a damping

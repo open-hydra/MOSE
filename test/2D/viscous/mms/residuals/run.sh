@@ -57,6 +57,13 @@
 #     next to the axis it must match the hoop stress 2 mu u_r/r^2) and axial
 #     components, the azimuthal one staying zero; swirl, the radial and
 #     azimuthal components on the cells with r >= L/2, the axial one exact.
+#     Axis at r = 0: the faces on the axis have zero area; on homann, N = 32,
+#     the viscous force must be that of the mesh with the axis at 1e-6 dr
+#     (1e-5). Polar line of a 3-D mesh (360 degrees around the axis): with
+#     symmetry on the axis the Navier-Stokes step completes; with a wall on the
+#     axis the metric of the wall gradient is not defined, and the run must
+#     stop at setup with the message that names the face (a declared limit),
+#     without NaN before it.
 #  5. Spalart-Allmaras next to a wall (wall_gradient.py): a column of fluid
 #     at rest over an isothermal wall with nu~ = a y, chi below 1e-3: the
 #     linear profile is an equilibrium of the Spalart-Allmaras equation
@@ -247,7 +254,6 @@ for kind in rest stream; do
   fi
 done
 
-echo "-- 4. viscous stress on the 2-D axisymmetric wedge, 32 x 32 and 64 x 64 cells --"
 # wedge_ini <equations>: one explicit Euler step with local time stepping
 wedge_ini() {
   cat > input.ini <<EOF
@@ -271,6 +277,7 @@ flux-limiter = vanleer
 riemann-solver = HLLC
 EOF
 }
+
 # wedge_step <equations> <tag>: run it, keep OUTPUT/diagnostic.tec as OUTPUT/diagnostic-<tag>.tec
 wedge_step() {
   wedge_ini "$1"
@@ -283,6 +290,8 @@ wedge_step() {
   fi
   cp OUTPUT/diagnostic.tec "OUTPUT/diagnostic-$2.tec"
 }
+
+echo "-- 4. viscous stress on the 2-D axisymmetric wedge, 32 x 32 and 64 x 64 cells --"
 for field in homann swirl; do
   errors=()
   for n in 32 64; do
@@ -290,20 +299,50 @@ for field in homann swirl; do
     wedge_step navier-stokes "$field-ns-n$n"
     wedge_step euler "$field-eu-n$n"
     errors+=("$(python3 -B wedge_viscous.py error "$field" "OUTPUT/diagnostic-$field-ns-n$n.tec" \
-                                                       "OUTPUT/diagnostic-$field-eu-n$n.tec")")
+                                                    "OUTPUT/diagnostic-$field-eu-n$n.tec")")
   done
+
   if [[ $field == homann ]]; then
-    echo "   Homann's stagnation-point flow"
+    echo "-- viscous force on Homann's stagnation-point flow, 2-D axisymmetric wedge --"
   else
-    echo "   a polynomial field with dilatation and swirl"
+    echo "-- viscous force on a polynomial field with dilatation and swirl, 2-D axisymmetric wedge --"
   fi
   if python3 -B wedge_viscous.py check "$field" "${errors[0]}" "${errors[1]}"; then
-    echo "  [ok  ] $field: second-order agreement"
+    echo "  [ok  ] second-order agreement"
   else
-    echo "  [FAIL] $field: the viscous force on the wedge is not the Navier-Stokes one"
+    echo "  [FAIL] the viscous force on the wedge is not the Navier-Stokes one"
     fail=1
   fi
 done
+
+echo "-- the axis at r = 0: faces of zero area on the axis of the wedge (homann, N = 32) --"
+python3 -B wedge_viscous.py case homann 32 axis0 || exit 1
+wedge_step navier-stokes homann-ns-n32-axis0
+wedge_step euler homann-eu-n32-axis0
+if python3 -B wedge_viscous.py axis homann OUTPUT/diagnostic-homann-ns-n32-axis0.tec OUTPUT/diagnostic-homann-eu-n32-axis0.tec \
+     OUTPUT/diagnostic-homann-ns-n32.tec OUTPUT/diagnostic-homann-eu-n32.tec; then
+  echo "  [ok  ] the viscous force is that of the mesh with the axis at 1e-6 dr"
+else
+  echo "  [FAIL] the viscous force changes when the faces on the axis have zero area"
+  fail=1
+fi
+
+echo "-- polar line of a 3-D mesh, symmetry on the axis --"
+python3 -B wedge_viscous.py polar 300 || exit 1
+wedge_step navier-stokes polar-300
+echo "  [ok  ] the Navier-Stokes step completes"
+
+echo "-- polar line of a 3-D mesh, wall on the axis: a declared limit of the stencil metric --"
+python3 -B wedge_viscous.py polar 302 || exit 1
+wedge_ini navier-stokes
+rm -f OUTPUT/diagnostic.tec
+"$LOCAL" > OUTPUT/polar-302.log 2>&1
+if python3 -B wedge_viscous.py stopped OUTPUT/polar-302.log; then
+  echo "  [ok  ] the run stops at setup and names the face"
+else
+  echo "  [FAIL] the run does not stop with the message on the collapsed wall faces (see OUTPUT/polar-302.log)"
+  fail=1
+fi
 
 cat > input.ini <<EOF
 [MOSE-Parameters]

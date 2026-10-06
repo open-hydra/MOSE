@@ -20,7 +20,8 @@
 !> which its value is right for a linear field: the centre of the cell across a face between blocks (plus the translation of
 !> a periodic pair), 3 x1 - 3 x2 + x3 behind the faces whose ghost value is 3 u1 - 3 u2 + u3 (Ghost_Extrapolate: walls,
 !> 400, 408, ...; 2 x1 - x2, or x1, in a block with two cells, or one, across the face), the cell itself behind the
-!> zero-gradient faces (0, 401-407, 420), its mirror image across a symmetry face (300), and on a 3-D rotational periodic
+!> zero-gradient faces (0, 401-407, 420), its mirror image across a symmetry face (300; the cell itself on a face of zero
+!> area, an axis, where the ghost value is a copy of the cell), and on a 3-D rotational periodic
 !> face (200) the cell of the other end rotated by the angle of the sector. Chimera (102) and mapped (410) faces take the
 !> extrapolated position too, an approximation: their values come from donor cells or from a file. The centres of every
 !> block are computed on every rank, from the nodes every rank holds until the end of the setup of the metrics, so no
@@ -92,7 +93,9 @@ contains
   end function Cell_Centre
 
 
-  !> Centre (mean of the four nodes) and unit normal (direction of growing index) of face Fm of cell (i,j,k).
+  !> Centre (mean of the four nodes) and unit normal (direction of growing index) of face Fm of cell (i,j,k). The normal
+  !> of a face of zero area (its nodes on an axis) is zero, as in Compute_Norm_Area: Mirror then gives the point itself,
+  !> as Ghost_Symmetry, which reflects the velocity with that normal, copies the cell there.
   pure subroutine Face_Centre_Normal ( node, i, j, k, Fm, xf, nf )
     use MOSE_Base_Types_m, only: MOSE_vector_3D_type
     implicit none
@@ -118,7 +121,11 @@ contains
     d1 = p3 - p1
     d2 = p4 - p2
     v = [ d1(2)*d2(3) - d1(3)*d2(2), d1(3)*d2(1) - d1(1)*d2(3), d1(1)*d2(2) - d1(2)*d2(1) ]
-    nf = v / norm2(v)
+    if ( norm2(v) > 0d0 ) then
+      nf = v / norm2(v)
+    else
+      nf = 0d0
+    end if
 
   end subroutine Face_Centre_Normal
 
@@ -335,15 +342,16 @@ contains
   end function Mean_Edges
 
 
-  !> Face metric M_f = (J^T)^-1 of the face of direction d and indices (i,j,k) of block b. The run stops when the three
-  !> differences of the stencil are not independent, |det J^T| <= 1e-12 |D_a x| |D_b x| |D_c x|: a degenerate cell, or a
-  !> face whose stencil collapses (a polar line of a 3-D mesh), where this metric is not defined.
-  function Face_Inverse ( JT, b, d, i, j, k, kind ) result ( Mf )
+  !> Metric (J^T)^-1 of face f of cell (i,j,k) of block b, or of the cell itself when f = 0 (kind: which one). The run
+  !> stops when the three differences of the stencil do not span the space, |det J^T| <= 1e-12 |D_a x| |D_b x| |D_c x|:
+  !> a collapsed face or cell (around a polar line of a 3-D mesh), or a degenerate cell, where the metric is not defined.
+  !> A declared limit of diffusive-metric = stencil, which inverse-mean does not have.
+  function Face_Inverse ( JT, b, i, j, k, f, kind ) result ( Mf )
     use MOSE_Lib_Diffusive, only: Inverse3
     use MOSE_Mod_MPI, only: mpi_abort_all
     implicit none
     real(R8), intent(in) :: JT(3,3)
-    integer, intent(in) :: b, d, i, j, k
+    integer, intent(in) :: b, i, j, k, f
     character(len=*), intent(in) :: kind
     real(R8) :: Mf(3,3)
     ! Local
@@ -354,15 +362,20 @@ contains
         - JT(1,2) * ( JT(2,1)*JT(3,3) - JT(2,3)*JT(3,1) ) &
         + JT(1,3) * ( JT(2,1)*JT(3,2) - JT(2,2)*JT(3,1) )
     if ( .not. ( abs(det) > 1d-12 * norm2(JT(:,1)) * norm2(JT(:,2)) * norm2(JT(:,3)) ) ) then
-      write(*,'(A,I0,A,I0,A,3(1X,I0),A)') ' [ERROR] diffusive-metric = stencil: block ', b, ', face of direction ', &
-                                          d, ' at', i, j, k, ' ('//kind//')'
-      write(*,'(A)') ' [ERROR]   the differences of the cell centres of its stencil are not independent:'
+      if ( f > 0 ) then
+        write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] diffusive-metric = stencil: block ', b, ', cell', i, j, k, &
+                                              ', face ', f, ' ('//kind//')'
+      else
+        write(*,'(A,I0,A,3(1X,I0),A)') ' [ERROR] diffusive-metric = stencil: block ', b, ', cell', i, j, k, ' ('//kind//')'
+      end if
+      write(*,'(A)') ' [ERROR]   collapsed face or cell (as around a polar line of a 3-D mesh): the metric of the stencil'
+      write(*,'(A)') ' [ERROR]   is not defined there. The differences of the cell centres it takes:'
       do t = 1, 3
         write(*,'(A,I0,A,3(1X,ES14.6))') ' [ERROR]   difference ', t, ':', JT(:,t)
       enddo
-      write(*,'(A)') ' [ERROR] A degenerate cell, or a stencil that collapses (polar line of a 3-D mesh).'
-      write(*,'(A)') ' [ERROR] diffusive-metric = inverse-mean does not need this metric.'
-      call mpi_abort_all ( 'face metric of the viscous fluxes not defined (see above)' )
+      write(*,'(A)') ' [ERROR] A declared limit of diffusive-metric = stencil; diffusive-metric = inverse-mean does not'
+      write(*,'(A)') ' [ERROR] need this metric.'
+      call mpi_abort_all ( 'metric of diffusive-metric = stencil not defined (see above)' )
     end if
     Mf = Inverse3 ( JT )
 
@@ -392,7 +405,7 @@ contains
           JT(:,t) = 0.25d0 * ( ( xc % x(:,i +e(1,t),j +e(2,t),k +e(3,t)) - xc % x(:,i -e(1,t),j -e(2,t),k -e(3,t)) ) &
                              + ( xc % x(:,i2+e(1,t),j2+e(2,t),k2+e(3,t)) - xc % x(:,i2-e(1,t),j2-e(2,t),k2-e(3,t)) ) )
         enddo
-        blk % dir(d) % Mf(i,j,k) % c = Face_Inverse ( JT, b, d, i, j, k, 'interior' )
+        blk % dir(d) % Mf(i,j,k) % c = Face_Inverse ( JT, b, i, j, k, 2*d, 'interior' )
       enddo ; enddo ; enddo
     enddo
 
@@ -454,7 +467,7 @@ contains
         JT(:,t) = 0.25d0 * ( dgh + dloc )
       end if
     enddo
-    domain % blk(b) % dir(dir) % Mf(fi,fj,fk) % c = Face_Inverse ( JT, b, dir, fi, fj, fk, 'between blocks' )
+    domain % blk(b) % dir(dir) % Mf(fi,fj,fk) % c = Face_Inverse ( JT, b, Im, Jm, Km, Fm, 'between blocks' )
 
   end subroutine Connection_Face_Metric
 
@@ -493,7 +506,8 @@ contains
   !> Face metric of a symmetry face (300) of block b: the cell and its mirror image across the face, D_a = (mirror - cell)
   !> along the direction of growing index, and the tangential differences of the cell and of the mirror images of its
   !> neighbours (BC_Symmetry_Visc). Faces across an index direction with one cell (the k faces of a 2-D mesh) keep the cell
-  !> metric: nothing to store.
+  !> metric: nothing to store. A face of zero area (on an axis), whose viscous flux is zero, keeps the cell metric too: its
+  !> mirror image is the cell itself, and the difference across it would be zero.
   subroutine Symmetry_Face_Metric ( blk, xc, rec )
     use MOSE_Advanced_Types_m
     use MOSE_Lib_Diffusive, only: Inverse3
@@ -512,6 +526,10 @@ contains
     e = reshape ( [1,0,0, 0,1,0, 0,0,1], [3,3] )
     call Face_Index ( Fm, dir, Im, Jm, Km, fi, fj, fk )
     if ( n(dir) == 1 ) return
+    if ( .not. ( blk % dir(dir) % f(fi,fj,fk) % a > 0d0 ) ) then
+      blk % dir(dir) % Mf(fi,fj,fk) % c = blk % M(Im,Jm,Km) % c
+      return
+    end if
     modfm2 = 1 - 2 * mod(Fm,2)
     call Face_Centre_Normal ( blk % node, Im, Jm, Km, Fm, xf, nf )
     x1 = xc % x(:,Im,Jm,Km)
@@ -523,7 +541,7 @@ contains
       xm = xc % x(:,Im-e(1,t),Jm-e(2,t),Km-e(3,t))
       JT(:,t) = 0.25d0 * ( ( xp - xm ) + ( Mirror ( xp, xf, nf ) - Mirror ( xm, xf, nf ) ) )
     enddo
-    blk % dir(dir) % Mf(fi,fj,fk) % c = Face_Inverse ( JT, rec % b, dir, fi, fj, fk, 'symmetry' )
+    blk % dir(dir) % Mf(fi,fj,fk) % c = Face_Inverse ( JT, rec % b, Im, Jm, Km, Fm, 'symmetry' )
 
   end subroutine Symmetry_Face_Metric
 
@@ -541,14 +559,13 @@ contains
   subroutine Wall_Face_Stencils ( domain, xc )
     use MOSE_Advanced_Types_m
     use MOSE_Lib_Diffusive, only: Inverse3
-    use MOSE_Lib_BC_Fluxes, only: Face_Index
     use MOSE_Mod_MPI, only: is_local_block
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     type(centres_t), intent(in) :: xc(:)
     ! Local
     integer, allocatable :: map(:,:)
-    integer :: b, f, ii, r, rn(2), q, s, dir, tb(2), n(3), c(3), cn(3), fi, fj, fk, typ, nside
+    integer :: b, f, ii, r, rn(2), q, s, dir, tb(2), n(3), c(3), cn(3), typ, nside
     real(R8) :: JT(3,3), xf(3), nf(3), xfn(3,2), Ac(3,3), dT
 
     do b = 1, domain % nb
@@ -614,8 +631,7 @@ contains
             end if
             domain % bc(r) % wdT(q) = dT
           enddo
-          call Face_Index ( f, dir, c(1), c(2), c(3), fi, fj, fk )
-          domain % bc(r) % wM = Face_Inverse ( JT, b, dir, fi, fj, fk, 'wall' )
+          domain % bc(r) % wM = Face_Inverse ( JT, b, c(1), c(2), c(3), f, 'wall' )
           domain % bc(r) % wstencil = .true.
         enddo
         deallocate ( map )
@@ -730,9 +746,9 @@ contains
           JTc(:,d) = 0.5d0 * ( xcp(:,1) - xcp(:,2) )
           JTa(:,d) = 0.5d0 * ( xa(:,1) - xa(:,2) )
         enddo
-        domain % blk(b) % Ms(i,j,k) % c = Face_Inverse ( JTi, b, 0, i, j, k, 'cell, source terms' )
-        domain % blk(b) % Msc(i,j,k) % c = Face_Inverse ( JTc, b, 0, i, j, k, 'cell, source terms, copied values' )
-        if ( rc ) domain % blk(b) % Msa(i,j,k) % c = Face_Inverse ( JTa, b, 0, i, j, k, 'cell, SA-RC' )
+        domain % blk(b) % Ms(i,j,k) % c = Face_Inverse ( JTi, b, i, j, k, 0, 'cell, source terms' )
+        domain % blk(b) % Msc(i,j,k) % c = Face_Inverse ( JTc, b, i, j, k, 0, 'cell, source terms, copied values' )
+        if ( rc ) domain % blk(b) % Msa(i,j,k) % c = Face_Inverse ( JTa, b, i, j, k, 0, 'cell, SA-RC' )
       enddo ; enddo ; enddo
       do f = 1, 6
         deallocate ( wall(f) % w )

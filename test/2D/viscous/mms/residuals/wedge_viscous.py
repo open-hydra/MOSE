@@ -32,7 +32,8 @@ swirl   A polynomial field with dilatation and swirl, the two things Homann's fl
         azimuthal one (a quarter of it); their tau_xtheta cancel.
 
 Case (python3 -B wedge_viscous.py case FIELD N): x in [0, 3 mm], r in [0, 3 mm] with the axis nodes at r = 1e-6 dr (like the
-wedge meshes of MOSE, so that no face has zero area), N x N square cells; air of test/common/Air-viscous (mu and k constant)
+wedge meshes of MOSE, so that no face has zero area), N x N square cells; with the option axis0, the axis nodes at r = 0,
+so that the faces on the axis have zero area; air of test/common/Air-viscous (mu and k constant)
 at uniform density and pressure (rho = 1.1858686e-3 kg/m3, T = 300 K, so nu = 1e-2 m2/s; for homann a = 1e4 1/s, L = 1 mm),
 with the velocity of FIELD at the cell centres. Faces: 400 on i = 1, i = N and j = N; 300 on the axis (j = 1); 200 on k.
 
@@ -52,15 +53,37 @@ viscous flux), with errors over the largest exact force of the same component:
   swirl   radial and azimuthal  error below 0.02 on N = 64 and observed order above 1.5 on the cells with r >= L/2 (next to
                   the axis the error of these cubic fields is of first order in the mesh);
           axial   below 1e-9 (exact for a quadratic u_x; the tau_xtheta of the two faces cancel).
+Axis at r = 0 (homann, N = 32): the faces on the axis have zero area, no normal and no viscous flux, and their ghost cells
+copy the cells. The viscous force must be that of the mesh with the axis at 1e-6 dr: their largest difference, over the
+largest exact force of the same component, below 1e-5 (the meshes differ by 1e-6 dr at the axis; on the radial velocity
+a r f', linear in r, and the axial one, constant in r, the derivatives across the axis are exact with both ghost cells,
+the mirror image and the copy of the cell), apart from the radial force of the first row. There the faces of the wedge
+(BC_Rotational_Periodic_Visc, with every diffusive-metric) take the derivative in r across the axis with the ghost cell
+one cell away, which on an axis of zero area is a copy of the cell: half of d u_r/dr, and lambda div(u) in tau_thetatheta
+wrong by mu a f'/3, 1/6 of the hoop term 2 mu a f'/r. That difference is printed, not checked: MOSE's meshes put the
+axis at a small radius.
+Polar line of a 3-D mesh (python3 -B wedge_viscous.py polar AXIS): the same box in x and r, 360 degrees around the axis in 8
+cells closed by a face between the block and itself (101), the axis nodes at r = 0, air at rest, faces 400 on i = 1,
+i = N and j = N and of type AXIS on the axis (j = 1):
+  300  symmetry: the faces on the axis have zero area, as in the wedge; the Navier-Stokes step must complete;
+  302  wall at 300 K: along the axis the centres of the wall faces coincide, so the differences of the wall gradient
+       around it are zero and its metric is not defined. The run must stop at setup with the message that names the
+       block, the cell and the face (a declared limit; diffusive-metric = inverse-mean runs there), without NaN before.
 
 Usage (from the test directory), FIELD = homann or swirl:
-  python3 -B wedge_viscous.py case FIELD N                    INPUT/ic.tec and INPUT/bc.txt
+  python3 -B wedge_viscous.py case FIELD N [axis0]            INPUT/ic.tec and INPUT/bc.txt (axis0: axis nodes at r = 0)
   python3 -B wedge_viscous.py error FIELD NS_FILE EU_FILE      prints the errors of one mesh, comma-separated; homann: radial,
                                                            radial on r >= L/2, radial over the hoop term on the first row,
                                                            axial, azimuthal; swirl: radial, radial on r >= L/2, azimuthal,
                                                            azimuthal on r >= L/2, axial
   python3 -B wedge_viscous.py check FIELD E32 E64              exit status 0 when the errors on N = 32 and N = 64 pass
                                                            (E32, E64: the five numbers printed by 'error')
+  python3 -B wedge_viscous.py polar AXIS                       INPUT/ic.tec and INPUT/bc.txt of the polar mesh (AXIS: 300 or 302)
+  python3 -B wedge_viscous.py stopped LOG                      exit status 0 when the run of LOG stopped at setup with the message
+                                                           on the collapsed wall faces of the axis, without NaN or trap
+  python3 -B wedge_viscous.py axis FIELD NS0 EU0 NS EU        largest difference of the viscous force between the mesh with the
+                                                           axis at r = 0 (NS0, EU0) and the one at 1e-6 dr (NS, EU); exit
+                                                           status 0 when it is below 1e-5
 """
 import math
 import os
@@ -106,10 +129,10 @@ def homann(n):
     return out
 
 
-def radii(n):
-    """Node radii: the axis row at 1e-6 dr, then j dr."""
+def radii(n, axis0=False):
+    """Node radii: the axis row at 1e-6 dr (at 0 with axis0), then j dr."""
     dr = SIZE / n
-    return [1.0e-6 * dr] + [j * dr for j in range(1, n + 1)]
+    return [0.0 if axis0 else 1.0e-6 * dr] + [j * dr for j in range(1, n + 1)]
 
 
 def swirl_velocity(xc, rc):
@@ -122,9 +145,9 @@ def swirl_force(xc, rc):
     return (8.0 / 3.0) * MU * B_SW, (32.0 / 3.0) * MU * C_SW * rc, 8.0 * MU * S_SW * rc * (1.0 + xc / L)
 
 
-def write_case(field, n):
+def write_case(field, n, axis0=False):
     dx = SIZE / n
-    rn = radii(n)
+    rn = radii(n, axis0)
     f = homann(n) if field == "homann" else None
     for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
         if os.path.lexists(p):
@@ -168,6 +191,66 @@ def write_case(field, n):
         rows += [rec(i, j, face, 200) for j in range(1, n + 1) for i in range(1, n + 1)]
     with open("INPUT/bc.txt", "w") as out:
         out.write("".join(rows))
+
+
+POLAR_N = (4, 3, 8)                 # polar mesh: cells along x, r and around the axis
+
+
+def write_polar(axis_type):
+    """The 3-D mesh around the axis (see the module docstring): air at rest, axis faces of type axis_type."""
+    ni, nj, nk = POLAR_N
+    dx, dr = SIZE / ni, SIZE / nj
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    nc = ni * nj * nk
+    with open("INPUT/ic.tec", "w") as out:
+        out.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
+        out.write(f" ZONE  T = B1-IG, I={ni + 1}, J={nj + 1}, K={nk + 1}, DATAPACKING=BLOCK, "
+                  "VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for comp in range(3):
+            for k in range(nk + 1):
+                theta = 2.0 * math.pi * (k % nk) / nk        # the last plane is the first one, to the bit
+                for j in range(nj + 1):
+                    for i in range(ni + 1):
+                        val = (i * dx, j * dr * math.cos(theta), j * dr * math.sin(theta))[comp]
+                        out.write(f" {val:.16E}\n")
+        for col in ([RHO0] * nc, [0.0] * nc, [0.0] * nc, [0.0] * nc, [P0] * nc):
+            out.write("".join(f" {x:.16E}\n" for x in col))
+
+    def rec(i, j, k, face, t):
+        return '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, k, face, t)
+
+    def src(i, j, k, face):
+        return '%10d %7d %7d %7d %7d %7d %7d %7d %7d\n' % (1, i, j, k, face, 1, 0, 0, 1)
+
+    rows = []
+    for k in range(1, nk + 1):
+        for j in range(1, nj + 1):
+            rows += [rec(1, j, k, 1, 400), rec(ni, j, k, 2, 400)]
+    for k in range(1, nk + 1):
+        for i in range(1, ni + 1):
+            rows.append(rec(i, 1, k, 3, axis_type))
+            if axis_type == 302:
+                rows.append(f"    {T0:.6E}, 0.000000E+00, 0.000000E+00,\n")
+            rows.append(rec(i, nj, k, 4, 400))
+    for j in range(1, nj + 1):
+        for i in range(1, ni + 1):
+            rows += [rec(i, j, 1, 5, 101), src(i, j, nk, 6), rec(i, j, nk, 6, 101), src(i, j, 1, 5)]
+    with open("INPUT/bc.txt", "w") as out:
+        out.write("".join(rows))
+
+
+def stopped(log):
+    """The run stopped at setup with the message on a collapsed wall face of the axis (block 1, a cell of the first row,
+    face 3), with no NaN and no floating-point trap before it."""
+    text = open(log, errors="replace").read()
+    head = re.search(r"\[ERROR\] diffusive-metric = stencil: block 1, cell +(\d+) +1 +(\d+), face 3 \(wall\)", text)
+    collapsed = "collapsed face or cell" in text and "diffusive-metric = inverse-mean does not" in text
+    clean = "ABORT:" in text and not re.search(r"NaN|Floating-point exception|SIGFPE|Program received signal", text)
+    print(f"    message on a wall face of the axis: {'yes' if head else 'no'}; collapsed face and remedy named: "
+          f"{'yes' if collapsed else 'no'}; clean stop without NaN or trap: {'yes' if clean else 'no'}")
+    sys.exit(0 if head and collapsed and clean else 1)
 
 
 def read_zone(path):
@@ -251,6 +334,58 @@ def errors_swirl(ns_path, eu_path):
     return err[1] / fmax[1], err_far[1] / fmax[1], err[2] / fmax[2], err_far[2] / fmax[2], err[0] / fmax[0]
 
 
+def largest_exact(field, n):
+    """Largest exact viscous force of each component over the cells, axial, radial, azimuthal (homann: the radial one for
+    the azimuthal, which is zero), on the mesh with the axis at 1e-6 dr."""
+    rn = radii(n)
+    dx = SIZE / n
+    f = homann(n) if field == "homann" else None
+    fmax = [0.0, 0.0, 0.0]
+    for j in range(n):
+        rc = 0.5 * (rn[j] + rn[j + 1])
+        for i in range(n):
+            if field == "homann":
+                fex = (-2.0 * RHO0 * A * math.sqrt(A * NU) * f[i][2], RHO0 * A * A * rc * f[i][3], 0.0)
+            else:
+                fex = swirl_force((i + 0.5) * dx, rc)
+            for k in range(3):
+                fmax[k] = max(fmax[k], abs(fex[k]))
+    if field == "homann":
+        fmax[2] = fmax[1]
+    return fmax
+
+
+def axis_difference(ns0_path, eu0_path, ns_path, eu_path):
+    """Homann: largest difference of the viscous right-hand side between the mesh with the axis at r = 0 (ns0, eu0) and
+    the one with the axis at 1e-6 dr (ns, eu), on the cells of the checks, over the largest exact force of the same
+    component: (difference, row of the cell) for the axial, radial (rows 2 and above) and azimuthal components; and the
+    largest radial difference on the first row over the hoop term 2 mu a f'/r."""
+    ns0, n = read_zone(ns0_path)
+    eu0, n0 = read_zone(eu0_path)
+    ns, n1 = read_zone(ns_path)
+    eu, n2 = read_zone(eu_path)
+    assert n == n0 == n1 == n2
+    fmax = largest_exact("homann", n)
+    rn = radii(n)
+    f = homann(n)
+    worst = [(0.0, 0), (0.0, 0), (0.0, 0)]
+    first_row = 0.0
+    for j in range(n - 1):
+        rc = 0.5 * (rn[j] + rn[j + 1])
+        for i in range(1, n - 1):
+            q = j * n + i
+            a = viscous_rhs(ns0, eu0, q)
+            b = viscous_rhs(ns, eu, q)
+            for k in range(3):
+                if k == 1 and j == 0:
+                    first_row = max(first_row, abs(a[1] - b[1]) / (2.0 * MU * A * f[i][1] / rc))
+                    continue
+                d = abs(a[k] - b[k]) / fmax[k]
+                if d > worst[k][0]:
+                    worst[k] = (d, j + 1)
+    return worst, first_row
+
+
 def order(e32, e64):
     return math.log2(e32 / e64) if e32 > 0 and e64 > 0 else float("nan")
 
@@ -293,11 +428,16 @@ def check_swirl(a32, a64):
 
 def main():
     what = sys.argv[1]
+    if what == "polar":
+        write_polar(int(sys.argv[2]))
+        return
+    if what == "stopped":
+        stopped(sys.argv[2])
     field = sys.argv[2] if len(sys.argv) > 2 else ""
     if field not in FIELDS:
         sys.exit(f"unknown field {field}: use one of {', '.join(FIELDS)}")
     if what == "case":
-        write_case(field, int(sys.argv[3]))
+        write_case(field, int(sys.argv[3]), len(sys.argv) > 4 and sys.argv[4] == "axis0")
     elif what == "error":
         errs = (errors_homann if field == "homann" else errors_swirl)(sys.argv[3], sys.argv[4])
         print(",".join(f"{e:.6e}" for e in errs))
@@ -306,6 +446,16 @@ def main():
         a64 = [float(v) for v in sys.argv[4].split(",")]
         ok = (check_homann if field == "homann" else check_swirl)(a32, a64)
         sys.exit(0 if ok else 1)
+    elif what == "axis":
+        if field != "homann":
+            sys.exit("axis: homann only")
+        worst, first_row = axis_difference(*sys.argv[3:7])
+        names = ("axial", "radial (rows 2 and above)", "azimuthal")
+        print("    axis at r = 0 against the axis at 1e-6 dr, largest difference of the viscous force over the largest exact "
+              "force: " + ", ".join(f"{nm} {d:.3e} (row {j})" for nm, (d, j) in zip(names, worst)))
+        print(f"    radial force of the first row, difference over the hoop term: {first_row:.3e} (not checked: the faces of "
+              "the wedge take d u_r/dr across the axis at half its value there, 1/6 of the hoop term)")
+        sys.exit(0 if max(d for d, _ in worst) < 1.0e-5 else 1)
     else:
         sys.exit(f"unknown request {what}")
 
