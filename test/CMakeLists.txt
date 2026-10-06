@@ -142,6 +142,9 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # enters (from rest too), subsonic and choked faces, the slip wall of an inlet the
 # reservoir cannot feed, and the outlet of an ambient face it cannot feed with the gas
 # moving in; one step, mass fluxes against the face state.
+# Boundary input: the property lines of bc.txt are read as written or refused
+# (the inlet 402 table under any file name; a missing or decreasing table stops
+# the run).
 mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;1D;2D")
 
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.

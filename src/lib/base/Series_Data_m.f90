@@ -18,6 +18,7 @@ module MOSE_Series_Data_m
 contains
 
   subroutine initialize(self,file,bar)
+    use MOSE_Mod_MPI, only: mpi_abort_all
     implicit none
     class(time_series_type), intent(inout) :: self
     character(len=*), intent(in)     :: file
@@ -27,17 +28,20 @@ contains
     integer :: UnitFree
 
     self%exists = .true.
-    self%n = -1
+    self%n = 0
     open(newunit=UnitFree, file = trim(file), status = 'OLD', action = 'READ', form = 'FORMATTED', iostat=ios)
-    ios = 0
-    do while (ios==0)
+    if (ios /= 0) call mpi_abort_all('[ERROR] Time table '//trim(file)//': the file cannot be opened')
+    ! One (time, value) pair per line; blank lines and the 'periodic' line are not pairs
+    do
       read(UnitFree,'(A)',iostat=ios) line
-      self%n = self%n+1
+      if (ios /= 0) exit
       if (index(line, 'periodic') > 0) then
         self%periodic = .true.
-        self%n = self%n -1 ! Do not count this one
+      elseif (len_trim(line) > 0) then
+        self%n = self%n + 1
       endif
     enddo
+    if (self%n < 1) call mpi_abort_all('[ERROR] Time table '//trim(file)//': no (time, value) pair in the file')
     rewind(UnitFree)
     allocate(self%time(1:self%n))
     allocate(self%var(1:self%n))
@@ -46,6 +50,9 @@ contains
       read(UnitFree,*) self%time(i), self%var(i)
     enddo
     close(UnitFree)
+    ! update interpolates between consecutive times: they must not decrease (two equal times make a jump)
+    if (any(self%time(2:) < self%time(:self%n-1))) &
+      call mpi_abort_all('[ERROR] Time table '//trim(file)//': the times decrease')
     
     if (bar) self%var = self%var*1d+5
 

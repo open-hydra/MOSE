@@ -1,0 +1,7 @@
+bin/
+OUTPUT/
+INPUT/
+input.ini
+p0.dat
+missing.dat
+decreasing.dat

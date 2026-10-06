@@ -160,8 +160,10 @@ contains
     integer :: cc, i, s, nnozzle, nmanifold
     integer :: unitfile, ios, cios, ip
     integer :: nzero_chim
-    character(len=32) :: p0file
+    character(len=llen) :: p0file
     character(len=32) :: alpha_tok, beta_tok
+    character(len=:), allocatable :: pline   ! a property line, read whole
+    character(len=256) :: msg402
     character(len=256) :: q2d_line
 
     cios = 0
@@ -303,9 +305,23 @@ contains
           if (level == 1) nio = nio + 1
           has_tdep_bc = .true.
           allocate( bc(i) % ci(1 : nsc+nrans) )
-          read( unitfile,*,iostat=ios ) &
-            bc(i)%T0, p0file, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
-          call bc(i)%p0time%initialize(file=p0file, bar=.true.)
+          ! Read as one line and split by hand (Read_Inlet_402): read as a list, a file
+          ! name with a directory ended at its slash, and the values after it were lost.
+          call Read_Line ( unitfile, pline, ios )
+          if ( ios == 0 ) then
+            call Read_Inlet_402 ( pline, bc(i), p0file, alpha_tok, beta_tok, ios, msg402 )
+          else
+            msg402 = 'the property line is missing'
+          end if
+          if ( ios /= 0 ) then
+            block
+              use MOSE_Mod_MPI, only: mpi_abort_all
+              character(len=512) :: msg
+              write(msg,'(A,I0,A)') '[ERROR] Boundary record ', i, ' (inlet 402): '//trim(msg402)
+              call mpi_abort_all(trim(msg))
+            end block
+          end if
+          call bc(i)%p0time%initialize(file=trim(p0file), bar=.true.)
           bc(i)%alpha = parse_dir_tok(alpha_tok)
           bc(i)%beta  = parse_dir_tok(beta_tok)
 
@@ -662,6 +678,147 @@ contains
     if (has_tdep_bc) write(*,'(A)') '   Time-dependent BC detected'
 
   end subroutine Print_BC_Summary
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Read_Line: the next line of a formatted file, whole, whatever its length (read in
+  !   pieces without advancing). ios < 0 at the end of the file; a last line without its
+  !   end-of-line mark is still a line.
+  subroutine Read_Line ( unit, line, ios )
+    implicit none
+    integer, intent(in)                        :: unit
+    character(len=:), allocatable, intent(out) :: line
+    integer, intent(out)                       :: ios
+    ! Local
+    character(len=256) :: piece
+    integer :: nread
+
+    line = ''
+    do
+      read ( unit, '(A)', advance='no', iostat=ios, size=nread ) piece
+      line = line // piece(1:nread)
+      if ( ios /= 0 ) exit
+    end do
+    if ( is_iostat_eor(ios) ) ios = 0
+    if ( is_iostat_end(ios) .and. len(line) > 0 ) ios = 0
+
+  end subroutine Read_Line
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Read_Inlet_402: the property line of an inlet 402 (time-varying p0), read as one line and split here into its
+  !   values: T0, p0_file, alpha, beta, rel_fac, mass fractions (nsc), turbulence values (nrans). As in list-directed
+  !   input, values are separated by a comma or by blanks (blanks around a comma included), and a value in quotes
+  !   (' or ") is taken whole, separators included; unlike list-directed input, a slash is part of a value, so that
+  !   the file name is taken as written: read as a list, a name with a directory (INPUT/p0.dat) ended at the slash, a
+  !   separator that also ends the record, and the values after it were not read. Values after the last one needed
+  !   are ignored, as a list-directed read did. ios /= 0, with msg, when the line is short, a value is empty (two
+  !   commas with only blanks between: a null value, which would leave the field as it was) or is not a number, or
+  !   the file name does not fit p0file.
+  subroutine Read_Inlet_402 ( line, bc, p0file, alpha_tok, beta_tok, ios, msg )
+    use MOSE_Advanced_Types_m, only: MOSE_bc_type
+    use MOSE_Global_m, only: nsc, nrans
+    implicit none
+    character(len=*), intent(in)       :: line
+    type(MOSE_bc_type), intent(inout)  :: bc
+    character(len=*), intent(out)      :: p0file, alpha_tok, beta_tok
+    integer, intent(out)               :: ios
+    character(len=*), intent(out)      :: msg
+    ! Local
+    character(len=len(line)) :: tok(5 + nsc + nrans)
+    integer :: ntok, need, p, n, s
+    character(len=1) :: q
+
+    ios = 0
+    msg = ' '
+    need = 5 + nsc + nrans
+
+    ! Split the line into values, up to the last one needed
+    ntok = 0
+    p = 1
+    n = len_trim(line)
+    do while ( ntok < need )
+      ! blanks before a value
+      do while ( p <= n )
+        if ( line(p:p) /= ' ' .and. line(p:p) /= achar(9) ) exit
+        p = p + 1
+      end do
+      if ( p > n ) exit
+      ntok = ntok + 1
+      tok(ntok) = ' '
+      if ( line(p:p) == ',' ) then
+        ios = 1
+        write(msg,'(A,I0,A)') 'value ', ntok, ' is empty'
+        return
+      else if ( line(p:p) == '"' .or. line(p:p) == "'" ) then
+        q = line(p:p)
+        s = index ( line(p+1:n), q )
+        if ( s == 0 ) then
+          ios = 1
+          write(msg,'(A,I0,A)') 'the quotes of value ', ntok, ' are not closed'
+          return
+        end if
+        tok(ntok) = line(p+1:p+s-1)
+        p = p + s + 1
+      else
+        s = p
+        do while ( p <= n )
+          if ( line(p:p) == ' ' .or. line(p:p) == ',' .or. line(p:p) == achar(9) ) exit
+          p = p + 1
+        end do
+        tok(ntok) = line(s:p-1)
+      end if
+      ! blanks after the value, then at most one comma
+      do while ( p <= n )
+        if ( line(p:p) /= ' ' .and. line(p:p) /= achar(9) ) exit
+        p = p + 1
+      end do
+      if ( p <= n ) then
+        if ( line(p:p) == ',' ) p = p + 1
+      end if
+    end do
+
+    if ( ntok < need ) then
+      ios = 1
+      write(msg,'(A,I0,A,I0,A)') 'it holds ', ntok, ' values, the inlet needs ', need, &
+        ' (T0, p0 file, alpha, beta, rel_fac, mass fractions, turbulence values)'
+      return
+    end if
+
+    read ( tok(1), *, iostat=ios ) bc % T0
+    if ( ios /= 0 ) then
+      msg = 'T0 is not a number: '//trim(tok(1))
+      return
+    end if
+    if ( len_trim(tok(2)) > len(p0file) ) then
+      ios = 1
+      write(msg,'(A,I0,A)') 'the name of the p0 file is longer than ', len(p0file), ' characters'
+      return
+    end if
+    p0file    = tok(2)
+    alpha_tok = tok(3)
+    beta_tok  = tok(4)
+    read ( tok(5), *, iostat=ios ) bc % rel_fac
+    if ( ios /= 0 ) then
+      msg = 'rel_fac is not a number: '//trim(tok(5))
+      return
+    end if
+    do s = 1, nsc
+      read ( tok(5+s), *, iostat=ios ) bc % ci(nrans+s)
+      if ( ios /= 0 ) then
+        msg = 'a mass fraction is not a number: '//trim(tok(5+s))
+        return
+      end if
+    end do
+    do s = 1, nrans
+      read ( tok(5+nsc+s), *, iostat=ios ) bc % ci(s)
+      if ( ios /= 0 ) then
+        msg = 'a turbulence value is not a number: '//trim(tok(5+nsc+s))
+        return
+      end if
+    end do
+
+  end subroutine Read_Inlet_402
 
 
   !─────────────────────────────────────────────────────────────────────────────

@@ -166,6 +166,12 @@ runs the data of `402` and `410` are evaluated at the time of each
 Runge–Kutta stage (see
 [Time Integration](../theory/time-integration.md#stage-times-and-time-dependent-boundary-data)).
 
+The `p0_file` of an inlet `402` is a text file of pairs `time [s]  p0 [bar]`, one per line, in increasing time (two
+equal times make a jump); a first line `periodic` makes the table repeat. The name is taken as written on the line,
+directories included (for example `INPUT/p0.dat`, relative to the directory of the run), up to 256 characters; a name with
+blanks goes in quotes. A table that cannot be opened, holds no pair or has decreasing times stops the run at set-up, and
+so does a `402` line with fewer values than listed above or with an empty one.
+
 ### Viscous Walls
 
 | Type | Name | Data line (comma-separated) |
