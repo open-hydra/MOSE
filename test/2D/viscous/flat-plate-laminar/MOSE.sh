@@ -74,9 +74,9 @@ fi
    
 if [[ $1 == solve ]]; then
   cd INPUT
-  ln -sfn ../../../../common/Air-viscous/phase.txt phase.txt
-  ln -sfn ../../../../common/Air-viscous/thermo.dat thermo.dat
-  ln -sfn ../../../../common/Air-viscous/transport.dat transport.dat
+  ln -sfn ../../../../common/Air-mu1e-3/phase.txt phase.txt
+  ln -sfn ../../../../common/Air-mu1e-3/thermo.dat thermo.dat
+  ln -sfn ../../../../common/Air-mu1e-3/transport.dat transport.dat
   cd ..
   mkdir -p OUTPUT bin
   ulimit -s unlimited
