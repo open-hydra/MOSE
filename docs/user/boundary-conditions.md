@@ -137,6 +137,12 @@ density, the pressure or a RANS variable would leave [1/2, 2] times its boundary
 | `k_rough` | Sand-grain roughness height $k_s$ [m] (`0.0` for smooth wall). Modelled with SA only ([SA-rough](../theory/turbulence.md#rough-walls-sa-rough)) |
 | `eps_wall` | Wall emissivity (0–1) |
 
+Ghost cells of `301` and `302` (used by the reconstruction and the gradients next to the wall):
+what vanishes on the wall (velocity, $k$, the Reynolds stresses and, on a smooth wall,
+$\rho\tilde\nu$) is mirrored with the sign changed; species densities, pressure, $\omega$ and
+$\rho\tilde\nu$ on a rough wall are extrapolated as for type `400`. The gas-surface walls
+`503`–`505` extrapolate every variable as type `400`.
+
 ### Physical Models
 
 | Type | Name | Data line |

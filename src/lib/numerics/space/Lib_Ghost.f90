@@ -89,6 +89,10 @@ contains
           call Ghost_Q2D_Mapped ( domain % bc(i), domain % blk(Bm), domain % time )
         case(400) ! extrapolation: linear, limited towards zero-gradient
           call Ghost_Extrapolate_Limited ( Im, Jm, Km, Fm, domain % blk(Bm) )
+        case(301,302) ! no-slip wall: mirrored velocity, limited linear extrapolation of the rest
+          call Ghost_Wall ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % k_rough )
+        case(503:505) ! gas-surface interaction (blowing): limited linear extrapolation
+          call Ghost_Extrapolate_Limited ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(0,401:407,420) ! inlet/outlet/extrapolation: zero-gradient
           call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(102)
@@ -370,15 +374,16 @@ contains
   end subroutine Ghost_ZG_Extrapolate
 
 
-  subroutine Ghost_Extrapolate_Limited ( Im, Jm, Km, Fm, blk )
+  subroutine Ghost_Extrapolate_Limited ( Im, Jm, Km, Fm, blk, odd )
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout) :: blk
+    logical, intent(in), optional :: odd(nprim)
     ! Local
     real(R8), parameter :: lo = 0.5d0, hi = 2d0
     integer  :: g, v, dir
-    real(R8) :: q1(nprim), d(nprim), Pg(nprim), psi
-    logical  :: positive(nprim)
+    real(R8) :: q1(nprim), q2(nprim), d(nprim), Pg(nprim), psi
+    logical  :: positive(nprim), mirror(nprim)
 
     ! Linear extrapolation from the boundary cell q1 and its inner neighbour q2, one psi per
     ! ghost cell for all variables: g(1) = q1 + psi(1) d, g(2) = g(1) + psi(2) d, d = q1 - q2,
@@ -387,13 +392,11 @@ contains
     ! so psi = 1 is linear extrapolation and psi = 0 zero gradient. Unlike the quadratic
     ! extrapolation it cannot amplify a perturbation of the boundary cell, nor drive the
     ! ghost density or rho*nu_tilde through zero.
+    ! Variables flagged in odd (a wall: those that vanish on it) are mirrored with the sign
+    ! changed instead, g(1) = -q1 and g(2) = -q2, and take no part in psi.
 
-    dir = (Fm + 1) / 2
-    if ( blk % dim(dir) < 2 ) then
-      ! No inner neighbour along the normal (e.g. the j faces of a 1D case)
-      call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, blk )
-      return
-    endif
+    mirror = .false.
+    if ( present(odd) ) mirror = odd
 
     positive = .false.
     positive(1:nsc) = .true.
@@ -405,9 +408,17 @@ contains
         positive(nt:nt+2) = .true.
         positive(nt+6)    = .true.
     end select
+    positive = positive .and. .not. mirror
 
     q1 = blk % P (:,Im,Jm,Km)
-    d  = q1 - blk % P (:,Im+guide(Fm,1),Jm+guide(Fm,2),Km+guide(Fm,3))
+    dir = (Fm + 1) / 2
+    if ( blk % dim(dir) < 2 ) then
+      ! No inner neighbour along the normal (e.g. the j faces of a 1D case): zero gradient
+      q2 = q1
+    else
+      q2 = blk % P (:,Im+guide(Fm,1),Jm+guide(Fm,2),Km+guide(Fm,3))
+    endif
+    d = q1 - q2
 
     Pg  = q1
     psi = 1d0
@@ -422,10 +433,45 @@ contains
       enddo
       psi = max ( psi, 0d0 )
       Pg = Pg + psi * d
-      blk % P (:,Im-guide(Fm,1)*g,Jm-guide(Fm,2)*g,Km-guide(Fm,3)*g) = Pg
+      if ( g == 1 ) then
+        blk % P (:,Im-guide(Fm,1)*g,Jm-guide(Fm,2)*g,Km-guide(Fm,3)*g) = merge ( - q1, Pg, mirror )
+      else
+        blk % P (:,Im-guide(Fm,1)*g,Jm-guide(Fm,2)*g,Km-guide(Fm,3)*g) = merge ( - q2, Pg, mirror )
+      endif
     enddo
 
   end subroutine Ghost_Extrapolate_Limited
+
+
+  subroutine Ghost_Wall ( Im, Jm, Km, Fm, blk, k_rough )
+    implicit none
+    integer, intent(in) :: Im, Jm, Km, Fm
+    type(MOSE_block_type), intent(inout) :: blk
+    real(R8), intent(in) :: k_rough
+    ! Local
+    logical :: odd(nprim)
+
+    ! Ghost cells of a no-slip wall (301, 302), seen by the reconstruction and the gradients
+    ! next to the wall. What vanishes on the wall is mirrored with the sign changed: the
+    ! velocity, the turbulent kinetic energy, the Reynolds stresses and, on a smooth wall,
+    ! rho*nu_tilde, as the wall BC sets the RANS ghost. The rest (species densities, p, omega,
+    ! rho*nu_tilde on a rough wall) is extrapolated linearly with the limiter of
+    ! Ghost_Extrapolate_Limited, so the temperature gradient of a non-adiabatic wall is kept
+    ! and the ghost stays positive.
+    odd = .false.
+    odd(nu:nw) = .true.
+    select case (nrans)
+      case(1)   ! SA
+        if ( k_rough <= 0d0 ) odd(nt) = .true.
+      case(2)   ! SST, Wilcox 2006: rho*k
+        odd(nt) = .true.
+      case(7)   ! SSG/LRR: rho*Rij
+        odd(nt:nt+5) = .true.
+    end select
+
+    call Ghost_Extrapolate_Limited ( Im, Jm, Km, Fm, blk, odd )
+
+  end subroutine Ghost_Wall
 
 
   subroutine Ghost_Chimera ( nb, Blk, bc )
