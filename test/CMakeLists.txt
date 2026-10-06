@@ -172,6 +172,13 @@ mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;
 # with the probe rows of the uninterrupted run.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
 
+# Output files (OutputFiles): the parts below, each in its folder of
+# test/fast/output-files, run one after the other by
+# test/fast/output-files/run.sh.
+# Wall output: a vtk raw run with no-slip walls ends, and every wall file has
+# the extent and the points of its face.
+mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
+
 # Input checks (InputChecks): the parts below, each in its folder of
 # test/fast/input-checks, run one after the other by
 # test/fast/input-checks/run.sh.

@@ -37,9 +37,11 @@ test/
 │   │   └── quasi2d-symmetry/  # Quasi-2D, symmetry k faces: round-off in w does not grow
 │   ├── boundary-conditions/   # Boundary conditions
 │   │   └── inlets/            # Inlet boundary conditions: direction normal, total conditions
-│   └── mesh-geometry/         # Mesh geometry
-│       ├── wall-distance/     # Distance to the wall = exact distance to the wall surface
-│       └── mesh-type/         # Plane mesh, wedge or periodic sector from every node
+│   ├── mesh-geometry/         # Mesh geometry
+│   │   ├── wall-distance/     # Distance to the wall = exact distance to the wall surface
+│   │   └── mesh-type/         # Plane mesh, wedge or periodic sector from every node
+│   └── output-files/          # Output files
+│       └── wall-output/       # Wall output in vtk raw: every wall file has the extent and the points of its face
 ├── unit/                      # Unit checks of library functions, built against the library
 │   └── qcr2000_check.f90      # QCR2000 stress, called as the solver calls it, against its definition
 ├── 2D/                        # 2-D validation cases
@@ -227,6 +229,7 @@ seconds on a CI runner.
 | `OpenMPEquiv` | 1 vs 4 threads bit-identical: the Sod tube, and a block overset on another whose four chimera faces meet at its edges (Navier–Stokes) | `test/fast/openmp-equiv` |
 | `Connections`/`ChimeraFace` | the viscous stencil of chimera faces, one evaluation of the residual of a linear field on two blocks that overlap with their ghost cells on cells of the other block: with u = G y in 2-D and u = G (y + z) in 3-D the y and z momentum residual is zero also in the cells at the ends of the chimera faces; with a radial velocity on a 2-D wedge of 1 degree the momentum residual of every cell is that of the same mesh as one block (within 1e-9 of μ G / H) | `test/fast/connections/chimera-face` |
 | `Restart` | split + restart reproduces the uninterrupted run; at a restart a missing probe file is written again and an existing one is appended to, with the rows of the uninterrupted run | `test/fast/restart` |
+| `OutputFiles`/`WallOutput` | a vtk raw run of a 2x2-block box with no-slip walls on its four sides ends, and every wall file `wallB<b>F<f>.vts` has the extent of its face, taken from `fieldBlock<b>.vts`, as WholeExtent and as Piece Extent, and its points, as raw appended data | `test/fast/output-files/wall-output` |
 | `InputChecks`/`ExitCodes` | a run stopped on an error ends with a non-zero exit code and its message and writes no solution: the Sod tube as a viscous mixture of four species, without `schmidt` and `diffusion.dat`, stops at setup; so does a run with a probe of an unknown variable, with exit status 1 and the name of the variable; a steady run with a soot model, with and without Spalart–Allmaras, ends normally and its diagnostic output names every variable it writes; the same state with `turbulence = SAcomp` stops at set-up with the message (a correction whose result depends on the units); a steady single-species run with sol-variables = none stops with a message that names thermo or transport | `test/fast/input-checks/exit-codes` |
 | `TimeIntegration`/`Quasi2DSymmetry` | quasi-2D case with symmetry k faces: p, u, v stay uniform and round-off in w does not grow (Heun, RK3); the same in a 1-D tube with symmetry j and k faces for v and w; a channel of variable section in a layer between parallel planes inclined to z and a 1-D channel of variable section keep the velocity across, with the warning, and p within 0.03 p0 of the quasi-1-D flow | `test/fast/time-integration/quasi2d-symmetry` |
 | `TimeIntegration`/`LocalTimeStep` | the step is stable at cfl 0.8 on square and on skewed 2-D cells and on cubic 3-D cells, in diffusion-dominated cells set by heat conduction and by species diffusion with the default cfl and vnn (Heun, RK3), and in the 1-D shock tube at cfl 0.99; on a periodic block of 8³ rhombohedra with every edge angle at 115°, where the viscous operator exceeds the rate 4 D sum_d |grad xi_d|^2 by 1.0365, heat conduction with Heun at vnn 0.5 decays over 600 steps | `test/fast/time-integration/local-time-step` |

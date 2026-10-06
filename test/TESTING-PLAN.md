@@ -136,6 +136,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
 | F5e | Time control (1-D duct, time-dependent inlet 402) | order in time ≥ 1.8 (RK2, RK3); table held before its first instant; time-threshold reached | ☑ `TimeIntegration`/`TimeControl` | ~5 s |
 | F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart` | ~1 s |
+| I11 | Wall output in vtk raw (2x2-block box of 8 × 8 cells, adiabatic no-slip walls (301) on its four sides, 5 RK3 steps) | the run ends; every wall file `wallB<b>F<f>.vts` has the extent of its face (WholeExtent and Piece Extent, from `fieldBlock<b>.vts`) and its points, as raw appended data | ☑ `OutputFiles`/`WallOutput` | <1 s |
 | I5 | Serial vs OpenMP equivalence: the Sod tube; a chimera case, a block overset on another whose four chimera faces meet at its edges (Navier–Stokes; it passes on the parent of its commit too: the race it guards shows under ThreadSanitizer with Archer, in three runs of three) | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~3 s |
 | F9 | Viscous stencil of chimera faces: two blocks of 8 x 6 cells (8 x 6 x 4 in 3-D) overlapping by 4 cells in x, each ghost cell on a cell of the other block; one step of a steady run with u = G y (2-D), u = G (y + z) (3-D), and a radial velocity on a 2-D wedge of 1 degree against the same wedge as one block | y and z momentum residual zero within 1e-9 of μ G / H, also in the cells at the ends of the chimera faces (1/4 of it with the ghost cell copied beyond the edge); on the wedge the momentum residual of every cell that of the one block within 1e-9 of μ G / H (half of v/r at the chimera faces with the ghost cell as its own k neighbour) | ☑ `Connections`/`ChimeraFace` | ~1 s |
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
@@ -154,10 +155,11 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F21 | Rotational periodicity of a 3-D sector (annulus sector from -45 to 45 degrees, type 200 on the k faces, radial flow with uniform density and pressure, 20 steps of RK3) | the columns k and NK + 1 - k mirror images (rho, u, v, p equal, w opposite) within 1e-10 of their scales | ☑ `Connections`/`SectorRadial` | <1 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
-Current `ctest -L fast`: **19 tests, ~103 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **20 tests, ~103 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, TimeIntegration,
 BoundaryConditions, Conservation, OpenMPEquiv, Connections, Restart,
-InputChecks, MMSResiduals, AblatingWall, MeshGeometry, QCR2000Stress).
+OutputFiles, InputChecks, MMSResiduals, AblatingWall, MeshGeometry,
+QCR2000Stress).
 
 The time is CPU time at one thread, one test at a time, measured on one machine
 (load average ~190 on 192 logical CPUs), where the 12 fast tests of main take ~41 s.
