@@ -47,12 +47,14 @@ test/
 │   ├── mesh-geometry/         # Mesh geometry
 │   │   ├── wall-distance/     # Distance to the wall = exact distance to the wall surface
 │   │   └── mesh-type/         # Plane mesh, wedge or periodic sector from every node
-│   └── output-files/          # Output files
-│       ├── wall-output/       # Wall output in vtk raw: every wall file has the extent, the points and the cell values of its face
-│       ├── vtk-names/         # Names and times of the VTK outputs
-│       ├── vtk-raw-format/    # vtk raw outputs hold raw appended data
-│       ├── wall-output-residual/ # The wall output leaves the residual of the wall cells alone
-│       └── probe-position/    # Probes given by position record the cell that holds them
+│   ├── output-files/          # Output files
+│   │   ├── wall-output/       # Wall output in vtk raw: every wall file has the extent, the points and the cell values of its face
+│   │   ├── vtk-names/         # Names and times of the VTK outputs
+│   │   ├── vtk-raw-format/    # vtk raw outputs hold raw appended data
+│   │   ├── wall-output-residual/ # The wall output leaves the residual of the wall cells alone
+│   │   └── probe-position/    # Probes given by position record the cell that holds them
+│   └── viscous-patch/         # Patch test of the viscous fluxes
+│       └── viscous-linear-patch/ # Patch test of the viscous fluxes: linear fields on skewed, folded, 3- and 5-block meshes
 ├── unit/                      # Unit checks of library functions, built against the library
 │   └── qcr2000_check.f90      # QCR2000 stress, called as the solver calls it, against its definition
 ├── 2D/                        # 2-D validation cases
@@ -268,6 +270,7 @@ seconds on a CI runner.
 | `MeshGeometry`/`WallDistance` | the distance to the wall read back from the Spalart–Allmaras source is the exact distance to the wall surface (convex corner, curved wall, nozzle lip on a wedge), and to its periodic images (channel and pipe periodic in x, 3-D sector, the channel with its periodic sides matched to 1e-8, 3-D slab periodic in k, 3-D channel periodic in x and z with periods a hundredth of its height, the 2-D channel ten periods from the origin, a staggered row of plane blades longer than the period, a 3-D block periodic along three nearly dependent translations, the 2-D channel turned by 30 degrees with its coordinates rounded to 5 and to 4 significant digits); the stop at set-up of that channel rounded to 2 digits, whose periodic sides do not match to 1e-2 of its cells; on a 3-D wall of twisted faces, the start-up report of the bound of the error | `test/fast/mesh-geometry/wall-distance` |
 | `MeshGeometry`/`MeshType` | a plane slab is plane and a wedge is a wedge whatever the direction of j (wall distance within 1e-9), also a wedge of 5 degrees in two blocks written with 5 significant digits and a plane slab far from the x axis, which a small turn nearly fits; the set-up summary names the type; a wedge written with 2 significant digits, too few to tell it, a plane slab whose k planes are not parallel (2 % of its thickness), 3-D sectors of 90 degrees whose periodic plane misses the turn by half a cell (100 cells in k) or a tenth (20 cells), and a wedge block with a plane block stop the run; a 3-D slab periodic in k keeps a uniform flow within 1e-12 | `test/fast/mesh-geometry/mesh-type` |
 | `Connections`/`SectorRadial` | a 3-D sector closed by the rotational periodicity (type 200 on the k faces, -45 to 45 degrees) keeps a radial flow its own mirror image across z = 0 within 1e-10 | `test/fast/connections/sector-radial` |
+| `ViscousPatch`/`ViscousLinearPatch` | patch test of the viscous fluxes: a linear velocity and a linear temperature, whose viscous force and heat conduction are zero, give zero (below 1e-11 of the scale of the face fluxes) in every cell of 2-D meshes with nodes moved at random, two blocks joined along a fold, points shared by 3 and by 5 blocks (also at every stage of an RK3 step), a symmetry plane under skewed cells, a 3-D pair of blocks, next to walls with a prescribed heat flux; a control that every metric passes (parallelogram cells, walls 301 with q = 0); with `diffusive-metric = inverse-mean` and `mean` the viscous force equals that of an independent replica of their formulas (1e-10) | `test/fast/viscous-patch/viscous-linear-patch` |
 | `BoundaryConditions`/`BCInput` | the property lines of bc.txt are read as written or refused: the table of an inlet 402 gives the same run under a plain name, a name with a directory, a long name and a quoted name; a missing table, or one whose times decrease, stops the run; a table that starts after the run gives its first value before; a property line with an empty value, short of a value, with a word for a number or with a misspelt flow direction stops the run | `test/fast/boundary-conditions/bc-input` |
 
 A few heavier checks carry the `validation` (not `fast`) label because they

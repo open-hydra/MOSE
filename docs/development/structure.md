@@ -185,6 +185,55 @@ from a 4-point stencil:
 
 ---
 
+## Diffusive Flux Evaluation
+
+The viscous, conductive and diffusive flux of an interior face comes from
+`Diffusive_Flux` (`numerics/fluxes/Lib_Diffusive.f90`), which takes the face
+metric as one argument:
+
+```fortran
+call Diffusive_Flux ( normal, area, waldis1, waldis2, kr1, kr2,          &
+                      Prim1, Prim2, Prim3, Prim4, Prim5, Prim6,          &
+                      Prim7, Prim8, Prim9, Prim10, Mf, Res1, Res2,       &
+                      a, b, c, Sc, Sct, Prt, Prl, soot_enabled )
+```
+
+`Prim1` and `Prim2` are the two cells, from 1 to 2 along the normal;
+`Prim3`–`Prim6` and `Prim7`–`Prim10` their neighbours along the two tangential
+index directions `b` and `c` (cell 1 at -1 and +1, then cell 2 at -1 and +1);
+`a` is the direction across the face. `Mf(3,3)` is the face metric: the
+gradient is `Gradient(v,:) = matmul(D(v,:), Mf)`, with `D` the difference
+across the face and the two tangential differences. `Res1` takes -flux and
+`Res2` +flux.
+
+The caller gets `Mf` from `Viscous_Face_Metric` (`numerics/space/Lib_Stencil_Metrics.f90`):
+
+```fortran
+Mf = Viscous_Face_Metric ( blk, d, i, j, k, metric )
+```
+
+for the face of direction `d` between cell `(i,j,k)` and the next one along
+`d`, with `metric = obj_space_scheme%metric_mode` (`METRIC_MEAN` 0,
+`METRIC_INVERSE_MEAN` 1, `METRIC_STENCIL` 2, from `diffusive-metric`). With
+`mean` and `inverse-mean` it computes the metric from the cell metrics
+`blk%M` and `blk%Minv` with the operations `Diffusive_Flux` used before;
+with `stencil` it returns the metric stored at setup in
+`blk%dir(d)%Mf(i,j,k)%c` by `Setup_Stencil_Metrics` (called at the end of
+`Setup_Metrics`, on every multigrid level). A caller that evaluates the
+interior viscous fluxes elsewhere, for example with another time scheme, gets
+the bits of `Fluxes_blk` by calling the two routines the same way.
+
+Boundary faces with `stencil`: a face between blocks (`101`, `201`) takes one
+gradient through `Diffusive_Flux` (`BC_Connection_Visc_Stencil`), with the
+metric stored on the face of the block of the record and the tangential
+neighbours of the ghost cell from `bc%Pg(:,3:6)`; a symmetry face (`300`)
+uses the stored metric of the cell and its mirror image in
+`BC_Symmetry_Visc`. Walls, faces of type `200` (`BC_Rotational_Periodic_Visc`)
+and chimera faces (`102`) keep their own metric with every option. The positions of the ghost cells that
+enter the metric are listed in [Numerics](../theory/numerics.md).
+
+---
+
 ## RANS Turbulence Models
 
 At run time `Assign_Setup` reads `turbulence_model` from the input file

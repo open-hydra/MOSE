@@ -62,7 +62,7 @@
 | preconditioning-Ur-smooth | 0 | >= 0 |  no | Ur max-smoothing passes |
 | space-reconstruction |  | MUSCL, first-order | yes | Space reconstruction method |
 | flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order) |
-| diffusive-metric | inverse-mean | inverse-mean, mean |  no | Face metric of the interior viscous fluxes: inverse-mean is exact on stretched meshes, mean is faster but overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r |
+| diffusive-metric | stencil | stencil, inverse-mean, mean |  no | Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of the cell centres as the face gradient, exact for a linear field on any mesh except at the k faces of type 200 and at the chimera faces (102), which take inverse-mean with every value; inverse-mean takes the mean edges of the two cells, exact on a stretching normal to the face only; mean also overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r |
 | shock-detector |  | Tramel, Chen |  no | Shock detector method |
 | riemann-solver | HLLC | HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact |  no | Riemann solver |
 | riemann-options-Mco | 0.0 | >= 0 |  no | Low-Mach acoustic-dissipation cutoff Mach (floor) |

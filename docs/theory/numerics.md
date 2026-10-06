@@ -244,18 +244,71 @@ are computed with a 10-point stencil at each cell interface:
 - 8 points in the two tangential directions (four per direction)
 
 The gradient in computational space $(\xi, \eta, \zeta)$ is mapped to
-Cartesian coordinates $(x, y, z)$ with a face metric tensor $M_f$. Each cell
+Cartesian coordinates $(x, y, z)$ with a face metric tensor $M_f$. With
+$D\phi = (D_a\phi, D_b\phi, D_c\phi)$ the difference across the face and the
+two tangential differences (the mean of the central differences of the two
+cells), the face gradient is $\nabla\phi_f = M_f^{T} D\phi$. Each cell
 stores its metric $M = A^{-T}$, where the rows of $A$ are the cell edge vectors
 $\partial\mathbf{x}/\partial\xi$, $\partial\mathbf{x}/\partial\eta$,
-$\partial\mathbf{x}/\partial\zeta$; the edge lengths also give the physical
-spacings $\Delta l$ of the MUSCL reconstruction. The face metric combines the
-two cells $L$ and $R$ that share the face, selected by `diffusive-metric` in
-`[MOSE-Numerics]`:
+$\partial\mathbf{x}/\partial\zeta$ (each the mean of the four edges of the
+cell along that index); the edge lengths also give the physical spacings
+$\Delta l$ of the MUSCL reconstruction. `diffusive-metric` in
+`[MOSE-Numerics]` selects the face metric:
 
 | `diffusive-metric` | Face metric | |
 |---|---|---|
-| `inverse-mean` (default) | $M_f = \left[\tfrac12\left(A_L + A_R\right)\right]^{-T}$ | the face-normal edge is the centre-to-centre vector: exact for a linear field on any stretching |
+| `stencil` (default) | $M_f = \left(J_f^{T}\right)^{-1}$, $J_f^{T} = \left[D_a\mathbf{x},\ D_b\mathbf{x},\ D_c\mathbf{x}\right]$ | the same differences of the cell centres as of the field: exact for a linear field on any mesh, except at the faces of type `200` (see *Axisymmetric Wedge*) and at the chimera faces (`102`) |
+| `inverse-mean` | $M_f = \left[\tfrac12\left(A_L + A_R\right)\right]^{-T}$ | the face-normal edge is the centre-to-centre vector: exact for a linear field on any stretching normal to the face |
 | `mean` | $M_f = \tfrac12\left(M_L + M_R\right)$ | faster; biased on stretched meshes |
+
+With `stencil`, the columns of $J_f^{T}$ are the differences of the cell
+centres (the mean of the eight nodes) that $D_a\phi$, $D_b\phi$ and $D_c\phi$
+take of the field. For a linear field $\phi = \phi_0 + \mathbf{g}\cdot\mathbf{x}$
+every difference is $D\phi = J_f\,\mathbf{g}$, so the face gradient is
+$\mathbf{g}$ on skewed, stretched and non-smooth meshes and across folds at the
+faces between blocks: the difference approximations of the field and of the
+coordinates must be the same [8]. Vinokur states the rule for the gradient of a
+potential (p. 26) and writes the face gradient of the viscous terms on the same
+values as here, Eq. (90)–(91), with metrics from averaged areas and volumes,
+Eq. (93)–(94), as in the cross-derivative terms of CFL3D [12]; `stencil`
+applies the rule to that stencil. Its component along the centre-to-centre
+vector is the difference of the two cell values over their distance, as in the
+face-tangent and node-averaging schemes [9, 10], with the derivatives along the
+stencil's tangential directions taken between means of four cells, at the mean
+of their centres (near, not in, the plane of the face); on a 2-D mesh of
+parallelograms it is the diamond scheme with least-squares weights [11], which
+are exactly 1/4 there. Where the tangential differences of the stencil lie in
+the plane of the face, its split of the face area vector is the over-relaxed
+one of [13]. Exactness for linear fields does not certify accuracy on curved,
+highly stretched cells [14]; that case is not measured here. `inverse-mean`
+takes the tangential columns
+from the mean edges of the two cells instead. On smooth meshes they approach
+the centre differences as the cells shrink, but where the mesh is not smooth
+(cells of alternating size, nodes moved at random, folds at the faces between
+blocks) the face gradient of a linear field stays wrong by several per cent or
+more at any resolution. The column across the face is kept as $\tfrac12(a_L + a_R)$, which
+is $\mathbf{x}_R - \mathbf{x}_L$, and so are the columns of the index
+directions with one cell (1-D runs, the $k$ direction of 2-D meshes and
+wedges), where the field does not vary: 1-D runs give the bits of
+`inverse-mean`. The ghost cells in the stencil take the position at which their
+value is right for a linear field:
+
+- faces between blocks (`101`, `201`): the centre of the cell across, plus the
+  translation of a periodic pair;
+- faces whose ghost value is $3u_1 - 3u_2 + u_3$ (walls, `400`, `408` and the
+  other types not listed here): $3\mathbf{x}_1 - 3\mathbf{x}_2 + \mathbf{x}_3$
+  ($2\mathbf{x}_1 - \mathbf{x}_2$, or $\mathbf{x}_1$, in a block with two
+  cells, or one, across the face); chimera (`102`) and mapped (`410`) faces take
+  the same position, an approximation, since their values come from donor cells
+  or from a file;
+- zero-gradient faces (`0`, `401`–`407`, `420`): the cell itself;
+- symmetry (`300`): the mirror image of the cell across the face;
+- 3-D rotational periodicity (`200`): the cell at the other end, rotated by the
+  angle of the sector.
+
+$M_f$ is computed once at setup and stored on every face of the blocks of each
+rank, 27 values per cell (the mesh does not move); the cell centres come from
+the nodes, which every rank holds, so no message is needed.
 
 In one dimension $M = 1/h$, so `mean` divides the difference across the face by
 the mean of $1/h$ instead of the centre-to-centre distance. With a cell-size
@@ -273,9 +326,13 @@ cells grow by about 1.2 or less; boundary-layer meshes often grow faster near
 the wall. With `inverse-mean` MOSE stores $A^{T}$ per cell (9 values), so each
 face needs one $3\times 3$ inversion.
 
-Block-connection and chimera faces always use the inverse mean: across a large
+With `stencil`, a face between blocks takes one face gradient with its stencil
+metric, as an interior face, and a symmetry face the gradient between the cell
+and its mirror image. With `inverse-mean` and `mean`, block-connection faces
+use the inverse mean, as chimera faces do with every option: across a large
 cell-size jump at a block interface, the mean makes the normal gradient so steep
-that the explicit diffusion becomes unstable.
+that the explicit diffusion becomes unstable. Wall faces keep the metric of the
+wall cell, with the tangential derivatives set to zero.
 
 The viscous flux of a chimera face is the mean of two fluxes: one with the
 central differences along the face of the row of the cell, one with those of
@@ -292,12 +349,14 @@ ghost cell turned by the wedge angle, as those of a cell are; across a block
 one cell wide in another direction they are the ghost cell itself.
 
 !!! note "Tangential derivatives"
-    The tangential derivatives on a face are central differences over two cells,
-    divided by the cell's own tangential edge. With stretching in a tangential
-    direction they carry the same $(1+r)^2/(4r)$ factor, which neither option
-    corrects. In a thin boundary layer this enters only through the streamwise
-    variation of the shear on faces normal to the flow, so its effect is much
-    smaller than that of the face-normal gradient.
+    With `inverse-mean` and `mean` the tangential derivatives on a face are
+    central differences over two cells, divided by the cell's own tangential
+    edge. With stretching in a tangential direction they carry the same
+    $(1+r)^2/(4r)$ factor, which neither option corrects. In a thin boundary
+    layer this enters only through the streamwise variation of the shear on
+    faces normal to the flow, so its effect is much smaller than that of the
+    face-normal gradient. `stencil` divides them by the difference of the
+    centres they span, and has no such factor.
 
 ---
 
@@ -315,7 +374,8 @@ from the state of the cell:
   $+p/r$ and the centrifugal terms of the axisymmetric equations;
 - viscous: the flux of a face between the cell and its rotated image, with the
   stencil of an interior face (the $i$ and $j$ neighbours of the image rotated
-  in the same way) and the face metric of the block connections.
+  in the same way) and the inverse-mean face metric of the cell and its image,
+  with every `diffusive-metric`.
 
 For an axisymmetric field the mass, energy and scalar fluxes of the two faces
 are equal and opposite, and only the momentum fluxes are applied. Without swirl
@@ -392,9 +452,13 @@ ignored that neighbour. Neither is the unsplit mesh, where the smoothing sees
 the new value of the neighbour, so with the smoothing on a split mesh does not
 give the fluxes of the unsplit one bit for bit.
 
-The viscous flux of a face between blocks uses its own stencil (the two
-tangential gradients of the two cells, averaged) and the inverse-mean face
-metric, not those of an interior face.
+With `diffusive-metric = stencil` the viscous flux of a face between blocks is
+that of an interior face: one face gradient, from the cell, the ghost cell and
+their tangential neighbours (those of the ghost cell are cells of the other
+block, `bc%Pg(:,3:6)`), with the stencil face metric. With `inverse-mean` and
+`mean` it uses its own stencil (two gradients, each with the tangential
+differences of one of the two cells, and the mean of their fluxes) and the
+inverse-mean face metric.
 
 The ghost cells and the neighbours along the face of those of the faces
 between blocks (`bc%Pg`) are filled at every Runge–Kutta stage, before the
@@ -445,3 +509,25 @@ of the records or of the threads.
    arXiv:2508.17982v4, Eq. (12), and by H. Guo, X. Zhuang, X. Meng,
    T. Rabczuk, arXiv:2010.05682v1, Eq. (7) with β₀ = 2, β = 1, whose Table 8
    gives f''(0) = 1.31194.
+8. M. Vinokur, "An analysis of finite-difference and finite-volume formulations
+   of conservation laws," NASA CR-177416, 1986: p. 26, Eq. (101) ("the two
+   difference approximations must be the same"); p. 23, Eq. (90)–(91) (the
+   transport terms on an auxiliary cell, with means of four cells along the
+   face); p. 40, Eq. (153) (the difference across a wall). Journal version:
+   *J. Comput. Phys.*, 81, 1989.
+9. B. Diskin, J. L. Thomas, E. J. Nielsen, H. Nishikawa, J. A. White,
+   "Comparison of Node-Centered and Cell-Centered Unstructured Finite-Volume
+   Discretizations: Viscous Fluxes," *AIAA J.*, 48(7), 1326–1338, 2010,
+   doi:10.2514/1.44940, Sec. III.A.
+10. H. Nishikawa, "Beyond Interface Gradient: A General Principle for
+    Constructing Diffusion Schemes," AIAA Paper 2010-5093, 2010, App. C.
+11. Y. Coudière, J.-P. Vila, P. Villedieu, "Convergence rate of a finite volume
+    scheme for a two dimensional convection-diffusion problem," *ESAIM: M2AN*,
+    33(3), 493–516, 1999, Eq. (9) and Lemma 6.2.
+12. CFL3D, `source/cfl3d/libs/gfluxv1.F` (cross-derivative terms of the viscous
+    fluxes), https://github.com/nasa/CFL3D, commit 776d516; S. L. Krist,
+    R. T. Biedron, C. L. Rumsey, *CFL3D User's Manual (Version 5.0)*,
+NASA/TM-1998-208444, 1998, App. C.2, p. 249 (the volume at a cell interface as the mean of its neighbours, for the thin-layer terms; the manual, p. 27,
+leaves out the cross-derivative terms, which gfluxv1.F adds). 13. H. Jasak, *Error Analysis and Estimation for the Finite Volume Method with Applications to
+Fluid Flows*, PhD thesis, Imperial College, University of London, 1996, Eq. (3.32). 14. D. J. Mavriplis, "Revisiting the Least-squares Procedure for
+Gradient Reconstruction on Unstructured Meshes," NASA/CR-2003-212683, 2003, p. 14.

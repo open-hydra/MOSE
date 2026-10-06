@@ -202,12 +202,13 @@ contains
     ! Local
     integer  :: b
     integer  :: SD_id
-    logical  :: soot_enabled, inverse_metric
+    logical  :: soot_enabled
+    integer  :: metric
     real(R8) :: Sc, Sct, Prt, Prl
 
     SD_id = obj_shock_detector%id
     soot_enabled = obj_soot%enabled
-    inverse_metric = obj_space_scheme%inverse_metric
+    metric = obj_space_scheme%metric_mode
     Sc  = obj_sim_param%Sc
     Sct = obj_rans%Sct
     Prt = obj_rans%Prt
@@ -215,25 +216,25 @@ contains
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
-      call Fluxes_blk ( b, domain % blk(b), SD_id, Sc, Sct, Prt, Prl, soot_enabled, inverse_metric )
+      call Fluxes_blk ( b, domain % blk(b), SD_id, Sc, Sct, Prt, Prl, soot_enabled, metric )
     enddo
 
   end subroutine Internal_Fluxes
 
 
-  subroutine Fluxes_blk ( b, blk, SD_id, Sc, Sct, Prt, Prl, soot_enabled, inverse_metric )
+  subroutine Fluxes_blk ( b, blk, SD_id, Sc, Sct, Prt, Prl, soot_enabled, metric )
     use MOSE_Advanced_Types_m, only: MOSE_block_type
-    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
     use MOSE_Global_m, only: model, gc, nprim, np
     use MOSE_Lib_Shock_Detector
     use MOSE_Lib_Convective
     use MOSE_Lib_Diffusive
+    use MOSE_Lib_Stencil_Metrics, only: Viscous_Face_Metric
     implicit none
     ! Inputs
     integer, intent(in)  :: b                ! block id, for error messages only
     type(MOSE_block_type), intent(inout), target :: blk
     logical, intent(in)  :: soot_enabled
-    logical, intent(in)  :: inverse_metric   ! diffusive-metric = inverse-mean: face metric from blk%Minv
+    integer, intent(in)  :: metric           ! diffusive-metric: 0 mean, 1 inverse-mean, 2 stencil
     integer, intent(in)  :: SD_id
     real(R8), intent(in) :: Sc, Sct, Prt, Prl
     ! Local
@@ -244,18 +245,10 @@ contains
     !> face.  Per-thread already — Fluxes_blk runs inside an orphaned parallel
     !> region.
     real(R8) :: dl4(-1:2)
-    !> Cell metrics handed to Diffusive_Flux: the inverse metrics (inverse-mean)
-    !> or the metrics themselves (mean).
-    type(MOSE_tensor_3D_type), pointer :: Mc(:,:,:)
+    !> Face metric handed to Diffusive_Flux (Viscous_Face_Metric)
+    real(R8) :: Mf(3,3)
 
     n = blk % dim
-    if ( model > 0 ) then
-      if ( inverse_metric ) then
-        Mc => blk % Minv
-      else
-        Mc => blk % M
-      end if
-    end if
 
     ! -----------------------------------------------------------------
     ! Shock-detector
@@ -300,6 +293,7 @@ contains
       do k = 1, n(3)
       do j = 1, n(2)
       do i = 1, n(1) - 1
+      Mf = Viscous_Face_Metric ( blk, 1, i, j, k, metric )
       call Diffusive_Flux ( blk % dir(1) % f(i,j,k) % N,  &
                             blk % dir(1) % f(i,j,k) % A,  &
                             blk % yn(i  ,j,k),            &
@@ -316,12 +310,11 @@ contains
                             blk % P(:,i  ,j,k+1),         &
                             blk % P(:,i+1,j,k-1),         &
                             blk % P(:,i+1,j,k+1),         &
-                            Mc(i  ,j,k) % c,              &
-                            Mc(i+1,j,k) % c,              &
+                            Mf,                           &
                             blk % R(:,i  ,j,k),           &
                             blk % R(:,i+1,j,k),           &
                             1, 2, 3,                &
-                            Sc, Sct, Prt, Prl, soot_enabled, inverse_metric)
+                            Sc, Sct, Prt, Prl, soot_enabled)
       enddo; enddo; enddo
     endif
 
@@ -347,6 +340,7 @@ contains
       do k = 1, n(3)
       do i = 1, n(1)
       do j = 1, n(2) - 1
+      Mf = Viscous_Face_Metric ( blk, 2, i, j, k, metric )
       call Diffusive_Flux ( blk % dir(2) % f(i,j,k) % N,  &
                             blk % dir(2) % f(i,j,k) % A,  &
                             blk % yn(i,j  ,k),            &
@@ -363,12 +357,11 @@ contains
                             blk % P(:,i,j  ,k+1),         &
                             blk % P(:,i,j+1,k-1),         &
                             blk % P(:,i,j+1,k+1),         &
-                            Mc(i,j  ,k) % c,              &
-                            Mc(i,j+1,k) % c,              &
+                            Mf,                           &
                             blk % R(:,i,j  ,k),           &
                             blk % R(:,i,j+1,k),           &
                             2, 1, 3,                &
-                            Sc, Sct, Prt, Prl, soot_enabled, inverse_metric)
+                            Sc, Sct, Prt, Prl, soot_enabled)
       enddo; enddo; enddo
     end if
 
@@ -394,6 +387,7 @@ contains
       do j = 1, n(2)
       do i = 1, n(1)
       do k = 1, n(3) - 1
+      Mf = Viscous_Face_Metric ( blk, 3, i, j, k, metric )
       call Diffusive_Flux ( blk % dir(3) % f(i,j,k) % N,  &
                             blk % dir(3) % f(i,j,k) % A,  &
                             blk % yn(i,j,k  ),            &
@@ -410,12 +404,11 @@ contains
                             blk % P(:,i,j+1,k  ),         &
                             blk % P(:,i,j-1,k+1),         &
                             blk % P(:,i,j+1,k+1),         &
-                            Mc(i,j,k  ) % c,              &
-                            Mc(i,j,k+1) % c,              &
+                            Mf,                           &
                             blk % R(:,i,j,k  ),           &
                             blk % R(:,i,j,k+1),           &
                             3, 1, 2,                &
-                            Sc, Sct, Prt, Prl, soot_enabled, inverse_metric )
+                            Sc, Sct, Prt, Prl, soot_enabled )
       enddo; enddo; enddo
     endif
 

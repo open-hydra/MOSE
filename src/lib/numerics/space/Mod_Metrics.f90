@@ -11,6 +11,7 @@ contains
     use MOSE_Global_m
     use MOSE_Lib_Metrics
     use MOSE_Lib_Diffusive, only: Inverse3
+    use MOSE_Lib_Stencil_Metrics, only: Setup_Stencil_Metrics
     use MOSE_Config_Types_m, only: obj_space_scheme
     use MOSE_Mod_MPI, only: is_local_block, mpi_is_root
     implicit none
@@ -149,6 +150,10 @@ contains
       !$omp end do
     enddo
     !$omp end parallel
+
+    ! diffusive-metric = stencil: face metrics of the viscous fluxes from the differences of the cell centres (needs the
+    ! cell metrics of the ghost cells, above)
+    if ( obj_space_scheme % stencil_metric .and. model > 0 ) call Setup_Stencil_Metrics ( domain )
 
   end subroutine Setup_Metrics
 

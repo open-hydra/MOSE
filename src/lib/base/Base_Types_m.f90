@@ -28,6 +28,7 @@ module MOSE_Base_Types_m
 
   type :: MOSE_d_metrics_type
     type(MOSE_f_metrics_type), allocatable  :: f(:,:,:)   
+    type(MOSE_tensor_3D_type), allocatable  :: Mf(:,:,:)  !> Face metric of the viscous fluxes, diffusive-metric = stencil
   end type MOSE_d_metrics_type
   !! ------------------------------------------------------
   !! ------------------------------------------------------

@@ -275,6 +275,18 @@ if(TEST WedgeAxisStep)
     set_tests_properties(WedgeAxisStep PROPERTIES TIMEOUT 600)
 endif()
 
+# Patch test of the viscous fluxes (ViscousPatch): the parts below, each in
+# its folder of test/fast/viscous-patch, run one after the other by
+# test/fast/viscous-patch/run.sh.
+# Patch test of the viscous fluxes: a linear velocity and a linear temperature
+# have zero viscous force and heat conduction in every cell, so the face
+# gradients must give zero to round-off on meshes with nodes moved at random,
+# folds between blocks, points shared by 3 and 5 blocks, symmetry planes and
+# walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
+# against an independent replica of their formulas.
+# Cost: 32 one-step solver runs, about 7 s of CPU time at one thread.
+mose_add_fast_script(ViscousPatch fast/viscous-patch "fast;numerics;2D;3D")
+
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
 # which is an exact steady solution, checked against its closed form. These
 # boundary conditions have no other coverage in the suite.

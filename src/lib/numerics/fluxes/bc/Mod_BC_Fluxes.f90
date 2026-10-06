@@ -319,6 +319,7 @@ contains
   !> cell its share, in the order of the records, as before.
   subroutine Connection_Fluxes ( domain, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Advanced_Types_m
+    use MOSE_Config_Types_m, only: obj_space_scheme
     use MOSE_Global_m, only: model, nprim
     use MOSE_Mod_MPI, only: mpi_size_
     use MOSE_Mod_GhostExchange, only: exchange_connection_flux
@@ -343,9 +344,14 @@ contains
       domain % bc(i) % Fc(:,1) = dR
       domain % bc(p) % Fc(:,1) = -dR
       if (model>0) then
-        call BC_Connection_Visc ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, domain % bc(i) % f, &
-                                  domain % blk(Bm), domain % bc(i) % Mg(1), domain % bc(i) % Pg, &
-                                  Sc, Sct, Prt, Prl, soot_enabled, dR )
+        if ( obj_space_scheme % stencil_metric ) then
+          call BC_Connection_Visc_Stencil ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, domain % bc(i) % f, &
+                                            domain % blk(Bm), domain % bc(i) % Pg, Sc, Sct, Prt, Prl, soot_enabled, dR )
+        else
+          call BC_Connection_Visc ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, domain % bc(i) % f, &
+                                    domain % blk(Bm), domain % bc(i) % Mg(1), domain % bc(i) % Pg, &
+                                    Sc, Sct, Prt, Prl, soot_enabled, dR )
+        end if
         domain % bc(i) % Fc(:,2) = dR
         domain % bc(p) % Fc(:,2) = -dR
       end if

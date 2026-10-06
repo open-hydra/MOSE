@@ -7,24 +7,27 @@ module MOSE_Lib_Diffusive
 
 contains
 
+  !> Viscous flux of the face between cells 1 (Prim1) and 2 (Prim2), along the normal from 1 to 2: the difference across
+  !> the face (index direction a) and the mean central differences of the two cells along the face (b: Prim3..Prim6, c:
+  !> Prim7..Prim10), mapped to Cartesian components with the face metric Mf (MOSE_Lib_Stencil_Metrics:
+  !> Viscous_Face_Metric); Res1 takes -flux, Res2 +flux.
   subroutine Diffusive_Flux ( normal, area, waldis1, waldis2, kr1, kr2, Prim1, Prim2, Prim3, Prim4, Prim5, &
-                              Prim6, Prim7, Prim8, Prim9, Prim10, M1, M2, Res1, Res2, a, b, c, &
-                              Sc, Sct, Prt, Prl, soot_enabled, inverse_metric )
+                              Prim6, Prim7, Prim8, Prim9, Prim10, Mf, Res1, Res2, a, b, c, &
+                              Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in)  :: a, b, c
     logical, intent(in)  :: soot_enabled
-    logical, intent(in)  :: inverse_metric    ! M1, M2 are the cells' inverse metrics (diffusive-metric = inverse-mean)
     real(R8), intent(in) :: Sc, Sct, Prt, Prl
     real(R8), intent(in) :: normal(3), area, waldis1, waldis2
     real(R8), intent(in) :: kr1, kr2      ! nearest-wall roughness of the two cells
     real(R8), intent(in), dimension(nprim) :: Prim1, Prim2, Prim3, Prim4, Prim5, Prim6
     real(R8), intent(in), dimension(nprim) :: Prim7, Prim8, Prim9, Prim10
-    real(R8), intent(in), dimension(3,3) :: M1, M2   ! cell metrics, or their inverses (see inverse_metric)
+    real(R8), intent(in), dimension(3,3) :: Mf       ! face metric
     real(R8), intent(inout), dimension(nprim) :: Res1, Res2
     ! Local
-    real(R8) :: rho1, Rgas, T1, rho2, T2, Gradient(nprim,3), Prim(nprim), M(3,3), waldis, k_rough, Flux(nprim)
+    real(R8) :: rho1, Rgas, T1, rho2, T2, Gradient(nprim,3), Prim(nprim), waldis, k_rough, Flux(nprim)
     integer  :: v
     real(R8) :: g1, g2, g3
 
@@ -47,28 +50,15 @@ contains
     call Tangential_Gradient ( Prim3, Prim4, Prim5, Prim6,  Gradient(:,b) )
     call Tangential_Gradient ( Prim7, Prim8, Prim9, Prim10, Gradient(:,c) )
 
-    ! Metric tensor at the face.
-    ! inverse-mean: the mean of the two inverse metrics (cell edge vectors, stored
-    ! per cell in blk%Minv), inverted, so that the one-index difference across the
-    ! face is divided by the centre-to-centre distance.
-    ! mean: averaging M itself divides it by the mean of 1/h instead, which
-    ! overstates the gradient by (1+r)^2/(4r) for a cell-size ratio r across the
-    ! face (+4% at r = 1.5, +9% at 1.8), at any mesh resolution.
-    if ( inverse_metric ) then
-      M = Inverse3 ( 0.5d0 * ( M1 + M2 ) )
-    else
-      M = 0.5d0 * ( M1 + M2 )
-    end if
-
     !> Transform the gradients from computational to physical space.
     !> Explicit loop, not `Gradient = matmul(Gradient,M)`: Gradient aliases
     !> itself there, so the compiler must build the whole (nprim,3) result in a
     !> temporary on every face.
     do v = 1, nprim
       g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
-      Gradient(v,1) = g1*M(1,1) + g2*M(2,1) + g3*M(3,1)
-      Gradient(v,2) = g1*M(1,2) + g2*M(2,2) + g3*M(3,2)
-      Gradient(v,3) = g1*M(1,3) + g2*M(2,3) + g3*M(3,3)
+      Gradient(v,1) = g1*Mf(1,1) + g2*Mf(2,1) + g3*Mf(3,1)
+      Gradient(v,2) = g1*Mf(1,2) + g2*Mf(2,2) + g3*Mf(3,2)
+      Gradient(v,3) = g1*Mf(1,3) + g2*Mf(2,3) + g3*Mf(3,3)
     end do
 
     Prim = 0.5d0 * ( Prim1 + Prim2 )

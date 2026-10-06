@@ -130,6 +130,7 @@ contains
     use FLINT_Lib_Thermodynamic
     use MOSE_Lib_RANS
     use MOSE_Lib_Fluid
+    use MOSE_Config_Types_m, only: obj_space_scheme
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     logical, intent(in)  :: RSM
@@ -151,6 +152,9 @@ contains
     Area = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
     dist = Blk % yn(Im,Jm,Km)
     M = Blk % M (Im,Jm,Km) % c
+    ! diffusive-metric = stencil: the face metric of the differences below, between the cell and its mirror image
+    ! (MOSE_Lib_Stencil_Metrics); a face across an index direction with one cell keeps the cell metric
+    if ( obj_space_scheme % stencil_metric .and. Blk % dim(Dir) > 1 ) M = Blk % dir(Dir) % Mf(Face_i,Face_j,Face_k) % c
 
     ! boundary cell variables
     Prim = Blk % P(:,Im,Jm,Km)

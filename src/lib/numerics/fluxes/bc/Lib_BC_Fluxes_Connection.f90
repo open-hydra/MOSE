@@ -227,4 +227,65 @@ contains
         
   end subroutine BC_Connection_Visc
 
+
+  !> Viscous flux of a face between blocks (101, 201) with diffusive-metric = stencil: one face gradient, as on an
+  !> interior face (Diffusive_Flux), with the cells in the order of growing index of this block (the cell and its ghost)
+  !> and the face metric of the stencil (MOSE_Lib_Stencil_Metrics), whose ghost cells are those of Pg(:,3:6). Where the
+  !> index directions of the two blocks agree across the face and their nodes have the same bits, the operations are those
+  !> of the same face in the unsplit mesh. Returns the share of the residual of the cell, dR (the caller adds it).
+  subroutine BC_Connection_Visc_Stencil ( Im, Jm, Km, Fm, Blk, Pg, Sc, Sct, Prt, Prl, soot_enabled, dR )
+    use MOSE_Lib_Diffusive, only: Diffusive_Flux
+    implicit none
+    integer, intent(in)  :: Im, Jm, Km, Fm
+    real(R8), intent(in) :: Sc, Sct, Prt, Prl
+    logical, intent(in)  :: soot_enabled
+    type(MOSE_block_type), intent(in) :: Blk
+    real(R8), intent(in)              :: Pg(nprim,6)
+    real(R8), intent(out)             :: dR(nprim)
+    ! Local
+    integer :: dir, Face_i, Face_j, Face_k, Ig, Jg, Kg, a, b, c
+    integer :: e(3,3)
+    real(R8), dimension(nprim) :: Rl, Rr
+
+    call Face_Index ( Fm, dir, Im, Jm, Km, Face_i, Face_j, Face_k )
+    Ig = Im - guide(Fm,1)
+    Jg = Jm - guide(Fm,2)
+    Kg = Km - guide(Fm,3)
+    select case ( dir )
+      case (1) ; a = 1 ; b = 2 ; c = 3
+      case (2) ; a = 2 ; b = 1 ; c = 3
+      case default ; a = 3 ; b = 1 ; c = 2
+    end select
+    e = reshape ( [1,0,0, 0,1,0, 0,0,1], [3,3] )
+    Rl = 0d0
+    Rr = 0d0
+
+    associate ( f => Blk % dir(dir) % f(Face_i,Face_j,Face_k), Mf => Blk % dir(dir) % Mf(Face_i,Face_j,Face_k) % c )
+    if ( mod(Fm,2) == 0 ) then
+      ! the cell is on the low-index side of the face: cell 1 = cell, cell 2 = ghost
+      call Diffusive_Flux ( f % N, f % A, Blk % yn(Im,Jm,Km), Blk % yn(Ig,Jg,Kg),                     &
+                            Blk % k_rough(Im,Jm,Km), Blk % k_rough(Ig,Jg,Kg),                       &
+                            Blk % P(:,Im,Jm,Km), Pg(:,1),                                           &
+                            Blk % P(:,Im-e(1,b),Jm-e(2,b),Km-e(3,b)), Blk % P(:,Im+e(1,b),Jm+e(2,b),Km+e(3,b)), &
+                            Pg(:,3), Pg(:,4),                                                       &
+                            Blk % P(:,Im-e(1,c),Jm-e(2,c),Km-e(3,c)), Blk % P(:,Im+e(1,c),Jm+e(2,c),Km+e(3,c)), &
+                            Pg(:,5), Pg(:,6),                                                       &
+                            Mf, Rl, Rr, a, b, c, Sc, Sct, Prt, Prl, soot_enabled )
+      dR = Rl
+    else
+      ! cell 1 = ghost, cell 2 = cell
+      call Diffusive_Flux ( f % N, f % A, Blk % yn(Ig,Jg,Kg), Blk % yn(Im,Jm,Km),                     &
+                            Blk % k_rough(Ig,Jg,Kg), Blk % k_rough(Im,Jm,Km),                       &
+                            Pg(:,1), Blk % P(:,Im,Jm,Km),                                           &
+                            Pg(:,3), Pg(:,4),                                                       &
+                            Blk % P(:,Im-e(1,b),Jm-e(2,b),Km-e(3,b)), Blk % P(:,Im+e(1,b),Jm+e(2,b),Km+e(3,b)), &
+                            Pg(:,5), Pg(:,6),                                                       &
+                            Blk % P(:,Im-e(1,c),Jm-e(2,c),Km-e(3,c)), Blk % P(:,Im+e(1,c),Jm+e(2,c),Km+e(3,c)), &
+                            Mf, Rl, Rr, a, b, c, Sc, Sct, Prt, Prl, soot_enabled )
+      dR = Rr
+    end if
+    end associate
+
+  end subroutine BC_Connection_Visc_Stencil
+
 end module MOSE_Lib_BC_Fluxes_Connection
