@@ -252,11 +252,11 @@ contains
 
             case (301) ! wall: prescribed heat flux
               call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
-                                  k_rough = domain % bc(i) % k_rough )
+                                  k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
 
             case (302) ! wall: prescribed temperature
               call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
-                                         k_rough = domain % bc(i) % k_rough )
+                                         k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
 
             ! Gas-surface interaction walls: when the surface is inert the GSI
             ! routine reports nothing, and the face is an ordinary wall at the
@@ -268,21 +268,21 @@ contains
                                                                        domain % bc(i) % qrad, domain % bc(i) % ci, Ovar, &
                                                                        ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
 
             case (504) ! GSI - pyrolysis
               call BC_Wall_Pyrolysis ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_pyro_model_id, &
                                        domain % bc(i) % qrad, domain % bc(i) % ci, Ovar, &
                                        ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
 
             case (505) ! GSI - surface reactions
               call BC_Wall_Reactions ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_surf_reac_id, &
                                        domain % bc(i) % qrad, Ovar, &
                                        ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
 
           end select
 

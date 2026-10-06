@@ -10,7 +10,7 @@ module MOSE_Lib_BC_Fluxes_Wall_Temperature
 
 contains
 
-  subroutine BC_Wall_Temperature ( Im, Jm, Km, Fm, Blk, T_wall, Ovar, w_wall, k_rough )
+  subroutine BC_Wall_Temperature ( Im, Jm, Km, Fm, Blk, T_wall, Ovar, w_wall, k_rough, rec )
     use MOSE_Config_Types_m, only: obj_rans
     use MOSE_Lib_Fluid
     use MOSE_Lib_RANS
@@ -22,6 +22,7 @@ contains
     real(R8), optional, dimension(8), intent(out) :: Ovar
     real(R8), optional, dimension(3), intent(in) :: w_wall
     real(R8), optional, intent(in) :: k_rough   ! sand-grain roughness of the face (absent = smooth)
+    type(MOSE_bc_type), optional, intent(in) :: rec   ! the record of the face: its wall stencil (diffusive-metric = stencil)
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, ig, jg, kg
     real(R8) :: Normal(3), Area, Dist, M(3,3), Prim(nprim), rho, Rgas, T, rho_wall, dl
@@ -29,6 +30,8 @@ contains
     integer  :: vgrad_i
     real(R8) :: gvec1, gvec2, gvec3, VelGrad(3,3)
     real(R8) :: kr, mit, kt
+    integer  :: tb(2)
+    logical  :: wst
 
     call Compute_Modfm ( fm, modfm, modfm1, modfm2, modfm3 )
     call Face_Index ( Fm, dir, Im, Jm, Km, Face_i, Face_j, Face_k )
@@ -41,6 +44,11 @@ contains
     Area = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
     Dist = 1d-20 ! since the flux is computed at the wall
     M = Blk % M (Im,Jm,Km) % c
+    ! diffusive-metric = stencil: the metric of the wall face, with the differences of the wall values along the wall
+    ! below (Wall_Face_Stencils in MOSE_Lib_Stencil_Metrics); otherwise the metric of the cell and no tangential difference
+    wst = .false.
+    if ( present(rec) ) wst = rec % wstencil
+    if ( wst ) M = rec % wM
 
     ! boundary cell variables
     Prim = Blk % P(:,Im,Jm,Km)
@@ -57,7 +65,8 @@ contains
     ! Laminar viscosity/conductivity at interface computed at Twall
     call co_k_mi_lam_Wilke ( Prim_wall(1:nsc), rho_wall, T_wall, mil, kl )
 
-    ! Difference in Across-face direction: symmetry; tangential direction: null
+    ! Difference in Across-face direction: symmetry; tangential direction: null (with the wall stencil, below: the
+    ! differences of the wall values)
     Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3                  ! Velocity
     if ( present(w_wall) ) then
       Gradient(nu:nw,Dir) = ( Prim(nu:nw) - w_wall ) * modfm3  ! Velocity relative to wall
@@ -65,6 +74,14 @@ contains
       Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3               ! Standard no-slip (w_wall=0)
     end if
     Gradient(np,Dir) = ( T - T_wall ) * modfm3                  ! Temperature
+    if ( wst ) then
+      select case (Dir)
+        case (1) ; tb = [2, 3]
+        case (2) ; tb = [1, 3]
+        case default ; tb = [1, 2]
+      end select
+      Gradient(np,tb(1)) = rec % wdT(1) ; Gradient(np,tb(2)) = rec % wdT(2)
+    end if
 
     if (model==2)  then
       dl = blk % yn(im,jm,km)

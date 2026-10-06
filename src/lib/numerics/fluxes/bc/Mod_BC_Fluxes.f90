@@ -109,10 +109,11 @@ contains
               if (model>0.AND.obj_rot%enabled.AND.RF_Is_Stationary_Face(Bm,Fm)) then
                 call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
                 call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, &
-                                    w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough )
+                                    w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
+                                    rec = domain % bc(i) )
               elseif (model>0) then
                 call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, &
-                                    k_rough = domain % bc(i) % k_rough )
+                                    k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
               endif
 
             case (302) ! wall: prescribed temperature
@@ -120,10 +121,11 @@ contains
               if (model>0.AND.obj_rot%enabled.AND.RF_Is_Stationary_Face(Bm,Fm)) then
                 call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
                 call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, &
-                                           w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough )
+                                           w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
+                                    rec = domain % bc(i) )
               elseif (model>0) then
                 call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, &
-                                           k_rough = domain % bc(i) % k_rough )
+                                           k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
               endif
 
             case (400) ! extrapolation
@@ -236,7 +238,7 @@ contains
               if (.not. ablating) then
                 call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
                 if (model>0) &
-                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
               endif
 
             ! ─────────────────────────────────────────────────────────────────
@@ -264,7 +266,7 @@ contains
               if (.not. ablating) then
                 call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
                 if (model>0) &
-                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
               endif
 
             case (504) ! GSI - pyrolysis
@@ -277,7 +279,7 @@ contains
               if (.not. ablating) then
                 call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
                 if (model>0) &
-                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
               endif
 
             case(505) ! GSI - surface reactions
@@ -289,7 +291,7 @@ contains
               if (.not. ablating) then
                 call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
                 if (model>0) &
-                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
               endif
 
             ! case(506) ! GSI - surface reactions + pyrolysis
@@ -427,20 +429,22 @@ contains
               if (obj_rot%enabled.AND.RF_Is_Stationary_Face(Bm,Fm)) then
                 call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
                 call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, &
-                                    w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough )
+                                    w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
+                                    rec = domain % bc(i) )
               else
                 call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, &
-                                    k_rough = domain % bc(i) % k_rough )
+                                    k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
               endif
 
             case (302) ! wall: prescribed temperature
               if (obj_rot%enabled.AND.RF_Is_Stationary_Face(Bm,Fm)) then
                 call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
                 call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, &
-                                           w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough )
+                                           w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
+                                    rec = domain % bc(i) )
               else
                 call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, &
-                                           k_rough = domain % bc(i) % k_rough )
+                                           k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
               endif
 
             ! Gas-surface interaction walls: the routine of BC_Fluxes, and the same
@@ -453,7 +457,7 @@ contains
                                                                       domain % bc(i) % qrad, domain % bc(i) % ci, &
                                                                       ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
 
             case (504) ! GSI - pyrolysis
               ablating = .false.
@@ -462,7 +466,7 @@ contains
                                                                         domain % bc(i) % qrad, domain % bc(i) % ci, &
                                                                         ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
 
             case (505) ! GSI - surface reactions
               ablating = .false.
@@ -470,7 +474,7 @@ contains
               call BC_Wall_Reactions( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_surf_reac_id, &
                                       domain % bc(i) % qrad, ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
 
           end select
 

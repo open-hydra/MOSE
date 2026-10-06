@@ -283,8 +283,10 @@ endif()
 # gradients must give zero to round-off on meshes with nodes moved at random,
 # folds between blocks, points shared by 3 and 5 blocks, symmetry planes and
 # walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
-# against an independent replica of their formulas.
-# Cost: 32 one-step solver runs, about 7 s of CPU time at one thread.
+# against an independent replica of their formulas. ViscousWallPatch: the
+# cells next to walls of prescribed temperature varying along the wall.
+# Cost: 32 and 18 one-step solver runs, about 7 s and 4 s of CPU time at
+# one thread.
 mose_add_fast_script(ViscousPatch fast/viscous-patch "fast;numerics;2D;3D")
 
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,

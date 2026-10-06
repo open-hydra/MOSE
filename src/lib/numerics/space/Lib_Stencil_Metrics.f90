@@ -26,6 +26,11 @@
 !> block are computed on every rank, from the nodes every rank holds until the end of the setup of the metrics, so no
 !> message is needed; the face metrics are stored for the blocks of the rank only (blk%dir(d)%Mf, on the faces of the
 !> block, interior and boundary).
+!>
+!> Walls: the gradient at a wall face takes the difference between the cell and the wall value across the face and the
+!> differences of the wall values along it, with the metric of the same differences of the positions (cell centre, face
+!> centres): Wall_Face_Stencils. Before, the tangential differences were zero and the metric was that of the cell, wrong
+!> by (dphi_w/ds) tan(theta) on a wall whose value varies along it, on cells skewed by theta.
 module MOSE_Lib_Stencil_Metrics
   use iso_fortran_env, only: I4 => int32, R8 => real64
 
@@ -195,6 +200,9 @@ contains
           call Symmetry_Face_Metric ( domain % blk(b), xc(b), domain % bc(r) )
       end select
     enddo
+
+    ! 5. Wall faces of the blocks of this rank
+    call Wall_Face_Stencils ( domain, xc )
 
     deallocate ( xc )
 
@@ -515,5 +523,115 @@ contains
     blk % dir(dir) % Mf(fi,fj,fk) % c = Face_Inverse ( JT, rec % b, dir, fi, fj, fk, 'symmetry' )
 
   end subroutine Symmetry_Face_Metric
+
+
+  !> Wall faces with diffusive-metric = stencil (types 301, 302, and 503-505 when they do not ablate): the face metric of
+  !> the wall gradient and the tangential differences of the imposed wall temperature, stored in the record (bc%wstencil,
+  !> wM, wdT) and used by BC_Wall_Temperature and BC_Wall_Heat. The difference across the face is the one of the wall
+  !> routines, modfm3 (phi_c - phi_w), with the position difference modfm3 (x_c - x_f); along the wall the differences of
+  !> the wall values at the centres (mean of the four nodes) of the neighbouring faces of the same block face and of the
+  !> same type, central, or one-sided where the wall ends; along an index direction with one cell, or with no such
+  !> neighbour, the edge of the cell and no difference of the field, as before. Exact for a linear field whose wall values
+  !> are its values at the face centres: T_w of the 302 records, and the velocity, zero on the wall. Not here: the wall
+  !> velocity of the stationary faces of a rotating frame, which varies along the wall (its tangential differences stay
+  !> zero, as before), and the temperature of the 503-505 faces, which the surface model sets at every call.
+  subroutine Wall_Face_Stencils ( domain, xc )
+    use MOSE_Advanced_Types_m
+    use MOSE_Lib_Diffusive, only: Inverse3
+    use MOSE_Lib_BC_Fluxes, only: Face_Index
+    use MOSE_Mod_MPI, only: is_local_block
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    type(centres_t), intent(in) :: xc(:)
+    ! Local
+    integer, allocatable :: map(:,:)
+    integer :: b, f, ii, r, rn(2), q, s, dir, tb(2), n(3), c(3), cn(3), fi, fj, fk, typ, nside
+    real(R8) :: JT(3,3), xf(3), nf(3), xfn(3,2), Ac(3,3), dT
+
+    do b = 1, domain % nb
+      if (.not. is_local_block(b)) cycle
+      n = domain % blk(b) % dim
+      do f = 1, 6
+        if ( domain % local_bf_count(b,f) == 0 ) cycle
+        dir = (f + 1) / 2
+        select case (dir)
+          case (1) ; tb = [2, 3]
+          case (2) ; tb = [1, 3]
+          case default ; tb = [1, 2]
+        end select
+        ! Records of the walls of this block face, by their two tangential cell indices
+        allocate ( map(n(tb(1)), n(tb(2))) )
+        map = 0
+        do ii = domain % local_bf_first(b,f), domain % local_bf_first(b,f) + domain % local_bf_count(b,f) - 1
+          r = domain % local_bf_idx(ii)
+          if ( .not. Is_Wall(domain % bc(r) % type) ) cycle
+          c = [domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k]
+          map(c(tb(1)), c(tb(2))) = r
+        enddo
+        do ii = domain % local_bf_first(b,f), domain % local_bf_first(b,f) + domain % local_bf_count(b,f) - 1
+          r = domain % local_bf_idx(ii)
+          typ = domain % bc(r) % type
+          if ( .not. Is_Wall(typ) ) cycle
+          c = [domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k]
+          call Face_Centre_Normal ( domain % blk(b) % node, c(1), c(2), c(3), f, xf, nf )
+          Ac = Inverse3 ( domain % blk(b) % M(c(1),c(2),c(3)) % c )        ! columns: the edges of the cell
+          JT = 0d0
+          JT(:,dir) = Modfm3_Of(f) * ( xc(b) % x(:,c(1),c(2),c(3)) - xf )
+          domain % bc(r) % wdT = 0d0
+          do q = 1, 2
+            ! neighbouring wall faces along tb(q), same block face and same type: rn(1) at +1, rn(2) at -1
+            rn = 0
+            do s = 1, 2
+              cn = c
+              cn(tb(q)) = c(tb(q)) + 3 - 2*s
+              if ( cn(tb(q)) < 1 .or. cn(tb(q)) > n(tb(q)) ) cycle
+              rn(s) = map(cn(tb(1)), cn(tb(2)))
+              if ( rn(s) /= 0 ) then
+                if ( domain % bc(rn(s)) % type /= typ ) rn(s) = 0
+              end if
+              if ( rn(s) /= 0 ) then
+                call Face_Centre_Normal ( domain % blk(b) % node, cn(1), cn(2), cn(3), f, xfn(:,s), nf )
+              end if
+            enddo
+            nside = count ( rn /= 0 )
+            if ( n(tb(q)) == 1 .or. nside == 0 ) then
+              JT(:,tb(q)) = Ac(:,tb(q))                                      ! as before: the edge, no difference
+              cycle
+            end if
+            dT = 0d0
+            if ( nside == 2 ) then
+              JT(:,tb(q)) = 0.5d0 * ( xfn(:,1) - xfn(:,2) )
+              if ( typ == 302 ) dT = 0.5d0 * ( domain % bc(rn(1)) % Tw - domain % bc(rn(2)) % Tw )
+            elseif ( rn(1) /= 0 ) then
+              JT(:,tb(q)) = xfn(:,1) - xf
+              if ( typ == 302 ) dT = domain % bc(rn(1)) % Tw - domain % bc(r) % Tw
+            else
+              JT(:,tb(q)) = xf - xfn(:,2)
+              if ( typ == 302 ) dT = domain % bc(r) % Tw - domain % bc(rn(2)) % Tw
+            end if
+            domain % bc(r) % wdT(q) = dT
+          enddo
+          call Face_Index ( f, dir, c(1), c(2), c(3), fi, fj, fk )
+          domain % bc(r) % wM = Face_Inverse ( JT, b, dir, fi, fj, fk, 'wall' )
+          domain % bc(r) % wstencil = .true.
+        enddo
+        deallocate ( map )
+      enddo
+    enddo
+
+  contains
+
+    logical function Is_Wall ( t )
+      integer, intent(in) :: t
+      Is_Wall = ( t == 301 .or. t == 302 .or. t == 503 .or. t == 504 .or. t == 505 )
+    end function Is_Wall
+
+    !> modfm3 of Compute_Modfm: +2 on the faces 1, 3, 5 (the wall at the low index of the cell), -2 on 2, 4, 6.
+    integer function Modfm3_Of ( face )
+      integer, intent(in) :: face
+      Modfm3_Of = 2 * ( 2 * mod(face,2) - 1 )
+    end function Modfm3_Of
+
+  end subroutine Wall_Face_Stencils
 
 end module MOSE_Lib_Stencil_Metrics

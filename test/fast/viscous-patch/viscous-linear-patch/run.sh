@@ -53,7 +53,7 @@ step() {
   cp "input-$tag.ini" input.ini
   cp "INPUT/bc-$tag.txt" INPUT/bc.txt
   rm -f INPUT/transport.dat
-  if [[ $tag == ref && $run == ene ]]; then
+  if [[ $tag == ref && ( $run == ene || $run == momw ) ]]; then
     ln -sf transport-ref.dat INPUT/transport.dat
   else
     ln -sf "../$VISC/transport.dat" INPUT/transport.dat
@@ -77,6 +77,13 @@ if [[ $NAME == ViscousWallPatch ]]; then
     step ns "$mesh" ene
     step ref "$mesh" ene
     python3 -B "$MC" check "$mesh" ene "OUTPUT/diag-$mesh-ene-ns.tec" "OUTPUT/diag-$mesh-ene-ref.tec" wall302 || status=1
+  done
+  echo "-- velocity linear and zero on a no-slip wall (302), wall cells with nodes moved at random: their momentum --"
+  for mesh in rand1 box3d; do
+    python3 -B "$MC" case "$mesh" momw > /dev/null || exit 1
+    step ns "$mesh" momw
+    step ref "$mesh" momw
+    python3 -B "$MC" check "$mesh" momw "OUTPUT/diag-$mesh-momw-ns.tec" "OUTPUT/diag-$mesh-momw-ref.tec" wall302 || status=1
   done
 else
   echo "-- viscous patch test: linear velocity (mom) and linear temperature (ene) --"

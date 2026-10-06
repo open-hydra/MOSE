@@ -10,7 +10,7 @@ module MOSE_Lib_BC_Fluxes_Wall_Heat
 
 contains
 
-  subroutine BC_Wall_Heat ( Im, Jm, Km, Fm, Blk, Heat_Flux, Ovar, w_wall, k_rough )
+  subroutine BC_Wall_Heat ( Im, Jm, Km, Fm, Blk, Heat_Flux, Ovar, w_wall, k_rough, rec )
     use MOSE_Lib_Fluid
     use MOSE_Lib_RANS
     use FLINT_Lib_Thermodynamic
@@ -21,13 +21,15 @@ contains
     real(R8), optional, dimension(8), intent(inout) :: Ovar
     real(R8), optional, dimension(3), intent(in) :: w_wall
     real(R8), optional, intent(in) :: k_rough   ! sand-grain roughness of the face (absent = smooth)
+    type(MOSE_bc_type), optional, intent(in) :: rec   ! the record of the face: its wall stencil (diffusive-metric = stencil)
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, Ig, Jg, Kg
     real(R8) :: Normal(3), Area, Dist, M(3,3), Prim(nprim), rho, Rgas, temp, Gradient(nprim,3)
     real(R8) :: mil, kl, Stress(3), Flux(nprim)
     integer  :: vgrad_i
     real(R8) :: gvec1, gvec2, gvec3, VelGrad(3,3), Prim_Wall(nprim), rho_wall, Twall, dl
-    real(R8) :: kr, mit
+    real(R8) :: kr, mit, Mc(3,3)
+    logical  :: wst
 
 
     kr = 0d0
@@ -41,6 +43,13 @@ contains
     Area = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
     Dist = 1d-20 ! since the flux is computed at the wall
     M = Blk % M (Im,Jm,Km) % c
+    Mc = M
+    ! diffusive-metric = stencil: velocity and turbulence take the metric of the wall face (Wall_Face_Stencils in
+    ! MOSE_Lib_Stencil_Metrics; their wall values do not vary along the wall); the wall temperature below is estimated
+    ! with the metric of the cell, as before
+    wst = .false.
+    if ( present(rec) ) wst = rec % wstencil
+    if ( wst ) M = rec % wM
 
     ! boundary cell variables
     Prim = Blk % P(:,Im,Jm,Km)
@@ -62,7 +71,7 @@ contains
     else
       Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3               ! Standard no-slip (w_wall=0)
     end if
-    Gradient(np,Dir) = -Heat_Flux / ( 2d0*kl*dot_product( M(Dir,:), normal ) ) * modfm2
+    Gradient(np,Dir) = -Heat_Flux / ( 2d0*kl*dot_product( Mc(Dir,:), normal ) ) * modfm2
 
     ! Wall variables
     Twall = temp - Gradient(np,Dir)

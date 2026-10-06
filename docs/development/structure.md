@@ -228,8 +228,13 @@ gradient through `Diffusive_Flux` (`BC_Connection_Visc_Stencil`), with the
 metric stored on the face of the block of the record and the tangential
 neighbours of the ghost cell from `bc%Pg(:,3:6)`; a symmetry face (`300`)
 uses the stored metric of the cell and its mirror image in
-`BC_Symmetry_Visc`. Walls, faces of type `200` (`BC_Rotational_Periodic_Visc`)
-and chimera faces (`102`) keep their own metric with every option. The positions of the ghost cells that
+`BC_Symmetry_Visc`. A wall face takes the metric and the tangential
+differences of the wall temperature that `Wall_Face_Stencils` stores in its
+record (`bc%wstencil`, `bc%wM`, `bc%wdT`): `BC_Wall_Temperature` and
+`BC_Wall_Heat` read them through their optional argument `rec`, which every
+caller passes (`BC_Fluxes`, `Wall_RANS_Ghosts`, the wall output). Faces of type
+`200` (`BC_Rotational_Periodic_Visc`) and chimera faces (`102`) keep their own
+metric with every option. The positions of the ghost cells that
 enter the metric are listed in [Numerics](../theory/numerics.md).
 
 ---

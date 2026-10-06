@@ -1,0 +1,6 @@
+bin/
+OUTPUT/
+INPUT/
+input.ini
+input-ns.ini
+input-ref.ini

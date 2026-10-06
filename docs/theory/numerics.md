@@ -331,8 +331,24 @@ metric, as an interior face, and a symmetry face the gradient between the cell
 and its mirror image. With `inverse-mean` and `mean`, block-connection faces
 use the inverse mean, as chimera faces do with every option: across a large
 cell-size jump at a block interface, the mean makes the normal gradient so steep
-that the explicit diffusion becomes unstable. Wall faces keep the metric of the
-wall cell, with the tangential derivatives set to zero.
+that the explicit diffusion becomes unstable.
+
+At a wall face (301, 302, and 503–505 when they do not ablate) the gradient
+takes the difference between the cell and the wall value across the face.
+With `stencil` it also takes the differences of the wall values along the
+wall, between the neighbouring wall faces of the same block face and type
+(central, or one-sided where the wall ends), with the metric of the same
+differences of the positions: the vector from the face centre (the mean of its
+four nodes) to the cell centre across the face, the differences of the face
+centres along it. For a linear field whose wall values are its values at the
+face centres the wall gradient is exact: the temperature of a 302 wall that
+varies along the wall, the velocity of a no-slip wall on cells of any shape.
+With `inverse-mean` and `mean`, and for the quantities whose wall value is not
+known along the wall (the temperature of 301 walls and of the surface models
+of 503–505, the velocity of the stationary walls of a rotating frame), the
+derivatives along the wall are zero and the metric is that of the wall cell:
+on a cell skewed by θ the normal gradient is then wrong by
+$(\partial\phi_w/\partial s)\tan\theta$, which refinement does not reduce.
 
 The viscous flux of a chimera face is the mean of two fluxes: one with the
 central differences along the face of the row of the cell, one with those of

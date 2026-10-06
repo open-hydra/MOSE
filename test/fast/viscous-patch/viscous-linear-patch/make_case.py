@@ -35,6 +35,8 @@ Runs:
          outer faces of type 302 (T_w = T at the face centre, the mean of its four nodes), 301 (q = k g . n with the face
          normal of the solver) or 400, mixed so that the faces between blocks end on every kind of ghost cell.
          Checked: the energy of the cells without a 400 face.
+  momw   uniform p = 10 Pa and T, u = (a, b, c) (y - 2 cm), zero on the wall y = 2 cm (302, T_w = T) of rand1 and box3d,
+         whose wall cells have nodes moved at random; the other outer faces 400. Checked: the momentum of the wall cells.
   rk3    u = 0, uniform p = 10 Pa, T linear (rho = p/(R T)): steady for the Euler equations and, with a face gradient
          exact for linear fields, for the Navier-Stokes equations, at every stage (the low pressure: see P_LOW).
          Three-stage Runge-Kutta step, 12 x 12 cells per block (star3, star5 only). The ghost cells of the outer faces
@@ -43,18 +45,19 @@ Runs:
          the cells of the other blocks at that point.
 
 Observable: one explicit step from the same state with the Navier-Stokes equations and one reference step (mom: the Euler
-equations; ene: Navier-Stokes with mu = k = 1e-30 and q = 0 on the 301 faces, because the solver refuses walls 301 and
+equations; ene, momw: Navier-Stokes with mu = k = 1e-30 and q = 0 on the 301 faces, because the solver refuses walls 301 and
 302 with the Euler equations and the ghost cells must stay those of the walls; rk3: the Navier-Stokes step only, whose
 inviscid part is zero for this state). The diagnostic output holds, per cell, the residual over the step, r, and the
 step dt; r/dt of Navier-Stokes minus r/dt of the reference is the viscous right-hand side per unit volume. It is
-compared with the scale mu |G| (sum of face areas)/volume (mom) or k |g| (sum of face areas)/volume (ene, rk3);
+compared with the scale mu |G| (sum of face areas)/volume (mom, momw) or k |g| (sum of face areas)/volume (ene, rk3);
 threshold 1e-11. The cells are grouped by the faces they have: interior (no boundary face), connection (a face between
 blocks; corner: two of them, the cells at a point shared by 3 or 5 blocks), symmetry (300), wall 301, wall 302.
 
 ViscousLinearPatch checks every group but wall 302, plus the old metrics: on the rand1 mesh, run mom, diffusive-metric =
 inverse-mean and mean must give, cell by cell, the viscous force of an independent replica of their face gradients
 (written here from Lib_Diffusive.f90 and Lib_Metrics.f90 at bff5a51), within 1e-10 of the scale. ViscousWallPatch checks
-the cells with a 302 face (walls whose temperature varies along the wall, on skewed cells).
+the cells with a 302 face: walls whose temperature varies along the wall, on skewed cells (ene), and the velocity at a
+no-slip wall whose cells have nodes moved at random (momw).
 
 Usage (from a test directory):
   python3 -B make_case.py case MESH RUN [METRIC]     INPUT/ic.tec; INPUT/bc-ns.txt, input-ns.ini for the Navier-Stokes
@@ -87,7 +90,7 @@ TOL = 1.0e-11
 TOL_REPLICA = 1.0e-10
 FMT = '{: .17E}'
 MESHES = ('fold2', 'jump', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
-RUNS = ('mom', 'ene', 'rk3')
+RUNS = ('mom', 'ene', 'rk3', 'momw')
 BC_CONNECT, BC_SYM, BC_Q, BC_T, BC_OPEN = 101, 300, 301, 302, 400
 
 
@@ -238,6 +241,8 @@ def outer_type(mesh, run, b, face):
         if mesh == 'sym' and face == 3:
             return BC_SYM
         return BC_OPEN
+    if run == 'momw':                    # one wall, the plane y = 2 cm of rand1 and box3d
+        return BC_T if face == 3 else BC_OPEN
     if run == 'rk3':
         mix = {0: (BC_T, BC_T), 1: (BC_Q, BC_T), 2: (BC_OPEN, BC_Q), 3: (BC_T, BC_OPEN), 4: (BC_Q, BC_Q)}
         return mix[b][0 if face == 2 else 1]
@@ -424,6 +429,12 @@ gparaQ = np.array([2000.0, 0.0, 0.0])      # along the walls of paraQ: q = k g .
 
 
 def field(mesh, run):
+    if run == 'momw':
+        # zero on the wall y = 2 cm, with shear and dilatation: u = (a, b, c) (y - 2 cm)
+        G = np.array([[0.0, 120.0, 0.0], [0.0, 60.0, 0.0], [0.0, 40.0 if mesh == 'box3d' else 0.0, 0.0]])
+        x0 = X0.copy()
+        x0[1] = LREF * OFFSET[1]
+        return {'G': G, 'u0': np.zeros(3), 'x0': x0}
     if run == 'mom':
         G = GSYM if mesh == 'sym' else (G3 if mesh == 'box3d' else G2)
         u0 = {'box3d': np.array([1.0, 0.5, 0.3]), 'sym': np.array([1.0, 0.0, 0.0])}.get(mesh, U0)
@@ -437,7 +448,7 @@ def field(mesh, run):
 
 def state(mesh, run, x):
     f = field(mesh, run)
-    if run == 'mom':
+    if run in ('mom', 'momw'):
         u = f['u0'] + f['G'].dot(x - f['x0'])
         return P_LOW / (RGAS * T0), u, P_LOW
     T = T0 + f['g'].dot(x - f['x0'])
@@ -497,7 +508,7 @@ def write_case(mesh, run, metric):
                         t = outer_type(mesh, run, b, face)
                         if t == BC_T:
                             xf = 0.25 * sum(face_nodes(X, face, i, j, k))
-                            tw = T0 + f['g'].dot(xf - f['x0'])
+                            tw = T0 if run == 'momw' else T0 + f['g'].dot(xf - f['x0'])
                             rows.append(head + f'{t:8d}\n' + f'    {tw:.17E},    0.000000E+00,    0.000000E+00,\n')
                         elif t == BC_Q:
                             d = (face + 1) // 2
@@ -618,7 +629,7 @@ def groups(blocks, mesh, run, conn):
 
 def scales(blocks, mesh, run):
     f = field(mesh, run)
-    coef = MU * float(np.linalg.norm(f['G'])) if run == 'mom' else KCOND * float(np.linalg.norm(f['g']))
+    coef = MU * float(np.linalg.norm(f['G'])) if run in ('mom', 'momw') else KCOND * float(np.linalg.norm(f['g']))
     out = []
     for X in blocks:
         ni, nj, nk = dims(X)
@@ -636,7 +647,7 @@ def scales(blocks, mesh, run):
 def check(mesh, run, ns_path, eu_path, wanted):
     blocks = build(mesh, run)
     conn = connections(blocks)
-    comps = ['rhou', 'rhov', 'rhow'] if run == 'mom' else ['rhoe']
+    comps = ['rhou', 'rhov', 'rhow'] if run in ('mom', 'momw') else ['rhoe']
     rhs = viscous_rhs(read_zones(ns_path), None if run == 'rk3' else read_zones(eu_path), comps)
     grp = groups(blocks, mesh, run, conn)
     sc = scales(blocks, mesh, run)

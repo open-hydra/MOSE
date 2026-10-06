@@ -10,13 +10,15 @@
 #  test:
 #    ViscousLinearPatch (viscous-linear-patch): patch test of the viscous
 #      fluxes
+#    ViscousWallPatch (viscous-wall-patch): the same next to walls of
+#      prescribed temperature
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(viscous-linear-patch)
+PARTS=(viscous-linear-patch viscous-wall-patch)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

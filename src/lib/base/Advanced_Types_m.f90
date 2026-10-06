@@ -82,6 +82,10 @@ module MOSE_Advanced_Types_m
     type(time_series_type), allocatable :: q2d_map(:)                        ! BC 667 (Q2D mapped) time-varying primitive data (one per primitive)
     character(len=llen)                 :: q2d_file = ' '                    ! BC 667 (Q2D mapped) Tecplot filename from bc.txt
     logical                             :: q2d_periodic = .false.            ! BC 667 (Q2D mapped) periodic time signal flag
+    ! Wall faces with diffusive-metric = stencil (MOSE_Lib_Stencil_Metrics: Wall_Face_Stencils)
+    logical                             :: wstencil = .false.                ! wM, wdT set for this wall face
+    real(R8)                            :: wM(3,3) = 0.0_R8                  ! face metric of the wall gradient
+    real(R8)                            :: wdT(2) = 0.0_R8                   ! tangential differences of T_w (302)
   end type MOSE_bc_type
   !! ------------------------------------------------------
   !! ------------------------------------------------------
