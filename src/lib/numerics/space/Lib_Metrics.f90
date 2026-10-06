@@ -533,18 +533,22 @@ contains
   
   subroutine Compute_Yn ( blk, bc, nb, nbound )
     use MOSE_Lib_KDTree, only: kdtree_t, kdtree_build, kdtree_free
-    use MOSE_Mod_MPI,    only: is_local_block, mpi_is_root
+    use MOSE_Mod_MPI,    only: is_local_block, mpi_is_root, mpi_abort_all
     implicit none
     integer, intent(in)                                  :: nb, nbound
     type(MOSE_block_type), dimension(nb), intent(inout)  :: blk
     type(MOSE_bc_type), dimension(nbound), intent(in)    :: bc
     ! Local
-    real(R8), dimension(nbound) :: facex, facey, facez, facekr, facer
+    real(R8), allocatable :: facex(:), facey(:), facez(:), facekr(:), facer(:)
     real(R8) :: corner(3,4)
     integer :: Fm, Bm, Im, Jm, Km, l, b, nwall, n
-    integer :: i1, j1, k1, i2, j2, k2, i3, j3, k3, i4, j4, k4
     logical, dimension(nb) :: needs_yn
     type(kdtree_t) :: wall_tree
+    ! Periodic images of the wall: image n is the wall turned about the x axis by img_angle(n), then translated by
+    ! img_shift(:,n); wall_box(:,1:2) are the low and high corners of the box around the wall faces
+    integer               :: nimg
+    real(R8), allocatable :: img_shift(:,:), img_angle(:)
+    real(R8)              :: wall_box(3,2)
 
     ! Validation switch: checks every yn against a brute-force scan, roughly
     ! doubling setup cost.  Keep .false. in production.
@@ -565,6 +569,7 @@ contains
       if ( Is_Wall(bc(l) % type) ) nwall = nwall + 1
     enddo
     allocate ( wall_corner(3, 0:4, max(nwall,1)) )
+    allocate ( facex(max(nwall,1)), facey(max(nwall,1)), facez(max(nwall,1)), facekr(max(nwall,1)), facer(max(nwall,1)) )
 
     nwall=0
 
@@ -580,53 +585,8 @@ contains
         Fm = bc(l) % f
         nwall = nwall+1
 
-        select case(Fm)
-          case(1:2)
-            i1 = Im - mod(Fm,2)
-            j1 = Jm - 1
-            k1 = Km - 1
-            i2 = Im - mod(Fm,2)
-            j2 = Jm
-            k2 = Km - 1
-            i3 = Im - mod(Fm,2)
-            j3 = Jm - 1
-            k3 = Km
-            i4 = Im - mod(Fm,2)
-            j4 = Jm
-            k4 = Km
-          case(3:4)
-            i1 = Im - 1
-            j1 = Jm - mod(Fm,2)
-            k1 = Km - 1
-            i2 = Im
-            j2 = Jm - mod(Fm,2)
-            k2 = Km - 1
-            i3 = Im - 1
-            j3 = Jm - mod(Fm,2)
-            k3 = Km
-            i4 = Im
-            j4 = Jm - mod(Fm,2)
-            k4 = Km
-          case(5:6)
-            i1 = Im - 1
-            j1 = Jm - 1
-            k1 = Km - mod(Fm,2)
-            i2 = Im
-            j2 = Jm - 1
-            k2 = Km - mod(Fm,2)
-            i3 = Im - 1
-            j3 = Jm
-            k3 = Km - mod(Fm,2)
-            i4 = Im
-            j4 = Jm
-            k4 = Km - mod(Fm,2)
-        end select
-
         ! Boundary face nodes, in cyclic order around the face.
-        corner(:,1) = blk(Bm) % node(i1,j1,k1) % c
-        corner(:,2) = blk(Bm) % node(i2,j2,k2) % c
-        corner(:,3) = blk(Bm) % node(i4,j4,k4) % c
-        corner(:,4) = blk(Bm) % node(i3,j3,k3) % c
+        corner = Face_Corners ( blk(Bm), Im, Jm, Km, Fm )
 
         if ( wall_meridional ) then
           ! Faces 1-4 of a wedge cell cross the meridional plane along a segment,
@@ -687,6 +647,13 @@ contains
       return
     end if
 
+    ! Periodic images of the wall. Across a periodic connection (201), and across type
+    ! 200 on faces 5-6 of a 3-D mesh without sectors, the mesh goes on translated; across
+    ! the rotational periodicity of a 3-D sector (200 on faces 5-6) it goes on turned by
+    ! delthe about the x axis: the wall nearest to a cell can be an image of the wall
+    ! across those boundaries, and the distance is the minimum over the images too.
+    call Wall_Images ( )
+
     ! One k-d tree over the wall-face centres, with the face radii, shared by every
     ! block and thread: it hands the exact point-face distance only the faces that
     ! can still be nearer than the nearest found so far (centre within that
@@ -709,9 +676,352 @@ contains
     end if
 
     call kdtree_free ( wall_tree )
-    deallocate ( wall_corner )
+    deallocate ( wall_corner, img_shift, img_angle )
 
     contains
+
+      !> Corners of face Fm of cell (Im, Jm, Km) of a block, in cyclic order around the face.
+      function Face_Corners ( blk, Im, Jm, Km, Fm ) result ( corner )
+        implicit none
+        type(MOSE_block_type), intent(in) :: blk
+        integer, intent(in)               :: Im, Jm, Km, Fm
+        real(R8)                          :: corner(3,4)
+        ! Local
+        integer :: i1, j1, k1, i2, j2, k2, i3, j3, k3, i4, j4, k4
+
+        select case(Fm)
+          case(1:2)
+            i1 = Im - mod(Fm,2)
+            j1 = Jm - 1
+            k1 = Km - 1
+            i2 = Im - mod(Fm,2)
+            j2 = Jm
+            k2 = Km - 1
+            i3 = Im - mod(Fm,2)
+            j3 = Jm - 1
+            k3 = Km
+            i4 = Im - mod(Fm,2)
+            j4 = Jm
+            k4 = Km
+          case(3:4)
+            i1 = Im - 1
+            j1 = Jm - mod(Fm,2)
+            k1 = Km - 1
+            i2 = Im
+            j2 = Jm - mod(Fm,2)
+            k2 = Km - 1
+            i3 = Im - 1
+            j3 = Jm - mod(Fm,2)
+            k3 = Km
+            i4 = Im
+            j4 = Jm - mod(Fm,2)
+            k4 = Km
+          case(5:6)
+            i1 = Im - 1
+            j1 = Jm - 1
+            k1 = Km - mod(Fm,2)
+            i2 = Im
+            j2 = Jm - 1
+            k2 = Km - mod(Fm,2)
+            i3 = Im - 1
+            j3 = Jm
+            k3 = Km - mod(Fm,2)
+            i4 = Im
+            j4 = Jm
+            k4 = Km - mod(Fm,2)
+        end select
+
+        corner(:,1) = blk % node(i1,j1,k1) % c
+        corner(:,2) = blk % node(i2,j2,k2) % c
+        corner(:,3) = blk % node(i4,j4,k4) % c
+        corner(:,4) = blk % node(i3,j3,k3) % c
+
+      end function Face_Corners
+
+
+      !> Images of the wall across the periodic boundaries (img_shift, img_angle, nimg) and the box around the wall.
+      !>  - Translations: each periodic connection (201) gives the vector from its source face to its own face (the
+      !>    difference of the face centres), in the meridional plane on a wedge, where it must lie along x. On a 3-D mesh
+      !>    without sectors (delthe = 0) so does each block whose k faces are closed by type 200: its last k node plane
+      !>    is the first one translated (Check_Mesh_Type), and the cells next to face 5 go on in those next to face 6
+      !>    (Ghost_Axysimmetry). The two sides of a periodic boundary match only to within the precision of the mesh
+      !>    file, so vectors that differ by less than MATCH times the size of the coordinates are the same (the tolerance
+      !>    of Check_Mesh_Type). The distinct vectors, shortest first, are reduced to a basis of the lattice they
+      !>    generate; a vector that is not an integer combination of the basis, within that tolerance times the number
+      !>    of vectors combined, stops the run. Images: the integer combinations sum k_i B_i with |k_i| <= 2 D |B*_i|,
+      !>    D the diagonal of the box around the nodes and B* the dual basis: a farther image is farther than D from
+      !>    every cell, beyond the wall of the mesh itself.
+      !>  - Rotations: on a 3-D mesh whose sectors are closed by type 200 on faces 5-6 (delthe /= 0), the turns by
+      !>    m delthe, |m delthe| <= pi; then every translation must lie along x, the axis of the turns.
+      !>  - More than NIMG_MAX images stop the run: the translations would be nearly parallel, or tiny against the mesh.
+      subroutine Wall_Images ( )
+        implicit none
+        ! Local
+        integer, parameter    :: MAXV = 3
+        real(R8), parameter   :: MATCH = 1d-6, NIMG_MAX = 1d5
+        real(R8), allocatable :: raw(:,:), cand(:,:), clen(:)
+        integer,  allocatable :: order(:)
+        logical,  allocatable :: closed(:)
+        real(R8)              :: basis(3,MAXV), ginv(MAXV,MAXV), coef(MAXV), rhs(MAXV)
+        real(R8)              :: t(3), lo(3), hi(3), cface(3,4), diag, scale, tol, lim, bound, nimg_r
+        integer               :: nraw, nc, nv, kmax(MAXV), mrot, i, j, m, n, l, b, k1, k2, k3, kk(MAXV)
+        logical               :: sector, span
+        character(len=256)    :: msg
+
+        ! Box around the wall faces, and around every node, for the bound on the images
+        wall_box(:,1) = minval ( reshape ( wall_corner(:,1:4,1:nwall), [3, 4*nwall] ), dim=2 )
+        wall_box(:,2) = maxval ( reshape ( wall_corner(:,1:4,1:nwall), [3, 4*nwall] ), dim=2 )
+        lo = huge(1d0)
+        hi = -huge(1d0)
+        do b = 1, nb
+          do n = 1, 3
+            lo(n) = min ( lo(n), minval ( blk(b) % node(:,:,:) % c(n) ) )
+            hi(n) = max ( hi(n), maxval ( blk(b) % node(:,:,:) % c(n) ) )
+          enddo
+        enddo
+        scale = maxval ( max ( abs(lo), abs(hi) ) )
+        if ( wall_meridional ) then
+          ! (x, r): r runs from 0 to the largest |(y, z)|
+          hi(2) = sqrt ( max ( lo(2)**2, hi(2)**2 ) + max ( lo(3)**2, hi(3)**2 ) )
+          lo(2) = 0d0
+          lo(3) = 0d0
+          hi(3) = 0d0
+        end if
+        diag = norm2 ( hi - lo )
+        tol  = MATCH * scale
+
+        ! Translations: of the periodic connections, and of the blocks closed in k by type 200 on a 3-D mesh without
+        ! sectors
+        span = ndir == 3 .and. delthe >= 0d0 .and. delthe <= 0d0
+        nraw = 0
+        do l = 1, nbound
+          if ( bc(l) % type == 201 ) nraw = nraw + 1
+        enddo
+        if ( span ) nraw = nraw + nb
+        allocate ( raw(3, max(nraw,1)), cand(3, max(nraw,1)), clen(max(nraw,1)), order(max(nraw,1)) )
+        nraw = 0
+        do l = 1, nbound
+          if ( bc(l) % type /= 201 ) cycle
+          cface = Face_Corners ( blk(bc(l)%b), bc(l)%i, bc(l)%j, bc(l)%k, bc(l)%f )
+          t = 0.25d0 * sum ( cface, dim=2 )
+          cface = Face_Corners ( blk(bc(l)%bs), bc(l)%is, bc(l)%js, bc(l)%ks, bc(l)%fs )
+          nraw = nraw + 1
+          raw(:,nraw) = t - 0.25d0 * sum ( cface, dim=2 )
+        enddo
+        if ( span ) then
+          allocate ( closed(nb) )
+          closed = .false.
+          do l = 1, nbound
+            if ( bc(l) % type == 200 .and. bc(l) % f >= 5 ) closed(bc(l) % b) = .true.
+          enddo
+          do b = 1, nb
+            if ( .not. closed(b) ) cycle
+            nraw = nraw + 1
+            raw(:,nraw) = blk(b) % node(0,0,blk(b)%dim(3)) % c - blk(b) % node(0,0,0) % c
+          enddo
+          deallocate ( closed )
+        end if
+        nc = 0
+        do l = 1, nraw
+          t = raw(:,l)
+          if ( norm2 ( t ) <= tol ) cycle
+          if ( wall_meridional ) then
+            if ( abs ( t(2) ) > tol .or. abs ( t(3) ) > tol ) &
+              call mpi_abort_all ( '[ERROR] Wall distance: a periodic connection (201) of an axisymmetric wedge is not '// &
+                                   'a translation along the x axis' )
+            t(2:3) = 0d0
+          end if
+          ! One of the vectors t and -t: the largest component positive
+          n = maxloc ( abs ( t ), dim=1 )
+          if ( t(n) < 0d0 ) t = -t
+          do i = 1, nc
+            if ( norm2 ( cand(:,i) - t ) <= tol ) exit
+          enddo
+          if ( i > nc ) then
+            nc = nc + 1
+            cand(:,nc) = t
+            clen(nc) = norm2 ( t )
+          end if
+        enddo
+
+        ! Basis of the lattice, shortest vectors first
+        do i = 1, nc
+          order(i) = i
+        enddo
+        do i = 2, nc
+          j = order(i)
+          m = i - 1
+          do while ( m >= 1 )
+            if ( clen(order(m)) <= clen(j) ) exit
+            order(m+1) = order(m)
+            m = m - 1
+          enddo
+          order(m+1) = j
+        enddo
+        nv = 0
+        do i = 1, nc
+          t = cand(:,order(i))
+          if ( nv > 0 ) then
+            ! Least-squares coefficients of t on the basis, and the nearest integer ones
+            do m = 1, nv
+              rhs(m) = dot_product ( basis(:,m), t )
+            enddo
+            call Invert_Gram ( basis, nv, ginv )
+            coef(1:nv) = matmul ( ginv(1:nv,1:nv), rhs(1:nv) )
+            lim = tol * ( 1d0 + sum ( abs ( anint ( coef(1:nv) ) ) ) )
+            ! An integer combination of the basis: nothing new
+            if ( norm2 ( t - matmul ( basis(:,1:nv), anint ( coef(1:nv) ) ) ) <= lim ) cycle
+            ! In the span of the basis, between its integer combinations: the periodic boundaries disagree
+            if ( norm2 ( t - matmul ( basis(:,1:nv), coef(1:nv) ) ) <= lim ) then
+              write(msg,'(A,3ES12.4,A)') '[ERROR] Wall distance: the periodic translation (', t, &
+                ') is not an integer combination of the others'
+              call mpi_abort_all ( trim(msg) )
+            end if
+          end if
+          if ( nv == MAXV ) call mpi_abort_all ( '[ERROR] Wall distance: more than three independent periodic translations' )
+          nv = nv + 1
+          basis(:,nv) = t
+        enddo
+
+        ! Rotational periodicity of 3-D sectors
+        sector = .false.
+        if ( ndir == 3 .and. .not. ( delthe >= 0d0 .and. delthe <= 0d0 ) ) then
+          do l = 1, nbound
+            if ( bc(l) % type == 200 .and. bc(l) % f >= 5 ) sector = .true.
+          enddo
+        end if
+        if ( sector ) then
+          do m = 1, nv
+            if ( abs ( basis(2,m) ) > tol .or. abs ( basis(3,m) ) > tol ) &
+              call mpi_abort_all ( '[ERROR] Wall distance: a periodic connection (201) of a mesh with rotational '// &
+                                   'periodicity (200) is not a translation along the x axis' )
+          enddo
+        end if
+
+        ! Bounds of the integer coefficients, |k_i| <= 2 D |B*_i| with |B*_i|^2 = (G^-1)_ii, and of the turns, and the
+        ! number of images (in reals: no integer overflow before the check)
+        kmax = 0
+        mrot = 0
+        nimg_r = 1d0
+        if ( nv > 0 ) then
+          call Invert_Gram ( basis, nv, ginv )
+          do m = 1, nv
+            bound = 2d0 * diag * sqrt ( ginv(m,m) )
+            if ( .not. ( bound <= NIMG_MAX ) ) bound = NIMG_MAX   ! too large, or not a number (Gram matrix singular)
+            kmax(m) = floor ( bound ) + 1
+            nimg_r = nimg_r * ( 2 * kmax(m) + 1 )
+          enddo
+        end if
+        if ( sector ) then
+          bound = 3.141592653589793d0 / abs ( delthe )
+          if ( .not. ( bound <= NIMG_MAX ) ) bound = NIMG_MAX
+          mrot = ceiling ( bound )
+          nimg_r = nimg_r * ( 2 * mrot + 1 )
+        end if
+        if ( nimg_r - 1d0 > NIMG_MAX ) then
+          write(msg,'(A,ES10.3,A)') '[ERROR] Wall distance: ', nimg_r - 1d0, ' periodic images of the wall: the periodic'// &
+            ' translations are nearly parallel, or tiny against the mesh (do the two sides of the periodic boundaries match?)'
+          call mpi_abort_all ( trim(msg) )
+        end if
+
+        ! The images, all but the identity
+        nimg = product ( 2*kmax + 1 ) * ( 2*mrot + 1 ) - 1
+        allocate ( img_shift(3, max(nimg,1)), img_angle(max(nimg,1)) )
+        img_angle = 0d0
+        nimg = 0
+        do k3 = -kmax(3), kmax(3)
+          do k2 = -kmax(2), kmax(2)
+            do k1 = -kmax(1), kmax(1)
+              kk = [ k1, k2, k3 ]
+              t = 0d0
+              do m = 1, nv
+                t = t + kk(m) * basis(:,m)
+              enddo
+              do m = -mrot, mrot
+                if ( k1 == 0 .and. k2 == 0 .and. k3 == 0 .and. m == 0 ) cycle
+                nimg = nimg + 1
+                img_shift(:,nimg) = t
+                img_angle(nimg) = m * delthe
+              enddo
+            enddo
+          enddo
+        enddo
+        deallocate ( raw, cand, clen, order )
+
+      end subroutine Wall_Images
+
+
+      !> ginv = inverse of the Gram matrix of basis(:,1:nv), nv <= 3 (independent vectors).
+      subroutine Invert_Gram ( basis, nv, ginv )
+        implicit none
+        real(R8), intent(in)  :: basis(:,:)
+        integer, intent(in)   :: nv
+        real(R8), intent(out) :: ginv(:,:)
+        ! Local
+        integer  :: i, j
+        real(R8) :: gram(3,3), det
+
+        do i = 1, nv
+          do j = 1, nv
+            gram(i,j) = dot_product ( basis(:,i), basis(:,j) )
+          enddo
+        enddo
+        select case ( nv )
+          case ( 1 )
+            ginv(1,1) = 1d0 / gram(1,1)
+          case ( 2 )
+            det = gram(1,1) * gram(2,2) - gram(1,2) * gram(2,1)
+            ginv(1,1) =  gram(2,2) / det
+            ginv(2,2) =  gram(1,1) / det
+            ginv(1,2) = -gram(1,2) / det
+            ginv(2,1) = -gram(2,1) / det
+          case ( 3 )
+            ginv(1,1) = gram(2,2)*gram(3,3) - gram(2,3)*gram(3,2)
+            ginv(1,2) = gram(1,3)*gram(3,2) - gram(1,2)*gram(3,3)
+            ginv(1,3) = gram(1,2)*gram(2,3) - gram(1,3)*gram(2,2)
+            ginv(2,1) = gram(2,3)*gram(3,1) - gram(2,1)*gram(3,3)
+            ginv(2,2) = gram(1,1)*gram(3,3) - gram(1,3)*gram(3,1)
+            ginv(2,3) = gram(1,3)*gram(2,1) - gram(1,1)*gram(2,3)
+            ginv(3,1) = gram(2,1)*gram(3,2) - gram(2,2)*gram(3,1)
+            ginv(3,2) = gram(1,2)*gram(3,1) - gram(1,1)*gram(3,2)
+            ginv(3,3) = gram(1,1)*gram(2,2) - gram(1,2)*gram(2,1)
+            det = gram(1,1)*ginv(1,1) + gram(1,2)*ginv(2,1) + gram(1,3)*ginv(3,1)
+            ginv(1:3,1:3) = ginv(1:3,1:3) / det
+        end select
+
+      end subroutine Invert_Gram
+
+
+      !> Distance from p to the box wall_box (0 inside).
+      pure function Box_Distance ( p ) result ( d )
+        implicit none
+        real(R8), intent(in) :: p(3)
+        real(R8)             :: d
+
+        d = norm2 ( max ( wall_box(:,1) - p, 0d0, p - wall_box(:,2) ) )
+
+      end function Box_Distance
+
+
+      !> The point at which the image n of the wall is seen as the wall itself: p translated by -img_shift(:,n) and
+      !> turned by -img_angle(n) about the x axis.
+      pure function Image_Point ( p, n ) result ( q )
+        implicit none
+        real(R8), intent(in) :: p(3)
+        integer, intent(in)  :: n
+        real(R8)             :: q(3)
+        ! Local
+        real(R8) :: ca, sa
+
+        q = p - img_shift(:,n)
+        if ( .not. ( img_angle(n) >= 0d0 .and. img_angle(n) <= 0d0 ) ) then
+          ca = cos ( img_angle(n) )
+          sa = sin ( img_angle(n) )
+          q(2:3) = [ q(2) * ca + q(3) * sa, - q(2) * sa + q(3) * ca ]
+        end if
+
+      end function Image_Point
+
 
       subroutine Wall_Distance_Blk ( blk, tree, face_kr )
         use MOSE_Lib_KDTree, only: kdtree_t, kdtree_nearest_object
@@ -720,11 +1030,11 @@ contains
         type(kdtree_t), intent(in)           :: tree
         real(R8), intent(in)                 :: face_kr(:)   ! Roughness of each wall face, by original face index
         ! Local
-        integer :: i, j, k, iface
-        real(R8) :: center(3), dist
+        integer :: i, j, k, iface, n
+        real(R8) :: center(3), dist, q(3)
 
         !$omp parallel
-        !$omp do collapse(3) private(i, j, k, center, dist, iface)
+        !$omp do collapse(3) private(i, j, k, center, dist, iface, n, q)
         do k = 1, blk % dim(3)
         do j = 1, blk % dim(2)
         do i = 1, blk % dim(1)
@@ -733,6 +1043,16 @@ contains
 
           ! Nearest wall face via the k-d tree, exact point-face distance.
           call kdtree_nearest_object ( tree, center(1), center(2), center(3), Wall_Face_Distance, dist, iface )
+
+          ! Periodic images: an image can be nearer only if the box of the wall, seen
+          ! from the moved point, is not farther than the distance found so far. The
+          ! query goes on from that distance and face, so ties keep the lowest face.
+          do n = 1, nimg
+            q = Image_Point ( center, n )
+            if ( Box_Distance ( q ) > dist ) cycle
+            call kdtree_nearest_object ( tree, q(1), q(2), q(3), Wall_Face_Distance, dist, iface, resume=.true. )
+          enddo
+
           blk % yn (i,j,k) = dist
           blk % k_rough (i,j,k) = face_kr(iface)
 
@@ -743,8 +1063,8 @@ contains
 
 
       !> Brute-force check of the k-d tree result: recompute each cell's
-      !> nearest-wall distance against the full face list, compare with
-      !> `blk%yn`, and abort past KDTREE_TOL.
+      !> nearest-wall distance against the full face list and its periodic
+      !> images, compare with `blk%yn`, and abort past KDTREE_TOL.
       subroutine Validate_Tree_Yn ( blk, nwall_, b_id )
         use MOSE_Mod_MPI, only: mpi_rank_
         implicit none
@@ -752,13 +1072,13 @@ contains
         integer, intent(in)                         :: nwall_
         integer, intent(in)                         :: b_id
         ! Local
-        integer :: i, j, k, ll
-        real(R8) :: center(3), dbrute, dummy, err, max_err
+        integer :: i, j, k, ll, n
+        real(R8) :: center(3), q(3), dbrute, dummy, err, max_err
 
         max_err = 0d0
 
         !$omp parallel
-        !$omp do collapse(3) private(i, j, k, ll, center, dbrute, dummy, err) &
+        !$omp do collapse(3) private(i, j, k, ll, n, center, q, dbrute, dummy, err) &
         !$omp             reduction(max:max_err)
         do k = 1, blk % dim(3)
         do j = 1, blk % dim(2)
@@ -767,9 +1087,13 @@ contains
           center = Cell_Centre ( blk, i, j, k )
 
           dbrute = 1d8
-          do ll = 1, nwall_
-            dummy = Wall_Face_Distance ( ll, center(1), center(2), center(3) )
-            if (dummy < dbrute) dbrute = dummy
+          do n = 0, nimg
+            q = center
+            if ( n > 0 ) q = Image_Point ( center, n )
+            do ll = 1, nwall_
+              dummy = Wall_Face_Distance ( ll, q(1), q(2), q(3) )
+              if (dummy < dbrute) dbrute = dummy
+            enddo
           enddo
 
           err = abs( blk % yn(i,j,k) - dbrute )

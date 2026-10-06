@@ -20,15 +20,33 @@ Three single-block cases, the wall on the j = 1 face, faces 300 elsewhere (and 2
   lip     the lip of a nozzle on a 1-degree axisymmetric wedge: in the meridional plane the nozzle wall, curved, meets the
           lip face at a convex corner of 90 degrees at x = 0, r = 2; in the jet below the lip the nearest wall point is the
           lip. The distance is the one in the meridional plane, from the wall curve.
+Three more cases have periodic boundaries, across which the wall goes on: the distance is the minimum over the periodic
+images of the wall too.
+  periodic  2-D channel periodic in x (connections 201 between the i faces, period 1), wall on the j = 1 face for x in
+            [0, 0.5] only, symmetry on the rest; near x = 1 the nearest wall is the image of the wall that starts at x = 1.
+  pipe      the same on a 1-degree axisymmetric wedge: pipe of radius 0.5 periodic in x, wall on the outer face for x in
+            [0, 0.5] only; the distance is the meridional one.
+  sector    3-D sector of 60 degrees of an annulus (radii 0.5 and 1), closed by the rotational periodicity (type 200 on
+            the k faces), wall on the inner face for the first half of the sector only; near the end of the sector the
+            nearest wall is the image of the wall in the next sector, turned by 60 degrees.
+  noisy     the channel of periodic, with the nodes of the plane i = NI moved by up to 1e-8 in x and y (differently for
+            every j): the two sides of the periodic connection match only to within the precision of the mesh file, as in
+            a mesh written in single precision. The translation of the images then differs from the period by up to
+            1.4e-8, and the distance by as much: the tolerance is 1e-6, for a distance of at least 0.03.
+  span      3-D slab (1 x 0.5 x 0.6) closed in k by type 200 with the plane k = NK the plane k = 0 translated by 0.6 in z
+            (periodic in k), wall on the j = 1 face for z in [0, 0.3] only; near z = 0.6 the nearest wall is the image of
+            the wall that starts at z = 0.6.
 The reference is the exact distance from the cell centre (mean of the nodes; in the wedge in the coordinates x and
-r = sqrt(y^2 + z^2)) to the wall of the mesh (straight faces between the wall nodes), by a scan of all faces. It is checked
-on the cells that do not touch the wall (in one step the wall reaches only the cells next to it, through the diffusion
-across the wall face and the central difference of the cb2 term): the largest relative difference must be below 1e-9.
+r = sqrt(y^2 + z^2)) to the wall of the mesh (straight faces between the wall nodes, plane in every case) and to its
+periodic images, by a scan of all faces. It is checked on the cells that do not touch the wall (in one step the wall
+reaches only the cells next to it, through the diffusion across the wall face and the central difference of the cb2
+term): the largest relative difference must be below 1e-9 (1e-6 in the case noisy).
 
 Usage (from the test directory):
-  python3 -B make_case.py case NAME            INPUT/ic.tec and INPUT/bc.txt of corner, arc or lip
+  python3 -B make_case.py case NAME            INPUT/ic.tec and INPUT/bc.txt of corner, arc, lip, periodic, pipe, sector,
+                                               noisy or span
   python3 -B make_case.py error NAME FILE      prints the largest relative error of d read from FILE (a diagnostic.tec)
-  python3 -B make_case.py check E1 E2 ...      exit status 0 when every error is below the tolerance
+  python3 -B make_case.py check N1=E1 ...      exit status 0 when the error of every case is below its tolerance
 """
 import math
 import os
@@ -47,6 +65,8 @@ CW1 = CB1 / KAPPA ** 2 + (1.0 + CB2) / SIGMA
 DELTA = math.radians(1.0)           # wedge angle of the lip case
 LZ = 0.1                            # thickness of the 2-D cases
 TOL = 1.0e-9
+TOLS = {"noisy": 1.0e-6}            # the two sides of the periodic connection match to 1e-8 only
+NOISE = 1.0e-8                      # case noisy: the largest displacement of the nodes of the plane i = NI
 SKIP = 1                            # rows of cells next to the wall left out of the check (j = 1 .. SKIP)
 
 SIZES = {"corner": (24, 16), "arc": (12, 12), "lip": (24, 16)}
@@ -178,6 +198,169 @@ def geometry(name):
     return out
 
 
+PERIODIC = {"periodic": (16, 10, 1), "pipe": (16, 10, 1), "sector": (4, 6, 12), "noisy": (16, 10, 1),
+            "span": (4, 6, 12)}
+SECTOR = math.radians(60.0)
+SPAN = 0.6                          # period in z of the case span
+WALL_LINE = "    0.000000E+00,    0.000000E+00,    0.000000E+00,\n"
+
+
+def periodic_nodes(name):
+    """Node coordinates (x, y, z) as MOSE reads them, by (i, j, k)."""
+    ni, nj, nk = PERIODIC[name]
+    out = {}
+    for k in range(nk + 1):
+        for j in range(nj + 1):
+            for i in range(ni + 1):
+                x = i / ni if name != "sector" else 0.1 * i
+                if name == "periodic":
+                    xyz = (x, 0.5 * (j / nj) ** 1.5, (0.0, LZ)[k])
+                elif name == "noisy":
+                    y = 0.5 * (j / nj) ** 1.5
+                    if i == ni:                                  # the far side of the period, matched to 1e-8 only
+                        x, y = x + NOISE * math.sin(1.0 + 3.0 * j), y + NOISE * math.cos(2.0 + 5.0 * j)
+                    xyz = (x, y, (0.0, LZ)[k])
+                elif name == "span":
+                    xyz = (0.25 * i, 0.5 * (j / nj) ** 1.5, SPAN * k / nk)
+                elif name == "pipe":
+                    r = 0.5 * (j / nj) ** 0.8                  # axis at j = 0, wall at r = 0.5
+                    xyz = (x, r * math.cos(0.5 * DELTA), (-1.0, 1.0)[k] * r * math.sin(0.5 * DELTA))
+                else:
+                    r = 0.5 + 0.5 * (j / nj) ** 1.5             # inner wall at j = 0
+                    th = SECTOR * k / nk
+                    xyz = (x, r * math.cos(th), r * math.sin(th))
+                out[(i, j, k)] = tuple(float(fmt(v)) for v in xyz)
+    return out
+
+
+def write_periodic_case(name):
+    ni, nj, nk = PERIODIC[name]
+    xyz = periodic_nodes(name)
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    nc = ni * nj * nk
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoNuTilde"\n')
+        f.write(f" ZONE  T = B1-IG, I={ni + 1}, J={nj + 1}, K={nk + 1}, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-9]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for c in range(3):
+            for k in range(nk + 1):
+                for j in range(nj + 1):
+                    for i in range(ni + 1):
+                        f.write(f" {fmt(xyz[(i, j, k)][c])}\n")
+        for v in (RHO, 0.0, 0.0, 0.0, P0, RHO * NUT):
+            f.write(f" {fmt(v)}\n" * nc)
+
+    def rec(i, j, k, face, t):
+        out = '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, k, face, t)
+        return out + WALL_LINE if t == 301 else out
+
+    def con(*a):
+        return '%10d %7d %7d %7d %7d %7d %7d %7d %7d\n' % a
+
+    out = []
+    for k in range(1, nk + 1):
+        for j in range(1, nj + 1):
+            if name in ("sector", "span"):
+                out += [rec(1, j, k, 1, 300), rec(ni, j, k, 2, 300)]
+            else:
+                out += [rec(1, j, k, 1, 201), con(1, ni, j, k, 2, 1, 0, 0, 1)]
+                out += [rec(ni, j, k, 2, 201), con(1, 1, j, k, 1, 1, 0, 0, 1)]
+        for i in range(1, ni + 1):
+            if name in ("periodic", "noisy"):
+                out += [rec(i, 1, k, 3, 301 if i <= ni // 2 else 300), rec(i, nj, k, 4, 300)]
+            elif name == "pipe":
+                out += [rec(i, 1, k, 3, 300), rec(i, nj, k, 4, 301 if i <= ni // 2 else 300)]
+            else:
+                out += [rec(i, 1, k, 3, 301 if k <= nk // 2 else 300), rec(i, nj, k, 4, 300)]
+    kface = {"periodic": 0, "pipe": 200, "sector": 200, "noisy": 0, "span": 200}[name]
+    for j in range(1, nj + 1):
+        for i in range(1, ni + 1):
+            out += [rec(i, j, 1, 5, kface), rec(i, j, nk, 6, kface)]
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(out))
+
+
+def triangle_distance(p, a, b, c):
+    """Distance from p to the triangle abc in 3-D: the plane when the projection falls inside, else the nearest side."""
+    def sub(u, v):
+        return [u[0] - v[0], u[1] - v[1], u[2] - v[2]]
+
+    def dot(u, v):
+        return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
+
+    def cross(u, v):
+        return [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+
+    def seg(a, b):
+        ab, ap = sub(b, a), sub(p, a)
+        t = min(max(dot(ap, ab) / dot(ab, ab), 0.0), 1.0)
+        return math.sqrt(sum((ap[i] - t * ab[i]) ** 2 for i in range(3)))
+
+    n = cross(sub(b, a), sub(c, a))
+    n2 = dot(n, n)
+    if all(dot(cross(sub(v, u), sub(p, u)), n) >= 0.0 for u, v in ((a, b), (b, c), (c, a))):
+        return abs(dot(sub(p, a), n)) / math.sqrt(n2)
+    return min(seg(a, b), seg(b, c), seg(c, a))
+
+
+def periodic_reference(name):
+    """Exact distance of every cell (i, j, k), 1-based, that does not touch the wall, to the wall and its images."""
+    ni, nj, nk = PERIODIC[name]
+    xyz = periodic_nodes(name)
+    out = {}
+    if name in ("periodic", "pipe", "noisy"):
+        jw = nj if name == "pipe" else 0
+        wall = [((plane("lip" if name == "pipe" else "corner", xyz[(i, jw, 0)])),
+                 (plane("lip" if name == "pipe" else "corner", xyz[(i + 1, jw, 0)]))) for i in range(ni // 2)]
+        for j in range(1, nj + 1):
+            if (name != "pipe" and j == 1) or (name == "pipe" and j == nj):
+                continue
+            for i in range(1, ni + 1):
+                corners = [xyz[(i - 1 + a, j - 1 + b, k)] for a in (0, 1) for b in (0, 1) for k in (0, 1)]
+                pc = [plane("lip" if name == "pipe" else "corner", q) for q in corners]
+                p = (sum(q[0] for q in pc) / 8.0, sum(q[1] for q in pc) / 8.0)
+                out[(i, j, 1)] = min(segment_distance((p[0] - shift, p[1]), a, b)[0]
+                                     for shift in (-2.0, -1.0, 0.0, 1.0, 2.0) for a, b in wall)
+        return out
+    faces = []
+    for k in range(nk // 2):
+        for i in range(ni):
+            faces.append([xyz[(i, 0, k)], xyz[(i + 1, 0, k)], xyz[(i + 1, 0, k + 1)], xyz[(i, 0, k + 1)]])
+    images = []
+    for m in range(-3, 4):
+        cm, sm = math.cos(m * SECTOR), math.sin(m * SECTOR)
+        for f in faces:
+            if name == "span":
+                images.append([(q[0], q[1], q[2] + m * SPAN) for q in f])
+            else:
+                images.append([(q[0], q[1] * cm - q[2] * sm, q[1] * sm + q[2] * cm) for q in f])
+    for k in range(1, nk + 1):
+        for j in range(2, nj + 1):
+            for i in range(1, ni + 1):
+                corners = [xyz[(i - 1 + a, j - 1 + b, k - 1 + c)] for a in (0, 1) for b in (0, 1) for c in (0, 1)]
+                p = [sum(q[c] for q in corners) / 8.0 for c in range(3)]
+                out[(i, j, k)] = min(min(triangle_distance(p, f[0], f[1], f[2]), triangle_distance(p, f[0], f[2], f[3]))
+                                     for f in images)
+    return out
+
+
+def periodic_error(name, path):
+    data, ni, nj = read_zone(path)
+    ref = periodic_reference(name)
+    f = factor()
+    nip, njp, nkp = PERIODIC[name]
+    assert (ni, nj) == (nip, njp), (ni, nj)
+    err = 0.0
+    for (i, j, k), d0 in ref.items():
+        n = ((k - 1) * nj + (j - 1)) * ni + (i - 1)
+        rhs = data["rhoNuTilde"][n] / data["dt"][n]
+        d = math.sqrt(RHO * NUT * NUT * f / rhs) if rhs < 0.0 else float("inf")
+        err = max(err, abs(d / d0 - 1.0))
+    print(f"{err:.3e} {len(ref)} 0")
+
+
 def fv1(chi):
     return chi ** 3 / (chi ** 3 + CV1 ** 3)
 
@@ -230,17 +413,20 @@ def error(name, path):
     print(f"{err:.3e} {len(cells)} {at_node}")
 
 
-def check(errs):
-    ok = all(float(e) <= TOL for e in errs)
+def check(pairs):
+    ok = True
+    for pair in pairs:
+        name, err = pair.split("=")
+        ok = ok and float(err) <= TOLS.get(name, TOL)
     sys.exit(0 if ok else 1)
 
 
 def main():
     what = sys.argv[1]
     if what == "case":
-        write_case(sys.argv[2])
+        (write_periodic_case if sys.argv[2] in PERIODIC else write_case)(sys.argv[2])
     elif what == "error":
-        error(sys.argv[2], sys.argv[3])
+        (periodic_error if sys.argv[2] in PERIODIC else error)(sys.argv[2], sys.argv[3])
     elif what == "check":
         check(sys.argv[2:])
     else:

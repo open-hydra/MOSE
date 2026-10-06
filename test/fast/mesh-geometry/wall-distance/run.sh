@@ -11,9 +11,14 @@
 #  function of nu~/nu alone, and so the distance d of every cell
 #  (make_case.py). Three cases: a convex corner of 90 degrees between two
 #  walls, a curved wall under a leaning mesh, and the lip of a nozzle on an
-#  axisymmetric wedge (distance in the meridional plane). On the cells that
-#  do not touch the wall, d must equal the exact distance to the wall of the
-#  mesh within 1e-9.
+#  axisymmetric wedge (distance in the meridional plane); and five cases
+#  with periodic boundaries, across which the wall goes on: a 2-D channel and a
+#  pipe on a wedge periodic in x, a 3-D sector closed by the rotational
+#  periodicity, the channel with the two sides of the period matched to 1e-8
+#  only, and a 3-D slab periodic in k by type 200, each with the wall on part
+#  of the period only. On the cells that do not touch the wall, d must equal
+#  the exact distance to the wall of the mesh and its periodic images within
+#  1e-9 (1e-6 for the channel matched to 1e-8).
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -65,7 +70,7 @@ EOF
 
 echo "-- distance to the wall read back from the Spalart-Allmaras source --"
 errors=()
-for name in corner arc lip; do
+for name in corner arc lip periodic pipe sector noisy span; do
   python3 -B make_case.py case "$name" || exit 1
   rm -f OUTPUT/diagnostic.tec
   "$LOCAL" > "OUTPUT/$name.log" 2>&1
@@ -77,7 +82,7 @@ for name in corner arc lip; do
   cp OUTPUT/diagnostic.tec "OUTPUT/diagnostic-$name.tec"
   read -r err cells corner_cells < <(python3 -B make_case.py error "$name" "OUTPUT/diagnostic-$name.tec")
   echo "  $name: largest relative error of d $err over $cells cells ($corner_cells nearest to a wall node)"
-  errors+=("$err")
+  errors+=("$name=$err")
 done
 
 if python3 -B make_case.py check "${errors[@]}"; then

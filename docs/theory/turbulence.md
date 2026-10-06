@@ -663,6 +663,20 @@ distance to the corner or the end.
 - A k-d tree over the face centres, with the radius of each face, finds the
   nearest face: the exact distance is computed only for the faces whose centre
   lies within the best distance found so far plus their radius.
+- Across periodic boundaries the wall goes on: the distance is the minimum over
+  the periodic images of the wall too. A periodic connection (type 201) gives
+  the translation from its source face to its own face, and on a 3-D mesh
+  without sectors so does a block closed in $k$ by type `200` (its last node
+  plane is the first one translated); the images are the integer combinations
+  of these translations (along $x$ on an axisymmetric wedge). The two sides of
+  a periodic boundary match only to the precision of the mesh file:
+  translations that differ by less than $10^{-6}$ of the size of the
+  coordinates are the same. On a 3-D mesh whose sectors are closed by the
+  rotational periodicity (type `200` on faces 5–6) the images are also the
+  turns by multiples of the sector angle about the $x$ axis. An image is
+  searched only when the box around the wall, seen from the cell moved back
+  by the image, is not farther than the distance found so far, so a mesh
+  without periodic boundaries costs nothing more.
 - Each cell takes the sand-grain roughness $k_s$ of the face that gives the
   minimum distance; between faces at the same distance, the first one in the
   boundary file.

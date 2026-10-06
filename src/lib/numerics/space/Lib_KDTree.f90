@@ -137,17 +137,26 @@ contains
   !> a subtree is skipped when its splitting plane is farther than that distance plus
   !> the largest radius in it. Read-only on the tree; safe to call concurrently from
   !> OpenMP threads if dist_fn is.
-  subroutine kdtree_nearest_object(tree, x, y, z, dist_fn, d, idx)
-    type(kdtree_t), intent(in)  :: tree
-    real(R8),       intent(in)  :: x, y, z
+  !> With `resume` true the search starts from the d and idx passed in (a distance
+  !> and object already found, for instance for another image of the query point)
+  !> instead of from no object, and returns the better of the two with the same rule.
+  subroutine kdtree_nearest_object(tree, x, y, z, dist_fn, d, idx, resume)
+    type(kdtree_t), intent(in)    :: tree
+    real(R8),       intent(in)    :: x, y, z
     procedure(kdtree_object_distance) :: dist_fn
-    real(R8),       intent(out) :: d
-    integer,        intent(out) :: idx
+    real(R8),       intent(inout) :: d
+    integer,        intent(inout) :: idx
+    logical, optional, intent(in) :: resume
+    logical :: cont
 
-    d   = huge(1.0_R8)
-    idx = huge(1)
+    cont = .false.
+    if (present(resume)) cont = resume
+    if (.not. cont) then
+      d   = huge(1.0_R8)
+      idx = huge(1)
+    end if
     if (tree%n <= 0 .or. .not. allocated(tree%pr)) then
-      idx = 0
+      if (.not. cont) idx = 0
       return
     end if
     call nearest_object_rec(tree, 1, tree%n, 1, x, y, z, dist_fn, d, idx)
