@@ -36,13 +36,18 @@ contains
 
     level = obj_multigrid%MG_level
 
-    ! Update IOfield solutiontime
+    ! Solution time of the outputs: level 1 (its files and the prolongated ones) and the level
+    ! being computed, so that field-level<n> and wall-level<n> carry it too
     if ( obj_time_scheme%time_accurate ) then
       simulation%IOfield(1)%solutiontime = simulation%domain(1)%time
-      IOwall%solutiontime = simulation%domain(1)%time
+      IOwall(1)%solutiontime = simulation%domain(1)%time
+      simulation%IOfield(level)%solutiontime = simulation%domain(level)%time
+      IOwall(level)%solutiontime = simulation%domain(level)%time
     else
       simulation%IOfield(1)%solutiontime = -real(obj_sim_param%iter_general,8)
-      IOwall%solutiontime = -real(obj_sim_param%iter_general,8)
+      IOwall(1)%solutiontime = -real(obj_sim_param%iter_general,8)
+      simulation%IOfield(level)%solutiontime = -real(obj_sim_param%iter_general,8)
+      IOwall(level)%solutiontime = -real(obj_sim_param%iter_general,8)
     endif
 
     if (level == 1) then
@@ -90,10 +95,12 @@ contains
       ! Timing summary (collective — every rank contributes its accumulators)
       call timer_summary()
 
-      ! Write output solution (collective — all ranks participate in gather)
-      call Write_Solution ( simulation%domain(1), simulation%IOfield(1), solfile )
-      if (obj_io % write_wall) call Write_Wall_Solution( simulation%domain(1), wallfile )
-      if (.not. obj_time_scheme%time_accurate) call Write_Diagnostic ( simulation%domain(1), simulation%IOfield(1), dgsfile )
+      ! Write output solution (collective — all ranks participate in gather). The level being
+      ! computed: a run that ends on a coarse level writes field-level<n> and wall-level<n>.
+      call Write_Solution ( simulation%domain(level), simulation%IOfield(level), solfile )
+      if (obj_io % write_wall) call Write_Wall_Solution( simulation%domain(level), wallfile )
+      if (level == 1 .and. .not. obj_time_scheme%time_accurate) &
+        call Write_Diagnostic ( simulation%domain(1), simulation%IOfield(1), dgsfile )
     
 
     ! INTERMEDIATE SOLUTION EVALUATION
@@ -144,6 +151,7 @@ contains
       if ( mod(simulation%domain(level) % iter, obj_io%sol_diter) == 0d0 ) then
         if (mpi_is_root) write(*,*) ' ... writing iter-based solution'
         call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
+        if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
         if (obj_multigrid%MGL > 1 .and. level > 1) then
           if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
           do m = obj_multigrid%MG_level, 2, -1
@@ -152,15 +160,14 @@ contains
           call Write_Solution (  simulation%domain(1), simulation%IOfield(1), mgsol )
           if (obj_io % write_wall) call Write_Wall_Solution( simulation%domain(1), mgwall )
         endif
-        if (level == 1) then
-          if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
-          if (.not. obj_time_scheme%time_accurate) call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
-        endif
+        if (level == 1 .and. .not. obj_time_scheme%time_accurate) &
+          call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
       ! Time-based solution
       elseif ( simulation%domain(level) % time >= obj_sim_param%time_from_call + obj_io%sol_dtime ) then
         obj_sim_param%time_from_call = simulation%domain(level) % time
         if (mpi_is_root) write(*,*) ' ... writing time-based solution'
         call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
+        if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
         if (obj_multigrid%MGL > 1 .and. level > 1) then
           if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
           do m = obj_multigrid%MG_level, 2, -1
@@ -169,15 +176,14 @@ contains
           call Write_Solution (  simulation%domain(1), simulation%IOfield(1), mgsol )
           if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(1), mgwall )
         endif
-        if (level == 1) then
-          if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
-          if (.not. obj_time_scheme%time_accurate) call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
-        endif
+        if (level == 1 .and. .not. obj_time_scheme%time_accurate) &
+          call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
       endif
 
       if (obj_multigrid%change_MG) then
         if (mpi_is_root) write(*,*) ' ... writing solution of grid-level ', level
         call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
+        if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
         if (obj_multigrid%MGL > 1 .and. level > 1) then
           if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
           do m = obj_multigrid%MG_level, 2, -1
@@ -242,6 +248,7 @@ contains
     if ( obj_sim_param%HYDRA_postprocess ) then
       if (mpi_is_root) write(*,*) ' ... writing HYDRA-coupling solution'
       call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
+      if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
       if (obj_multigrid%MGL > 1 .and. level > 1) then
         if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
         do m = obj_multigrid%MG_level, 2, -1
@@ -250,7 +257,6 @@ contains
         call Write_Solution (  simulation%domain(1), simulation%IOfield(1), mgsol )
         if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(1), mgwall )
       endif
-      if (obj_io % write_wall .and. level == 1) call Write_Wall_Solution ( simulation%domain(1), wallfile )
     endif
 
   end subroutine MOSE_postprocess

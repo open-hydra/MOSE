@@ -215,6 +215,10 @@ After a run completes, the `OUTPUT/` directory contains:
 | `wall.tec` | Wall quantities (skin friction, heat flux) — viscous cases only |
 | `diagnostic.*` | Per-cell residuals of $\rho$, $\rho u$, $\rho v$, $\rho w$, $\rho E$ and of the RANS variables, local time step `dt`, shock-sensor flag `beta` — steady runs only |
 | `<probe>.txt` | Time-history data at probe locations called <probe>|
+| `field-level<n>.*`, `wall-level<n>.*` | Multigrid runs: solution and wall quantities of coarse level `<n>`, written while it is computed and when the run moves to the next finer level |
+| `field-prolongated.*`, `wall-prolongated.*` | Multigrid runs: the coarse solution prolongated to the finest level, written with every coarse-level output |
+
+The field and wall files carry the iteration (steady runs) or the time (time-accurate runs) as their solution time.
 
 ### Input/Output Formats
 
