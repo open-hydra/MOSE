@@ -10,7 +10,9 @@ the table raises the total pressure by 5 % over the run, so the inlet drives a w
 The property line of the inlet names the table file. The same table under four names must give the same run, bit for
 bit: p0.dat (the reference), INPUT/tables/p0.dat (a directory), a name longer than 32 characters, and a quoted name with
 a blank in it. A table that does not exist, or whose times decrease (decreasing.dat: the rows of p0.dat in reverse
-order), must stop the run at set-up.
+order), must stop the run at set-up. Before the first time of a table the inlet takes its first value: a table that
+starts at t = 1e-4 (late.dat, the rows of p0.dat from the second on) must give the run of the same table with its first
+value repeated at t = 0 (early.dat), bit for bit.
 
 Usage (from the test directory):
   python3 -B make_case.py case NAME      INPUT/ic.tec, INPUT/bc.txt naming the table NAME, and the table under that name
@@ -61,6 +63,10 @@ def write_case(name):
     rows = [(1.0e-4 * n, P0 * (1.0 + 0.05 * n / 10) / 1.0e5) for n in range(11)]   # bar: 1.2 bar rising by 5 % in 1 ms
     if name == "decreasing.dat":
         rows.reverse()
+    elif name == "late.dat":
+        rows = rows[1:]
+    elif name == "early.dat":
+        rows = [(0.0, rows[1][1])] + rows[1:]
     with open(name, "w") as f:
         for t, p in rows:
             f.write(f"{t:.15E} {p:.15E}\n")

@@ -8,7 +8,8 @@
 #  with a directory (INPUT/tables/p0.dat), a name longer than 32 characters
 #  and a quoted name with a blank. A table that does not exist, or whose
 #  times decrease, must stop the run at set-up, with a non-zero exit code and
-#  the name of the file.
+#  the name of the file. A table that starts after the start of the run must
+#  give the run of the same table with its first value repeated at t = 0.
 #  Gas: test/common/Air.
 #===============================================================================
 set -uo pipefail
@@ -88,6 +89,17 @@ if [[ $rc -ne 0 ]] && grep -a -q 'missing.dat' OUTPUT/missing.log; then
   echo "  [ok  ] stopped at set-up, exit code $rc, file named"
 else
   echo "  [FAIL] exit code $rc, the missing table was not reported (see OUTPUT/missing.log)"
+  fail=1
+fi
+
+echo "-- a table that starts after the start of the run --"
+run late late.dat
+run early early.dat
+if [[ -f OUTPUT/field-late.tec && -f OUTPUT/field-early.tec ]] && \
+   python3 -B make_case.py same OUTPUT/field-early.tec OUTPUT/field-late.tec; then
+  echo "  [ok  ] the first value before the first time: the run of early.dat, bit for bit"
+else
+  echo "  [FAIL] late.dat is not the run of early.dat (see OUTPUT/late.log)"
   fail=1
 fi
 
