@@ -129,7 +129,7 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 | `407` | Ambient ($T_0$, $p_0$, $p_\text{back}$) | `T0,  p0,  p_back,  alpha,  beta,  rel_fac,  [massf],  [turb]` |
 | `408` | Inlet — velocity + $T$ static | `T,   un,  alpha,  beta,  rel_fac,  [massf],  [turb]` |
 | `410` | Assigned state (time-varying file) | `filename  [periodic]` |
-| `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  r_throat,  rel_fac,  [massf],  [turb]` |
+| `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  g,  rel_fac,  [massf],  [turb]` |
 
 Type `409` (a forced outlet named in the reader of the boundary file) is not implemented: a record of type `409`, or of any
 type not listed on this page, gets no flux, and this version does not stop on it. Type `410` reads its data on the finest
@@ -141,6 +141,7 @@ grid level only: do not use it with a sequence of grid levels.
 |-------|-------------|
 | `alpha` | In-plane flow angle [rad] or the token `normal` (face-normal inflow); anything else stops the run |
 | `beta` | Out-of-plane flow angle [rad] or `normal`; anything else stops the run |
+| `g` | Mass flux through the face [kg/(m²·s)] (types `403`, `404`, `420`) |
 | `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation); no effect on `401`, `402` and `407` |
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
 | `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |
@@ -207,10 +208,11 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 
 |  Type | Name               | Data line                                                                  |
 | :---: | ------------------ | -------------------------------------------------------------------------- |
-| `502` | SRM grain boundary | `T_af, a, n, p_ref, rho_grain, SF_geo`                                     |
+| `502` | SRM grain boundary | `T_af, a, n, p_ref, rho_grain, SF_geo, [massf_1 … massf_ns]`               |
 | `503` | Melting            | `cp_wall, T_wall, Ti_wall, dh_wall, q_rad, eps_wall, [massf_1 … massf_ns]` |
 | `504` | Pyrolysis          | `pyro_id, q_rad, eps_wall, [massf_1 … massf_ns]`                           |
 | `505` | Surface reactions  | `reac_id, q_rad`                                                           |
+| `506` | Surface reactions and pyrolysis | `pyro_id, reac_id, q_rad, eps_wall, [massf_1 … massf_ns]`     |
 
 Type `506` is read but not applied in this version: the face gets no flux. Do not use it; `504` and `505` are the pyrolysis and
 the surface reactions alone.
