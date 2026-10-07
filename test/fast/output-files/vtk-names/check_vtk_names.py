@@ -8,7 +8,11 @@ data arrays must be the variables MOSE writes for this case, without quotes.
 Field data (TIME, CYCLE and the counters a restart reads back) are global
 values, not variables, and are not counted.
 
-Usage: python check_vtk_names.py <OUTPUT directory>
+With the second argument sa-transport: the run with the Spalart-Allmaras model and sol-variables = thermo
+transport, whose field adds the turbulence variable, the laminar viscosity and conductivity and the eddy viscosity, and
+whose diagnostic adds the residual of the turbulence variable.
+
+Usage: python check_vtk_names.py <OUTPUT directory> [sa-transport]
 Exit 0 = pass, 1 = fail.
 """
 import sys
@@ -24,6 +28,9 @@ EXPECTED = {
     # steady run: residuals, local time step, shock sensor
     "diagnostic": ["rho", "rhou", "rhov", "rhow", "rhoe", "dt", "beta"],
 }
+if len(sys.argv) > 2 and sys.argv[2] == "sa-transport":
+    EXPECTED["field"] = ["rho(1)", "u", "v", "w", "p", "rhoNuTilde", "T", "g", "R", "mil", "kl", "mut"]
+    EXPECTED["diagnostic"] = ["rho", "rhou", "rhov", "rhow", "rhoe", "rhoNuTilde", "dt", "beta"]
 
 
 def xml_part(path):
