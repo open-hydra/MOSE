@@ -81,8 +81,10 @@ contains
     integer :: u, ios, iz, nvar_file
     integer :: I_nodes, J_nodes, n1, n2, n_nodes, I_max, J_max
     integer :: b_zone, t_zone, iv, ic, i1, i2, ibc, it
-    integer :: ip, jp, ncount
-    character(len=1024) :: line
+    integer :: ncount
+    logical :: names_ok
+    character(len=32768) :: line
+    character(len=:), allocatable :: header
     character(len=32) :: tmp_names(100)
     integer, allocatable :: varmap(:)
     real(R8), allocatable :: node_buf(:), cell_buf(:,:,:)
@@ -105,7 +107,7 @@ contains
 
     ! --- Pass 1: VARIABLES line + all ZONE headers ---
 
-    ! Read VARIABLES line — parse quoted names: "x" "y" "z" "var1" ...
+    ! Read the VARIABLES list: from the VARIABLES line up to the first ZONE record
     do
       read(u, '(A)', iostat=ios) line
       if (ios /= 0) then
@@ -114,22 +116,22 @@ contains
       endif
       if (index(lowercase(line), 'variables') > 0) exit
     enddo
-    ! Extract quoted variable names (single pass)
-    ncount = 0; ip = 1
-    do while (ip <= len_trim(line))
-      if (line(ip:ip) == '"') then
-        jp = index(line(ip+1:), '"')
-        if (jp > 0) then
-          ncount = ncount + 1
-          tmp_names(ncount) = line(ip+1:ip+jp-1)
-          ip = ip + jp + 1
-        else
-          exit
-        endif
-      else
-        ip = ip + 1
+    header = trim(line(index(line, '=')+1:))
+    do
+      read(u, '(A)', iostat=ios) line
+      if (ios /= 0) exit
+      if (Is_Zone_Record(line)) then
+        backspace(u)
+        exit
       endif
+      header = header//' '//trim(line)
     enddo
+    call Parse_Variable_Names(header, tmp_names, ncount, names_ok)
+    if (.not. names_ok) then
+      write(*,*) '[ERROR] Q2D file: unreadable VARIABLES list (unclosed quote or more than ', &
+                 size(tmp_names), ' names)'
+      error stop
+    endif
     nvar_total = ncount
     nvar_file = nvar_total - 3  ! subtract x, y, z
 
@@ -147,7 +149,7 @@ contains
     do
       read(u, '(A)', iostat=ios) line
       if (ios /= 0) exit
-      if (index(lowercase(line), 'zone') > 0) nzones_total = nzones_total + 1
+      if (Is_Zone_Record(line)) nzones_total = nzones_total + 1
     enddo
 
     if (nzones_total == 0) then
@@ -165,7 +167,7 @@ contains
     do
       read(u, '(A)', iostat=ios) line
       if (ios /= 0) exit
-      if (index(lowercase(line), 'zone') > 0) then
+      if (Is_Zone_Record(line)) then
         iz = iz + 1
         call parse_zone_header(line, zone_block(iz), &
                                zone_I(iz), zone_J(iz), zone_time(iz))
@@ -240,7 +242,7 @@ contains
         write(*,*) '[ERROR] Q2D file: no ZONE found in data pass'
         error stop
       endif
-      if (index(lowercase(line), 'zone') > 0) exit
+      if (Is_Zone_Record(line)) exit
     enddo
 
     do iz = 1, nzones_total
@@ -359,6 +361,74 @@ contains
 
 
   ! ---------------------------------------------------------------------------
+  ! Split the text after "VARIABLES =" into names. A name is in double quotes,
+  ! in single quotes or bare; names are separated by blanks, tabs or commas, and
+  ! a quoted name may hold any of them. ok = .false. on an unclosed quote or
+  ! more names than size(names).
+  ! ---------------------------------------------------------------------------
+  subroutine Parse_Variable_Names(text, names, n, ok)
+    implicit none
+    character(len=*), intent(in)  :: text
+    character(len=*), intent(out) :: names(:)
+    integer,          intent(out) :: n
+    logical,          intent(out) :: ok
+    ! Local
+    character(len=*), parameter :: seps = ' ,'//achar(9)
+    integer :: ip, jp, last
+
+    names = ''; n = 0; ok = .true.
+    last = len_trim(text)
+    ip = 1
+    do while (ip <= last)
+      if (index(seps, text(ip:ip)) > 0) then
+        ip = ip + 1
+        cycle
+      endif
+      if (n == size(names)) then
+        ok = .false.
+        return
+      endif
+      n = n + 1
+      if (text(ip:ip) == '"' .or. text(ip:ip) == "'") then
+        jp = index(text(ip+1:last), text(ip:ip))
+        if (jp == 0) then
+          ok = .false.
+          return
+        endif
+        names(n) = text(ip+1:ip+jp-1)
+        ip = ip + jp + 1
+      else
+        jp = scan(text(ip:last), seps//'"'//"'")
+        if (jp == 0) jp = last - ip + 2
+        names(n) = text(ip:ip+jp-2)
+        ip = ip + jp - 1
+      endif
+    enddo
+
+  end subroutine Parse_Variable_Names
+
+
+  ! ---------------------------------------------------------------------------
+  ! True when the first word of a line is the ZONE keyword (any case), so that
+  ! a variable name such as zone_velocity is not taken for a zone record.
+  ! ---------------------------------------------------------------------------
+  logical function Is_Zone_Record(line)
+    use strings, only: lowercase
+    implicit none
+    character(len=*), intent(in) :: line
+    ! Local
+    character(len=:), allocatable :: word
+    integer :: k
+
+    word = adjustl(line)
+    k = scan(word, ' ,'//achar(9))
+    if (k > 0) word = word(:k-1)
+    Is_Zone_Record = trim(lowercase(word)) == 'zone'
+
+  end function Is_Zone_Record
+
+
+  ! ---------------------------------------------------------------------------
   ! Parse a Tecplot ZONE header line to extract block number,
   ! I (node count), J (node count), and SOLUTIONTIME.
   ! Zone name format: T="B{block}_T{tidx}"
@@ -380,12 +450,21 @@ contains
     call parse(line, ',', args)
 
     do i = 1, size(args)
-      ! Zone title: T="B{b}_T{t}"
-      if (index(args(i), 'T="') > 0 .or. index(args(i), 't="') > 0) then
-        pos = index(args(i), '"') + 1
-        pos2 = index(args(i)(pos:), '"')
-        if (pos2 > 0) then
-          zone_title = args(i)(pos:pos+pos2-2)
+      ! Zone title: T="B{b}_T{t}", T = 'B{b}_T{t}' or T = B{b}_T{t}
+      pos = index(args(i), '=')
+      if (pos > 1) then
+        ! key = last word before '=' (the first argument also holds ZONE)
+        zone_title = trim(args(i)(:pos-1))
+        zone_title = zone_title(index(trim(zone_title), ' ', back=.true.)+1:)
+        if (lowercase(trim(zone_title)) /= 't') pos = 0
+      endif
+      if (pos > 1) then
+        zone_title = adjustl(args(i)(pos+1:))
+        pos2 = len_trim(zone_title)
+        if (pos2 >= 2 .and. scan(zone_title(1:1), '"'//"'") == 1) then
+          if (zone_title(pos2:pos2) == zone_title(1:1)) zone_title = zone_title(2:pos2-1)
+        endif
+        if (len_trim(zone_title) > 0) then
           ! Parse "B{num}_T{num}"
           pos = index(zone_title, 'B')
           if (pos > 0) then
