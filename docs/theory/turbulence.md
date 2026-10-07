@@ -650,6 +650,19 @@ or face centre, which differs from it wherever the grid lines are not normal
 to the wall; next to a convex corner or at the end of a wall it is the
 distance to the corner or the end.
 
+The distance to the centre of the nearest wall face is wrong by a fixed
+fraction in the first cell of a skewed mesh. With the grid lines at an angle
+$\theta$ to the wall normal, the centre of the first cell, at the height
+$d_1$, lies $d_1\tan\theta$ along the wall from the centre of its wall face,
+the nearest face centre while $d_1\tan\theta$ is at most half the face, at
+the distance $d_1/\cos\theta$. The relative error,
+$1/\cos\theta - 1$, does not fall with refinement: 1.5 % at 10°, 6.4 % at 20°,
+15.5 % at 30°, 41 % at 45°. It enters squared the destruction of SA,
+$c_{w1} f_w (\tilde\nu/d)^2$ (a factor $\cos^2\theta$: 0.97, 0.88, 0.75,
+0.50), and the arguments of $F_1$ and $F_2$ and the wall value
+$\omega_w = 60\nu/(\beta_1 d_1^2)$ of SST. That distance is exact only on
+meshes orthogonal to the wall, with the cell centres above the face centres.
+
 - Each face of a wall boundary (types 301, 302, 503–505) is taken as the four
   triangles between its centre and its sides, which are the face itself when
   the face is plane and convex, as on every 2-D and axisymmetric mesh (on a
