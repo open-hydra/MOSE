@@ -108,6 +108,8 @@ if [[ $1 == test ]]; then
     cp $MASTER $LOCAL
   fi
   mesh=( 1 2 4 8 )
+  # verify.py reads OUTPUT/field_x<r>.tec: drop those of earlier runs
+  rm -f OUTPUT/field.tec OUTPUT/field_x*.tec
   for r in "${mesh[@]}"; do
     cd INPUT/
     ln -sf ic_x$r.tec ic.tec
@@ -119,7 +121,7 @@ if [[ $1 == test ]]; then
     else
       $LOCAL 2>errors_file >>logfile
     fi
-    mv OUTPUT/field.tec OUTPUT/field_x$r.tec
+    mv OUTPUT/field.tec OUTPUT/field_x$r.tec || exit 1
   done
 fi
 
