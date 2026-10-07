@@ -13,9 +13,13 @@
 #     1-D tube of air, one forward Euler step with first-order reconstruction,
 #     so that the density change of a boundary cell gives the mass flux of its
 #     face (total_conditions.py). Reservoir at T0 = T, flow direction normal:
-#       farfield2  ambient (407) on both ends, p0 = p_back = 2 p, gas at rest:
-#                  subsonic inflow;
+#       farfield36 ambient (407) on both ends, p0 = p_back = 36 p, gas at rest:
+#                  the reservoir drives the gas in, through a choked face
+#                  (normal Mach 1);
+#       farfield2  the same with p0 = p_back = 2 p: subsonic inflow;
 #       inlet2     inlet (401) on both ends, p0 = 2 p, gas at rest: subsonic
+#                  inflow;
+#       inlet36    inlet (401) on both ends, p0 = 36 p, gas at rest: choked
 #                  inflow;
 #       nofeed     inlet (401) with p0 = 0.2 p and the gas moving in at 0.1 a:
 #                  p0 is below the pressure the gas of the cell reaches at
@@ -115,7 +119,7 @@ space-reconstruction = first-order
 riemann-solver = HLLC
 INI
 
-for name in farfield2 inlet2 nofeed outlet05 outlet12 outletstop; do
+for name in farfield36 farfield2 inlet2 inlet36 nofeed outlet05 outlet12 outletstop; do
   echo "   $name"
   python3 -B total_conditions.py case "$name" || exit 1
   rm -f OUTPUT/field.tec

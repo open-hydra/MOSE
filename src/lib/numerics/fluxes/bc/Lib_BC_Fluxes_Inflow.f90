@@ -471,6 +471,7 @@ contains
   ! The gas enters (enters = .true.) when p0 is above p_stop = p (Riem/a)**(2 gamma/(gamma-1)),
   ! the pressure that the gas of the cell reaches when the outgoing wave brings it to rest:
   ! with Riem > 0 that is YC < 0. Otherwise Flux = 0 and the caller applies its own branch.
+  ! When the inflow root would make the face supersonic across (w + a3 <= 0) the face is choked.
   subroutine Stagn_Inflow ( Prim, Sound, Gamma, Riem, alpha, beta, &
                                  BC_ci, BC_RANS, BC_T0, BC_p0, BC_Sign, &
                                  t_Vec, Normal, Area, Flux, Fmass, enters )
@@ -528,6 +529,13 @@ contains
     ! cannot choose between them: at rest it would take the larger one on the faces 2, 4, 6
     Un3 = ( YB - BC_Sign * sqrt( Discr ) ) / YA
     Sound3 = sqrt ( Sound0**2 - Coef_D * Un3**2 )
+    ! Choked face. With w + a3 <= 0 the outgoing characteristic no longer reaches the face: every one
+    ! enters, the face state depends on the reservoir alone, and the one that joins the subsonic state
+    ! on w + a3 = 0 has normal Mach 1: from the total enthalpy, a3**2 = a0**2 - D a3**2
+    if ( BC_Sign * Un3 + Sound3 <= 0d0 ) then
+      Sound3 = Sound0 / sqrt ( 1d0 + Coef_D )
+      Un3    = - BC_Sign * Sound3
+    end if
     p3 = BC_p0 * ( Sound3 / Sound0 )**( 2d0 * Gamma / ( Gamma - 1d0 ) )
     Ut3 = Un3 * E1
     Ub3 = Un3 * E2

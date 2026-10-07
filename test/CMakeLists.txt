@@ -137,7 +137,7 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # Inlet boundary conditions: the far-field inlet (407) with the flow direction
 # normal gives the field of the equivalent angles, to the bit, with no
 # transverse velocity; inlets at total conditions (401, 407): when the gas
-# enters (from rest too), subsonic faces, the slip wall of an inlet the
+# enters (from rest too), subsonic and choked faces, the slip wall of an inlet the
 # reservoir cannot feed, and the outlet of an ambient face it cannot feed with the gas
 # moving in; one step, mass fluxes against the face state.
 mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;1D;2D")
