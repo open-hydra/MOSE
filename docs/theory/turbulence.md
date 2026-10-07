@@ -706,12 +706,19 @@ production of SA-R and SA-RC, which can be negative («the SA-RC production term
 NASA Turbulence Modeling Resource). Like the transport, they can make a stage negative, and the count
 at the end of the run shows it.
 
-The rates are those of the state at the start of the step, so the bound holds through the stages
-as long as the stiffness does not grow much within one step. An impulsive start of a
-$k$–$\omega$ model from a state far from the wall value of $\omega$ is the exception: during the
-first step the wall condition raises $\omega$ in the wall cells by orders of magnitude, and with
-the full step the explicit destruction overshoots ($\omega < 0$, then the floor and a very large
-$\mu_t$). Start such runs with the CFL ramp (`cfl-rise-threshold`).
+The convex combination keeps the bound of the forward-Euler stage only where that bound holds on the
+state each stage starts from: Shu and Osher assume that the forward-Euler step keeps the property,
+under one step restriction, for every state it is applied to (ICASE Report 87-33, (2.7) and
+Proposition 2.1), while here the restriction depends on the state through $d$, and the rates are
+those of the state at the start of the step. A stage from a state where the rate is $d_s$ takes
+$q_s - \Delta t\,(d_s/2)\,q_s$ through a quadratic destruction, positive while $\Delta t\,d_s < 2$; with
+$\Delta t\,d \le 1$ this holds as long as $d_s < 2\,d$. The margin of 2 of $\tilde\nu$ and $\omega$ therefore
+covers a rate that grows within the step up to twice its value at the start, and no more; $k$, whose
+destruction is linear, keeps only the margin by which its rate $\beta^\ast\omega$ lies below $d$. An
+impulsive start of a $k$–$\omega$ model from a state far from the wall value of $\omega$ goes beyond
+that: during the first step the wall condition raises $\omega$ in the wall cells by orders of
+magnitude, and with the full step the explicit destruction overshoots ($\omega < 0$, then the floor
+and a very large $\mu_t$). Start such runs with the CFL ramp (`cfl-rise-threshold`).
 
 At the end of a RANS run MOSE prints how many cell updates had a stage that made $\tilde\nu$, $k$ or
 $\omega$ negative before the realizability floor:
