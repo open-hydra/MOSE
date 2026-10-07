@@ -18,6 +18,7 @@ Usage (from the test directory):
   python3 -B make_case.py case NAME      INPUT/ic.tec, INPUT/bc.txt naming the table NAME, and the table under that name
   python3 -B make_case.py same A B       exit status 0 when the fields A and B hold the same values (cell data, bit for bit)
   python3 -B make_case.py bad KIND       the case of p0.dat with the line of bc.txt that BAD[KIND] gives
+  python3 -B make_case.py srm            the duct with a viscous gas and nu~, its inlet an SRM grain boundary (502)
 """
 import math
 import os
@@ -91,6 +92,27 @@ def write_bad(kind):
         f.write("".join(lines))
 
 
+MU = 1.8467e-5                                       # a viscosity of air, Pa s: nu~ = 3 MU / rho needs only to be positive
+
+
+def write_srm():
+    """The duct of p0.dat with nu~ = 3 nu (mi_tilde) for the Spalart-Allmaras model, and record 1 (the inlet) an SRM grain
+    boundary (502): T_af, a, n, p_ref, rho_grain, SF_geo and the mass fraction of the single species."""
+    write_case("p0.dat")
+    with open("INPUT/ic.tec") as f:
+        lines = f.read().splitlines(True)
+    lines[0] = lines[0].replace('"p"\n', '"p" "rhoNuTilde"\n')
+    lines[1] = lines[1].replace("[4-8]=CELLCENTERED", "[4-9]=CELLCENTERED")
+    with open("INPUT/ic.tec", "w") as f:
+        f.write("".join(lines) + f" {3.0 * MU:.15E}\n" * N)
+    with open("INPUT/bc.txt") as f:
+        bc = f.readlines()
+    bc[0] = bc[0].replace("     402\n", "     502\n")
+    bc[1] = "3.0E+03, 1.0E-05, 0.4, 1.0E+06, 1.7E+03, 1.0, 1.0\n"
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(bc))
+
+
 def cell_values(path):
     with open(path) as f:
         lines = f.read().splitlines()
@@ -104,6 +126,8 @@ def main():
         write_case(sys.argv[2])
     elif what == "bad":
         write_bad(sys.argv[2])
+    elif what == "srm":
+        write_srm()
     elif what == "same":
         a, b = cell_values(sys.argv[2]), cell_values(sys.argv[3])
         sys.exit(0 if a == b and len(a) > 0 else 1)

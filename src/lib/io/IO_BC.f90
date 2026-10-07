@@ -67,6 +67,16 @@ contains
 
     end do
 
+    ! An SRM grain boundary (502) sets no turbulence values: not behind it, and not for the gas it
+    ! injects. With a RANS model they would stay as they were, without a word: stop at set-up.
+    if ((nSRM > 0) .and. (model == 2)) then
+      block
+        use MOSE_Mod_MPI, only: mpi_abort_all
+        call mpi_abort_all('[ERROR] Boundary type 502 (SRM grain boundary) with a RANS model: not supported, '// &
+                           'the turbulence values of the injected gas are not set (docs/user/boundary-conditions.md)')
+      end block
+    end if
+
     !! Phase 3: Initialize BCs for specific models
     ! GSI BCs
     if (ngsi > 0) then

@@ -267,6 +267,10 @@ the surface reactions alone.
     [Inert surfaces](../theory/gsi.md#inert-surfaces).
 
 !!! warning
+    Type `502` cannot be used with a RANS model (`turbulence` set): it sets no
+    turbulence values for the gas it injects, and the run stops at set-up.
+
+!!! warning
     Type `505` requires a thermodynamic table containing O₂, CO₂, CO, H₂O, H₂,
     OH, O and H.
 

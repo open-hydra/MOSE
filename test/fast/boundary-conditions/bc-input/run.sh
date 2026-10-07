@@ -13,7 +13,8 @@
 #  A property line with an empty required value must stop the run at set-up,
 #  naming the line of bc.txt, the record, its type and the value; so must a
 #  line short of a value, or with a word for a number, and a flow direction
-#  that is neither a number nor normal.
+#  that is neither a number nor normal. An SRM grain boundary (502) with a
+#  RANS model, which it does not support, must stop the run at set-up.
 #  Gas: test/common/Air.
 #===============================================================================
 set -uo pipefail
@@ -134,6 +135,23 @@ bad empty 'bc.txt line 4 \(record 2, type 406\): the value of rel_fac is empty'
 bad short 'bc.txt line 4 \(record 2, type 406\): the line is short or holds a value that is not a number'
 bad word 'bc.txt line 4 \(record 2, type 406\): the line is short or holds a value that is not a number'
 bad angle "bc.txt line 2 \\(record 1, type 402\\): alpha is neither a number nor normal: 'nromal'"
+
+echo "-- an SRM grain boundary (502) with a RANS model --"
+python3 -B make_case.py srm || exit 1
+rm -f INPUT/phase.txt INPUT/thermo.dat INPUT/transport.dat
+ln -sf "../../../../common/Air-viscous/phase.txt"     INPUT/phase.txt
+ln -sf "../../../../common/Air-viscous/thermo.dat"    INPUT/thermo.dat
+ln -sf "../../../../common/Air-viscous/transport.dat" INPUT/transport.dat
+sed -e 's/^equations = euler$/equations = navier-stokes\nturbulence = SA\nschmidt = 0.7/' input.ini > input-srm.ini && mv input-srm.ini input.ini
+rm -f OUTPUT/field.tec
+"$LOCAL" > OUTPUT/srm-rans.log 2>&1
+rc=$?
+if [[ $rc -ne 0 ]] && grep -a -q 'type 502' OUTPUT/srm-rans.log; then
+  echo "  [ok  ] srm-rans: stopped at set-up, exit code $rc"
+else
+  echo "  [FAIL] srm-rans: exit code $rc, the 502 boundary with a RANS model was not refused (see OUTPUT/srm-rans.log)"
+  fail=1
+fi
 
 if [[ $fail -ne 0 ]]; then
   echo "BCInput: FAILED"
