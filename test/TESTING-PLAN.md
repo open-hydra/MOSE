@@ -116,7 +116,8 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
   `test/fast/openmp-equiv`. *MPI variant (needs-mpi tier):* `test/mpi/boundary-records`
   (`MPIBoundaryRecords`) — a strip of four viscous blocks bit-identical on 1×1, 2×1,
   4×1 and 2×2 ranks × threads, and with the `bc.txt` records in reverse order (1 and 2
-  ranks, with and without threads).
+  ranks, with and without threads), the wall output included; the same with the
+  Spalart–Allmaras model, ordered and reversed (1×1, 1×4, 2×2).
 
 ---
 

@@ -64,8 +64,8 @@ The format is as follows:
 | `face` | Face index of that cell (1–6, see [Face Numbering](#face-numbering)) |
 | `type` | Numeric BC type code (see table below) |
 
-All boundary cells are listed — one entry per face cell, face by face, block by block. MOSE needs this order
-for the wall output; the solution does not depend on it.
+All boundary cells are listed — one entry per face cell, face by face, block by block, as ATLAS writes them (another
+order gives the same solution and the same wall output).
 
 **Line 2 — BC data (type-dependent):**
 

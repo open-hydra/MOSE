@@ -390,7 +390,7 @@ contains
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
-    integer  :: f, lower, upper, i, b
+    integer  :: f, lower, upper, i, ii, b
     integer  :: Bm, Im, Jm, Km, Fm
     real(R8) :: r_fc(3)                              ! Face centre [m] (stationary-wall BCs)
     logical  :: ablating                             ! GSI walls: is the surface consuming material?
@@ -398,20 +398,22 @@ contains
 
     if ( model /= 2 ) return
 
-    ! Same order as BC_Fluxes: by block and face, the cells of one face in parallel,
-    ! so that two wall faces of a corner cell never update its residual together.
-    upper = 0
-
+    ! The lists of BC_Fluxes (build_local_bc_index): the records of the blocks this rank
+    ! owns, block by block and face by face whatever the order of bc.txt, the cells of one
+    ! face in parallel, so that two wall faces of a corner cell never update its residual
+    ! together. The ranges n_bf(b,f) of the record list hold one face of one block only
+    ! when bc.txt is sorted by block and face.
     blocks: do b = 1, domain % nb
+      if (.not. is_local_block(b)) cycle blocks
       faces: do f = 1, 6
 
-        lower = upper + 1
-        upper = upper + domain % n_bf(b,f)
+        lower = domain % local_bf_first(b,f)
+        upper = lower + domain % local_bf_count(b,f) - 1
 
-        !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, r_fc, ablating, Tw_surface)
-        do i = lower, upper
+        !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, r_fc, ablating, Tw_surface)
+        do ii = lower, upper
+          i  = domain % local_bf_idx(ii)
           Bm = domain % bc(i) % b
-          if (.not. is_local_block(Bm)) cycle
           Im = domain % bc(i) % i
           Jm = domain % bc(i) % j
           Km = domain % bc(i) % k
