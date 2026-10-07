@@ -51,7 +51,7 @@
 | vnn | 0.3 | > 0 |  no | Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62) |
 | cfl-rise-threshold | 0 | >= 0 |  no | CFL rise threshold |
 | time-accurate | .false. | logical | yes | Time accurate switch |
-| integration-variables | cons | cons ,  prim , prec |  no | Integration variables (cons/prim/prec) |
+| integration-variables | cons | cons, prim, prec |  no | Integration variables (cons/prim/prec) |
 | irs | .false. | logical |  no | Implicit Residual Smoothing (steady runs only) |
 | irs-beta | 0.0 | >= 0 |  no | IRS beta parameter (> 0 also enables IRS; steady runs only) |
 | preconditioning-Uref | 0.0 | >= 0 |  no | Reference velocity for preconditioning |

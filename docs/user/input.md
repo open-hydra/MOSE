@@ -32,7 +32,13 @@ space-reconstruction = MUSCL
     If a parameter is not specified, the **default value** is used silently.
 
 !!! warning "Parameter names are case-sensitive"
-    Incorrect names or values are ignored and the default is used instead. Check the [Parameter Registry](registry.md) for the exact spelling.
+    Incorrect names are ignored and the default is used instead. Check the [Parameter Registry](registry.md) for the exact spelling.
+
+!!! warning "Values outside their rules stop the run"
+    A value outside the rule of its parameter (column Allowed of the [Parameter Registry](registry.md)) stops the run with a message: at the start, and when MOSE reads `input.ini` again during the run, every `ini-diter` iterations (10000 by default), to take the values changed meanwhile. The parameters that `input.ini` leaves out keep their values.
+
+!!! warning "What a reading during the run changes"
+    When MOSE reads `input.ini` again during the run, only the parameters that the solver reads at every step take the new values, such as `cfl`, `vnn` and the intervals of the outputs. The choices that the set-up makes once from the input are not made again, nor are its checks between keys: a new value of `equations`, `turbulence`, `chemistry`, `space-reconstruction`, `flux-limiter`, `riemann-solver`, `shock-detector` or `time-scheme` is checked against its rule and leaves the run as it was. Do not turn residual smoothing on during a run (`irs = true`): its work arrays exist only when it was on at the start, and the run stops with a segmentation fault.
 
 ---
 

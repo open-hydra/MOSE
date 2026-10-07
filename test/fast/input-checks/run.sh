@@ -15,13 +15,14 @@
 #      time-accurate runs
 #    DecompositionMap (decomposition-map): block-to-rank map of
 #      INPUT/decomposition.map
+#    RuntimeInput (runtime-input): input.ini read again during a run
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(exit-codes limiter-defaults irs-time-accurate decomposition-map)
+PARTS=(exit-codes limiter-defaults irs-time-accurate decomposition-map runtime-input)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

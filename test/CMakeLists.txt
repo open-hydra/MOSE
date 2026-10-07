@@ -201,6 +201,9 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # with every block on rank 0, also one written by the mesh decomposer (MDB)
 # itself, gives the bits of the run without it; maps that do not fit the mesh
 # or the run stop it at setup with the fault named.
+# input.ini read again during a run (ini-diter): a value out of the rules of
+# the registry stops the run with its message, as at setup; read again
+# unchanged, with keys left out or written, it gives the run without readings.
 mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;numerics;1D;2D")
 
 # Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).

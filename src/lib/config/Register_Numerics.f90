@@ -41,7 +41,7 @@ contains
     call reg%add( trim(section), 'time-accurate', obj_time_scheme%time_accurate, '.false.', 'Time accurate switch', 'logical', .true. )
 
     ! New state
-    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'cons', 'Integration variables (cons/prim/prec)', 'cons ,  prim , prec', .false. )
+    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'cons', 'Integration variables (cons/prim/prec)', 'cons, prim, prec', .false. )
 
 
     ! Implicit residual smoothing --------------------------

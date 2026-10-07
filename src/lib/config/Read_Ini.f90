@@ -45,6 +45,7 @@ contains
     use Finer,               only: file_ini
     use MOSE_Backend_INI,    only: Load_Ini
     use MOSE_Input_Registry
+    use MOSE_Mod_MPI,        only: mpi_is_root, mpi_abort_all
     implicit none
     ! Local
     type(file_ini) :: fini
@@ -56,8 +57,16 @@ contains
     ! Registry is built, now load the values from the ini file
     call Load_Ini(fini)
 
-    ! Validate registry
+    ! Validate registry: the values read again keep to the rules of the registry, as at setup
+    ! (Check_Input in Wrap_Setup); a value out of its rule stops the run with the message of the rule
     out = Validate_Registry()
+    if (index(out,'ERROR') > 0) then
+      if (mpi_is_root) then
+        write(*,'(A,T35,A)') '   Input file, read again', 'FAIL'
+        write(*,'(4X,A)') trim(out)
+      end if
+      call mpi_abort_all('input file error, input.ini read again during the run (see above)')
+    end if
 
   end subroutine Read_Inifile_Runtime
 

@@ -50,9 +50,9 @@ contains
       obj_shock_detector%id = 1; obj_shock_detector%description='Tramel'
     elseif (obj_shock_detector%description=='chen') then
       obj_shock_detector%id = 2; obj_shock_detector%description='Chen'
-    elseif (obj_shock_detector%description=='' .and. index(obj_riemann%description,'Tramel')>0) then
+    elseif (obj_shock_detector%description=='' .and. index(obj_riemann%name,'Tramel')>0) then
       obj_shock_detector%id = 1; obj_shock_detector%description='Tramel'
-    elseif (obj_shock_detector%description=='' .and. index(obj_riemann%description,'Chen')>0) then
+    elseif (obj_shock_detector%description=='' .and. index(obj_riemann%name,'Chen')>0) then
       obj_shock_detector%id = 2; obj_shock_detector%description='Chen'
     endif
 
@@ -106,7 +106,7 @@ contains
     if (obj_time_scheme%time_accurate) then
       obj_time_scheme%description = trim(obj_time_scheme%description)//' with time-accurate switch enabled'
     end if
-    if (trim(obj_time_scheme%integration_variables) == 'Preconditioned' .and. obj_time_scheme%time_accurate) then
+    if (trim(obj_time_scheme%integration_variables) == 'prec' .and. obj_time_scheme%time_accurate) then
       obj_time_scheme%error_message = '[ERROR] integration-variables=prec is currently supported only for steady/pseudo-time runs.'
     end if
     if (obj_irs%enabled) then
@@ -120,15 +120,15 @@ contains
     ! Space scheme
     ! ... written in Mod_Space ...
     ! Riemann solver
-    if (index(obj_riemann%description, 'AUSM+M')      > 0 .or. &
-        index(obj_riemann%description, 'HLLC+ (Chen') > 0 .or. &
-        index(obj_riemann%description, 'Low-Mach Roe') > 0) then
+    if (index(obj_riemann%name, 'AUSM+M')      > 0 .or. &
+        index(obj_riemann%name, 'HLLC+ (Chen') > 0 .or. &
+        index(obj_riemann%name, 'Low-Mach Roe') > 0) then
       if (obj_riemann%Mco == 0.0d0) then
         obj_riemann%error_message = '[ERROR] Low-Mach Riemann solver selected. Mco (riemann-options-Mco) must be defined in input.'
       end if
     endif
-    if (trim(obj_riemann%description) == 'HLLC-PC') then
-      if (obj_time_scheme%integration_variables /= 'Preconditioned') then
+    if (trim(obj_riemann%name) == 'HLLC-PC') then
+      if (obj_time_scheme%integration_variables /= 'prec') then
         obj_riemann%error_message = '[ERROR] Preconditioned HLL solver selected. integration-variables must be set to "prec".'
       end if
     endif
