@@ -139,8 +139,8 @@ grid level only: do not use it with a sequence of grid levels.
 
 | Field | Description |
 |-------|-------------|
-| `alpha` | In-plane flow angle [rad] or the token `normal` (face-normal inflow) |
-| `beta` | Out-of-plane flow angle [rad] or `normal` |
+| `alpha` | In-plane flow angle [rad] or the token `normal` (face-normal inflow); anything else stops the run |
+| `beta` | Out-of-plane flow angle [rad] or `normal`; anything else stops the run |
 | `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation); no effect on `401`, `402` and `407` |
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
 | `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |

@@ -12,7 +12,8 @@
 #  give the run of the same table with its first value repeated at t = 0.
 #  A property line with an empty required value must stop the run at set-up,
 #  naming the line of bc.txt, the record, its type and the value; so must a
-#  line short of a value, or with a word for a number.
+#  line short of a value, or with a word for a number, and a flow direction
+#  that is neither a number nor normal.
 #  Gas: test/common/Air.
 #===============================================================================
 set -uo pipefail
@@ -132,6 +133,7 @@ bad() {   # bad <kind> <pattern>: the run must stop with a non-zero code and a m
 bad empty 'bc.txt line 4 \(record 2, type 406\): the value of rel_fac is empty'
 bad short 'bc.txt line 4 \(record 2, type 406\): the line is short or holds a value that is not a number'
 bad word 'bc.txt line 4 \(record 2, type 406\): the line is short or holds a value that is not a number'
+bad angle "bc.txt line 2 \\(record 1, type 402\\): alpha is neither a number nor normal: 'nromal'"
 
 if [[ $fail -ne 0 ]]; then
   echo "BCInput: FAILED"

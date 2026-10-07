@@ -334,8 +334,7 @@ contains
             bc(i)%T0, bc(i)%p0, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
           if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%p0 ], 'T0 p0', &
                                             alpha_tok, beta_tok )
-          bc(i)%alpha = parse_dir_tok(alpha_tok)
-          bc(i)%beta  = parse_dir_tok(beta_tok)
+          if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Inlet, time-varying p0
@@ -361,8 +360,7 @@ contains
             end block
           end if
           call bc(i)%p0time%initialize(file=trim(p0file), bar=.true.)
-          bc(i)%alpha = parse_dir_tok(alpha_tok)
-          bc(i)%beta  = parse_dir_tok(beta_tok)
+          if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Inlet, mass-flux g + T0
@@ -377,8 +375,7 @@ contains
             bc(i)%T0, bc(i)%mdot, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
           if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%mdot ], 'T0 g', &
                                             alpha_tok, beta_tok )
-          bc(i)%alpha = parse_dir_tok(alpha_tok)
-          bc(i)%beta  = parse_dir_tok(beta_tok)
+          if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Inlet, mass-flux g + T (static)
@@ -393,8 +390,7 @@ contains
             bc(i)%T0, bc(i)%mdot, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
           if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%mdot ], 'T g', &
                                             alpha_tok, beta_tok )
-          bc(i)%alpha = parse_dir_tok(alpha_tok)
-          bc(i)%beta  = parse_dir_tok(beta_tok)
+          if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Supersonic inlet, M + T (static) + p (static)
@@ -409,8 +405,7 @@ contains
             bc(i)%mach, bc(i)%T0, bc(i)%pamb, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
           if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%mach, bc(i)%T0, bc(i)%pamb ], 'mach T p', &
                                             alpha_tok, beta_tok )
-          bc(i)%alpha = parse_dir_tok(alpha_tok)
-          bc(i)%beta  = parse_dir_tok(beta_tok)
+          if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Outlet, prescribed back pressure (if zero, extrapolation)
@@ -435,8 +430,7 @@ contains
             bc(i)%T0, bc(i)%p0, bc(i)%pamb, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
           if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%p0, bc(i)%pamb ], 'T0 p0 p_back', &
                                             alpha_tok, beta_tok )
-          bc(i)%alpha = parse_dir_tok(alpha_tok)
-          bc(i)%beta  = parse_dir_tok(beta_tok)
+          if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Inlet, mass-flux un + T (static)
@@ -451,8 +445,7 @@ contains
             bc(i)%T0, bc(i)%un, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
           if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%un ], 'T un', &
                                             alpha_tok, beta_tok )
-          bc(i)%alpha = parse_dir_tok(alpha_tok)
-          bc(i)%beta  = parse_dir_tok(beta_tok)
+          if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Assigned state via time-varying file
@@ -1086,22 +1079,52 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
+  ! Need_Direction: the flow directions alpha and beta of an inlet line (record n, type btype, line nline of bc.txt)
+  !   from their tokens; a token that is neither a number nor normal stops the run.
+  subroutine Need_Direction ( n, btype, nline, alpha_tok, beta_tok, alpha, beta )
+    use MOSE_Mod_MPI, only: mpi_abort_all
+    implicit none
+    integer, intent(in)          :: n, btype, nline
+    character(len=*), intent(in) :: alpha_tok, beta_tok
+    real(R8), intent(out)        :: alpha, beta
+    ! Local
+    integer            :: ios
+    character(len=200) :: msg
+
+    call parse_dir_tok ( alpha_tok, alpha, ios )
+    if ( ios /= 0 ) then
+      write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
+        "): alpha is neither a number nor normal: '"//trim(adjustl(alpha_tok))//"'"
+      call mpi_abort_all ( trim(msg) )
+    end if
+    call parse_dir_tok ( beta_tok, beta, ios )
+    if ( ios /= 0 ) then
+      write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
+        "): beta is neither a number nor normal: '"//trim(adjustl(beta_tok))//"'"
+      call mpi_abort_all ( trim(msg) )
+    end if
+
+  end subroutine Need_Direction
+
+
+  !─────────────────────────────────────────────────────────────────────────────
   ! parse_dir_tok: convert a direction token (read as character) to real.
-  !   If the token contains 'normal', return 1.0e30 (face-normal flag).
-  !   Otherwise parse as a floating-point number.
-  pure function parse_dir_tok(tok) result(val)
+  !   If the token contains 'normal', return huge (face-normal flag).
+  !   Otherwise parse it as a floating-point number; ios /= 0 when it is not one (it gave 0 in silence).
+  pure subroutine parse_dir_tok ( tok, val, ios )
     implicit none
     character(len=*), intent(in) :: tok
-    real(R8) :: val
-    integer  :: ios_loc
+    real(R8), intent(out)        :: val
+    integer, intent(out)         :: ios
     character(len=len(tok)) :: tok_
     tok_ = adjustl(tok)
+    ios = 0
     if (index(trim(tok_), 'normal') > 0) then
       val = huge(1.0_R8)
     else
-      read(tok_, *, iostat=ios_loc) val
-      if (ios_loc /= 0) val = 0.0_R8
+      read(tok_, *, iostat=ios) val
+      if (ios /= 0) val = 0.0_R8
     endif
-  end function parse_dir_tok
+  end subroutine parse_dir_tok
 
 end module MOSE_IO_BC

@@ -77,6 +77,7 @@ BAD = {                                              # line of INPUT/bc.txt (0-b
     "empty": (3, f"{PB:.6E}, ,\n"),                 # line 4, the outlet (record 2): rel_fac empty
     "short": (3, f"{PB:.6E}\n"),                    # line 4, the outlet: rel_fac missing
     "word": (3, f"{PB:.6E}, x\n"),                  # line 4, the outlet: a word for rel_fac
+    "angle": (1, f"{T0}, p0.dat, nromal, normal, 1.0, 1.0\n"),   # line 2, the inlet (record 1): alpha misspelt
 }
 
 
