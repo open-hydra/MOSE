@@ -244,6 +244,21 @@ steady flows only: «Without the time term, the model is not correct in a time-d
 (NASA Turbulence Modeling Resource, Spalart–Allmaras page, SA-RC). Time-accurate runs with the
 correction print a warning at start-up.
 
+MOSE takes $\partial S_{ij}/\partial x_k$ with central differences of the velocity gradients of the
+cells, and the ghost cells of every face of a block hold a copy of the gradient of the cell
+(`Compute_Velocity_Gradient`). Next to a face between blocks the central difference is then
+$(S_{c+1} - S_c)/2$, half the one-sided difference: for $S_{ij}$ linear across the face, its
+derivative across the face in the cell next to it, and the part of $DS_{ij}/Dt$ that comes from it,
+is half the true value when the mesh is divided there, and whole when it is not, so the result
+depends on how the mesh is divided into blocks (and among MPI ranks).
+On a column with a shear flow whose strain rate varies across the face, the right-hand side of
+$\rho\tilde\nu$ of the column divided in two blocks differs from that of the undivided column in
+the two columns of cells next to the face, and agrees to round-off elsewhere. A run with SA-RC on a
+mesh of more than one block therefore stops
+at setup with a message; before, it ran with that dependence. Exchanging the velocity gradients
+across the faces between blocks would remove the limit, and is left for a later version. At the
+faces of the physical boundaries (walls, inflow, outflow) the copy is a choice of the model.
+
 ---
 
 ## Menter SST $k$–$\omega$ — Two-Equation Model

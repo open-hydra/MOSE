@@ -308,6 +308,21 @@ value is right for a linear field:
 - 3-D rotational periodicity (`200`): the cell at the other end, rotated by the
   angle of the sector.
 
+Behind a symmetry face, a periodic pair and a rotational periodic face the
+gradient is exact for the linear fields that the condition allows:
+$\mathbf{g}\cdot\mathbf{n} = 0$ for a scalar and $G = RGR$, $R\mathbf{u}_0 =
+\mathbf{u}_0$ for the velocity at a symmetry plane ($R = I - 2\mathbf{n}\mathbf{n}^{T}$),
+$\mathbf{g}\cdot\mathbf{T} = 0$ across a periodic pair of translation $\mathbf{T}$,
+$\mathbf{u}(R_\delta\mathbf{x}) = R_\delta\mathbf{u}(\mathbf{x})$ across a rotational
+periodic face. For a field that breaks the condition the value of the ghost cell
+(reflected, copied or rotated) is not the value of the field at any point, so no
+position makes the stencil exact: the error is proportional to the part that the
+condition forbids ($\mathbf{g}\cdot\mathbf{n}$, $G - RGR$, $\mathbf{g}\cdot\mathbf{T}$),
+it stays on the faces next to the boundary, and it vanishes as the solution
+satisfies the condition. Behind the other faces between blocks, the
+zero-gradient faces and the extrapolated ones the gradient is exact for every
+linear field.
+
 $M_f$ is computed once at setup and stored on every face of the blocks of each
 rank, 27 values per cell (the mesh does not move); the cell centres come from
 the nodes, which every rank holds, so no message is needed. Where a face or a
