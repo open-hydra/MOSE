@@ -64,7 +64,7 @@ contains
                                     p0_or_pstat=p0_loc, alpha=alpha_loc,     &
                                     beta=beta_loc, Mach_rel=Mach_loc )
       end if
-      call Stagn_Inflow ( Bound_Prim, Un, Bound_Sound, Bound_Gamma, Riem,       &
+      call Stagn_Inflow ( Bound_Prim, Bound_Sound, Bound_Gamma, Riem,           &
                                  alpha_loc, beta_loc, BC_ci, BC_RANS, T0_loc, p0_loc, &
                                  BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux, BC_mdot )
     end if

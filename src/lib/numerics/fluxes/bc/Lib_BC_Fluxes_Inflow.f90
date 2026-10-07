@@ -66,7 +66,7 @@ contains
     end if
 
     Flux = 0d0
-    call Stagn_Inflow ( Bound_Prim, Un, Bound_Sound, Bound_Gamma, Riem,      &
+    call Stagn_Inflow ( Bound_Prim, Bound_Sound, Bound_Gamma, Riem,          &
                                alpha_loc, beta_loc, BC_ci, BC_RANS, T0_loc, p0_loc, &
                                BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux, BC_mdot )
 
@@ -465,18 +465,18 @@ contains
   ! Subsonic inflow: prescribed stagnation conditions (T0, p0).
   ! Solves the characteristic equations to find the face state compatible with
   ! the interior Riemann invariant and the prescribed total conditions.
-  subroutine Stagn_Inflow ( Prim, Un, Sound, Gamma, Riem, alpha, beta, &
+  subroutine Stagn_Inflow ( Prim, Sound, Gamma, Riem, alpha, beta, &
                                  BC_ci, BC_RANS, BC_T0, BC_p0, BC_rel_fac, BC_Sign, &
                                  t_Vec, Normal, Area, Flux, Fmass )
     use FLINT_Lib_Thermodynamic
     implicit none
-    real(R8), intent(in)  :: Prim(nprim), Un, Sound, Gamma, Riem, alpha, beta
+    real(R8), intent(in)  :: Prim(nprim), Sound, Gamma, Riem, alpha, beta
     real(R8), intent(in)  :: BC_ci(nsc), BC_RANS(1:), BC_T0, BC_p0, BC_rel_fac
     real(R8), intent(in)  :: BC_Sign, t_Vec(3), Normal(3), Area
     real(R8), intent(out) :: Flux(nprim), Fmass
     ! Local
     integer  :: s, iter_discr
-    real(R8) :: Face_Rgas, Sound0, Coef_D, Coef_C, YA, YB, YC, Discr, Un_Sign, Un3, Sound3
+    real(R8) :: Face_Rgas, Sound0, Coef_D, Coef_C, YA, YB, YC, Discr, Un3, Sound3
     real(R8) :: p3, Ut3, Ub3, BC_p0_try
     real(R8) :: Face_T, Face_Sound, Face_Prim(nprim), Face_rho, Face_Enthalpy, Face_Un
     real(R8) :: XA, XB, XC, XD, XE, XF, check, E1, E2, b_Vec(3), b_Mod
@@ -524,8 +524,10 @@ contains
       end if
     enddo
 
-    Un_Sign = sign ( 1d0, Un )  ! Sign of normal velocity at the boundary interface
-    Un3 = ( YB + Un_Sign * sqrt( Discr ) ) / YA
+    ! The smaller root of the quadratic in w = BC_Sign*Un3, the inflow. The larger one is a spurious outflow
+    ! (w = 4 a0/(gamma+1) with the cell at rest at the reservoir state), and the sign of the cell velocity
+    ! cannot choose between them: at rest it would take the larger one on the faces 2, 4, 6
+    Un3 = ( YB - BC_Sign * sqrt( Discr ) ) / YA
     Sound3 = sqrt ( Sound0**2 - Coef_D * Un3**2 )
     p3 = BC_p0_try * ( Sound3 / Sound0 )**( 2d0 * Gamma / ( Gamma - 1d0 ) )
     Ut3 = Un3 * E1
