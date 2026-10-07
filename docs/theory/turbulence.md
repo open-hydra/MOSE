@@ -108,6 +108,21 @@ $$
 \tilde\nu_\text{wall} = 0
 $$
 
+on the viscous walls (types `301`, `302`, `503`–`505`); the wall distance $y$ is measured from
+them and from the walls coupled to another solver (`103`, `104`). A slip wall (type `300`, which
+is also the symmetry plane) follows the standard model: the ghost cell copies the cell, a zero
+normal derivative of $\tilde\nu$, and the slip wall is not a wall for the distance («the free-slip
+wall points are not included in the search when $d$ is computed», P. R. Spalart, S. R. Allmaras,
+*La Recherche Aérospatiale* 1994(1), p. 21). Allmaras, Johnson and Spalart (ICCFD7-1902, §3.3)
+propose instead $\tilde\nu = 0$ on slip walls and their inclusion in the distance, as distinct
+from symmetry planes; MOSE, whose type `300` serves both, does not make that change.
+
+Negative values are clipped: after every stage MOSE keeps $\rho\tilde\nu \ge 10^{-10}$ (the
+realizability floor) and counts the cell updates in which a stage made it negative
+([Time-accurate runs](#time-accurate-runs-explicit-sources)). ICCFD7-1902 (§3.2) replaces the
+clipping with the negative SA model, since clipping «prevents the convergence of discrete PDE
+residuals»; MOSE does not implement SA-neg.
+
 ### Rough walls — SA-rough
 
 A wall face with a sand-grain roughness height $k_s > 0$ (the `k_rough` field of
