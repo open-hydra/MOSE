@@ -40,6 +40,24 @@ of each hexahedral cell. The numerical algorithm consists of the following steps
   computed at each face with a 10-point stencil and mapped to Cartesian
   coordinates using the face metric tensor.
 
+### Rotational periodicity (type 200)
+
+Type 200 on the $k$ faces closes a mesh that turns about the $x$ axis: an
+axisymmetric wedge (one cell in $k$) or a 3-D sector (several). The flow
+beyond face 5 is the flow next to face 6 turned back by the angle $\delta$
+of the wedge or sector, and the flow beyond face 6 the flow next to face 5
+turned forward. With $g = +1$ on face 5 and $g = -1$ on face 6, the ghost
+cell takes the state of its source cell (on a wedge the cell itself, on a
+sector the cell next to the opposite $k$ face) with the velocity turned
+about $x$ by $\varphi = -g\,\delta$:
+
+$$
+v_g = v\cos\varphi - w\sin\varphi = v\cos\delta + g\,w\sin\delta, \qquad
+w_g = v\sin\varphi + w\cos\varphi = -g\,v\sin\delta + w\cos\delta .
+$$
+
+$u$ and the scalars do not change under a turn about $x$, and are copied.
+
 ---
 
 ## MUSCL Reconstruction

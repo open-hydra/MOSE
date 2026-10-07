@@ -28,7 +28,8 @@ test/
 │   ├── connections/           # Faces between blocks
 │   │   ├── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
 │   │   ├── connection-flux/   # One flux per face between blocks: one block = two blocks, conservation
-│   │   └── connection-order/  # Faces between blocks of the same parity: any order of bc.txt, same bits
+│   │   ├── connection-order/  # Faces between blocks of the same parity: any order of bc.txt, same bits
+│   │   └── sector-radial/     # A 3-D sector closed by type 200 keeps a radial flow mirror-symmetric
 │   ├── time-integration/      # Time integration
 │   │   ├── time-control/      # Time-dependent inlet order, time tables, stop criteria
 │   │   ├── local-time-step/   # Local time step stable on square/skewed/cubic cells and in diffusive cells
@@ -236,6 +237,7 @@ seconds on a CI runner.
 | `Connections`/`ConnectionOrder` | two 2-D blocks whose index directions are permuted across the cut (face 4 of one on face 2 of the other, two faces of the same parity) give the same bits with the records of `bc.txt` sorted and reversed (Navier–Stokes, HLLC+Tramel, a shock leaving the cut); with the block below the cut one cell thick across it, or two cells thick with two multigrid levels (one at level 2), the run stops at set-up with a message that names the record, the block across, its cells and the level | `test/fast/connections/connection-order` |
 | `MeshGeometry`/`WallDistance` | the distance to the wall read back from the Spalart–Allmaras source is the exact distance to the wall surface (convex corner, curved wall, nozzle lip on a wedge), and to its periodic images (channel and pipe periodic in x, 3-D sector, the channel with its periodic sides matched to 1e-8, 3-D slab periodic in k); on a 3-D wall of twisted faces, the start-up report of the bound of the error | `test/fast/mesh-geometry/wall-distance` |
 | `MeshGeometry`/`MeshType` | a plane slab is plane and a wedge is a wedge whatever the direction of j (wall distance within 1e-9), also a wedge of 5 degrees in two blocks written with 5 significant digits and a plane slab far from the x axis, which a small turn nearly fits; the set-up summary names the type; a wedge written with 2 significant digits, too few to tell it, a plane slab whose k planes are not parallel (2 % of its thickness), 3-D sectors of 90 degrees whose periodic plane misses the turn by half a cell (100 cells in k) or a tenth (20 cells), and a wedge block with a plane block stop the run; a 3-D slab periodic in k keeps a uniform flow within 1e-12 | `test/fast/mesh-geometry/mesh-type` |
+| `Connections`/`SectorRadial` | a 3-D sector closed by the rotational periodicity (type 200 on the k faces, -45 to 45 degrees) keeps a radial flow its own mirror image across z = 0 within 1e-10 | `test/fast/connections/sector-radial` |
 
 A few heavier checks carry the `validation` (not `fast`) label because they
 need reference data or plotting — for example `ShuOsherConvergence`, a 4-grid

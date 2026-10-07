@@ -160,7 +160,9 @@ mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D"
 # the other, index directions permuted): the record that computes the flux
 # of the face does not follow the order of bc.txt; sorted and reversed
 # records give the same bits.
-mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;1D;2D")
+# Sector radial: a 3-D sector closed by the rotational periodicity (type 200 on
+# the k faces) keeps a radial flow its own mirror image.
+mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;1D;2D;3D")
 
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
 # at a restart a missing probe file is written again, an existing one appended,
