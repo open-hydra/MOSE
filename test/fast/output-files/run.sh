@@ -12,13 +12,14 @@
 #    VtkNames (vtk-names): names and times of the VTK outputs
 #    VtkRawFormat (vtk-raw-format): vtk raw solutions as raw appended data
 #    WallOutputResidual (wall-output-residual): wall output and residual
+#    ProbePosition (probe-position): probes given by position
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(wall-output vtk-names vtk-raw-format wall-output-residual)
+PARTS=(wall-output vtk-names vtk-raw-format wall-output-residual probe-position)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

@@ -100,7 +100,8 @@ contains
   end subroutine Setup_Probes
 
 
-  !> Find the cell indexes related to the probe starting from space coords
+  !> Find the cell indexes related to the probe starting from space coords: the cell whose centre
+  !> (the mean of its eight nodes) is the nearest, among the cells of the blocks (no ghost cells)
   subroutine Place (self, domain)
     use MOSE_Mod_MPI, only: is_local_block, mpi_size_, mpi_rank_, &
                             mpi_allreduce_min_r8, mpi_allreduce_sum_r8_array
@@ -109,15 +110,19 @@ contains
     type(MOSE_domain_type), intent(in) :: domain
     ! Local
     integer :: i, j, k, b
-    real(8) :: d0, d, dglob, claim, winner
+    real(8) :: d0, d, dglob, claim, winner, centre(3)
     real(8) :: packed(4)
 
     d0 = huge(1d0)
     self%ilocation = 0
     do b = 1, domain%nb
       if (.not. is_local_block(b)) cycle
-      do k = 0, domain%blk(b)%dim(3); do j = 0, domain%blk(b)%dim(2); do i = 1, domain%blk(b)%dim(1)
-        d = norm2(self%location%c-domain%blk(b)%node(i,j,k)%c)
+      do k = 1, domain%blk(b)%dim(3); do j = 1, domain%blk(b)%dim(2); do i = 1, domain%blk(b)%dim(1)
+        centre = 0.125d0 * ( domain%blk(b)%node(i-1,j-1,k-1)%c + domain%blk(b)%node(i,j-1,k-1)%c + &
+                             domain%blk(b)%node(i-1,j  ,k-1)%c + domain%blk(b)%node(i,j  ,k-1)%c + &
+                             domain%blk(b)%node(i-1,j-1,k  )%c + domain%blk(b)%node(i,j-1,k  )%c + &
+                             domain%blk(b)%node(i-1,j  ,k  )%c + domain%blk(b)%node(i,j  ,k  )%c )
+        d = norm2(self%location%c-centre)
         if (d<d0) then
           d0 = d
           self%ilocation = [b , i, j, k]
