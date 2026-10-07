@@ -29,11 +29,13 @@ test/
 │   │   ├── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
 │   │   ├── connection-flux/   # One flux per face between blocks: one block = two blocks, conservation
 │   │   └── connection-order/  # Faces between blocks of the same parity: any order of bc.txt, same bits
-│   └── time-integration/      # Time integration
-│       ├── time-control/      # Time-dependent inlet order, time tables, stop criteria
-│       ├── local-time-step/   # Local time step stable on square/skewed/cubic cells and in diffusive cells
-│       ├── turbulence-sources/ # Time order and positivity of the turbulence sources; Wilcox 2006 vortex stretching; asymptotic omega wall value
-│       └── quasi2d-symmetry/  # Quasi-2D, symmetry k faces: round-off in w does not grow
+│   ├── time-integration/      # Time integration
+│   │   ├── time-control/      # Time-dependent inlet order, time tables, stop criteria
+│   │   ├── local-time-step/   # Local time step stable on square/skewed/cubic cells and in diffusive cells
+│   │   ├── turbulence-sources/ # Time order and positivity of the turbulence sources; Wilcox 2006 vortex stretching; asymptotic omega wall value
+│   │   └── quasi2d-symmetry/  # Quasi-2D, symmetry k faces: round-off in w does not grow
+│   └── boundary-conditions/   # Boundary conditions
+│       └── inlets/            # Inlet boundary conditions: direction normal, total conditions
 ├── unit/                      # Unit checks of library functions, built against the library
 │   └── qcr2000_check.f90      # QCR2000 stress, called as the solver calls it, against its definition
 ├── 2D/                        # 2-D validation cases
@@ -215,6 +217,7 @@ seconds on a CI runner.
 | `PrandtlMeyer` | analytic turning angle | `test/2D/euler/prandtl-meyer` |
 | `RiemannSmoke` | every shock-capturing solver stays positive (no NaN, ρ,p>0) | `test/fast/riemann-smoke` |
 | `NumericsSmoke` | all limiters × time schemes × recon × integration vars stay positive | `test/fast/numerics-smoke` |
+| `BoundaryConditions`/`Inlets` | an ambient inlet (407) with the flow direction `normal` gives the field of the angles the token stands for on that face, to the bit, with no transverse velocity | `test/fast/boundary-conditions/inlets` |
 | `TimeIntegration`/`TimeControl` | second order in time with a time-dependent inlet (BC 402) for RK2 and RK3; a time table holds its first value before its first instant; `res-threshold` does not end a time-accurate run | `test/fast/time-integration/time-control` |
 | `Conservation` | closed slip-wall box conserves total mass to round-off | `test/fast/conservation` |
 | `OpenMPEquiv` | 1 vs 4 threads bit-identical: the Sod tube, and a block overset on another whose four chimera faces meet at its edges (Navier–Stokes) | `test/fast/openmp-equiv` |

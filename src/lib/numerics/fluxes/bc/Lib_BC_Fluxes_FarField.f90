@@ -21,7 +21,7 @@ contains
     use MOSE_Config_Types_m,        only: obj_rot
     use MOSE_Lib_RotatingFrame,     only: RF_Convert_BC_Inflow
     use FLINT_Lib_Thermodynamic,    only: f_Rtot
-    use MOSE_Lib_BC_Fluxes_Inflow,  only: Stagn_Inflow, setup_inflow_geometry
+    use MOSE_Lib_BC_Fluxes_Inflow,  only: Stagn_Inflow, setup_inflow_geometry, Compute_Inflow_Direction
     use MOSE_Lib_BC_Fluxes_Outflow, only: Outflow
     implicit none
     type(MOSE_block_type), intent(inout) :: Blk
@@ -45,8 +45,9 @@ contains
     T0_loc    = BC_T0
     p0_loc    = BC_p0
     Mach_loc  = 0.0d0
-    alpha_loc = BC_alpha
-    beta_loc  = BC_beta
+    ! The token normal gives the face normal, as for the other inlets; resolved before the
+    ! conversion of the rotating frame, which turns the direction it is given
+    call Compute_Inflow_Direction ( Normal, BC_alpha, BC_beta, alpha_loc, beta_loc )
 
     Flux = 0d0
 

@@ -131,6 +131,14 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # Quasi-2D case with symmetry k faces: round-off in w must not grow.
 mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;3D")
 
+# Boundary conditions (BoundaryConditions): the parts below, each in its
+# folder of test/fast/boundary-conditions, run one after the other by
+# test/fast/boundary-conditions/run.sh.
+# Inlet boundary conditions: the far-field inlet (407) with the flow direction
+# normal gives the field of the equivalent angles, to the bit, with no
+# transverse velocity.
+mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;2D")
+
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
 mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")
 
