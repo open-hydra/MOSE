@@ -27,7 +27,7 @@ contains
     use MOSE_IO_Probes,            only: Setup_Probes, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
     use MOSE_IO_Wall,              only: Initialize_Wall_File
     use MOSE_Lib_Ghost,            only: Fill_Ghost_Cell
-    use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_stop_all, mpi_bcast_logical
+    use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_abort_all, mpi_stop_all, mpi_bcast_logical
     use MOSE_Mod_Timers,           only: timer_run_begin
     use MOSE_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index, &
                                          allocate_exchange_schedules
@@ -128,6 +128,20 @@ contains
     setup_error = .false.
     if (mpi_is_root) call Check_BC ( setup_error )
     call Stop_Together ( setup_error, 'boundary condition error (see above)' )
+
+    ! SA-RC on one block only: its strain-rate gradient takes the velocity gradients of the ghost cells as copies of the
+    ! cell, also behind the faces between blocks (Compute_Velocity_Gradient), so with more than one block the result
+    ! would depend on how the mesh is divided into blocks
+    if ( obj_rans%SpalartShur .and. simulation%domain(1)%nb > 1 ) then
+      if (mpi_is_root) then
+        write(*,'(A,I0,A)') ' [ERROR] turbulence = SA-RC needs a mesh of one block; this one has ', simulation%domain(1)%nb, &
+                            ' blocks.'
+        write(*,'(A)') ' [ERROR]   The rotation-curvature correction copies the velocity gradient of each cell into the ghost'
+        write(*,'(A)') ' [ERROR]   cells of the faces between blocks, so the result would depend on how the mesh is divided.'
+        write(*,'(A)') ' [ERROR]   Use a mesh of one block, or another turbulence model.'
+      end if
+      call mpi_abort_all ( 'SA-RC with more than one block (see above)' )
+    end if
 
     ! MPI: partition blocks once on finest-level cell counts (restriction and
     ! prolongation are block-local, so a block must live on the same rank at

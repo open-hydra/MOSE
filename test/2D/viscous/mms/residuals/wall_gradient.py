@@ -39,11 +39,18 @@ centres, and the ghost cells of the wall the position at which their value is ri
              (right-hand side)/rho between the two runs, over (cb2/sigma) a^2, is checked; it holds the terms in grad rho;
   skewed3d   the same in 3-D: 5 x 16 x 5 cells, x += y tan 20, z += y tan 10, T linear in x and z, the sides of 400 type.
 
+SA-RC, the rotation-curvature correction, copies the velocity gradient of each cell into the ghost cells of the faces
+between blocks, so its result would depend on how the mesh is divided into blocks: a run with more than one block must stop
+at setup and say so. The uniform column with turbulence = SA-RC runs; the same column as two blocks of 2 x 16 cells
+(uniform2: a face between the blocks, 101, and the periodic pair across x, 201) stops with the message.
+
 Usage (from the test directory):
   python3 -B wall_gradient.py case [CASE [uni]]   INPUT/ic.tec and INPUT/bc.txt; CASE uniform (default), stretched, skewed,
                                               skewed3d; uni: at uniform temperature (skewed cases)
   python3 -B wall_gradient.py check FIELD DIAG [CASE]                    exit status 0 when the right-hand side passes
   python3 -B wall_gradient.py checkdiff CASE FIELD DIAG FIELD_UNI DIAG_UNI   the same for the skewed cases
+  python3 -B wall_gradient.py sarcstop LOG                 exit status 0 when the run of LOG stopped at setup with the message
+                                                       on SA-RC and more than one block, without NaN or trap
 """
 import math
 import os
@@ -103,6 +110,66 @@ def write_case():
         out += [rec(i, j, face, 0) for j in range(1, NJ + 1) for i in range(1, NI + 1)]
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(out))
+
+
+def write_case_two_blocks():
+    """The uniform column as two blocks of 2 x 16 cells along x: block 1 at x in [0, 2 dx], block 2 at [2 dx, 4 dx]; the
+    face between them (101) and the periodic pair (201) from block 1, face 1, to block 2, face 2."""
+    rho = P0 / (RGAS * T0)
+    half = NI // 2
+    y = [j * DY for j in range(NJ + 1)]
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoNuTilde"\n')
+        for b in (1, 2):
+            x = [((b - 1) * half + i) * DX for i in range(half + 1)]
+            f.write(f" ZONE  T = B{b}-IG, I={half + 1}, J={NJ + 1}, K=2, DATAPACKING=BLOCK, "
+                    "VARLOCATION=([1-3]=NODAL,[4-9]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+            for c in range(3):
+                for k in range(2):
+                    for j in range(NJ + 1):
+                        for i in range(half + 1):
+                            f.write(f" {(x[i], y[j], k * DX)[c]:.16E}\n")
+            n = half * NJ
+            zero = [0.0] * n
+            nut = [rho * A * (j + 0.5) * DY for j in range(NJ) for _ in range(half)]
+            for col in ([rho] * n, zero, zero, zero, [P0] * n, nut):
+                f.write("".join(f" {v:.16E}\n" for v in col))
+
+    def rec(b, i, j, face, t):
+        return '%9d %7d %7d %7d %7d %7d\n' % (b, i, j, 1, face, t)
+
+    def con(*a):
+        return '%10d %7d %7d %7d %7d %7d %7d %7d %7d\n' % a
+
+    out = []
+    for j in range(1, NJ + 1):
+        out += [rec(1, 1, j, 1, 201), con(2, half, j, 1, 2, 1, 0, 0, 1)]
+        out += [rec(1, half, j, 2, 101), con(2, 1, j, 1, 1, 1, 0, 0, 1)]
+        out += [rec(2, 1, j, 1, 101), con(1, half, j, 1, 2, 1, 0, 0, 1)]
+        out += [rec(2, half, j, 2, 201), con(1, 1, j, 1, 1, 1, 0, 0, 1)]
+    for b in (1, 2):
+        for i in range(1, half + 1):
+            out += [rec(b, i, 1, 3, 302), f"    {T0:.6E}, 0.000000E+00, 0.000000E+00,\n"]
+        for i in range(1, half + 1):
+            out.append(rec(b, i, NJ, 4, 300))
+        for face in (5, 6):
+            out += [rec(b, i, j, face, 0) for j in range(1, NJ + 1) for i in range(1, half + 1)]
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(out))
+
+
+def sarc_stop(log):
+    """The run stopped at setup with the message on SA-RC and more than one block, without NaN or trap before it."""
+    text = open(log, errors="replace").read()
+    head = re.search(r"\[ERROR\] turbulence = SA-RC needs a mesh of one block; this one has 2 blocks", text)
+    remedy = "Use a mesh of one block, or another turbulence model" in text
+    clean = "ABORT:" in text and not re.search(r"NaN|Floating-point exception|SIGFPE|Program received signal", text)
+    print(f"    message on SA-RC with two blocks: {'yes' if head else 'no'}; remedy named: {'yes' if remedy else 'no'}; "
+          f"clean stop without NaN or trap: {'yes' if clean else 'no'}")
+    sys.exit(0 if head and remedy and clean else 1)
 
 
 def layout(case):
@@ -276,6 +343,8 @@ def main():
         case = sys.argv[2] if len(sys.argv) > 2 else 'uniform'
         if case == 'uniform':
             write_case()
+        elif case == 'uniform2':
+            write_case_two_blocks()
         else:
             write_case_general(case, len(sys.argv) > 3 and sys.argv[3] == 'uni')
     elif what == "check":
@@ -284,6 +353,8 @@ def main():
         check(sys.argv[2], sys.argv[3])
     elif what == "checkdiff":
         check_diff(*sys.argv[2:7])
+    elif what == "sarcstop":
+        sarc_stop(sys.argv[2])
     else:
         sys.exit(f"unknown request {what}")
 

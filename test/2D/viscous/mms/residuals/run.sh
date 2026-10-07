@@ -77,7 +77,9 @@
 #     The same with cells growing by 1.2 from the wall, and on skewed cells
 #     (2-D and 3-D) with the density linear along the wall, where the ghost
 #     cell of the wall copies the density and the terms in grad rho must stay
-#     zero.
+#     zero. SA-RC: the uniform column runs; the same column as two blocks must
+#     stop at setup and say why (its result would depend on the division in
+#     blocks).
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -421,6 +423,24 @@ for case in skewed skewed3d; do
     echo "  [FAIL] $case: grad rho of the wall cells takes a wrong normal component"; fail=1
   fi
 done
+
+echo "-- SA-RC: one block runs, two blocks stop at setup --"
+sed -i 's/^turbulence = SA$/turbulence = SA-RC/' input.ini
+python3 -B wall_gradient.py case uniform || exit 1
+rm -f OUTPUT/field.tec
+"$LOCAL" > OUTPUT/wall-run-sarc-1.log 2>&1
+if [[ -f OUTPUT/field.tec ]] && ! grep -a -qE 'NaN|Integration failed|ABORT' OUTPUT/wall-run-sarc-1.log; then
+  echo "  [ok  ] one block: the run completes"
+else
+  echo "  [FAIL] SA-RC on one block did not complete (see OUTPUT/wall-run-sarc-1.log)"; fail=1
+fi
+python3 -B wall_gradient.py case uniform2 || exit 1
+"$LOCAL" > OUTPUT/wall-run-sarc-2.log 2>&1
+if python3 -B wall_gradient.py sarcstop OUTPUT/wall-run-sarc-2.log; then
+  echo "  [ok  ] two blocks: the run stops at setup and says why"
+else
+  echo "  [FAIL] SA-RC on two blocks does not stop with the message (see OUTPUT/wall-run-sarc-2.log)"; fail=1
+fi
 
 if [[ $fail -ne 0 ]]; then
   echo "MMSResiduals: FAILED"
