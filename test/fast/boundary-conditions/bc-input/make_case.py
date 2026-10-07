@@ -75,6 +75,8 @@ def write_case(name):
 
 BAD = {                                              # line of INPUT/bc.txt (0-based) and what it becomes
     "empty": (3, f"{PB:.6E}, ,\n"),                 # line 4, the outlet (record 2): rel_fac empty
+    "short": (3, f"{PB:.6E}\n"),                    # line 4, the outlet: rel_fac missing
+    "word": (3, f"{PB:.6E}, x\n"),                  # line 4, the outlet: a word for rel_fac
 }
 
 

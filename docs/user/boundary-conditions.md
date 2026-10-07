@@ -76,7 +76,8 @@ Some BC types carry additional data on the second line (see [BC Types](#bc-types
 Every value of the data line is required, except those with a default value: `k_rough` and `eps_wall` (0), `cp_wall`,
 `Ti_wall` and `dh_wall` (0), `pyro_id` and `reac_id` (0), `rho_grain` (0), `SF_geo` (1), `p_sub` and `p_sup` (0). An
 empty value (two commas with nothing between them) keeps that default; an empty required value stops the run at set-up,
-with the line of `bc.txt`, the record, its type and the name of the value. Blank lines between records are skipped.
+with the line of `bc.txt`, the record, its type and the name of the value. So does a line short of a value, or with a
+value that is not a number. Blank lines between records are skipped.
 
 ## BC Types
 

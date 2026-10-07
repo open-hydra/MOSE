@@ -219,10 +219,7 @@ contains
       ! the blank ones as the list-directed read did), then as its values.
       call Next_Line ( unitfile, pline, ios, nline )
       if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%b, bc(i)%i, bc(i)%j, bc(i)%k, bc(i)%f, bc(i)%type
-      if (ios/=0) then
-        write(*,'(A,I9)') '[ERROR] reading BC file, bc number:',i
-        stop 1
-      endif
+      if ( ios /= 0 ) call BC_Line_Error ( i, -1, nline, pline )
 
       ! n_bf update
       n_bf( bc(i) % b, bc(i) % f ) = n_bf( bc(i) % b, bc(i) % f ) + 1
@@ -252,7 +249,8 @@ contains
           bc(i)%ni = IEMPTY
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) (bc(i)%ni(cc),cc=1,2)
-          call Need_I ( i, bc(i)%type, nline, bc(i)%ni, 'n1 n2' )   ! also after a failed read: the counts size the arrays
+          if ( ios /= 0 ) call BC_Line_Error ( i, bc(i)%type, nline, pline )
+          call Need_I ( i, bc(i)%type, nline, bc(i)%ni, 'n1 n2' )
           allocate(bc(i)%donorID(1:sum(bc(i)%ni),1:4))
           allocate(bc(i)%volume_fraction(1:sum(bc(i)%ni)))
           bc(i)%donorID = IEMPTY
@@ -260,12 +258,14 @@ contains
           do s = 1, bc(i)%ni(1)
             call Next_Line ( unitfile, pline, ios, nline )
             if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
+            if ( ios /= 0 ) call BC_Line_Error ( i, bc(i)%type, nline, pline )
             if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, bc(i)%donorID(s,1:4), 'bD iD jD kD' )
             if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%volume_fraction(s:s), 'vol_frac' )
           enddo
           do s = bc(i)%ni(1)+1, bc(i)%ni(1)+bc(i)%ni(2)
             call Next_Line ( unitfile, pline, ios, nline )
             if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
+            if ( ios /= 0 ) call BC_Line_Error ( i, bc(i)%type, nline, pline )
             if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, bc(i)%donorID(s,1:4), 'bD iD jD kD' )
             if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%volume_fraction(s:s), 'vol_frac' )
           enddo
@@ -460,6 +460,7 @@ contains
           if (level == 1) nstate = nstate + 1
           allocate ( bc(i) % Pg (nprim, 6) )
           call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 .and. len_trim(pline) > len(q2d_line) ) ios = 1   ! a name that does not fit q2d_file
           q2d_line = pline
           q2d_line = adjustl(q2d_line)
           ip = index(trim(q2d_line), ',')
@@ -592,6 +593,9 @@ contains
         !   read(unitfile,*,iostat=ios) bc(i)%bs, bc(i)%fs
 
       end select
+
+      ! A property line that cannot be read as the values of its type stops the run
+      if ( ios /= 0 ) call BC_Line_Error ( i, bc(i)%type, nline, pline )
 
     enddo
 
@@ -802,6 +806,34 @@ contains
     end do
 
   end subroutine Next_Line
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! BC_Line_Error: stop the run on line nline of the boundary file, of record n, that cannot be read as the values it
+  !   must hold (short, or a value that is not a number): its record line (btype < 0) or a property line of type btype;
+  !   an empty line is the end of the file.
+  subroutine BC_Line_Error ( n, btype, nline, line )
+    use MOSE_Mod_MPI, only: mpi_abort_all
+    implicit none
+    integer, intent(in)          :: n, btype, nline
+    character(len=*), intent(in) :: line
+    ! Local
+    character(len=160) :: head
+
+    if ( len_trim(line) == 0 ) then
+      write(head,'(A,I0,A,I0)') '[ERROR] bc.txt ends at line ', nline, ', before the end of record ', n
+      call mpi_abort_all ( trim(head) )
+    end if
+    if ( btype < 0 ) then
+      write(head,'(A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, &
+        '): the line is not block, i, j, k, face and type'
+    else
+      write(head,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
+        '): the line is short or holds a value that is not a number'
+    end if
+    call mpi_abort_all ( trim(head)//': "'//trim(line(1:min(len(line),200)))//'"' )
+
+  end subroutine BC_Line_Error
 
 
   !─────────────────────────────────────────────────────────────────────────────
