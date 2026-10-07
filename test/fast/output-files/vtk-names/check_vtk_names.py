@@ -8,18 +8,28 @@ data arrays must be the variables MOSE writes for this case, without quotes.
 Field data (TIME, CYCLE and the counters a restart reads back) are global
 values, not variables, and are not counted.
 
+The three writers of MOSE (field, wall, diagnostic) each decide the quotes of
+the names, the paths and the vtk format: they must agree. Every .vtm lists its
+block files as vtk/<file>.vts, relative to its own folder (no leading or double
+slash), and that path must resolve; every data array of the three outputs has
+the format of sol-format: appended (vtk raw) or ascii (vtk ascii).
+
 With the second argument sa-transport: the run with the Spalart-Allmaras model and sol-variables = thermo
 transport, whose field adds the turbulence variable, the laminar viscosity and conductivity and the eddy viscosity, and
 whose diagnostic adds the residual of the turbulence variable.
 
-Usage: python check_vtk_names.py <OUTPUT directory> [sa-transport]
+Usage: python check_vtk_names.py <OUTPUT directory> [sa-transport] [ascii]
+(ascii: the run with sol-format = vtk ascii; vtk raw otherwise)
 Exit 0 = pass, 1 = fail.
 """
+import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 out = Path(sys.argv[1])
+flags = set(sys.argv[2:])
+FORMAT = "ascii" if "ascii" in flags else "appended"
 EXPECTED = {
     # single-species air, Navier-Stokes, sol-variables = thermo (the default)
     "field": ["rho(1)", "u", "v", "w", "p", "T", "g", "R"],
@@ -28,7 +38,7 @@ EXPECTED = {
     # steady run: residuals, local time step, shock sensor
     "diagnostic": ["rho", "rhou", "rhov", "rhow", "rhoe", "dt", "beta"],
 }
-if len(sys.argv) > 2 and sys.argv[2] == "sa-transport":
+if "sa-transport" in flags:
     EXPECTED["field"] = ["rho(1)", "u", "v", "w", "p", "rhoNuTilde", "T", "g", "R", "mil", "kl", "mut"]
     EXPECTED["diagnostic"] = ["rho", "rhou", "rhov", "rhow", "rhoe", "rhoNuTilde", "dt", "beta"]
 
@@ -56,11 +66,11 @@ for name, expected in EXPECTED.items():
     if not files:
         fail.append(f"{vtm}: lists no block")
     for f in files:
+        if not re.fullmatch(r"vtk/[^/]+\.vts", f or ""):
+            fail.append(f"{vtm}: block file listed as {f!r}, not vtk/<file>.vts relative to the .vtm")
         vts = vtm.parent / f
         if not vts.is_file():
-            vts = out / "vtk" / Path(f).name
-        if not vts.is_file():
-            fail.append(f"{vtm}: block file {f} not found")
+            fail.append(f"{vtm}: block file {f} not found relative to the .vtm")
             continue
         try:
             root = ET.fromstring(xml_part(vts))
@@ -72,6 +82,9 @@ for name, expected in EXPECTED.items():
                  if id(a) not in field_data and a.get("Name") != "Points"]
         if names != expected:
             fail.append(f"{vts.name}: variable names {names}, expected {expected}")
+        formats = sorted({a.get("format") for a in root.iter("DataArray")})
+        if formats != [FORMAT]:
+            fail.append(f"{vts.name}: data array formats {formats}, expected {FORMAT} for every array")
 
 if fail:
     for line in fail:
