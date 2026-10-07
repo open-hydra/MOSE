@@ -189,10 +189,17 @@ with one direction orthogonal to the other two included, $F = 1$, and in 2-D the
 is.
 
 Without dimensional splitting the convective limits of the directions add up: an explicit scheme
-on square 2-D cells needs $\tau(|a_x|/\Delta x + |a_y|/\Delta y) \le C_0$, not the largest of the two
-terms (Hundsdorfer, §9.3); the convective and diffusive rates add up in the same way.
-With the linearised MUSCL–upwind advection and central diffusion, a von Neumann analysis gives the
-stability limits below; at the worst cell Péclet number the additive law is exact.
+on square 2-D cells needs a condition of the type $\tau(|a_x|/\Delta x + |a_y|/\Delta y) \le C_0$, not
+the largest of the two terms (Hundsdorfer, §9.3, which states the form without a proof). For forward
+Euler the form follows, with the diffusive rates added as well, from the positivity condition (6.1)
+of Hundsdorfer: with first-order upwind convection and central diffusion on a Cartesian mesh the
+diagonal entry of a row is $-\sum_d \bigl(|a_d|/h_d + 2D/h_d^2\bigr)$ and the others are not negative, so
+$\tau \sum_d \bigl(|a_d|/h_d + 2D/h_d^2\bigr) \le 1$: the rule above with CFL = 1 and VNN = 1/2. The
+constants of Heun and RK3 in the table do not come from that source: they are a von Neumann analysis
+of the linearised MUSCL–upwind advection with central diffusion, made for MOSE, and at the worst
+cell Péclet number the additive law is exact. The source warns that such an eigenvalue criterion can
+mislead for the non-normal operators that boundaries give, as an inflow boundary with upwind
+differences (Hundsdorfer, §3.3, pp. 26–27): the limits are those of the interior.
 
 | Scheme | CFL ≤ | VNN ≤ |
 |---|---|---|
