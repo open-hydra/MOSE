@@ -10,6 +10,13 @@ module MOSE_IO_BC
   integer :: nconnect, nwall, ngsi, nSRM, nio, nsym, nper, nchimera, ncoupled, next, nKaffs, nstate
   logical :: has_tdep_bc
 
+  ! Empty fields of a property line. A null value of list-directed input (two commas with only blanks between) leaves
+  ! its variable as it was: undefined for a field without a default value. Read_BCfile sets those fields to EMPTY
+  ! (IEMPTY for integers, a blank token for a direction) before the read, and Need_R, Need_I and Need_Inlet stop the run
+  ! on a field still EMPTY after it; a field with a default value keeps it (docs/user/boundary-conditions.md).
+  real(R8), parameter :: EMPTY  = -huge(1.0_R8)
+  integer,  parameter :: IEMPTY = -huge(1)
+
 contains
 
   subroutine Setup_BC ( domain )
@@ -159,6 +166,7 @@ contains
     ! Local
     integer :: cc, i, s, nnozzle, nmanifold
     integer :: unitfile, ios, cios, ip
+    integer :: nline                         ! lines of the file read so far (Next_Line)
     integer :: nzero_chim
     character(len=llen) :: p0file
     character(len=32) :: alpha_tok, beta_tok
@@ -203,10 +211,14 @@ contains
     nzero_chim = 0
 
     ! Read file
+    nline = 0
     do i = 1, size(bc)
 
       ! ── First line: block, ijk, face, ATLAS BC ID ─────────────────────────
-      read( unitfile,*,iostat=ios ) bc(i)%b, bc(i)%i, bc(i)%j, bc(i)%k, bc(i)%f, bc(i)%type
+      ! Every line is read whole (Next_Line, which counts the lines of the file and skips
+      ! the blank ones as the list-directed read did), then as its values.
+      call Next_Line ( unitfile, pline, ios, nline )
+      if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%b, bc(i)%i, bc(i)%j, bc(i)%k, bc(i)%f, bc(i)%type
       if (ios/=0) then
         write(*,'(A,I9)') '[ERROR] reading BC file, bc number:',i
         stop 1
@@ -222,8 +234,13 @@ contains
         ! Connection and periodic BCs
         case(101, 201)
           if (level == 1) nconnect = nconnect + 1
-          read( unitfile,*,iostat=ios ) &
+          bc(i)%bs = IEMPTY ; bc(i)%is = IEMPTY ; bc(i)%js = IEMPTY ; bc(i)%ks = IEMPTY ; bc(i)%fs = IEMPTY
+          bc(i)%d11 = IEMPTY ; bc(i)%d12 = IEMPTY ; bc(i)%d21 = IEMPTY ; bc(i)%d22 = IEMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) &
             bc(i)%bs, bc(i)%is, bc(i)%js, bc(i)%ks, bc(i)%fs, bc(i)%d11, bc(i)%d12, bc(i)%d21, bc(i)%d22
+          if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, [ bc(i)%bs, bc(i)%is, bc(i)%js, bc(i)%ks, bc(i)%fs, &
+                                        bc(i)%d11, bc(i)%d12, bc(i)%d21, bc(i)%d22 ], 'bs is js ks fs d11 d12 d21 d22' )
           allocate ( bc(i) % Pg (nprim, 6) )
           allocate ( bc(i) % Fc (nprim, 2) )
           bc(i) % Fc = 0d0
@@ -232,14 +249,25 @@ contains
         ! Chimera overlap BC (102) and coupled multi-solver chimera (104, donors are FUSS cells)
         case(102, 104)
           if (level == 1) nchimera = nchimera + 1
-          read( unitfile,*,iostat=ios ) (bc(i)%ni(cc),cc=1,2)
+          bc(i)%ni = IEMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) (bc(i)%ni(cc),cc=1,2)
+          call Need_I ( i, bc(i)%type, nline, bc(i)%ni, 'n1 n2' )   ! also after a failed read: the counts size the arrays
           allocate(bc(i)%donorID(1:sum(bc(i)%ni),1:4))
           allocate(bc(i)%volume_fraction(1:sum(bc(i)%ni)))
+          bc(i)%donorID = IEMPTY
+          bc(i)%volume_fraction = EMPTY
           do s = 1, bc(i)%ni(1)
-            read( unitfile,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
+            call Next_Line ( unitfile, pline, ios, nline )
+            if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
+            if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, bc(i)%donorID(s,1:4), 'bD iD jD kD' )
+            if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%volume_fraction(s:s), 'vol_frac' )
           enddo
           do s = bc(i)%ni(1)+1, bc(i)%ni(1)+bc(i)%ni(2)
-            read( unitfile,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
+            call Next_Line ( unitfile, pline, ios, nline )
+            if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
+            if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, bc(i)%donorID(s,1:4), 'bD iD jD kD' )
+            if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%volume_fraction(s:s), 'vol_frac' )
           enddo
           if (sum(bc(i)%volume_fraction(1:bc(i)%ni(1))) < 0.5d0 .or. &
               sum(bc(i)%volume_fraction(bc(i)%ni(1)+1:sum(bc(i)%ni))) < 0.5d0) then
@@ -277,7 +305,10 @@ contains
         case(301)
           if (level == 1) nwall = nwall + 1
           obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
-          read(unitfile,*,iostat=ios) bc(i)%qw, bc(i)%k_rough, bc(i)%eps_wall
+          bc(i)%qw = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%qw, bc(i)%k_rough, bc(i)%eps_wall
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qw ], 'q_wall' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Wall, prescribed temperature
@@ -285,7 +316,10 @@ contains
         case(302)
           if (level == 1) nwall = nwall + 1
           obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
-          read(unitfile,*,iostat=ios) bc(i)%Tw, bc(i)%k_rough, bc(i)%eps_wall
+          bc(i)%Tw = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%Tw, bc(i)%k_rough, bc(i)%eps_wall
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%Tw ], 'T_wall' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Inlet, stag. conditions (T0, p0)
@@ -293,8 +327,13 @@ contains
         case(401)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : nsc+nrans) )
-          read( unitfile,*,iostat=ios ) &
+          bc(i)%T0 = EMPTY ; bc(i)%p0 = EMPTY ; bc(i)%rel_fac = EMPTY ; bc(i)%ci = EMPTY
+          alpha_tok = ' ' ; beta_tok = ' '
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) &
             bc(i)%T0, bc(i)%p0, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
+          if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%p0 ], 'T0 p0', &
+                                            alpha_tok, beta_tok )
           bc(i)%alpha = parse_dir_tok(alpha_tok)
           bc(i)%beta  = parse_dir_tok(beta_tok)
 
@@ -307,7 +346,7 @@ contains
           allocate( bc(i) % ci(1 : nsc+nrans) )
           ! Read as one line and split by hand (Read_Inlet_402): read as a list, a file
           ! name with a directory ended at its slash, and the values after it were lost.
-          call Read_Line ( unitfile, pline, ios )
+          call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) then
             call Read_Inlet_402 ( pline, bc(i), p0file, alpha_tok, beta_tok, ios, msg402 )
           else
@@ -317,7 +356,7 @@ contains
             block
               use MOSE_Mod_MPI, only: mpi_abort_all
               character(len=512) :: msg
-              write(msg,'(A,I0,A)') '[ERROR] Boundary record ', i, ' (inlet 402): '//trim(msg402)
+              write(msg,'(A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', i, ', type 402): '//trim(msg402)
               call mpi_abort_all(trim(msg))
             end block
           end if
@@ -331,8 +370,13 @@ contains
         case(403)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : nsc+nrans) )
-          read( unitfile,*,iostat=ios ) &
+          bc(i)%T0 = EMPTY ; bc(i)%mdot = EMPTY ; bc(i)%rel_fac = EMPTY ; bc(i)%ci = EMPTY
+          alpha_tok = ' ' ; beta_tok = ' '
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) &
             bc(i)%T0, bc(i)%mdot, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
+          if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%mdot ], 'T0 g', &
+                                            alpha_tok, beta_tok )
           bc(i)%alpha = parse_dir_tok(alpha_tok)
           bc(i)%beta  = parse_dir_tok(beta_tok)
 
@@ -342,8 +386,13 @@ contains
         case(404)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : nsc+nrans) )
-          read( unitfile,*,iostat=ios ) &
+          bc(i)%T0 = EMPTY ; bc(i)%mdot = EMPTY ; bc(i)%rel_fac = EMPTY ; bc(i)%ci = EMPTY
+          alpha_tok = ' ' ; beta_tok = ' '
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) &
             bc(i)%T0, bc(i)%mdot, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
+          if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%mdot ], 'T g', &
+                                            alpha_tok, beta_tok )
           bc(i)%alpha = parse_dir_tok(alpha_tok)
           bc(i)%beta  = parse_dir_tok(beta_tok)
 
@@ -353,8 +402,13 @@ contains
         case(405)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : nsc+nrans) )
-          read( unitfile,*,iostat=ios ) &
+          bc(i)%mach = EMPTY ; bc(i)%T0 = EMPTY ; bc(i)%pamb = EMPTY ; bc(i)%rel_fac = EMPTY ; bc(i)%ci = EMPTY
+          alpha_tok = ' ' ; beta_tok = ' '
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) &
             bc(i)%mach, bc(i)%T0, bc(i)%pamb, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
+          if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%mach, bc(i)%T0, bc(i)%pamb ], 'mach T p', &
+                                            alpha_tok, beta_tok )
           bc(i)%alpha = parse_dir_tok(alpha_tok)
           bc(i)%beta  = parse_dir_tok(beta_tok)
 
@@ -363,7 +417,10 @@ contains
         ! Second line: p_back, rel_fac
         case(406)
           if (level == 1) nio = nio + 1
-          read( unitfile,*,iostat=ios ) bc(i)%pamb, bc(i)%rel_fac
+          bc(i)%pamb = EMPTY ; bc(i)%rel_fac = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%pamb, bc(i)%rel_fac
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%pamb, bc(i)%rel_fac ], 'p_back rel_fac' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Ambient, T0 + p0 + back pressure
@@ -371,8 +428,13 @@ contains
         case(407)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : nsc+nrans) )
-          read( unitfile,*,iostat=ios ) &
+          bc(i)%T0 = EMPTY ; bc(i)%p0 = EMPTY ; bc(i)%pamb = EMPTY ; bc(i)%rel_fac = EMPTY ; bc(i)%ci = EMPTY
+          alpha_tok = ' ' ; beta_tok = ' '
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) &
             bc(i)%T0, bc(i)%p0, bc(i)%pamb, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
+          if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%p0, bc(i)%pamb ], 'T0 p0 p_back', &
+                                            alpha_tok, beta_tok )
           bc(i)%alpha = parse_dir_tok(alpha_tok)
           bc(i)%beta  = parse_dir_tok(beta_tok)
 
@@ -382,8 +444,13 @@ contains
         case(408)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : nsc+nrans) )
-          read( unitfile,*,iostat=ios ) &
+          bc(i)%T0 = EMPTY ; bc(i)%un = EMPTY ; bc(i)%rel_fac = EMPTY ; bc(i)%ci = EMPTY
+          alpha_tok = ' ' ; beta_tok = ' '
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) &
             bc(i)%T0, bc(i)%un, alpha_tok, beta_tok, bc(i)%rel_fac, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
+          if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%un ], 'T un', &
+                                            alpha_tok, beta_tok )
           bc(i)%alpha = parse_dir_tok(alpha_tok)
           bc(i)%beta  = parse_dir_tok(beta_tok)
 
@@ -392,7 +459,8 @@ contains
         case(410)
           if (level == 1) nstate = nstate + 1
           allocate ( bc(i) % Pg (nprim, 6) )
-          read(unitfile, '(A)', iostat=ios) q2d_line
+          call Next_Line ( unitfile, pline, ios, nline )
+          q2d_line = pline
           q2d_line = adjustl(q2d_line)
           ip = index(trim(q2d_line), ',')
           if (ip > 0) then
@@ -408,15 +476,26 @@ contains
         case(420)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : nsc+nrans) )
-          read( unitfile,*,iostat=ios ) &
+          bc(i)%T0 = EMPTY ; bc(i)%p0 = EMPTY ; bc(i)%mdot = EMPTY ; bc(i)%rel_fac = EMPTY ; bc(i)%ci = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) &
             bc(i)%T0, bc(i)%p0, bc(i)%psub, bc(i)%psup, bc(i)%mdot, bc(i)%rel_fac, &
             (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
+          if ( ios == 0 ) then
+            call Need_R ( i, bc(i)%type, nline, [ bc(i)%T0, bc(i)%p0 ], 'T0 p0' )
+            call Need_R ( i, bc(i)%type, nline, [ bc(i)%mdot, bc(i)%rel_fac ], 'g rel_fac' )
+            call Need_R ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
+            call Need_R ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
+          end if
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Manifold
         case(501)
           if (level == 1) nmanifold = nmanifold + 1
-          read(unitfile,*,iostat=ios) bc(i)%bs, bc(i)%fs
+          bc(i)%bs = IEMPTY ; bc(i)%fs = IEMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%bs, bc(i)%fs
+          if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, [ bc(i)%bs, bc(i)%fs ], 'bs fs' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! SRM grain boundary
@@ -428,8 +507,13 @@ contains
           ! come from ATLAS and was left at zero when that output dropped it, which
           ! silently injected the propellant gas cold. It is now evaluated from Taf
           ! and the product composition against the thermodynamic tables, in BC_SRM.
-          read(unitfile,*,iostat=ios) bc(i)%Taf, bc(i)%aCoeff, bc(i)%n, bc(i)%pRef, &
+          bc(i)%Taf = EMPTY ; bc(i)%aCoeff = EMPTY ; bc(i)%n = EMPTY ; bc(i)%pRef = EMPTY ; bc(i)%ci = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%Taf, bc(i)%aCoeff, bc(i)%n, bc(i)%pRef, &
             bc(i)%rhoGrain, bc(i)%SF_geo, (bc(i)%ci(s), s = 1, nsc)
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%Taf, bc(i)%aCoeff, bc(i)%n, bc(i)%pRef ], &
+                                        'T_af a n p_ref' )
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! GSI - Melting
@@ -439,7 +523,11 @@ contains
           if (level == 1) ngsi   = ngsi   + 1
           allocate( bc(i) % ci(1 : nsc) )
           obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
-          read(unitfile,*,iostat=ios) bc(i)%cp_wall, bc(i)%Tw, bc(i)%Ti_wall, bc(i)%dh_wall, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+          bc(i)%Tw = EMPTY ; bc(i)%qrad = EMPTY ; bc(i)%ci = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%cp_wall, bc(i)%Tw, bc(i)%Ti_wall, bc(i)%dh_wall, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%Tw, bc(i)%qrad ], 'T_wall q_rad' )
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! GSI - Pyrolysis
@@ -449,7 +537,11 @@ contains
           if (level == 1) ngsi   = ngsi   + 1
           allocate( bc(i) % ci(1 : nsc) )
           obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
-          read(unitfile,*,iostat=ios) bc(i)%GSI_pyro_model_id, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+          bc(i)%qrad = EMPTY ; bc(i)%ci = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%GSI_pyro_model_id, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! GSI - Surface reactions
@@ -458,7 +550,10 @@ contains
           if (level == 1) nwall  = nwall  + 1
           if (level == 1) ngsi   = ngsi   + 1
           obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
-          read(unitfile,*,iostat=ios) bc(i)%GSI_surf_reac_id, bc(i)%qrad
+          bc(i)%qrad = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%GSI_surf_reac_id, bc(i)%qrad
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! GSI - Surface reactions + pyrolysis
@@ -468,15 +563,24 @@ contains
           if (level == 1) ngsi   = ngsi   + 1
           allocate( bc(i) % ci(1 : nsc) )
           obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
-          read(unitfile,*,iostat=ios) bc(i)%GSI_pyro_model_id, bc(i)%GSI_surf_reac_id, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+          bc(i)%qrad = EMPTY ; bc(i)%ci = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%GSI_pyro_model_id, bc(i)%GSI_surf_reac_id, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Coupled multi-solver wall
         case(103)
           if (level == 1) ncoupled = ncoupled + 1
           obj_io_bc%coupling_flag( bc(i)%b , bc(i)%f ) = .true.
-          read( unitfile,*,iostat=ios ) &
+          bc(i)%bs = IEMPTY ; bc(i)%is = IEMPTY ; bc(i)%js = IEMPTY ; bc(i)%ks = IEMPTY ; bc(i)%fs = IEMPTY
+          bc(i)%d11 = IEMPTY ; bc(i)%d12 = IEMPTY ; bc(i)%d21 = IEMPTY ; bc(i)%d22 = IEMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) &
             bc(i)%bs, bc(i)%is, bc(i)%js, bc(i)%ks, bc(i)%fs, bc(i)%d11, bc(i)%d12, bc(i)%d21, bc(i)%d22
+          if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, [ bc(i)%bs, bc(i)%is, bc(i)%js, bc(i)%ks, bc(i)%fs, &
+                                        bc(i)%d11, bc(i)%d12, bc(i)%d21, bc(i)%d22 ], 'bs is js ks fs d11 d12 d21 d22' )
           allocate(bc(i)%ext_flux(nprim))
           bc(i)%ext_flux = 0.0
           allocate ( bc(i) % Pg (1, 6) )
@@ -678,6 +782,134 @@ contains
     if (has_tdep_bc) write(*,'(A)') '   Time-dependent BC detected'
 
   end subroutine Print_BC_Summary
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Next_Line: the next line of the boundary file that is not blank (Read_Line), as the list-directed read skipped
+  !   blank lines; nline counts every line read, blank ones included, so it is the line number in the file.
+  subroutine Next_Line ( unit, line, ios, nline )
+    implicit none
+    integer, intent(in)                        :: unit
+    character(len=:), allocatable, intent(out) :: line
+    integer, intent(out)                       :: ios
+    integer, intent(inout)                     :: nline
+
+    do
+      call Read_Line ( unit, line, ios )
+      if ( ios /= 0 ) exit
+      nline = nline + 1
+      if ( len_trim(line) > 0 ) exit
+    end do
+
+  end subroutine Next_Line
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Need_R, Need_I: stop the run (Empty_Field) on the first of the values v of record n, type btype, line nline of the
+  !   file, still EMPTY after the read of its property line. names: their names, blank-separated, in the order of the
+  !   line; the last name stands for the values after it (a list of mass fractions, say).
+  subroutine Need_R ( n, btype, nline, v, names )
+    implicit none
+    integer, intent(in)          :: n, btype, nline
+    real(R8), intent(in)         :: v(:)
+    character(len=*), intent(in) :: names
+    ! Local
+    integer :: k
+
+    do k = 1, size(v)
+      if ( v(k) == EMPTY ) call Empty_Field ( n, btype, nline, Name_Of ( names, k ) )
+    end do
+
+  end subroutine Need_R
+
+
+  subroutine Need_I ( n, btype, nline, v, names )
+    implicit none
+    integer, intent(in)          :: n, btype, nline
+    integer, intent(in)          :: v(:)
+    character(len=*), intent(in) :: names
+    ! Local
+    integer :: k
+
+    do k = 1, size(v)
+      if ( v(k) == IEMPTY ) call Empty_Field ( n, btype, nline, Name_Of ( names, k ) )
+    end do
+
+  end subroutine Need_I
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Need_Inlet: the fields of an inlet line, in its order: the leading values lead (names), alpha, beta, rel_fac, the
+  !   mass fractions and the turbulence values.
+  subroutine Need_Inlet ( n, nline, bc, lead, names, alpha_tok, beta_tok )
+    use MOSE_Advanced_Types_m, only: MOSE_bc_type
+    use MOSE_Global_m,         only: nsc, nrans
+    implicit none
+    integer, intent(in)            :: n, nline
+    type(MOSE_bc_type), intent(in) :: bc
+    real(R8), intent(in)           :: lead(:)
+    character(len=*), intent(in)   :: names, alpha_tok, beta_tok
+
+    call Need_R ( n, bc%type, nline, lead, names )
+    if ( len_trim(alpha_tok) == 0 ) call Empty_Field ( n, bc%type, nline, 'alpha' )
+    if ( len_trim(beta_tok) == 0 ) call Empty_Field ( n, bc%type, nline, 'beta' )
+    call Need_R ( n, bc%type, nline, [ bc%rel_fac ], 'rel_fac' )
+    call Need_R ( n, bc%type, nline, bc%ci(nrans+1:nrans+nsc), 'massf' )
+    call Need_R ( n, bc%type, nline, bc%ci(1:nrans), 'turb' )
+
+  end subroutine Need_Inlet
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Empty_Field: stop the run on the field what of the property line of record n, type btype, line nline of the file,
+  !   left empty.
+  subroutine Empty_Field ( n, btype, nline, what )
+    use MOSE_Mod_MPI, only: mpi_abort_all
+    implicit none
+    integer, intent(in)          :: n, btype, nline
+    character(len=*), intent(in) :: what
+    ! Local
+    character(len=240) :: msg
+
+    write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
+      '): the value of '//trim(what)//' is empty (docs/user/boundary-conditions.md)'
+    call mpi_abort_all ( trim(msg) )
+
+  end subroutine Empty_Field
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Name_Of: the k-th blank-separated word of names, or the last one when there are fewer.
+  pure function Name_Of ( names, k ) result ( w )
+    implicit none
+    character(len=*), intent(in) :: names
+    integer, intent(in)          :: k
+    character(len=len(names))    :: w
+    ! Local
+    integer :: p, q, m
+
+    w = ' '
+    p = 1
+    m = 0
+    do
+      do while ( p <= len_trim(names) )
+        if ( names(p:p) /= ' ' ) exit
+        p = p + 1
+      end do
+      if ( p > len_trim(names) ) exit
+      q = index ( names(p:), ' ' )
+      if ( q == 0 ) then
+        q = len(names) + 1
+      else
+        q = p + q - 1
+      end if
+      m = m + 1
+      w = names(p:q-1)
+      if ( m == k ) exit
+      p = q
+    end do
+
+  end function Name_Of
 
 
   !─────────────────────────────────────────────────────────────────────────────

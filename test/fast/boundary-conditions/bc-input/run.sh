@@ -10,6 +10,8 @@
 #  times decrease, must stop the run at set-up, with a non-zero exit code and
 #  the name of the file. A table that starts after the start of the run must
 #  give the run of the same table with its first value repeated at t = 0.
+#  A property line with an empty required value must stop the run at set-up,
+#  naming the line of bc.txt, the record, its type and the value.
 #  Gas: test/common/Air.
 #===============================================================================
 set -uo pipefail
@@ -112,6 +114,21 @@ else
   echo "  [FAIL] exit code $rc, the decreasing times were not reported (see OUTPUT/decreasing.log)"
   fail=1
 fi
+
+echo "-- property lines that cannot be read as the values of their type --"
+bad() {   # bad <kind> <pattern>: the run must stop with a non-zero code and a message matching the pattern
+  python3 -B make_case.py bad "$1" || exit 1
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/bad-$1.log" 2>&1
+  local rc=$?
+  if [[ $rc -ne 0 ]] && grep -a -q -E "$2" "OUTPUT/bad-$1.log"; then
+    echo "  [ok  ] $1: stopped at set-up, exit code $rc"
+  else
+    echo "  [FAIL] $1: exit code $rc, the line was not refused as it should (see OUTPUT/bad-$1.log)"
+    fail=1
+  fi
+}
+bad empty 'bc.txt line 4 \(record 2, type 406\): the value of rel_fac is empty'
 
 if [[ $fail -ne 0 ]]; then
   echo "BCInput: FAILED"

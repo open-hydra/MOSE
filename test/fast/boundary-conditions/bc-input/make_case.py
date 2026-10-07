@@ -17,6 +17,7 @@ value repeated at t = 0 (early.dat), bit for bit.
 Usage (from the test directory):
   python3 -B make_case.py case NAME      INPUT/ic.tec, INPUT/bc.txt naming the table NAME, and the table under that name
   python3 -B make_case.py same A B       exit status 0 when the fields A and B hold the same values (cell data, bit for bit)
+  python3 -B make_case.py bad KIND       the case of p0.dat with the line of bc.txt that BAD[KIND] gives
 """
 import math
 import os
@@ -72,6 +73,21 @@ def write_case(name):
             f.write(f"{t:.15E} {p:.15E}\n")
 
 
+BAD = {                                              # line of INPUT/bc.txt (0-based) and what it becomes
+    "empty": (3, f"{PB:.6E}, ,\n"),                 # line 4, the outlet (record 2): rel_fac empty
+}
+
+
+def write_bad(kind):
+    write_case("p0.dat")
+    n, text = BAD[kind]
+    with open("INPUT/bc.txt") as f:
+        lines = f.readlines()
+    lines[n] = text
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(lines))
+
+
 def cell_values(path):
     with open(path) as f:
         lines = f.read().splitlines()
@@ -83,6 +99,8 @@ def main():
     what = sys.argv[1]
     if what == "case":
         write_case(sys.argv[2])
+    elif what == "bad":
+        write_bad(sys.argv[2])
     elif what == "same":
         a, b = cell_values(sys.argv[2]), cell_values(sys.argv[3])
         sys.exit(0 if a == b and len(a) > 0 else 1)

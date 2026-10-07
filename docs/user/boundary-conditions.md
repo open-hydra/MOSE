@@ -73,6 +73,11 @@ order gives the same solution and the same wall output).
 
 Some BC types carry additional data on the second line (see [BC Types](#bc-types)). For types that carry no data (symmetry, extrapolation, axisymmetry), the second line is **absent**.
 
+Every value of the data line is required, except those with a default value: `k_rough` and `eps_wall` (0), `cp_wall`,
+`Ti_wall` and `dh_wall` (0), `pyro_id` and `reac_id` (0), `rho_grain` (0), `SF_geo` (1), `p_sub` and `p_sup` (0). An
+empty value (two commas with nothing between them) keeps that default; an empty required value stops the run at set-up,
+with the line of `bc.txt`, the record, its type and the name of the value. Blank lines between records are skipped.
+
 ## BC Types
 
 The following table lists all numeric BC type codes used in `bc.txt`, their physical meaning, and the format of the required data line.
