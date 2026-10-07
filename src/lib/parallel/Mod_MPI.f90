@@ -34,7 +34,7 @@ module MOSE_Mod_MPI
   public :: mpi_reduce_sum_r8, mpi_reduce_sum_r8_array
   public :: mpi_allreduce_norm2
   public :: mpi_bcast_logical, mpi_bcast_integer
-  public :: mpi_abort_all
+  public :: mpi_abort_all, mpi_stop_all
   public :: check_mpi_error
 
 contains
@@ -238,7 +238,7 @@ contains
   !> Rank 0 reads the file and broadcasts what it
   !> found, so that every rank takes the same decision: no file (found false),
   !> the assignment in owner (found true), or an error, which every rank prints
-  !> before the run stops.
+  !> before every rank stops (mpi_stop_all, exit code 1).
   subroutine read_decomposition_map(path, nb, blk_dims, blk_ncells, owner, found)
     character(len=*), intent(in) :: path
     integer, intent(in)  :: nb
@@ -272,7 +272,9 @@ contains
 #ifdef USE_MPI
       if (mpi_size_ > 1) call MPI_BARRIER(MPI_COMM_WORLD, ierr)
 #endif
-      call mpi_abort_all('decomposition map error (see above)')
+      ! Every rank has the error, broadcast by rank 0: the ranks stop together, so that the output of every rank reaches the
+      ! log, and not with MPI_ABORT, which only makes a best attempt to stop the processes
+      call mpi_stop_all('decomposition map error (see above)')
     end if
     found = (status == MAP_READ)
   end subroutine read_decomposition_map
@@ -612,6 +614,41 @@ contains
     error stop
 #endif
   end subroutine mpi_abort_all
+
+
+  !> Stop of every rank on an error that every rank has found, a decision taken
+  !> on all ranks (the outcome of reading the decomposition map, which rank 0
+  !> broadcasts; a file that every rank reads): each rank prints the message and
+  !> flushes its output, the ranks wait for each other, so that what any rank
+  !> printed before (rank 0 the explanation of the error) is out before any rank
+  !> ends, then the ranks finalize MPI and end with exit code 1. MPI_ABORT
+  !> (mpi_abort_all) makes only a "best attempt" to abort the processes
+  !> (MPI-4.1, section 11.4.2): with Intel MPI 2021.12 the launcher at times
+  !> ended before writing out what the ranks printed (measured), and the first
+  !> rank to call it can stop another one before that one prints. A program that
+  !> ends normally calls MPI_FINALIZE in every process, which can then give an
+  !> exit code (MPI-4.1, section 11.2.2).
+  !> Precondition: every rank must reach this call on the same error, from the
+  !> same data (files that every rank reads at set-up, the outcome of a
+  !> broadcast). A decision that can differ between ranks, such as one on a file
+  !> read again during the run, which the user can rewrite while the ranks read
+  !> it, must be reduced first (mpi_allreduce_max_r8 of a flag); else the ranks
+  !> that do not stop wait in their next collective call and the run hangs.
+  subroutine mpi_stop_all(message)
+    character(len=*), intent(in) :: message
+#ifdef USE_MPI
+    integer :: ierr
+    write(*,'(A,I4,A,A)') ' [RANK ', mpi_rank_, '] STOP: ', trim(message)
+    flush(output_unit)
+    ! MPI_BARRIER returns at a rank only after every rank has entered it (MPI-4.1, section 6.3)
+    call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+    call MPI_FINALIZE(ierr)
+#else
+    write(*,'(A,A)') ' STOP: ', trim(message)
+    flush(output_unit)
+#endif
+    error stop 1
+  end subroutine mpi_stop_all
 
 
 end module MOSE_Mod_MPI
