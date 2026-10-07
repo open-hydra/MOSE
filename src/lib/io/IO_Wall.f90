@@ -174,6 +174,8 @@ contains
     use MOSE_Lib_BC_Fluxes_GSI_Melting
     use MOSE_Lib_BC_Fluxes_GSI_Pyrolysis
     use MOSE_Lib_BC_Fluxes_GSI_Reactions
+    use MOSE_Config_Types_m,    only: obj_rot
+    use MOSE_Lib_RotatingFrame, only: RF_Is_Stationary_Face, RF_Wall_Velocity, RF_Face_Center
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
@@ -186,6 +188,7 @@ contains
     integer, allocatable  :: order(:), first(:,:), next(:,:)
     integer  :: Ig, Jg, Kg
     real(R8) :: r_keep(nprim), g_keep(nprim)   ! residual of the wall cell and its ghost cell, before the call
+    real(R8) :: r_fc(3)                        ! centre of a wall face that does not rotate with the frame
 
     ! Count total BC cells across all viscous faces
     n_wall_total = 0
@@ -250,13 +253,29 @@ contains
           Ovar = 0d0
           select case ( domain % bc(i) % type )
 
+            ! A wall that does not rotate with the frame moves with -(Omega x r) in it: the wall velocity
+            ! that BC_Fluxes gives it (RF_Wall_Velocity at the face centre)
             case (301) ! wall: prescribed heat flux
-              call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
-                                  k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
+              if (obj_rot%enabled .and. RF_Is_Stationary_Face(Bm,Fm)) then
+                call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
+                call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
+                                    w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
+                                    rec = domain % bc(i) )
+              else
+                call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
+                                    k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
+              endif
 
             case (302) ! wall: prescribed temperature
-              call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
-                                         k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
+              if (obj_rot%enabled .and. RF_Is_Stationary_Face(Bm,Fm)) then
+                call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
+                                           w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
+                                           rec = domain % bc(i) )
+              else
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
+                                           k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
+              endif
 
             ! Gas-surface interaction walls: when the surface is inert the GSI
             ! routine reports nothing, and the face is an ordinary wall at the
