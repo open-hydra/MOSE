@@ -10,13 +10,14 @@
 #  test:
 #    Inlets (inlets): inlet boundary conditions
 #    BCInput (bc-input): property lines of bc.txt
+#    RotatingFrame (rotating-frame): stationary walls of a rotating frame
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(inlets bc-input)
+PARTS=(inlets bc-input rotating-frame)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

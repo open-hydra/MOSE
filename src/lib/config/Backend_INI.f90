@@ -72,15 +72,14 @@ contains
       call fini%get(section_name=trim(codename)//'-Probes', option_name='probe'//trim(str(.true.,i)), val=probes_name(i), error=error)
     enddo
     
-    ! Count the stationary faces for the rotating frame
+    ! Count the stationary faces for the rotating frame: stationary-face-1, -2, ... up to the first missing
     obj_rot%n_stationary = 0
-    i = 0
     do
-      call fini%get(section_name=trim(codename)//'-Rotating-Frame',option_name='stationary-face-'//trim(str(.true.,i+1)), val=wholestring, error=error)
+      call fini%get(section_name=trim(codename)//'-Rotating-Frame', &
+                    option_name='stationary-face-'//trim(str(.true.,obj_rot%n_stationary+1)), val=wholestring, error=error)
       if (error /= 0) exit
       obj_rot%n_stationary = obj_rot%n_stationary + 1
     enddo
-    i = i + 1 
     if (obj_rot%n_stationary > 0) allocate(obj_rot%stationary_face_str(obj_rot%n_stationary))
     
   end subroutine Scan_Ini

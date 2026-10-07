@@ -41,7 +41,8 @@ test/
 │   │   └── quasi2d-symmetry/  # Quasi-2D, symmetry k faces: round-off in w does not grow
 │   ├── boundary-conditions/   # Boundary conditions
 │   │   ├── inlets/            # Inlet boundary conditions: direction normal, total conditions
-│   │   └── bc-input/          # Property lines of bc.txt read as written or refused
+│   │   ├── bc-input/          # Property lines of bc.txt read as written or refused
+│   │   └── rotating-frame/    # Rotating frame: stationary faces read and listed, the run ends
 │   ├── mesh-geometry/         # Mesh geometry
 │   │   ├── wall-distance/     # Distance to the wall = exact distance to the wall surface
 │   │   └── mesh-type/         # Plane mesh, wedge or periodic sector from every node
@@ -237,6 +238,7 @@ seconds on a CI runner.
 | `BoundaryConditions`/`Inlets` | an ambient inlet (407) with the flow direction `normal` gives the field of the angles the token stands for on that face, to the bit, with no transverse velocity; inlets at total conditions in a 1-D tube of air, one forward Euler step with first-order reconstruction: the mass flux of each inlet face equals that of the face state within 1e-9 of rho a — ambient (407) and inlet (401) faces with the gas at rest and p0 = 2 p (subsonic inflow, 0.7701 rho a) or 36 p (choked, normal Mach 1, 20.83 rho a), on both ends; an inlet with p0 below the pressure the gas of the cell reaches at rest is a slip wall; an ambient (407) face that the reservoir cannot feed, with the gas of the cell moving in at 0.5 a or 1.2 a, is an outlet at p_back (0.0590 and 0.0389 rho a out), and at rest at p_stop with p_back above it (no mass) | `test/fast/boundary-conditions/inlets` |
 | `TimeIntegration`/`TimeControl` | second order in time with a time-dependent inlet (BC 402) for RK2 and RK3; a time table holds its first value before its first instant; `res-threshold` does not end a time-accurate run | `test/fast/time-integration/time-control` |
 | `Conservation` | closed slip-wall box conserves total mass to round-off | `test/fast/conservation` |
+| `BoundaryConditions`/`RotatingFrame` | a rigid-body rotating frame with two `stationary-face-<n>` entries: the run ends within 60 s with exit code 0 and its set-up summary lists the two stationary patches | `test/fast/boundary-conditions/rotating-frame` |
 | `OpenMPEquiv` | 1 vs 4 threads bit-identical: the Sod tube, and a block overset on another whose four chimera faces meet at its edges (Navier–Stokes) | `test/fast/openmp-equiv` |
 | `Connections`/`ChimeraFace` | the viscous stencil of chimera faces, one evaluation of the residual of a linear field on two blocks that overlap with their ghost cells on cells of the other block: with u = G y in 2-D and u = G (y + z) in 3-D the y and z momentum residual is zero also in the cells at the ends of the chimera faces; with a radial velocity on a 2-D wedge of 1 degree the momentum residual of every cell is that of the same mesh as one block (within 1e-9 of μ G / H) | `test/fast/connections/chimera-face` |
 | `Restart` | split + restart reproduces the uninterrupted run; at a restart a missing probe file is written again and an existing one is appended to, with the rows of the uninterrupted run | `test/fast/restart` |
