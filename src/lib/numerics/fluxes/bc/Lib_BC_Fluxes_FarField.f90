@@ -19,7 +19,7 @@ contains
   ! (Stagn_Inflow), whatever the sign of the cell velocity; otherwise the face is an outlet at
   ! BC_pback (Outflow, or Outlet_Moving_In when the gas of the cell moves in).
   subroutine BC_FarField ( Bm, Im, Jm, Km, Fm, Blk, BC_T0, BC_p0, BC_pback, &
-                                 BC_rel_fac, BC_alpha, BC_beta, BC_ci, BC_RANS, BC_mdot )
+                                 BC_alpha, BC_beta, BC_ci, BC_RANS, BC_mdot )
     use MOSE_Config_Types_m,        only: obj_rot
     use MOSE_Lib_RotatingFrame,     only: RF_Convert_BC_Inflow
     use FLINT_Lib_Thermodynamic,    only: f_Rtot
@@ -28,7 +28,7 @@ contains
     implicit none
     type(MOSE_block_type), intent(inout) :: Blk
     integer,  intent(in)    :: Bm, Im, Jm, Km, Fm
-    real(R8), intent(in)    :: BC_T0, BC_p0, BC_pback, BC_rel_fac, BC_alpha, BC_beta
+    real(R8), intent(in)    :: BC_T0, BC_p0, BC_pback, BC_alpha, BC_beta
     real(R8), intent(in)    :: BC_ci(nsc), BC_RANS(1:)
     real(R8), intent(out)   :: BC_mdot
     ! Local
@@ -66,7 +66,7 @@ contains
     end if
     call Stagn_Inflow ( Bound_Prim, Bound_Sound, Bound_Gamma, Riem,           &
                                alpha_loc, beta_loc, BC_ci, BC_RANS, T0_loc, p0_loc, &
-                               BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux, BC_mdot, enters )
+                               BC_Sign, t_Vec, Normal, Area, Flux, BC_mdot, enters )
     if ( .not. enters ) then
       if ( BC_Sign * Un >= 0d0 ) then
         ! The gas of the cell is at rest or moves out: the outlet treatment of 406 at BC_pback

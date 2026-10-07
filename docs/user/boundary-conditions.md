@@ -131,7 +131,7 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 |-------|-------------|
 | `alpha` | In-plane flow angle [rad] or the token `normal` (face-normal inflow) |
 | `beta` | Out-of-plane flow angle [rad] or `normal` |
-| `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation) |
+| `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation); no effect on `401`, `402` and `407` |
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
 | `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |
 
@@ -145,7 +145,8 @@ and the invariant $a + \tfrac{\gamma-1}{2}\,w$ that reaches the face from inside
 above $p_0$. `407` is then an outlet at `p_back`: with the gas of the cell at rest or moving out, the outlet treatment of
 `406`; with the gas moving in, the face takes the state that the outgoing wave gives at the pressure
 $\min(p_\text{back}, p_\text{stop})$, where its velocity points out (at $p_\text{stop}$ the gas is at rest at the face), and
-it has no flux when the gas moves in at $2a/(\gamma-1)$ or faster.
+it has no flux when the gas moves in at $2a/(\gamma-1)$ or faster. `rel_fac` has no effect on these three types: when the gas
+enters, the face state exists with $p_0$ as given.
 
 **Time-varying data (`402`, `410`).** The `p0_file` of type `402` lists
 `time  p0` pairs, one per line, with `p0` in bar; a first line containing
