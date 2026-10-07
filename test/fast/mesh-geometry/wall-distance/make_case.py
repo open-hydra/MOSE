@@ -25,7 +25,8 @@ images of the wall too.
   periodic  2-D channel periodic in x (connections 201 between the i faces, period 1), wall on the j = 1 face for x in
             [0, 0.5] only, symmetry on the rest; near x = 1 the nearest wall is the image of the wall that starts at x = 1.
   pipe      the same on a 1-degree axisymmetric wedge: pipe of radius 0.5 periodic in x, wall on the outer face for x in
-            [0, 0.5] only; the distance is the meridional one.
+            [0, 0.5] only; the distance is the meridional one. The axis nodes are at 1e-6 of the radial size of the
+            first cell, as in the meshes of MOSE, so that no face has zero area.
   sector    3-D sector of 60 degrees of an annulus (radii 0.5 and 1), closed by the rotational periodicity (type 200 on
             the k faces), wall on the inner face for the first half of the sector only; near the end of the sector the
             nearest wall is the image of the wall in the next sector, turned by 60 degrees.
@@ -244,7 +245,7 @@ def periodic_nodes(name):
                 elif name == "span":
                     xyz = (0.25 * i, 0.5 * (j / nj) ** 1.5, SPAN * k / nk)
                 elif name == "pipe":
-                    r = 0.5 * (j / nj) ** 0.8                  # axis at j = 0, wall at r = 0.5
+                    r = 0.5 * (j / nj) ** 0.8 if j > 0 else 1.0e-6 * 0.5 / nj ** 0.8   # axis at j = 0, wall at r = 0.5
                     xyz = (x, r * math.cos(0.5 * DELTA), (-1.0, 1.0)[k] * r * math.sin(0.5 * DELTA))
                 else:
                     r = 0.5 + 0.5 * (j / nj) ** 1.5             # inner wall at j = 0

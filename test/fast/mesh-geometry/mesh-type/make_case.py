@@ -11,8 +11,9 @@ round-off, with the digits they are written with, does not change the type: rela
             is plane. The wall distance, read back from the Spalart-Allmaras source (gas at rest, nu~ uniform, one
             explicit Euler step, as in WallDistance), must be the plane distance y_c - 0.5 within 1e-9; on a wedge it
             would be measured from the x axis.
-  flipwedge 2-D wedge of 1 degree, right-handed with the axis on the j = NJ face (r = 0 exactly there) and the wall on
-            the j = 0 face (r = 1): a wedge, so the distance read back must be the meridional one, 1 - r_c, within 1e-9.
+  flipwedge 2-D wedge of 1 degree, right-handed with the axis on the j = NJ face and the wall on the j = 0 face (r = 1):
+            a wedge, so the distance read back must be the meridional one, 1 - r_c, within 1e-9. The axis nodes are at
+            1e-6 of the radial size of the first cell, as in the meshes of MOSE, so that no face has zero area.
   wedge5    two blocks of a wedge of 5 degrees as flipwedge, that do not touch (x from 0 to 1.2 and from 2 to 3.2), with
             radii falling as (j/NJ)^1.5 and (j/NJ)^1.12, every coordinate written with 5 significant digits: a wedge,
             whose nodes match a turn only to the round-off of those digits, and whose blocks give angles that differ
@@ -90,7 +91,8 @@ def slab_nodes():
 def flipwedge_nodes():
     ni, nj = 12, 10
     xs = [0.1 * i for i in range(ni + 1)]
-    rs = [1.0 - (j / nj) ** 1.5 for j in range(nj)] + [0.0]                     # 1 at j = 0, exactly 0 at j = NJ
+    rs = [1.0 - (j / nj) ** 1.5 for j in range(nj)]                             # 1 at j = 0
+    rs += [1.0e-6 * rs[-1]]                                                     # axis at j = NJ, 1e-6 of the first cell
     c, s = math.cos(0.5 * DELTA), math.sin(0.5 * DELTA)
     zsign = (1.0, -1.0)                                                         # right-handed with the axis at j = NJ
     return [[[(x, r * c, zsign[k] * r * s) for x in xs] for r in rs] for k in range(2)]

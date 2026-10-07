@@ -153,7 +153,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F19 | Mesh type (plane slab with y falling along j, right-handed wedge with the axis on its last j face, a wedge of 5 degrees in two blocks with coordinates of 5 significant digits, a plane slab far from the x axis (y from 1 to 1.001, 1e-4 thick), a wedge of 1 degree with coordinates of 2 significant digits, a plane slab with its k planes tilted by 2 % of its thickness, 3-D sectors of 90 degrees with the periodic plane turned by half a cell more (100 cells in k) or a tenth (20 cells) but at two nodes, a wedge block with a plane block, 3-D slab periodic in k with type 200) | plane and meridional wall distance (to the wall of the nodes as written) within 1e-9, and the type in the set-up summary; set-up stop with a non-zero exit code (2 digits, tilted slab, shifted sectors, mixed blocks); uniform flow kept within 1e-12 | ☑ `MeshGeometry`/`MeshType` | ~2 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
-Current `ctest -L fast`: **19 tests, ~99 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **19 tests, ~100 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, TimeIntegration,
 BoundaryConditions, Conservation, OpenMPEquiv, Connections, Restart,
 InputChecks, MMSResiduals, AblatingWall, MeshGeometry, QCR2000Stress).
