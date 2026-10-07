@@ -242,6 +242,7 @@ contains
           if (bc(i)%type == 102) then
             allocate ( bc(i) % Pg (nprim, 6) )
           else
+            if (level == 1) ncoupled = ncoupled + 1
             ! 104: coupled wall as for 103 (solid T stencil, coupling flux, wall output)
             obj_io_bc%coupling_flag( bc(i)%b , bc(i)%f ) = .true.
             allocate ( bc(i) % Pg (1, 6) )
