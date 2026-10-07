@@ -16,6 +16,8 @@ contains
   !─────────────────────────────────────────────────────────────────────────────
   ! BC 401/402: Subsonic inlet — stagnation total temperature T0 and total
   ! pressure p0.  Flow direction from BC_alpha/BC_beta (or face-normal if specified).
+  ! The gas enters when p0 is above the pressure that the gas of the cell reaches at rest
+  ! (Stagn_Inflow); otherwise error = 1 and the caller makes the face a slip wall.
   subroutine BC_Inlet_StagnCond ( Bm, Im, Jm, Km, Fm, Blk, BC_T0, BC_p0, &
                                    BC_rel_fac, BC_alpha, BC_beta, BC_ci, BC_RANS, BC_mdot, error )
     use MOSE_Config_Types_m, only: obj_rot
@@ -35,6 +37,7 @@ contains
     real(R8) :: Un, Bound_rho, Bound_Rgas, Bound_Sound, Bound_Gamma, Riem
     real(R8) :: T0_loc, p0_loc, alpha_loc, beta_loc, Face_Rgas_loc, Mach_rel_dummy
     real(R8) :: Flux(nprim)
+    logical  :: enters
 
     error = 0
 
@@ -42,12 +45,6 @@ contains
                                   Int_i, Int_j, Int_k, Normal, Area, t_Vec, BC_Sign,   &
                                   Bound_Prim, Int_Prim, Un, Bound_rho, Bound_Rgas,    &
                                   Bound_Sound, Bound_Gamma, Riem )
-
-    ! Reject if flow is directed outward (pure inflow BC)
-    if (BC_Sign * Un >= 0d0) then
-      error = 1
-      return
-    end if
 
     call Compute_Inflow_Direction (Normal, BC_alpha, BC_beta, alpha, beta)
 
@@ -68,7 +65,13 @@ contains
     Flux = 0d0
     call Stagn_Inflow ( Bound_Prim, Bound_Sound, Bound_Gamma, Riem,          &
                                alpha_loc, beta_loc, BC_ci, BC_RANS, T0_loc, p0_loc, &
-                               BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux, BC_mdot )
+                               BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux, BC_mdot, enters )
+
+    ! The reservoir does not drive gas in: a pure inlet lets none out, the face is a slip wall
+    if ( .not. enters ) then
+      error = 1
+      return
+    end if
 
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
 
@@ -465,15 +468,19 @@ contains
   ! Subsonic inflow: prescribed stagnation conditions (T0, p0).
   ! Solves the characteristic equations to find the face state compatible with
   ! the interior Riemann invariant and the prescribed total conditions.
+  ! The gas enters (enters = .true.) when p0 is above p_stop = p (Riem/a)**(2 gamma/(gamma-1)),
+  ! the pressure that the gas of the cell reaches when the outgoing wave brings it to rest:
+  ! with Riem > 0 that is YC < 0. Otherwise Flux = 0 and the caller applies its own branch.
   subroutine Stagn_Inflow ( Prim, Sound, Gamma, Riem, alpha, beta, &
                                  BC_ci, BC_RANS, BC_T0, BC_p0, BC_rel_fac, BC_Sign, &
-                                 t_Vec, Normal, Area, Flux, Fmass )
+                                 t_Vec, Normal, Area, Flux, Fmass, enters )
     use FLINT_Lib_Thermodynamic
     implicit none
     real(R8), intent(in)  :: Prim(nprim), Sound, Gamma, Riem, alpha, beta
     real(R8), intent(in)  :: BC_ci(nsc), BC_RANS(1:), BC_T0, BC_p0, BC_rel_fac
     real(R8), intent(in)  :: BC_Sign, t_Vec(3), Normal(3), Area
     real(R8), intent(out) :: Flux(nprim), Fmass
+    logical,  intent(out) :: enters
     ! Local
     integer  :: s, iter_discr
     real(R8) :: Face_Rgas, Sound0, Coef_D, Coef_C, YA, YB, YC, Discr, Un3, Sound3
@@ -498,6 +505,18 @@ contains
     check = ( XC * XE - XF * XB )
     E1 = ( XF * XA - XC * XD ) / check ! ??
     E2 = ( XD * XB - XE * XA ) / check ! ??
+
+    ! Does the reservoir drive gas in? Riem > 0 and YC < 0 (p0 > p_stop); then the quadratic below
+    ! has the inflow root, since its discriminant is at least YB**2
+    Face_Rgas = sum ( BC_ci * Ri_tab )
+    Sound0 = sqrt ( Gamma * Face_Rgas * BC_T0 )
+    Coef_C = ( BC_p0 / Prim(np) )**( ( Gamma - 1d0 ) / Gamma )
+    Coef_C = Coef_C * ( ( Sound / Sound0 )**2 )
+    YC = Riem**2 - Coef_C * Sound0**2
+    enters = ( Riem > 0d0 .and. YC < 0d0 )
+    Flux  = 0d0
+    Fmass = 0d0
+    if ( .not. enters ) return
 
     discr = -1.d0
     BC_p0_try = BC_p0

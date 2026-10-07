@@ -135,6 +135,18 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
 | `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |
 
+**Inlets at total conditions (`401`, `402`, `407`).** The gas enters when $p_0$ is above
+$p_\text{stop} = p\,\bigl(1 + \tfrac{\gamma-1}{2}\,w/a\bigr)^{2\gamma/(\gamma-1)}$, the pressure that the gas of
+the boundary cell (pressure $p$, speed of sound $a$, velocity $w$ along the outward normal) reaches when the outgoing
+acoustic wave brings it to rest: a cell at rest takes the inflow as soon as $p_0 > p$, and a cell moving out takes it
+when $p_0$ is high enough to turn the flow back. The face state then follows from $T_0$, $p_0$, the flow direction
+and the invariant $a + \tfrac{\gamma-1}{2}\,w$ that reaches the face from inside. When the gas does not enter, `401` and
+`402` make the face a slip wall: they let no gas out, and reflect a wave that reaches them with a stagnation pressure
+above $p_0$. `407` is then an outlet at `p_back`: with the gas of the cell at rest or moving out, the outlet treatment of
+`406`; with the gas moving in, the face takes the state that the outgoing wave gives at the pressure
+$\min(p_\text{back}, p_\text{stop})$, where its velocity points out (at $p_\text{stop}$ the gas is at rest at the face), and
+it has no flux when the gas moves in at $2a/(\gamma-1)$ or faster.
+
 **Time-varying data (`402`, `410`).** The `p0_file` of type `402` lists
 `time  p0` pairs, one per line, with `p0` in bar; a first line containing
 `periodic` makes the table periodic. MOSE interpolates linearly in time;
