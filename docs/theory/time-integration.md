@@ -121,11 +121,87 @@ Carpenter et al. [5]. On a fixed mesh, with $\Delta t \to 0$, both schemes keep
 their order in time (second for Heun, third for SSP-RK3). Refining mesh and
 step together at a fixed CFL number, the boundary error lowers the global
 order of the third-order scheme towards two (in the fourth-order experiments
-of [5], table I.a, the rate settles at 2.5 in the L2 norm), also when the
-boundary data enter through the boundary flux as in MOSE; Heun stays second
-order. Keeping the full order would need intermediate boundary values built
-from the time derivatives of the data [5], which tabulated data do not
-provide.
+of [5], table I.a, the rate settles at 2.5 in the L2 norm); Heun stays second
+order. Both statements follow from the boundary error derived below. The
+experiments of [5] show the same loss with a weak (SAT) imposition of the
+data, and its appendix A shows that data entering as a source term give the
+same scheme; the characteristic boundary fluxes of MOSE are outside that
+analysis and are checked by the tests (`TimeIntegration`/`TimeControl`).
+
+[5] gives two ways to keep the full order. One imposes no boundary data at
+the intermediate stages, only at the end of the step: the scheme keeps its
+order, also for nonlinear systems, but in the experiments of [5] the CFL
+number had to be lower by at least a factor of two, and often much more
+(text after table I.a). The other imposes intermediate values built from the
+data and its time derivatives (equations (22)–(27) of [5]) at the same time
+step; it is general for linear problems only, and for nonlinear systems [5]
+shows it for the third-order Runge–Kutta scheme of Heun (stage times 0, 1/3,
+2/3; section 3), not for SSP-RK3. MOSE uses neither: tabulated data have no
+time derivatives, and the step would shrink.
+
+#### Boundary error of the stage-time data
+
+The derivation of [5], section 2, carried out for the two schemes of MOSE
+([5] does it for the classical fourth-order scheme and notes that it can be
+done for any Runge–Kutta scheme). Model problem ([5], equations (1)–(4)):
+$u_t + u_x = 0$ for $x > 0$, $u(0,t) = g(t)$, semi-discretised as
+$\mathrm{d}V/\mathrm{d}t = (1/h)\,DV$ for the interior entries of $V$, with the
+boundary entry $v_0 = g$. Split $D$ by its first row and column,
+
+$$
+D = \begin{pmatrix} d_{00} & r^{\mathsf T} \\ c & B \end{pmatrix},
+$$
+
+so that $c$ couples the interior entries to the boundary one, and let
+$\lambda = \Delta t/h$. Each stage computes every entry with $D$ and then sets
+the boundary entry to the data at its stage time; that change is $G^k e_0$, as
+in [5], equations (9)–(16). With the exact solution in $V^n$,
+$\lambda^k (D^k V^n)_0 = \Delta t^k g^{(k)}(t^n) + \dots$ ([5], equation (18)),
+and the scheme without the boundary changes is accurate to its own order.
+
+*Heun* (stage times 0, 1):
+$V^{(1)} = V^n + \lambda D V^n + G^0 e_0$,
+$V^{n+1} = \tfrac12 V^n + \tfrac12\bigl(V^{(1)} + \lambda D V^{(1)}\bigr) + G^1 e_0$, with
+$G^0 = g(t^n + \Delta t) - g - \Delta t\,g' = \tfrac12 \Delta t^2 g'' + O(\Delta t^3)$.
+The interior entries of $V^{n+1}$ differ from those of the scheme without the
+boundary changes by
+
+$$
+\tfrac{\lambda}{2}\,G^0\,c = \tfrac{\lambda}{4}\,\Delta t^2\,g''\,c + O(\Delta t^3) .
+$$
+
+*SSP-RK3* (stage times 0, 1, ½):
+$V^{(1)} = V^n + \lambda D V^n + G^0 e_0$,
+$V^{(2)} = \tfrac34 V^n + \tfrac14\bigl(V^{(1)} + \lambda D V^{(1)}\bigr) + G^1 e_0$,
+$V^{n+1} = \tfrac13 V^n + \tfrac23\bigl(V^{(2)} + \lambda D V^{(2)}\bigr) + G^2 e_0$, with
+$G^0$ as above and, from the boundary entry of $V^{(2)}$ before the change,
+
+$$
+G^1 = g(t^n + \tfrac12\Delta t) - g - \tfrac12\Delta t\,g' - \tfrac14\Delta t^2 g'' - \tfrac14 G^0 - \tfrac{\lambda}{4}\,d_{00}\,G^0 + O(\Delta t^3)
+= -\tfrac14\Delta t^2 g'' - \tfrac{\lambda}{4}\,d_{00}\,G^0 + O(\Delta t^3) .
+$$
+
+The interior entries of $V^{n+1}$ differ by
+
+$$
+\bigl(\tfrac{\lambda}{3}G^0 + \tfrac{2\lambda}{3}G^1\bigr)\,c + \tfrac{\lambda^2}{6}\,G^0\,(d_{00}\,c + Bc) :
+$$
+
+the terms in $\lambda\,\Delta t^2$ cancel ($\tfrac16 - \tfrac16$), and so do those in
+$d_{00}\,c$, which leaves
+
+$$
+\tfrac{\lambda^2}{12}\,\Delta t^2\,g''\,Bc + O(\Delta t^3) .
+$$
+
+Both errors sit next to the boundary, where $c$ and $Bc$ are not zero. At a
+fixed CFL number they are $O(\Delta t^2)$ per step, first order there per unit
+of time, as equations (20)–(21) of [5] for the fourth-order scheme, and the
+global order is two ([5], abstract; it cannot exceed two, after equation
+(21)): SSP-RK3 drops from three to two, and two is the order of Heun. On a
+fixed mesh they are $\Delta t^3 g''c/(4h)$ and $\Delta t^4 g''Bc/(12h^2)$ per step,
+$O(\Delta t^2)$ and $O(\Delta t^3)$ per unit of time: the orders of the schemes. The
+derivation is linear and one-dimensional, like that of [5].
 
 ### State update
 
