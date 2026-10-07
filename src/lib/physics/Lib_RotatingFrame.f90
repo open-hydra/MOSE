@@ -121,7 +121,9 @@ contains
     integer  :: k
     real(R8) :: norm
 
-    if ( obj_rot%model == "" ) then
+    ! Off unless the model is rigid-body: none (the registry default) or empty. enabled has no
+    ! default initialization, so every model must set it
+    if ( obj_rot%model /= "rigid-body" ) then
       obj_rot%enabled = .false.
       return
     elseif ( obj_rot%model == "rigid-body" ) then
