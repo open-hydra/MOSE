@@ -253,6 +253,9 @@ contains
                  status='old',position='append',form='formatted')
           endif
           call Drop_Probe_Rows ( obj_io%restart%cycle, simulation%domain(1)%time )
+          ! The same for the torque of the rotating frame: rows of iteration, time, torque, power
+          if (obj_rot%enabled .and. mpi_is_root) &
+            call Drop_Rows_After ( 'OUTPUT/torque.dat', 4, obj_io%restart%cycle, simulation%domain(1)%time )
         endif
         ! Time-based probe rows fall on the multiples of their dtime: a restart that goes on in time
         ! writes the next one not reached yet; a new transient starts from the first, as a new run

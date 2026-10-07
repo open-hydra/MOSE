@@ -118,7 +118,8 @@ nightly/local tier.
   output), time-based output, the multigrid level, a transient started from a steady
   solution, and
   the residual history and probe rows of a restart from a solution older than the end
-  of the run that wrote it, also from history files cut by hand without a final newline.
+  of the run that wrote it, also from history files cut by hand without a final newline,
+  and the rows of `torque.dat` of the rotating frame in the same restart.
 - ☑ **I4 — Conservation invariant**: closed slip-wall box, shock-tube IC; total mass
   conserved to round-off (~2e-13). *Done:* `test/fast/conservation`. (Energy invariant
   is a possible future addition.)

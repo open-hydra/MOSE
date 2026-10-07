@@ -582,6 +582,7 @@ contains
     use MOSE_Global_m, only: np
     use MOSE_Lib_Ghost, only: Is_Wall
     use MOSE_Mod_MPI, only: is_local_block, mpi_is_root, mpi_reduce_sum_r8
+    use MOSE_Config_Types_m, only: obj_sim_param
 
     implicit none
     type(MOSE_domain_type), intent(in) :: domain
@@ -590,6 +591,7 @@ contains
     ! Local
     integer,  save :: unit_torque = -1
     logical,  save :: first_call  = .true.
+    logical  :: exists
     integer  :: i, Bm, Im, Jm, Km, Fm, Dir, Fi, Fj, Fk
     real(R8) :: r_face(3), r_rel(3), F_wall(3), torque_vec(3)
     real(R8) :: T_axial, p_face, sign_fm
@@ -660,11 +662,20 @@ contains
     ! Only root writes the output
     if (mpi_is_root) then
       if (first_call) then
-        open(newunit=unit_torque, file='OUTPUT/torque.dat', &
-             status='replace', form='formatted')
-        write(unit_torque, '(A)') &
-          '#        iter              time   torque_axial (pressure, non-dim)' // &
-          '         power (T*omega, non-dim)'
+        ! A restart goes on after the rows of the run it continues, as residual-history.dat and
+        ! the probe files (Wrap_Setup first drops the rows written after the solution it reads);
+        ! a new run, or a restart without the file, starts it with its header
+        inquire(file='OUTPUT/torque.dat', exist=exists)
+        if (obj_sim_param%newrun .or. .not. exists) then
+          open(newunit=unit_torque, file='OUTPUT/torque.dat', &
+               status='replace', form='formatted')
+          write(unit_torque, '(A)') &
+            '#        iter              time   torque_axial (pressure, non-dim)' // &
+            '         power (T*omega, non-dim)'
+        else
+          open(newunit=unit_torque, file='OUTPUT/torque.dat', &
+               status='old', position='append', form='formatted')
+        end if
         first_call = .false.
       end if
 

@@ -42,6 +42,16 @@
 #              20, p2.txt with the first characters of its next row ("2" of
 #              24). The restart drops the broken row, ends each file with a
 #              newline and goes on as the run in one go of probes.
+#   torque     time-accurate, a solution every 10 iterations, with the
+#              rotating frame on (rigid-body, omega = 1 rad/s about x):
+#              OUTPUT/torque.dat gets a header line and a row at every
+#              iteration, as residual-history.dat. 25 iterations, field.vtm
+#              removed, then the restart from field2 (iteration 20) for 30
+#              iterations, against 50 in one go: torque.dat must keep its
+#              header and rows 1 to 20, drop rows 21 to 25 of the first part
+#              and go on as the run in one go. The Sod tube has no wall
+#              faces, so the torque and power columns are 0: the rows differ
+#              by their iteration and time.
 #
 #  Reuses the Sod inputs (test/1D/Sod79); nothing else is stored here.
 #===============================================================================
@@ -96,12 +106,14 @@ write_ini() {
   local dir=$1 case=$2 iters=$3 newrun=$4
   {
     printf '%s\n' '[MOSE-Parameters]' "iter-threshold = $iters" 'res-threshold = 1e-300' "newrun = $newrun" ''
-    printf '%s\n' '[MOSE-Physics]' 'equations = euler' ''
+    printf '%s\n' '[MOSE-Physics]' 'equations = euler'
+    [[ $case == torque ]] && printf '%s\n' 'rotational-frame = rigid-body'
+    printf '\n'
     printf '%s\n' '[MOSE-Numerics]' 'time-scheme = RK3' 'integration-variables = cons' \
                   'space-reconstruction = MUSCL' 'flux-limiter = vanleer' 'riemann-solver = HLLC'
     case $case in
       steady)    printf '%s\n' 'cfl = 0.5' 'cfl-rise-threshold = 30' 'time-accurate = false' ;;
-      dtime|probes) printf '%s\n' 'cfl = 0.9' 'time-accurate = true' ;;
+      dtime|probes|torque) printf '%s\n' 'cfl = 0.9' 'time-accurate = true' ;;
       multigrid|multigrid-tecplot) printf '%s\n' 'cfl = 0.5' 'time-accurate = false' ;;
       transient) if [[ $newrun == true ]]; then printf '%s\n' 'cfl = 0.5' 'time-accurate = false'
                  else printf '%s\n' 'cfl = 0.9' 'time-accurate = true'; fi ;;
@@ -118,6 +130,8 @@ write_ini() {
                                '[p1]' 'variables = rho(1) u p' 'dtime = 0.01' 'index-position = 1 50 1 1' '' \
                                '[p2]' 'variables = rho(1) u p' 'diter = 4' 'index-position = 1 30 1 1' '' \
                                '[p3]' 'variables = rho(1) u p' 'diter = 7' 'dtime = 0.03' 'index-position = 1 70 1 1' ;;
+      torque)    printf '%s\n' 'sol-diter = 10' '' '[MOSE-Rotating-Frame]' 'omega = 1.0' 'axis = 1.0 0.0 0.0' \
+                               'origin = 0.0 0.0 0.0' ;;
       multigrid) printf '%s\n' 'sol-diter = 4' '' '[MOSE-Multigrid]' 'levels = 2' 'level2-iter = 10' \
                                "level1-iter = $iters" ;;
       multigrid-tecplot) printf '%s\n' '' '[MOSE-Multigrid]' 'levels = 2' 'level2-iter = 10' "level1-iter = $iters" ;;
@@ -237,8 +251,33 @@ write_ini runs/probes-cut/split probes 30 false;  solve runs/probes-cut/split re
 python3 -B "$CHECK" runs/probes/full/OUTPUT runs/probes-cut/split/OUTPUT > runs/probes-cut/compare.log 2>&1 || status=1
 sed "s/^Restart (vtk raw)/  probes-cut/" runs/probes-cut/compare.log
 
+# torque: the rotating frame writes OUTPUT/torque.dat, a header line and a row per residual row. 25 iterations, then
+# the restart from the solution of iteration 20 (field.vtm removed, as in probes): torque.dat, compared with the other
+# outputs, must be that of the run in one go, which must hold the header and the rows of iterations 1 to 50
+prepare runs/torque/full
+write_ini runs/torque/full torque 50 true;    solve runs/torque/full full
+prepare runs/torque/split
+write_ini runs/torque/split torque 25 true;   solve runs/torque/split first
+rm -f runs/torque/split/OUTPUT/field.vtm
+write_ini runs/torque/split torque 30 false;  solve runs/torque/split restart
+python3 -B "$CHECK" runs/torque/full/OUTPUT runs/torque/split/OUTPUT > runs/torque/compare.log 2>&1 || status=1
+sed "s/^Restart (vtk raw)/  torque/" runs/torque/compare.log
+python3 -B - runs/torque/full/OUTPUT/torque.dat <<'EOF' || status=1
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+lines = [l for l in p.read_text().splitlines() if l.strip()] if p.is_file() else []
+heads = [k for k, l in enumerate(lines) if l.lstrip().startswith('#')]
+its = [int(l.split()[0]) for l in lines if not l.lstrip().startswith('#')]
+ok = heads == [0] and its == list(range(1, 51))
+print('  torque: torque.dat of the run in one go, %d header line(s) and %d rows, iterations %s (%s)'
+      % (len(heads), len(its), '%d to %d' % (its[0], its[-1]) if its else '-',
+         'ok' if ok else 'one header line first and the rows of iterations 1 to 50 expected'))
+sys.exit(0 if ok else 1)
+EOF
+
 if [[ $status -ne 0 ]]; then
   fail "a restart does not carry on the counters"
 fi
-echo "RestartCounters: ok — steady, dtime, multigrid and probes restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline, and a transient from a steady solution starts at t = 0"
+echo "RestartCounters: ok — steady, dtime, multigrid, probes and rotating-frame (torque.dat) restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline, and a transient from a steady solution starts at t = 0"
 exit 0

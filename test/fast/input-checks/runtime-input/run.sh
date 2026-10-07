@@ -42,8 +42,8 @@
 #     iteration 20 (else the test says so and fails):
 #     a. omega from 1e4 to 2e4 rad/s: from iteration 21 the run must go on as
 #        one that restarts from its solution of iteration 20 with omega = 2e4
-#        from its set-up for 10 iterations: residual-history.dat, the
-#        solutions of iterations 21, 28 and 30 and the wall output of
+#        from its set-up for 10 iterations: residual-history.dat, torque.dat,
+#        the solutions of iterations 21, 28 and 30 and the wall output of
 #        iteration 30 byte for byte
 #        (the Coriolis and centrifugal sources and the velocity of the
 #        stationary wall all at 2e4 rad/s), and the log must give the omega
@@ -287,7 +287,7 @@ prepare_frame "$d"; write_frame "$d" 20 true rigid-body 1.0e4 '1 1'
 write_frame "$d" 10 false rigid-body 2.0e4 '1 1'
 ( cd "$d" && "$SOLVER" > solve2.log 2>&1 )
 same=yes
-for f in residual-history.dat field3.vtm field4.vtm field.vtm vtk/field3Block1.vts vtk/field4Block2.vts \
+for f in residual-history.dat torque.dat field3.vtm field4.vtm field.vtm vtk/field3Block1.vts vtk/field4Block2.vts \
          vtk/fieldBlock1.vts vtk/fieldBlock2.vts vtk/fieldBlock3.vts vtk/fieldBlock4.vts vtk/wallB1F1.vts; do
   if ! cmp -s "runs/frame-omega/OUTPUT/$f" "$d/OUTPUT/$f"; then
     same=no

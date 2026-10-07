@@ -260,8 +260,9 @@ contains
   !>          row starts on a new line: the values are counted to find where each row starts. A time is
   !>          compared as printed, to 1e-12 relative: the row of the step of the solution may print its
   !>          time rounded up in the last digit. A last row with fewer than ncol values (a file cut in
-  !>          the middle of a row) is dropped too. The file is truncated and closed, and ends with a
-  !>          newline (End_With_Newline); a missing file is left alone.
+  !>          the middle of a row) is dropped too. A line that starts with '#' (a header) is kept and
+  !>          holds no values. The file is truncated and closed, and ends with a newline
+  !>          (End_With_Newline); a missing file is left alone.
   subroutine Drop_Rows_After ( file, ncol, iteration, time )
     implicit none
     character(len=*), intent(in) :: file
@@ -281,6 +282,13 @@ contains
     do
       read(unit,'(A)',iostat=ios) line
       if (ios /= 0) exit
+      ! A header line is kept and holds no values
+      if (len_trim(line) > 0) then
+        if (line(verify(line, ' '):verify(line, ' ')) == '#') then
+          nkeep = nkeep + 1
+          cycle
+        endif
+      endif
       if (mod(nval, ncol) == 0 .and. len_trim(line) > 0) then
         ! The line starts a row: its first value, line(k1:k2), is an iteration or a time
         k1 = verify(line, ' ')
