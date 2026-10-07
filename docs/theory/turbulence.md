@@ -652,7 +652,9 @@ distance to the corner or the end.
 
 - Each face of a wall boundary (types 301, 302, 503–505) is taken as the four
   triangles between its centre and its sides, which are the face itself when
-  the face is plane, as on every 2-D and axisymmetric mesh. The distance to a
+  the face is plane and convex, as on every 2-D and axisymmetric mesh (on a
+  plane face that is not convex, a pathological cell, the centre can fall
+  outside the face, and the triangles are not the face). The distance to a
   triangle is the distance to its plane when the projection of the point falls
   inside it, otherwise the distance to the nearest side.
 - On a 2-D axisymmetric wedge (BC 200) the distance is measured in the
