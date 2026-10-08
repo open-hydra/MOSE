@@ -179,7 +179,11 @@ mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D"
 # records give the same bits.
 # Sector radial: a 3-D sector closed by the rotational periodicity (type 200 on
 # the k faces) keeps a radial flow its own mirror image.
-mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;1D;2D;3D")
+# Sector viscous: the two k faces of a 3-D sector closed by type 200 are
+# interior faces of the annulus, and carry their viscous flux: the sector of
+# 90 degrees gives the viscous force of the same cells inside the sector of
+# 180 degrees, and the normal stress of symmetry planes on a radial flow.
+mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;physics;1D;2D;3D")
 
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
 # at a restart a missing probe file is written again, an existing one appended,
@@ -253,7 +257,9 @@ mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;numerics
 # rest next to a wall, or flowing along it on stretched cells, changes nu~ as
 # with SA.
 # Part 4: the viscous force on the axisymmetric wedge (Homann's flow and a field
-# with dilatation and swirl) converges to the Navier-Stokes one with second order.
+# with dilatation and swirl) converges to the Navier-Stokes one with second order;
+# a viscous run with the axis at r = 0 on the wedge or on a 3-D sector stops at setup,
+# and on the polar line of a 3-D mesh with diffusive-metric = inverse-mean or mean.
 # Part 5: next to a wall the Spalart-Allmaras sources see the gradient of nu~
 # that the wall value nu~ = 0 gives (linear profile at rest).
 mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")

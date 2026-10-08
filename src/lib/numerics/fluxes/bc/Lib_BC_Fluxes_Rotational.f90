@@ -181,7 +181,7 @@ contains
   end subroutine BC_Rotational_Periodic_Eul
 
 
-  !> Viscous flux on a face (5 or 6) of the 2-D axisymmetric wedge, one cell in k.
+  !> Viscous flux on a face (5 or 6) of type 200: the 2-D axisymmetric wedge (one cell in k) and the 3-D sector.
   !>
   !> The k ghost of the cell is the cell rotated by delthe about the x axis
   !> (Ghost_Axysimmetry), so the face is the face between the cell and that
@@ -193,16 +193,25 @@ contains
   !> inverse metrics, as on the connections (Face_Metric); the ghost metric is
   !> the exact rotation of the cell (BC_Extrapolate_Metrics).
   !>
-  !> Only the momentum is updated. The flow on the wedge is axisymmetric by
+  !> On the wedge only the momentum is updated. The flow there is axisymmetric by
   !> construction, so, as for the inviscid flux above, the mass, energy and
   !> scalar fluxes of faces 5 and 6 are equal and opposite and cancel; the
   !> momentum fluxes do not. Without swirl their sum is the normal viscous
   !> stress of the faces, tau_thetatheta = 2 mu u_r/r + lambda div(u), acting
   !> along -r: the -tau_thetatheta/r of the axisymmetric equations, next to the
   !> +p/r of the inviscid flux. With swirl the faces also carry tau_rtheta and
-  !> tau_xtheta. Not handled here: the 3-D rotational periodicity (ndir = 3),
-  !> and a planar 2-D mesh with type 200 on k (delthe = 0), where the image is
-  !> the cell itself and the fluxes of faces 5 and 6 are the same and cancel.
+  !> tau_xtheta.
+  !>
+  !> On a 3-D sector (ndir = 3) the image of the cell next to face 6 is the cell
+  !> next to face 5 (the source, Ks) turned forward by the sector angle, and the
+  !> face is computed once, by the record of face 6, as the inviscid flux: the
+  !> image row is the source row turned, the image metric the source metric
+  !> turned (its rows are vectors), wall distance and roughness are the mean of
+  !> the cell and the source, as on an interior face; the cell gets -F, the
+  !> source the same flux with its momentum turned back. A translated sector
+  !> (delthe = 0) is the same without the turn. Not handled: a planar 2-D mesh
+  !> with type 200 on k (delthe = 0), where the image is the cell itself and the
+  !> fluxes of faces 5 and 6 are the same and cancel.
   subroutine BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, Blk, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Lib_Metrics, only : delthe
     use MOSE_Lib_Diffusive, only : Compute_Diffusive_Flux, Face_Metric
@@ -213,32 +222,51 @@ contains
     real(R8), intent(in) :: Sc, Sct, Prt, Prl
     logical, intent(in) :: soot_enabled
     ! Local
-    integer :: Dir, Face_i, Face_j, Face_k, Kg, modfm2, v
-    real(R8) :: Normal(3), Area, M(3,3), Prim(nprim), Flux(nprim), Gradient(nprim,3), g1, g2, g3
+    integer :: Dir, Face_i, Face_j, Face_k, Kg, Ks, modfm2, v, d
+    real(R8) :: Normal(3), Area, M(3,3), Mg(3,3), Prim(nprim), Flux(nprim), Gradient(nprim,3), g1, g2, g3
     real(R8), dimension(nprim) :: Visc_c, Visc_g, Visc_im, Visc_ip, Visc_jm, Visc_jp
     real(R8), dimension(nprim) :: Rot_im, Rot_ip, Rot_jm, Rot_jp
 
-    ! No wedge: delthe exactly zero, written as two ordered comparisons (same result, also for -0 and NaN)
-    if (ndir == 3 .or. (delthe >= 0d0 .and. delthe <= 0d0)) return
+    ! No wedge on a 2-D mesh: delthe exactly zero, written as two ordered comparisons (same result, also for -0 and NaN)
+    if (ndir < 3 .and. (delthe >= 0d0 .and. delthe <= 0d0)) return
+    ! 3-D sector: the record of face 6 computes the face for both cells
+    if (ndir == 3 .and. Fm /= 6) return
 
     call Face_Index ( Fm, Dir, Im, Jm, Km, Face_i, Face_j, Face_k )
     modfm2 = 1 - 2 * mod(Fm,2)     ! +1 on face 6 (image at k+1), -1 on face 5 (image at k-1)
     Kg = Km - guide(Fm,3)          ! k of the image of the cell (its ghost)
+    Ks = Km                        ! k of the source of the image: the cell itself on a wedge,
+    if (ndir == 3) Ks = Blk % dim(3) - Km + 1   ! the cell next to the opposite k face on a sector
 
     Normal = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     Area   = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
-    M = Face_Metric ( Blk % M(Im,Jm,Km) % c, Blk % M(Im,Jm,Kg) % c )
+    if (ndir == 3) then
+      ! Metric of the image, the source turned: x' = R x gives grad xi' = R grad xi, each row turned as a vector
+      Mg = Blk % M(Im,Jm,Ks) % c
+      do d = 1, 3
+        g2 = Mg(d,2) ; g3 = Mg(d,3)
+        Mg(d,2) = g2 * cos(delthe) + guide(Fm,3) * g3 * sin(delthe)
+        Mg(d,3) = g2 * sin(delthe) * (-guide(Fm,3)) + g3 * cos(delthe)
+      end do
+    else
+      Mg = Blk % M(Im,Jm,Kg) % c
+    end if
+    M = Face_Metric ( Blk % M(Im,Jm,Km) % c, Mg )
 
     call Visc_Variables ( Blk % P(:,Im,Jm,Km), Visc_c )
     call Visc_Variables ( Blk % P(:,Im,Jm,Kg), Visc_g )
+    call Visc_Variables ( Blk % P(:,Im-1,Jm,Ks), Rot_im )
+    call Visc_Variables ( Blk % P(:,Im+1,Jm,Ks), Rot_ip )
+    call Visc_Variables ( Blk % P(:,Im,Jm-1,Ks), Rot_jm )
+    call Visc_Variables ( Blk % P(:,Im,Jm+1,Ks), Rot_jp )
+    Rot_im = Rotated ( Rot_im )
+    Rot_ip = Rotated ( Rot_ip )
+    Rot_jm = Rotated ( Rot_jm )
+    Rot_jp = Rotated ( Rot_jp )
     call Visc_Variables ( Blk % P(:,Im-1,Jm,Km), Visc_im )
     call Visc_Variables ( Blk % P(:,Im+1,Jm,Km), Visc_ip )
     call Visc_Variables ( Blk % P(:,Im,Jm-1,Km), Visc_jm )
     call Visc_Variables ( Blk % P(:,Im,Jm+1,Km), Visc_jp )
-    Rot_im = Rotated ( Visc_im )
-    Rot_ip = Rotated ( Visc_ip )
-    Rot_jm = Rotated ( Visc_jm )
-    Rot_jp = Rotated ( Visc_jp )
 
     ! Gradients in computational space: k across the face, i and j along it
     Gradient(:,3) = ( Visc_g - Visc_c ) * modfm2
@@ -253,13 +281,26 @@ contains
       Gradient(v,3) = g1*M(1,3) + g2*M(2,3) + g3*M(3,3)
     end do
 
-    ! The image has the wall distance and roughness of the cell
+    ! The image has the wall distance and roughness of its source: the face takes their mean with the cell, as an
+    ! interior face (on a wedge the source is the cell)
     Prim = 0.5d0 * ( Blk % P(:,Im,Jm,Km) + Blk % P(:,Im,Jm,Kg) )
-    call Compute_Diffusive_Flux ( Prim, Gradient, Area, Normal, Blk % yn(Im,Jm,Km), Blk % k_rough(Im,Jm,Km), &
+    call Compute_Diffusive_Flux ( Prim, Gradient, Area, Normal, &
+                                  0.5d0 * ( Blk % yn(Im,Jm,Km) + Blk % yn(Im,Jm,Ks) ), &
+                                  0.5d0 * ( Blk % k_rough(Im,Jm,Km) + Blk % k_rough(Im,Jm,Ks) ), &
                                   Flux, Sc, Sct, Prt, Prl, soot_enabled )
 
-    ! Residual update: momentum only (see above)
-    Blk % r(nu:nw,Im,Jm,Km) = Blk % r(nu:nw,Im,Jm,Km) - modfm2 * Flux(nu:nw)
+    if (ndir == 3) then
+      ! Residual update of the two cells of the face: the cell next to face 6, and the source next to face 5 with the
+      ! momentum turned back, as the inviscid flux
+      Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) - Flux
+      g2 = Flux(nv) ; g3 = Flux(nw)
+      Flux(nv) =  g2 * cos(delthe) + g3 * sin(delthe)
+      Flux(nw) = -g2 * sin(delthe) + g3 * cos(delthe)
+      Blk % r(:,Im,Jm,Ks) = Blk % r(:,Im,Jm,Ks) + Flux
+    else
+      ! Residual update: momentum only (see above)
+      Blk % r(nu:nw,Im,Jm,Km) = Blk % r(nu:nw,Im,Jm,Km) - modfm2 * Flux(nu:nw)
+    end if
 
     contains
 

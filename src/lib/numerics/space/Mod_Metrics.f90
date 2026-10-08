@@ -63,7 +63,8 @@ contains
       call Compute_Norm_Area ( domain % blk(b) )
     enddo
 
-    ! A viscous run on the 2-D axisymmetric wedge stops when the axis is exactly at r = 0 (Check_Wedge_Axis)
+    ! A viscous run on the 2-D axisymmetric wedge or on a 3-D sector stops when the axis is exactly at r = 0
+    ! (Check_Wedge_Axis)
     if ( model > 0 ) call Check_Wedge_Axis ( domain )
 
     if (model>1) then
@@ -161,37 +162,82 @@ contains
   end subroutine Setup_Metrics
 
 
-  !> A viscous run on the 2-D axisymmetric wedge (type 200 on the k faces, one cell in k) stops at setup when a boundary
-  !> face has zero area, that is when the axis is exactly at r = 0, with every diffusive-metric. The faces of the wedge
-  !> (BC_Rotational_Periodic_Visc) take the derivative in r across the axis with the ghost cell one cell away, but behind a
-  !> face of zero area the ghost cell is a copy of the cell (Ghost_Symmetry with a zero normal): they see half of
-  !> d u_r/dr, and the hoop stress of the first row of cells is wrong (by 1/6 of it in a Homann flow). The meshes of MOSE
-  !> put the axis nodes at a small radius, 1e-6 of the radial size of the first cell.
+  !> A viscous run on the 2-D axisymmetric wedge (type 200 on the k faces, one cell in k), or on a 3-D sector closed by
+  !> type 200 on its k faces, stops at setup when a boundary face of a block so closed has zero area, that is when the
+  !> axis is exactly at r = 0, with every diffusive-metric. The faces of type 200 (BC_Rotational_Periodic_Visc) take the
+  !> derivative in r across the axis with the ghost cell one cell away, but behind a face of zero area the ghost cell is a
+  !> copy of the cell (Ghost_Symmetry with a zero normal): they see half of d u_r/dr, and the hoop stress of the first row
+  !> of cells is wrong (by 1/6 of it in a Homann flow on the wedge; on a sector of four cells of 1 degree, by 1/12 next to
+  !> the faces of type 200 with diffusive-metric = stencil and by 1/6 with inverse-mean). The meshes of MOSE put the axis
+  !> nodes at a small radius, 1e-6 of the radial size of the first cell.
+  !> On the polar line of a 3-D mesh (a block around the axis, not closed by type 200) the faces on the axis have zero area
+  !> too. The stencil metric places their ghost cells at the cells and is exact there for a linear field; with
+  !> diffusive-metric = inverse-mean or mean the viscous force of the first row of cells grows as the mesh is refined (for a
+  !> linear field, whose exact force is zero, 31.6, 80.6 and 164.5 N/m^3 with inverse-mean on 5 x 4 x 8, 10 x 8 x 16 and
+  !> 20 x 16 x 32 cells of the polar case of MMSResiduals): a viscous run stops at setup and names stencil.
   subroutine Check_Wedge_Axis ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Global_m, only: ndir
     use MOSE_Lib_Metrics, only: delthe
     use MOSE_Lib_BC_Fluxes, only: Face_Index
     use MOSE_Mod_MPI, only: is_local_block, mpi_abort_all
+    use MOSE_Config_Types_m, only: obj_space_scheme
     implicit none
     type(MOSE_domain_type), intent(in) :: domain
     ! Local
     integer :: r, b, dir, fi, fj, fk
+    logical :: polar
+    logical, allocatable :: closed(:)
+    character(len=12) :: metric
 
-    ! Not a wedge: the same test as BC_Rotational_Periodic_Visc (delthe exactly zero, as two ordered comparisons)
-    if ( ndir == 3 .or. ( delthe >= 0d0 .and. delthe <= 0d0 ) ) return
+    ! The blocks closed by type 200: none when delthe is exactly zero (two ordered comparisons, as in
+    ! BC_Rotational_Periodic_Visc); in 2-D every block is then a wedge, in 3-D delthe is not zero only with sectors turned
+    ! about the x axis (Check_Mesh_Type), the blocks with a type-200 record on faces 5 and 6, as there
+    allocate ( closed(domain % nb) )
+    closed = .false.
+    if ( .not. ( delthe >= 0d0 .and. delthe <= 0d0 ) ) then
+      closed = ( ndir < 3 )
+      if ( ndir == 3 ) then
+        do r = 1, domain % nbound
+          if ( domain % bc(r) % type == 200 .and. domain % bc(r) % f >= 5 ) closed(domain % bc(r) % b) = .true.
+        enddo
+      end if
+    end if
+    ! The other blocks of a 3-D mesh, with diffusive-metric = inverse-mean or mean: a polar line
+    polar = ( ndir == 3 .and. .not. obj_space_scheme % stencil_metric )
+    if ( .not. ( any ( closed ) .or. polar ) ) return
+    metric = 'mean'
+    if ( obj_space_scheme % inverse_metric ) metric = 'inverse-mean'
     do r = 1, domain % nbound
       b = domain % bc(r) % b
-      if ( .not. is_local_block(b) ) cycle
+      if ( .not. is_local_block(b) .or. .not. ( closed(b) .or. polar ) ) cycle
       call Face_Index ( domain % bc(r) % f, dir, domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k, fi, fj, fk )
       if ( domain % blk(b) % dir(dir) % f(fi,fj,fk) % a > 0d0 ) cycle
-      write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] block ', b, ', cell', domain % bc(r) % i, domain % bc(r) % j, &
-                                            domain % bc(r) % k, ', face ', domain % bc(r) % f, &
-                                            ': a face of zero area on the 2-D axisymmetric wedge (type 200):'
-      write(*,'(A)') ' [ERROR]   the axis is exactly at r = 0, and the hoop stress of the first row of cells would be wrong'
-      write(*,'(A)') ' [ERROR]   (by 1/6 of it in a Homann flow). Put the axis nodes at a small radius, 1e-6 of the radial'
-      write(*,'(A)') ' [ERROR]   size of the first cell, as the meshes of MOSE do.'
-      call mpi_abort_all ( 'axis of the 2-D axisymmetric wedge at r = 0 (see above)' )
+      if ( .not. closed(b) ) then
+        write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] block ', b, ', cell', domain % bc(r) % i, domain % bc(r) % j, &
+                                              domain % bc(r) % k, ', face ', domain % bc(r) % f, &
+                                              ': a face of zero area (as on the axis of a 3-D mesh), with diffusive-metric = '// &
+                                              trim(metric)//':'
+        write(*,'(A)') ' [ERROR]   with this metric the viscous force of the first row of cells next to such a face grows as the'
+        write(*,'(A)') ' [ERROR]   mesh is refined. Use diffusive-metric = stencil, exact there, with symmetry (300) on the axis.'
+        call mpi_abort_all ( 'polar line of a 3-D mesh with diffusive-metric = '//trim(metric)//' (see above)' )
+      else if ( ndir == 3 ) then
+        write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] block ', b, ', cell', domain % bc(r) % i, domain % bc(r) % j, &
+                                              domain % bc(r) % k, ', face ', domain % bc(r) % f, &
+                                              ': a face of zero area on the 3-D sector (type 200 on the k faces):'
+        write(*,'(A)') ' [ERROR]   the axis is exactly at r = 0, and the hoop stress of the first row of cells would be wrong'
+        write(*,'(A)') ' [ERROR]   (by up to 1/6 of it in a Homann flow). Put the axis nodes at a small radius, 1e-6 of the'
+        write(*,'(A)') ' [ERROR]   radial size of the first cell, as the meshes of MOSE do.'
+        call mpi_abort_all ( 'axis of the 3-D sector at r = 0 (see above)' )
+      else
+        write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] block ', b, ', cell', domain % bc(r) % i, domain % bc(r) % j, &
+                                              domain % bc(r) % k, ', face ', domain % bc(r) % f, &
+                                              ': a face of zero area on the 2-D axisymmetric wedge (type 200):'
+        write(*,'(A)') ' [ERROR]   the axis is exactly at r = 0, and the hoop stress of the first row of cells would be wrong'
+        write(*,'(A)') ' [ERROR]   (by 1/6 of it in a Homann flow). Put the axis nodes at a small radius, 1e-6 of the radial'
+        write(*,'(A)') ' [ERROR]   size of the first cell, as the meshes of MOSE do.'
+        call mpi_abort_all ( 'axis of the 2-D axisymmetric wedge at r = 0 (see above)' )
+      end if
     enddo
 
   end subroutine Check_Wedge_Axis

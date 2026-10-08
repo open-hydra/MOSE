@@ -345,8 +345,9 @@ contains
   !> Metric (J^T)^-1 of face f of cell (i,j,k) of block b, or of the cell itself when f = 0 (kind: which one). The run
   !> stops when the three differences of the stencil do not span the space, |det J^T| <= 1e-12 |D_a x| |D_b x| |D_c x|:
   !> a degenerate face or cell, where the metric is not defined. A declared limit of diffusive-metric = stencil, which
-  !> inverse-mean does not have. (A wall on a face of zero area, as on the axis of a 3-D mesh around it, stops before, in
-  !> Wall_Face_Stencils.)
+  !> inverse-mean does not have, although a viscous run with inverse-mean or mean stops on a 3-D mesh at a boundary face
+  !> of zero area (Check_Wedge_Axis). (A wall on a face of zero area, as on the axis of a 3-D mesh around it, stops
+  !> before, in Wall_Face_Stencils.)
   function Face_Inverse ( JT, b, i, j, k, f, kind ) result ( Mf )
     use MOSE_Lib_Diffusive, only: Inverse3
     use MOSE_Mod_MPI, only: mpi_abort_all
@@ -375,7 +376,7 @@ contains
         write(*,'(A,I0,A,3(1X,ES14.6))') ' [ERROR]   difference ', t, ':', JT(:,t)
       enddo
       write(*,'(A)') ' [ERROR] A declared limit of diffusive-metric = stencil; diffusive-metric = inverse-mean does not'
-      write(*,'(A)') ' [ERROR] need this metric.'
+      write(*,'(A)') ' [ERROR] need this metric (but on a 3-D mesh it stops at a boundary face of zero area).'
       call mpi_abort_all ( 'metric of diffusive-metric = stencil not defined (see above)' )
     end if
     Mf = Inverse3 ( JT )

@@ -59,10 +59,17 @@
 #     azimuthal components on the cells with r >= L/2, the axial one exact.
 #     Axis at r = 0 on the wedge: the faces of the wedge would get the hoop
 #     stress of the first row wrong, so a viscous run must stop at setup and
-#     say why, with diffusive-metric = stencil and inverse-mean. Polar line of
+#     say why, with diffusive-metric = stencil and inverse-mean; so must a
+#     viscous run on a 3-D sector closed by type 200 on its k faces (homann,
+#     four cells of 1 degree, wedge_viscous.py sector) with the axis at r = 0,
+#     where the faces of type 200 of the first row see half of d u_r/dr as
+#     on the wedge. Polar line of
 #     a 3-D mesh (360 degrees around the axis, axis at r = 0): with symmetry on
 #     the axis the viscous force of a linear velocity field must vanish to
-#     round-off, next to the axis too; with a wall on the axis the run must
+#     round-off, next to the axis too (diffusive-metric = stencil); with
+#     inverse-mean and mean, whose viscous force of the first row grows as the
+#     mesh is refined there, a viscous run must stop at setup and name stencil;
+#     with a wall on the axis the run must
 #     stop at setup with the message that names the face and the remedy
 #     (symmetry on the axis), without NaN before it.
 #  5. Spalart-Allmaras next to a wall (wall_gradient.py): a column of fluid
@@ -333,6 +340,20 @@ for metric in stencil inverse-mean; do
   fi
 done
 
+echo "-- the axis at r = 0 on a 3-D sector (homann, N = 32, 4 cells of 1 degree): a declared stop of the viscous runs --"
+python3 -B wedge_viscous.py sector 32 axis0 || exit 1
+for metric in stencil inverse-mean; do
+  wedge_ini navier-stokes "$metric"
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/sector-axis0-$metric.log" 2>&1
+  if python3 -B wedge_viscous.py sectorstop "OUTPUT/sector-axis0-$metric.log"; then
+    echo "  [ok  ] $metric: the run stops at setup and says why"
+  else
+    echo "  [FAIL] $metric: no stop with the message on the axis at r = 0 of the sector (see OUTPUT/sector-axis0-$metric.log)"
+    fail=1
+  fi
+done
+
 echo "-- polar line of a 3-D mesh, symmetry on the axis: a linear velocity field --"
 python3 -B wedge_viscous.py polar 300 || exit 1
 wedge_step navier-stokes polar-300-ns
@@ -343,6 +364,19 @@ else
   echo "  [FAIL] the viscous force of a linear field does not vanish on the polar mesh"
   fail=1
 fi
+
+echo "-- polar line of a 3-D mesh, symmetry on the axis, inverse-mean and mean: a declared stop of the viscous runs --"
+for metric in inverse-mean mean; do
+  wedge_ini navier-stokes "$metric"
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/polar-300-$metric.log" 2>&1
+  if python3 -B wedge_viscous.py polarstop "OUTPUT/polar-300-$metric.log" "$metric"; then
+    echo "  [ok  ] $metric: the run stops at setup and names stencil"
+  else
+    echo "  [FAIL] $metric: no stop with the message on the polar line (see OUTPUT/polar-300-$metric.log)"
+    fail=1
+  fi
+done
 
 echo "-- polar line of a 3-D mesh, wall on the axis: a declared limit of the stencil metric --"
 python3 -B wedge_viscous.py polar 302 || exit 1

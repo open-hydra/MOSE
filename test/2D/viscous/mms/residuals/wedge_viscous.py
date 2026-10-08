@@ -58,6 +58,12 @@ ghost cells copy the cells. The faces of the wedge (BC_Rotational_Periodic_Visc)
 with the ghost cell one cell away: there they would see half of d u_r/dr, and the hoop stress of the first row would be
 wrong (lambda div(u) in tau_thetatheta by mu a f'/3, 1/6 of the hoop term 2 mu a f'/r). A viscous run must stop at setup
 with the message on the axis at r = 0, with diffusive-metric = stencil and inverse-mean, without NaN before it.
+Axis at r = 0 on a 3-D sector (python3 -B wedge_viscous.py sector N [axis0]): Homann's flow on the same box in x and r, N x N
+cells, and SECTOR_K cells of DELTA around the axis, from -SECTOR_K DELTA/2 to +SECTOR_K DELTA/2, closed by type 200 on the k
+faces (u_r turned to the azimuth of each cell), 300 on the axis, 400 on i = 1, i = N and j = N. With axis0 the faces on the axis
+have zero area, and the faces of type 200 of the first row see half of d u_r/dr, as on the wedge (1/12 of the hoop term next
+to them with stencil, 1/6 with inverse-mean): a viscous run must stop at setup with the message on the axis at r = 0 of the
+sector, with diffusive-metric = stencil and inverse-mean, without NaN before it.
 Polar line of a 3-D mesh (python3 -B wedge_viscous.py polar AXIS): the same box in x and r, 360 degrees around the axis in 8
 cells closed by a face between the block and itself (101), 5 x 4 cells in x and r, the axis nodes at r = 0, a linear
 velocity U + G x with every entry of G (G_POLAR) at the cell centres, faces 400 on i = 1, i = N and j = N and of type
@@ -65,6 +71,8 @@ AXIS on the axis (j = 1):
   300  symmetry: the faces on the axis have zero area, and their ghost cells copy the cells, which the stencil metric
        places at the cell: the viscous force of the cells with no face 400, the first row next to the axis included, must
        vanish to round-off, below 1e-11 of mu |G| (sum of the face areas)/volume, as for any linear field;
+  300  with diffusive-metric = inverse-mean or mean, whose viscous force of the first row grows as the mesh is refined:
+       the viscous run must stop at setup with the message that names the metric and stencil, without NaN before it;
   302  wall at 300 K: a wall on faces of zero area, whose gradient is not defined. The run must stop at setup with the
        message that names the block, the cell and the face and says to use the symmetry condition (300) on the axis,
        without NaN before it.
@@ -79,9 +87,14 @@ Usage (from the test directory), FIELD = homann or swirl:
                                                            (E32, E64: the five numbers printed by 'error')
   python3 -B wedge_viscous.py axisstop LOG                     exit status 0 when the run of LOG stopped at setup with the message
                                                            on the axis at r = 0 of the wedge, without NaN or trap
+  python3 -B wedge_viscous.py sector N [axis0]                 INPUT/ic.tec and INPUT/bc.txt of Homann's flow on the 3-D sector
+  python3 -B wedge_viscous.py sectorstop LOG                   exit status 0 when the run of LOG stopped at setup with the message
+                                                           on the axis at r = 0 of the sector, without NaN or trap
   python3 -B wedge_viscous.py polar AXIS                       INPUT/ic.tec and INPUT/bc.txt of the polar mesh (AXIS: 300 or 302)
   python3 -B wedge_viscous.py linear NS_FILE EU_FILE           exit status 0 when the viscous force of the linear field on the
                                                            polar mesh vanishes (300 on the axis)
+  python3 -B wedge_viscous.py polarstop LOG METRIC            exit status 0 when the run of LOG (300 on the axis, METRIC inverse-mean
+                                                           or mean) stopped at setup with the message that names stencil
   python3 -B wedge_viscous.py stopped LOG                      exit status 0 when the run of LOG stopped at setup with the message
                                                            on the wall faces of zero area on the axis, without NaN or trap
 """
@@ -189,6 +202,59 @@ def write_case(field, n, axis0=False):
     rows += [rec(i, n, 4, 400) for i in range(1, n + 1)]
     for face in (5, 6):
         rows += [rec(i, j, face, 200) for j in range(1, n + 1) for i in range(1, n + 1)]
+    with open("INPUT/bc.txt", "w") as out:
+        out.write("".join(rows))
+
+
+SECTOR_K = 4                        # 3-D sector: cells of DELTA around the axis
+
+
+def write_sector(n, kk, axis0=False):
+    """Homann's flow on a 3-D sector of kk cells of DELTA around the axis, type 200 on the k faces, N x N cells in x and r."""
+    dx = SIZE / n
+    rn = radii(n, axis0)
+    f = homann(n)
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+
+    def theta(k):
+        return (k - 0.5 * kk) * DELTA
+
+    u, v, w = [], [], []
+    for k in range(kk):
+        c, s = math.cos(theta(k + 0.5)), math.sin(theta(k + 0.5))
+        for j in range(n):
+            ur = A * 0.5 * (rn[j] + rn[j + 1])
+            for i in range(n):
+                u.append(-2.0 * math.sqrt(A * NU) * f[i][0])
+                v.append(ur * f[i][1] * c)
+                w.append(ur * f[i][1] * s)
+    nc = n * n * kk
+    with open("INPUT/ic.tec", "w") as out:
+        out.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
+        out.write(f" ZONE  T = B1-IG, I={n + 1}, J={n + 1}, K={kk + 1}, DATAPACKING=BLOCK, "
+                  "VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for comp in range(3):
+            for k in range(kk + 1):
+                c, s = math.cos(theta(k)), math.sin(theta(k))
+                for j in range(n + 1):
+                    for i in range(n + 1):
+                        out.write(f" {(i * dx, rn[j] * c, rn[j] * s)[comp]:.16E}\n")
+        for col in ([RHO0] * nc, u, v, w, [P0] * nc):
+            out.write("".join(f" {x:.16E}\n" for x in col))
+
+    def rec(i, j, k, face, t):
+        return '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, k, face, t)
+
+    rows = []
+    for k in range(1, kk + 1):
+        rows += [rec(1, j, k, 1, 400) for j in range(1, n + 1)]
+        rows += [rec(n, j, k, 2, 400) for j in range(1, n + 1)]
+        rows += [rec(i, 1, k, 3, 300) for i in range(1, n + 1)]
+        rows += [rec(i, n, k, 4, 400) for i in range(1, n + 1)]
+    for face, k in ((5, 1), (6, kk)):
+        rows += [rec(i, j, k, face, 200) for j in range(1, n + 1) for i in range(1, n + 1)]
     with open("INPUT/bc.txt", "w") as out:
         out.write("".join(rows))
 
@@ -344,6 +410,33 @@ def axis_stop(log):
     sys.exit(0 if head and remedy and clean else 1)
 
 
+def polar_stop(log, metric):
+    """The viscous run on the polar mesh (300 on the axis) with diffusive-metric = metric (inverse-mean or mean) stopped at
+    setup with the message on a face of zero area on the axis (block 1, a cell of the first row, face 3) that names stencil,
+    with no NaN and no floating-point trap before it."""
+    text = open(log, errors="replace").read()
+    head = re.search(r"\[ERROR\] block 1, cell +(\d+) +1 +(\d+), face 3: a face of zero area \(as on the axis of a 3-D "
+                     r"mesh\), "
+                     r"with diffusive-metric = " + re.escape(metric), text)
+    remedy = "Use diffusive-metric = stencil" in text
+    clean = clean_stop(text)
+    print(f"    message on the axis with {metric}: {'yes' if head else 'no'}; stencil named: {'yes' if remedy else 'no'};"
+          f" clean stop without NaN or trap: {'yes' if clean else 'no'}")
+    sys.exit(0 if head and remedy and clean else 1)
+
+
+def sector_stop(log):
+    """The viscous run on the 3-D sector with the axis at r = 0 stopped at setup with the message on the axis (block 1, a
+    cell of the first row, face 3), with no NaN and no floating-point trap before it."""
+    text = open(log, errors="replace").read()
+    head = re.search(r"\[ERROR\] block 1, cell +(\d+) +1 +(\d+), face 3: a face of zero area on the 3-D sector", text)
+    remedy = "the axis is exactly at r = 0" in text and "Put the axis nodes at a small radius" in text
+    clean = clean_stop(text)
+    print(f"    message on the axis at r = 0 of the sector: {'yes' if head else 'no'}; remedy named: {'yes' if remedy else 'no'};"
+          f" clean stop without NaN or trap: {'yes' if clean else 'no'}")
+    sys.exit(0 if head and remedy and clean else 1)
+
+
 def read_zone(path):
     """Cell values of a one-zone MOSE ASCII file (BLOCK packing), names quoted or not, and the number of cells per side."""
     with open(path) as fh:
@@ -474,6 +567,13 @@ def main():
         stopped(sys.argv[2])
     if what == "axisstop":
         axis_stop(sys.argv[2])
+    if what == "sector":
+        write_sector(int(sys.argv[2]), SECTOR_K, len(sys.argv) > 3 and sys.argv[3] == "axis0")
+        return
+    if what == "sectorstop":
+        sector_stop(sys.argv[2])
+    if what == "polarstop":
+        polar_stop(sys.argv[2], sys.argv[3])
     if what == "linear":
         polar_linear(sys.argv[2], sys.argv[3])
     field = sys.argv[2] if len(sys.argv) > 2 else ""

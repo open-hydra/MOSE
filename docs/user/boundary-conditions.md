@@ -119,7 +119,8 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
     faces is applied as well ($-\tau_{\theta\theta}/r$ in the radial momentum, see
     [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge-bc-200)). Keep the wedge thin: the azimuthal
     derivatives carry an error of order $\delta^2$. With more than one cell in $k$, type `200` is a rotational
-    periodicity, inviscid flux only.
+    periodicity: faces 5 and 6 make one interior face of the whole annulus, with its inviscid and viscous fluxes (see
+    [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge-bc-200)).
 
 ### Inlet / Outlet
 

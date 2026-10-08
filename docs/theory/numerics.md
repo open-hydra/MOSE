@@ -329,11 +329,17 @@ the nodes, which every rank holds, so no message is needed. Where a face or a
 cell is degenerate, the differences of its stencil can stop spanning the space
 and the metric is not defined there: the run stops at setup with a message that
 names the block, the cell and the face, a declared limit of `stencil`
-(`inverse-mean` does not need this metric). A wall on faces of zero area, as on
+(`inverse-mean` does not need this metric, but a viscous run with it stops on a
+3-D mesh at a boundary face of zero area, below). A wall on faces of zero area,
+as on
 the axis of a 3-D mesh around it (a polar line), stops too: its gradient is not
 defined there, and the axis takes the symmetry condition (`300`). With `300` on
 the axis the polar line runs, and the face gradients next to it are exact for
-linear fields.
+linear fields. With `inverse-mean` and `mean` a viscous run on a 3-D mesh with a
+boundary face of zero area, as on a polar line with the axis exactly at $r = 0$,
+stops at setup and names `stencil`: next to the axis
+the viscous force of the first row of cells grows as the mesh is refined (a
+linear field, whose force is zero).
 
 In one dimension $M = 1/h$, so `mean` divides the difference across the face by
 the mean of $1/h$ instead of the centre-to-centre distance. With a cell-size
@@ -474,10 +480,39 @@ so the `vnn` limits of the rule hold next to the axis too; without them, at a
 Prandtl number of 10, the first rows broke down at the `vnn` the rule declares
 stable (test `WedgeAxisStep`).
 
-The 3-D rotational periodicity (type `200` with more than one cell in $k$)
-computes the inviscid flux only. On a planar 2-D mesh (faces 5 and 6 parallel,
-no wedge angle) type `200` makes the image the cell itself, and the fluxes of
-the two faces cancel.
+On a 3-D sector (type `200` with more than one cell in $k$) faces 5 and 6
+make one interior face of the whole annulus, computed once, by the record of
+face 6, for the inviscid and for the viscous flux. Beyond face 6 lies the cell
+next to face 5 turned forward by the sector angle, a turn $R$ about $x$: the
+$i$ and $j$ differences of the image row are those of that row turned, the
+metric of the image is that of its cell turned, $M R^{\mathsf T}$ (each row of
+$M = \partial\xi/\partial\mathbf{x}$ is a vector), and the wall distance and
+roughness of the face are the mean of the two cells, as on an interior face.
+The cell next to face 6 takes the flux and the cell next to face 5 the same
+flux with its momentum turned back, $R^{\mathsf T}F$: mass, energy, species,
+turbulence variables, axial momentum and angular momentum about $x$ are
+conserved. A translated sector (faces 5 and 6 parallel) is the same with
+$R = I$. The viscous face takes the metric of the wedge, the inverse of the mean
+of the inverse metrics (`inverse-mean`), with every `diffusive-metric`. On the
+wedge and on the sector the derivatives of these faces along the face (in $i$
+and $j$) are central differences over two cells divided by the mean edge of the
+cell and of its image: where the cell size grows along the face by a ratio $q$
+they carry the factor $(1+q)^2/(4q)$ of the note *Tangential derivatives* above,
+a relative error of $(q-1)^2/(4q)$ ($8.3\times10^{-3}$ at $q = 1.2$), and in the
+first row next to an axis with symmetry (`300`), whose ghost cell is the mirror
+image of the cell, $(3+q)/4$, a relative error of $(q-1)/4$ ($5\times10^{-2}$ at
+$q = 1.2$); refinement at a fixed ratio does not reduce them. A linear field is
+therefore not exact at the faces of type `200`: for $u_r = U r$, whose viscous
+force is zero, the radial viscous force of a cell of the wedge is that relative
+error times the hoop term $\tau_{\theta\theta}/r$, on top of the error of order
+$\delta^2$ above.
+A viscous run on a sector whose axis nodes are
+exactly at $r = 0$ stops at setup, as on the wedge, with every
+`diffusive-metric`: behind faces of zero area the periodic faces of the first
+row of cells would see half of $\partial u_r/\partial r$. Put the axis nodes at
+a small radius. On a planar 2-D mesh (faces 5 and 6 parallel, no wedge angle)
+type `200` makes the image the cell itself, and the fluxes of the two faces
+cancel.
 
 ## Faces Between Blocks
 
