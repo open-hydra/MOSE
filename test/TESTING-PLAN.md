@@ -206,13 +206,16 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F23 | Rotating frame (Sod tube, rigid-body frame) with two `stationary-face-<n>` entries; a stationary wall across the axis, gas at rest in the absolute frame | the run ends within 60 s with exit code 0; the set-up summary lists the two stationary patches; wall shear in the wall output below 1e-3 of mu Omega y_c / (dx/2) | ☑ `BoundaryConditions`/`RotatingFrame` | <1 s |
 | F25 | Probes given by position (planar 2-D duct, a different pressure in every cell, probes at cell centres in the mid-plane) | each probe holds the values of its cell, never a neighbour or a ghost cell | ☑ `OutputFiles`/`ProbePosition` | <1 s |
 | F27 | Viscous flux of the rotational periodicity of a 3-D sector (sector of 90 degrees against the sector of 180 degrees that holds it, viscous air at 10 Pa, a velocity periodic for a turn by 90 degrees with normal stress and shear on the periodic faces; a radial flow with the k faces 200 and 300; one explicit step) | viscous force of every cell equal to that of the same cell in the larger sector within 1e-9 of its scale (momentum and energy); 200 against 300 within 0.02 of the normal stress away from the j faces | ☑ `Connections`/`SectorViscous` | <1 s |
+| F26 | Sign of the wall heat flux (planar 2-D channel of air at rest, the same wall on both j faces, one step) | `301` at q_wall = 1e4 W/m²: the cells next to the two walls warm up alike within 1e-9, qw = -q_wall on face 3 and q_wall on face 4; `302` at 400 K: qw opposite on the two walls within 1e-9, positive on face 4 | ☑ `BoundaryConditions`/`WallHeatSign` | <1 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
 Current `ctest -L fast`: **21 tests, ~143 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, InputChecks,
 TimeIntegration, BoundaryConditions, Conservation, OpenMPEquiv, Connections,
 Restart, OutputFiles, MMSResiduals, ViscousPatch, AblatingWall, MeshGeometry,
-QCR2000Stress).
+QCR2000Stress). MPI builds also register the `needs-mpi` tier
+(`test/mpi/`; `MPIConnectionFlux`, `MPIConnectionOrder`: the two-block cases with
+one block per rank; `MPIDecompositionMap`).
 
 The time is CPU time at one thread, one test at a time, measured on one machine
 with 192 logical CPUs at a load average of ~190, where the 12 fast tests of main

@@ -32,8 +32,9 @@ Runs:
          viscous flux there). The low pressure keeps the round-off of the pressure forces, p (face area)/volume, far
          below the viscous scale. Checked: the momentum of the cells without a 400 face.
   ene    u = 0, uniform rho, T = T0 + g . (x - x0), p = rho R T (so the extrapolated ghost cells stay on the linear field);
-         outer faces of type 302 (T_w = T at the face centre, the mean of its four nodes), 301 (q = k g . n with the face
-         normal of the solver) or 400, mixed so that the faces between blocks end on every kind of ghost cell.
+         outer faces of type 302 (T_w = T at the face centre, the mean of its four nodes), 301 (q into the fluid: k g . n
+         with the face normal of the solver on faces 2, 4, 6, -k g . n on faces 1, 3, 5) or 400, mixed so that the faces
+         between blocks end on every kind of ghost cell.
          Checked: the energy of the cells without a 400 face.
   momw   uniform p = 10 Pa and T, u = (a, b, c) (y - 2 cm), zero on the wall y = 2 cm (302, T_w = T) of rand1 and box3d,
          whose wall cells have nodes moved at random; the other outer faces 400. Checked: the momentum of the wall cells.
@@ -520,7 +521,8 @@ def write_case(mesh, run, metric):
                             elif face == 5:
                                 fk = k - 1
                             nrm, _ = face_normal_area(X, sgn, d, fi, fj, fk)
-                            q = KCOND * f['g'].dot(nrm) if (run != 'mom' and tag == 'ns') else 0.0
+                            into = 1.0 if face % 2 == 0 else -1.0     # q_wall is positive into the fluid
+                            q = into * KCOND * f['g'].dot(nrm) if (run != 'mom' and tag == 'ns') else 0.0
                             rows.append(head + f'{t:8d}\n' + f'    {q:.17E},    0.000000E+00,    0.000000E+00,\n')
                         else:
                             rows.append(head + f'{t:8d}\n')

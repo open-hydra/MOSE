@@ -11,13 +11,15 @@
 #    Inlets (inlets): inlet boundary conditions
 #    BCInput (bc-input): property lines of bc.txt
 #    RotatingFrame (rotating-frame): stationary walls of a rotating frame
+#    WallHeatSign (wall-heat-sign): sign of the wall heat flux and wall
+#      stress
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(inlets bc-input rotating-frame)
+PARTS=(inlets bc-input rotating-frame wall-heat-sign)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

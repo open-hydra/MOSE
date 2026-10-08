@@ -154,7 +154,10 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # the run).
 # Rotating frame: stationary-face-1, -2, ... of [MOSE-Rotating-Frame] are read
 # and listed, and the run ends (the count of the keys used to loop forever).
-mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;1D;2D")
+# Sign of the wall heat flux: q_wall of a wall 301 is positive into the fluid on
+# every face (the same wall on both sides of a channel heats it alike), and the
+# wall output writes qw as k grad T . n along the face normal (301 and 302).
+mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;physics;1D;2D")
 
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
 mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")

@@ -212,6 +212,10 @@ with fewer values than listed above or with an empty one.
 | `k_rough` | Sand-grain roughness height $k_s$ [m] (`0.0` for smooth wall). Modelled with SA only ([SA-rough](../theory/turbulence.md#rough-walls-sa-rough)) |
 | `eps_wall` | Wall emissivity (0–1) |
 
+The heat flux `qw` written in `OUTPUT/wall.tec` is $k\,\nabla T\cdot\mathbf{n}$ along the face normal $\mathbf{n}$ toward
+growing index, for every wall: positive into the fluid on faces 2, 4, 6 and into the wall on faces 1, 3, 5 (a `301` wall
+writes `q_wall` on faces 2, 4, 6 and `-q_wall` on 1, 3, 5).
+
 ### Physical Models
 
 | Type | Name | Data line |
