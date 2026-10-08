@@ -125,6 +125,10 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 | `410` | Assigned state (time-varying file) | `filename  [periodic]` |
 | `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  r_throat,  rel_fac,  [massf],  [turb]` |
 
+Type `409` (a forced outlet named in the reader of the boundary file) is not implemented: a record of type `409`, or of any
+type not listed on this page, gets no flux, and this version does not stop on it. Type `410` reads its data on the finest
+grid level only: do not use it with a sequence of grid levels.
+
 **Common fields:**
 
 | Field | Description |
@@ -182,6 +186,9 @@ Runge–Kutta stage (see
 |:----:|------|-----------|
 | `501` | Manifold connection | `bs  fs` |
 
+Type `501` does not work in this version: MOSE computes the mean state of the connected face and does not use it, so the face
+gets no flux. Do not use it.
+
 ### Gas–Surface Interaction
 
 Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.md) for the models and their limitations.
@@ -192,6 +199,9 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 | `503` | Melting            | `cp_wall, T_wall, Ti_wall, dh_wall, q_rad, eps_wall, [massf_1 … massf_ns]` |
 | `504` | Pyrolysis          | `pyro_id, q_rad, eps_wall, [massf_1 … massf_ns]`                           |
 | `505` | Surface reactions  | `reac_id, q_rad`                                                           |
+
+Type `506` is read but not applied in this version: the face gets no flux. Do not use it; `504` and `505` are the pyrolysis and
+the surface reactions alone.
 
 
 | Field       | Description                                                                                       |
