@@ -491,9 +491,23 @@ Properties, for every mesh and in 3-D, with the hypotheses written:
   With these positions in the face metrics (`stencil`) the face gradients next
   to walls and `400` faces are exact for those fields, whatever the density:
   the quantities differenced are extrapolated themselves. The density gradient
-  of the source terms takes the position of the temperature: exact for the
-  value where the pressure and the composition do not vary across the wall
-  cell (a boundary layer).
+  of the source terms takes the position of the temperature. At `301`, `400`
+  and `503`–`505` the pressure, the composition and the temperature all sit at
+  $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$, so the density of the ghost
+  cell is that of the field there, exact for linear $p$, $Y_s$ and $T$ where no
+  limit acts, with no further hypothesis. At `302` the temperature sits at
+  $2\mathbf{x}_f - \mathbf{x}_1$ and the pressure and the composition at
+  $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$: the two positions differ by
+  $|r - 1|\,\Delta l_1/2$ along the normal ($r = \Delta l_2/\Delta l_1$, the
+  stretching of the first two cells; zero on uniform cells), and the density is
+  exact where the pressure and the composition do not vary across the wall cell
+  (a boundary layer). Otherwise its relative error is
+  $|r - 1|\,\Delta l_1\,|\partial_n p|/(2p)$, and the same for the composition,
+  never amplified, and that of its gradient across the wall cell is of the
+  same relative order: $O(h^2)$ in the value and $O(h)$ in the gradient on
+  meshes refined with $r - 1 = O(h)$. The test `SAWallGradient` on skewed cells
+  checks the case of the hypothesis (uniform pressure, the temperature uniform
+  across the wall); the general case admits no test with a zero residual.
 - **Fluxes and sources.** One set of ghost cells: the wall flux routines no
   longer write ghost values (before, the turbulence variables after the fluxes,
   and copies of the densities and of the pressure for the sources), and the
@@ -517,8 +531,15 @@ Declared limits:
   by the factor $2/(3 - r)$ for a linear field (1.11 at $r = 1.2$): bounded and
   consistent, not exact; the extrapolated class is exact there ($s$);
 - `503`–`505`: the velocity and the temperature are extrapolated (the surface
-  may blow, its state is set at every call of its routine) and the wall value
-  of $\omega$ is that of an adiabatic wall at the state of the cell; with the
+  may blow, its state is set at every call of its routine) and the wall values
+  of the turbulence variables are those of an adiabatic wall at the state of
+  the cell: exact for $k$, $R_{ij}$ and $\tilde\nu$ (zero), while that of
+  $\omega$ differs, at uniform pressure, from the value at the state of the
+  surface by the factor $\mu(T_1)T_1/(\mu(T_s)T_s)$ (about $(T_1/T_s)^{1.7}$
+  with $\mu \propto T^{0.7}$): of order one but bounded, it enters only the
+  source terms (the gradient of $\omega$ in the cross-diffusion of SST,
+  $\nabla k\cdot\nabla\omega$) and the limited MUSCL reconstruction of the
+  first face, while the wall flux keeps the state of the surface; with the
   blowing correction of $\omega$ (`-blowcorr`) the wall flux takes the corrected
   value, the ghost cell the uncorrected one;
 - the temperature of a `301` wall is extrapolated (consistent, exact for every
