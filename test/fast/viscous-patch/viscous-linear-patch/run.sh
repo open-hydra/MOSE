@@ -6,7 +6,9 @@
 #  the viscous force and the heat conduction of every cell are zero: a face
 #  gradient exact for linear fields gives zero to round-off on any mesh
 #  (make_case.py). Meshes with nodes moved at random, two blocks joined along
-#  a fold, a jump of cell size with shear, points shared by 3 and by 5 blocks,
+#  a fold, jumps of cell size with shear (1.5, and 2 next to the faces with
+#  dyadic coordinates, where the ghost cells must not degenerate), points
+#  shared by 3 and by 5 blocks,
 #  a 3-D pair of blocks, a symmetry plane under skewed cells. One explicit
 #  step with the Navier-Stokes equations and one reference step (Euler, or
 #  Navier-Stokes with mu = k = 1e-30 next to walls) from the same state: the
@@ -75,7 +77,7 @@ step() {
 status=0
 if [[ $NAME == ViscousWallPatch ]]; then
   echo "-- viscous patch test: cells next to walls of prescribed temperature (302), T varying along the wall --"
-  for mesh in fold2 jump star3 star5 box3d sym paraT; do
+  for mesh in fold2 jump jump2 star3 star5 box3d sym paraT; do
     python3 -B "$MC" case "$mesh" ene > /dev/null || exit 1
     step ns "$mesh" ene
     step ref "$mesh" ene
@@ -89,7 +91,7 @@ if [[ $NAME == ViscousWallPatch ]]; then
     python3 -B "$MC" check "$mesh" momw "OUTPUT/diag-$mesh-momw-ns.tec" "OUTPUT/diag-$mesh-momw-ref.tec" wall302 || status=1
   done
   echo "-- T linear at uniform pressure (density not uniform): walls 301, 302 and 400 faces extrapolate T itself --"
-  for mesh in fold2 jump star3 star5 box3d sym paraT; do
+  for mesh in fold2 jump jump2 star3 star5 box3d sym paraT; do
     python3 -B "$MC" case "$mesh" enep > /dev/null || exit 1
     step ns "$mesh" enep
     step ref "$mesh" enep
@@ -102,7 +104,7 @@ if [[ $NAME == ViscousWallPatch ]]; then
   python3 -B "$MC" limits OUTPUT/paraT-hot-ns.log || status=1
 else
   echo "-- viscous patch test: linear velocity (mom) and linear temperature (ene) --"
-  for mesh in fold2 jump star3 star5 box3d sym; do
+  for mesh in fold2 jump jump2 star3 star5 box3d sym; do
     for run in mom ene; do
       python3 -B "$MC" case "$mesh" "$run" > /dev/null || exit 1
       step ns "$mesh" "$run"

@@ -252,7 +252,25 @@ stores its metric $M = A^{-T}$, where the rows of $A$ are the cell edge vectors
 $\partial\mathbf{x}/\partial\xi$, $\partial\mathbf{x}/\partial\eta$,
 $\partial\mathbf{x}/\partial\zeta$ (each the mean of the four edges of the
 cell along that index); the edge lengths also give the physical spacings
-$\Delta l$ of the MUSCL reconstruction. `diffusive-metric` in
+$\Delta l$ of the MUSCL reconstruction. The ghost cells behind a boundary face
+take their metric from nodes extrapolated linearly along the index lines,
+$\mathbf{N}_{-g} = 2\mathbf{N}_{-g+1} - \mathbf{N}_{-g+2}$ (faces between
+blocks: the cell across; symmetry: the mirror image; the wedge: the rotated
+cell): both layers have the edge across the face of the first cell, so their
+size never vanishes nor turns over however stretched the mesh, and the first is
+centred at $2\mathbf{x}_f - \mathbf{x}_1$ ($\mathbf{x}_f$ the mean of the nodes
+of the face, $\mathbf{x}_1$ that of the cell). A cell whose determinant is zero
+to $10^{-12}$ of the product of its edge lengths, or a ghost cell whose
+determinant is not that of the first cell in sign and to $10^{-12}$ in size,
+stops the run at setup, with its block, cell and face. Behind a face of zero
+area (an axis) the ghost cells are the reflection of the first cell through the
+axis, whose determinant has the opposite sign by construction: their sign is
+not checked, and a wall on such a face stops as said below. The ghost values of a
+chimera face (`102`) come from the donor cells and weights that the tool which
+wrote `bc.txt` computed for its own ghost cells; the face metric of their
+viscous flux takes these linear ones, so where the tool builds its ghost cells
+otherwise (on cells stretched across the face) the normal gradient is taken over
+a distance that differs by as much (no test with `102` faces). `diffusive-metric` in
 `[MOSE-Numerics]` selects the face metric:
 
 | `diffusive-metric` | Face metric | |
@@ -311,7 +329,11 @@ value is right for a linear field:
   cells, or one, across the face; there the value reads the ghost cell of the
   opposite face, so value and position agree only with three cells or more);
   chimera (`102`) and mapped (`410`) faces take the same position, an
-  approximation, since their values come from donor cells or from a file;
+  approximation, since their values come from donor cells or from a file; the
+  MUSCL reconstruction of the first interior face takes the distance
+  $l_0 = \Delta l_1$ of the ghost cell instead, so on cells stretched across
+  these faces the slope behind the face is scaled by a factor of order one,
+  which the limiter bounds;
 - zero-gradient faces (`0`, `401`–`407`, `420`): the cell itself;
 - symmetry (`300`): the mirror image of the cell across the face; on a face of
   zero area (an axis at $r = 0$) the cell itself, since the ghost value there is
@@ -454,8 +476,10 @@ wall cell and in the next one across the face:
 
 $\mathbf{x}_f$ is the centre of the face (the mean of its four nodes) and
 $s = l_0/l_1$ the ratio of the distances of the MUSCL reconstruction at the
-first interior face, $l_0 = (\Delta l_g + \Delta l_1)/2$,
-$l_1 = (\Delta l_1 + \Delta l_2)/2$ ($s = 1$ on uniform cells). $\psi \le s$ is
+first interior face, $l_0 = (\Delta l_g + \Delta l_1)/2 = \Delta l_1$ (the ghost
+cell has the edge across the face of the first cell, see *Gradient Computation
+for Diffusive Fluxes*), $l_1 = (\Delta l_1 + \Delta l_2)/2$:
+$s = 2\Delta l_1/(\Delta l_1 + \Delta l_2)$, 1 on uniform cells. $\psi \le s$ is
 the largest value that keeps each species, the pressure, the temperature and
 each scalar within $[q_1/2,\ 2q_1]$; the species are then normalised to sum
 one; the velocity is not limited ($\psi = s$). The wall values of the turbulence
@@ -490,24 +514,24 @@ Properties, for every mesh and in 3-D, with the hypotheses written:
   centres (zero velocity on the wall, $T(\mathbf{x}_f) = T_w$ of each face).
   With these positions in the face metrics (`stencil`) the face gradients next
   to walls and `400` faces are exact for those fields, whatever the density:
-  the quantities differenced are extrapolated themselves. The density gradient
-  of the source terms takes the position of the temperature. At `301`, `400`
-  and `503`–`505` the pressure, the composition and the temperature all sit at
-  $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$, so the density of the ghost
-  cell is that of the field there, exact for linear $p$, $Y_s$ and $T$ where no
-  limit acts, with no further hypothesis. At `302` the temperature sits at
-  $2\mathbf{x}_f - \mathbf{x}_1$ and the pressure and the composition at
-  $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$: the two positions differ by
-  $|r - 1|\,\Delta l_1/2$ along the normal ($r = \Delta l_2/\Delta l_1$, the
-  stretching of the first two cells; zero on uniform cells), and the density is
-  exact where the pressure and the composition do not vary across the wall cell
-  (a boundary layer). Otherwise its relative error is
-  $|r - 1|\,\Delta l_1\,|\partial_n p|/(2p)$, and the same for the composition,
-  never amplified, and that of its gradient across the wall cell is of the
-  same relative order: $O(h^2)$ in the value and $O(h)$ in the gradient on
-  meshes refined with $r - 1 = O(h)$. The test `SAWallGradient` on skewed cells
-  checks the case of the hypothesis (uniform pressure, the temperature uniform
-  across the wall); the general case admits no test with a zero residual.
+  the quantities differenced are extrapolated themselves. So is the MUSCL
+  reconstruction at the first interior face along a straight grid line: both
+  positions are $l_0 = \Delta l_1$ from $\mathbf{x}_1$, the distance it assumes.
+  The density gradient of the source terms takes the position of the
+  temperature. At `301`, `400` and `503`–`505` the pressure, the composition
+  and the temperature all sit at $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$,
+  so the density of the ghost cell is that of the field there, exact for linear
+  $p$, $Y_s$ and $T$ where no limit acts, with no further hypothesis. At `302`
+  the temperature sits at $2\mathbf{x}_f - \mathbf{x}_1$, $\Delta l_1$ from
+  $\mathbf{x}_1$ along the edge across the face of the wall cell, and the
+  pressure and the composition at $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$,
+  along the line from $\mathbf{x}_2$ to $\mathbf{x}_1$, $\Delta l_1$ from
+  $\mathbf{x}_1$ on a straight grid line: there the two positions are the same
+  point and the density is exact; elsewhere they differ by about $\Delta l_1$
+  times the angle $\theta$ between the two directions, and the density is exact
+  where the pressure and the composition do not vary across the wall cell (a
+  boundary layer), its relative error otherwise of the order of
+  $\Delta l_1\,\theta\,|\nabla p|/p$, and the same for the composition.
 - **Fluxes and sources.** One set of ghost cells: the wall flux routines no
   longer write ghost values (before, the turbulence variables after the fluxes,
   and copies of the densities and of the pressure for the sources), and the
@@ -525,11 +549,6 @@ end of a run one line reports the ghost fills in which either acted:
 
 Declared limits:
 
-- the ghost cells of walls keep the geometry extrapolated from the nodes, so on
-  a mesh stretched across the wall by the ratio $r$ the MUSCL slope of the
-  wall-value classes at the first interior face differs from the slope inside
-  by the factor $2/(3 - r)$ for a linear field (1.11 at $r = 1.2$): bounded and
-  consistent, not exact; the extrapolated class is exact there ($s$);
 - `503`–`505`: the velocity and the temperature are extrapolated (the surface
   may blow, its state is set at every call of its routine) and the wall values
   of the turbulence variables are those of an adiabatic wall at the state of

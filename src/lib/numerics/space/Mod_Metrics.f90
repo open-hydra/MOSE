@@ -54,14 +54,19 @@ contains
         N6 % c = domain % blk(b) % node(i  ,j-1,k  ) % c
         N7 % c = domain % blk(b) % node(i  ,j  ,k-1) % c
         N8 % c = domain % blk(b) % node(i  ,j  ,k  ) % c
-        call Compute_Metric_Tensor ( N1, N2, N3, N4, N5, N6, N7, N8, domain % blk(b) % M(i,j,k), domain % blk(b) % dl(i,j,k), domain % blk(b) % vol(i,j,k) )
+        call Compute_Metric_Tensor ( N1, N2, N3, N4, N5, N6, N7, N8, domain % blk(b) % M(i,j,k), domain % blk(b) % dl(i,j,k), domain % blk(b) % vol(i,j,k), &
+                                     loc = [b, i, j, k, 0] )
         if ( inverse_metric ) domain % blk(b) % Minv(i,j,k) % c = Inverse3 ( domain % blk(b) % M(i,j,k) % c )
       enddo; enddo; enddo
       !$omp end parallel
+      ! A degenerate or inverted cell (Compute_Metric_Tensor wrote the first one): no further block here; every rank
+      ! stops together below
+      if ( bad_metric ) exit
 
       ! Compute Normal & Area
       call Compute_Norm_Area ( domain % blk(b) )
     enddo
+    call Stop_On_Bad_Metric ( )
 
     ! A viscous run on the 2-D axisymmetric wedge or on a 3-D sector stops when the axis is exactly at r = 0
     ! (Check_Wedge_Axis)
@@ -134,7 +139,7 @@ contains
                                      domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg, 1 )
         case default  ! Rientra qui anche chimera
           call BC_Extrapolate_Metrics ( Im, Jm, Km, Fm, domain % blk(Bm), &
-                                        domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg )
+                                        domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg, Bm )
       end select
     enddo
     !$omp end do
@@ -154,6 +159,8 @@ contains
       !$omp end do
     enddo
     !$omp end parallel
+    ! A degenerate or inverted ghost cell (Compute_Metric_Tensor wrote the first one): every rank stops together
+    call Stop_On_Bad_Metric ( )
 
     ! Walls and 400 faces: ratio of the MUSCL distances behind the face, for the ghost values (Ghost_Wall) and their
     ! positions (Setup_Stencil_Metrics); every record, on every rank

@@ -17,6 +17,10 @@ paraQ):
   jump   one block of 8 x 8 cells whose sizes alternate in the ratio 1.5 in x and in y, sheared by x += 0.5 y, nodes not
          moved: the face gradients of inverse-mean and mean are not exact there, but for a linear field their errors
          cancel in the sums of the interior cells; on this mesh the check bites in the cells next to the walls;
+  jump2  as jump with the sizes 1 and 2 (units of 1/16: the block is 0.75 wide), the first cells next to the faces 1
+         and 3 half as wide as the second ones, unit 2^-7 m instead of 1 cm: every coordinate is a dyadic fraction, so
+         that the ghost nodes extrapolated from the first three node planes are exact with any compiler (as
+         3 N0 - 3 N1 + N2 they would fall on the face, a ghost cell of zero width);
   star3  a triangle cut into 3 blocks of 8 x 8 cells that meet at its centre (a point shared by 3 blocks);
   star5  a pentagon cut into 5 blocks of 8 x 8 cells that meet at its centre (a point shared by 5 blocks);
   box3d  two blocks of 6 x 6 x 6 cells joined at x = 0.5, the j lines of block 2 rising as y = t + 0.2 s t;
@@ -94,11 +98,12 @@ P_LOW = 10.0                        # mom, rk3: a low pressure. The round-off of
                                     # the velocity it gives at the first stage carries an energy flux (rho e + p) u, of
                                     # order p, into the later stages (rk3: 3e-10 of the scale at 1e5 Pa, 1e-13 at 10 Pa)
 LREF = 1.0e-2                       # m
+LREF2 = 2.0**-7                     # m, jump2: dyadic coordinates
 OFFSET = np.array([1.0, 2.0, 0.0])  # unit coordinates: keep y > 0 away from the axis
 TOL = 1.0e-11
 TOL_REPLICA = 1.0e-10
 FMT = '{: .17E}'
-MESHES = ('fold2', 'jump', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
+MESHES = ('fold2', 'jump', 'jump2', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
 RUNS = ('mom', 'ene', 'rk3', 'momw', 'enep', 'hot')
 BC_CONNECT, BC_SYM, BC_Q, BC_T, BC_OPEN = 101, 300, 301, 302, 400
 
@@ -157,6 +162,12 @@ def alternating(n, r):
 
 def mesh_jump(n=8):
     a = alternating(n, 1.5)
+    S, T = np.meshgrid(a, a, indexing='ij')
+    return [extrude(np.stack([S + 0.5 * T, T], axis=-1), 1.0 / n)]
+
+
+def mesh_jump2(n=8):
+    a = np.concatenate([[0.0], np.cumsum([1.0 if k % 2 == 0 else 2.0 for k in range(n)])]) / 16.0
     S, T = np.meshgrid(a, a, indexing='ij')
     return [extrude(np.stack([S + 0.5 * T, T], axis=-1), 1.0 / n)]
 
@@ -227,6 +238,8 @@ def build(mesh, run):
         blocks = mesh_fold2()
     elif mesh == 'jump':
         blocks = mesh_jump()
+    elif mesh == 'jump2':
+        return [LREF2 * (X + OFFSET) for X in mesh_jump2()]
     elif mesh == 'star3':
         blocks = mesh_star(3, n2)
     elif mesh == 'star5':
@@ -258,7 +271,7 @@ def outer_type(mesh, run, b, face):
     # ene
     if mesh == 'fold2':
         return {(0, 1): BC_T, (0, 3): BC_Q, (0, 4): BC_T, (1, 2): BC_OPEN, (1, 3): BC_T, (1, 4): BC_Q}[(b, face)]
-    if mesh in ('jump', 'rand1'):
+    if mesh in ('jump', 'jump2', 'rand1'):
         return {1: BC_T, 2: BC_Q, 3: BC_T, 4: BC_OPEN}[face]
     if mesh == 'paraT':
         return {1: BC_OPEN, 2: BC_OPEN, 3: BC_T, 4: BC_T}[face]
@@ -735,7 +748,7 @@ def cell_metric(X, i, j, k):
 def extrapolation_ratio(X, face, i, j):
     """s = l0/l1 of the MUSCL distances behind face 1-4 of cell (i, j) of a 2-D block (Extrapolation_Ratio of
     Lib_Metrics.f90): mean edges across the face of the cell, of the next one and of the ghost cell whose nodes are
-    extrapolated as 3 N0 - 3 N1 + N2."""
+    extrapolated as 2 N0 - N1 (the edge of the cell itself)."""
     ni, nj, _ = dims(X)
     planes = {1: (0, 1, 2), 2: (ni, ni - 1, ni - 2), 3: (0, 1, 2), 4: (nj, nj - 1, nj - 2)}[face]
     e1 = np.zeros(3); e2 = np.zeros(3); eg = np.zeros(3)
@@ -744,7 +757,7 @@ def extrapolation_ratio(X, face, i, j):
             n0, n1, n2 = ((X[a, t, k] if face <= 2 else X[t, a, k]) for a in planes)
             e1 += n1 - n0
             e2 += n2 - n1
-            eg += 3.0 * n1 - n2 - 2.0 * n0
+            eg += n1 - n0
     l = [float(np.linalg.norm(0.25 * e)) for e in (eg, e1, e2)]
     return (l[0] + l[1]) / (l[1] + l[2])
 
