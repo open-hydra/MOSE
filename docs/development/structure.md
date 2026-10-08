@@ -232,7 +232,7 @@ uses the stored metric of the cell and its mirror image in
 differences of the wall temperature that `Wall_Face_Stencils` stores in its
 record (`bc%wstencil`, `bc%wM`, `bc%wdT`): `BC_Wall_Temperature` and
 `BC_Wall_Heat` read them through their optional argument `rec`, which every
-caller passes (`BC_Fluxes`, `Wall_RANS_Ghosts`, the wall output). Faces of type
+caller passes (`BC_Fluxes`, the wall output). Faces of type
 `200` (`BC_Rotational_Periodic_Visc`) and chimera faces (`102`) keep their own
 metric with every option. The positions of the ghost cells that
 enter the metric are listed in [Numerics](../theory/numerics.md).

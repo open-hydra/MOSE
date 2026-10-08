@@ -349,10 +349,9 @@ is therefore **bit-identical** to the old loop. With the records in any other
 order the solution is now the one of the sorted file, and deterministic; the
 old loop summed the faces of a corner cell in file order and, with more than
 one thread, could even give a different solution from run to run (two threads
-updating the same corner cell). The turbulence ghosts set by the time step
-(`Wall_RANS_Ghosts`) walk the same lists, and the wall output (`IO_Wall`) groups
-all the records by block and face before laying them out, so neither depends on
-the order of the file either. `test/mpi/boundary-records` checks ranks × threads
+updating the same corner cell). The wall output (`IO_Wall`) groups all the
+records by block and face before laying them out, so it does not depend on the
+order of the file either. `test/mpi/boundary-records` checks ranks × threads
 layouts and the reversed file with and without threads, the wall output and a
 Spalart–Allmaras run included.
 

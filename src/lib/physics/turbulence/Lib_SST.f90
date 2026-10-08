@@ -72,7 +72,7 @@ contains
     type(MOSE_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b
-    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:)   ! cell metric of the sources (Source_Metrics)
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:), Mt(:,:,:)   ! cell metrics of the sources (Source_Metrics)
     logical :: SpalartShur, k_energy_coupling, point_implicit
       
     SpalartShur       = obj_rans%SpalartShur
@@ -89,10 +89,10 @@ contains
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
-      call Source_Metrics ( domain % blk(b), Mi )
+      call Source_Metrics ( domain % blk(b), Mi, Mt=Mt )
       call SST_Blk ( domain % blk(b) % P,            &
                      domain % blk(b) % r,            &
-                     Mi,                            &
+                     Mi, Mt,                        &
                      domain % blk(b) % vol,          &
                      domain % blk(b) % yn,           &
                      domain % blk(b) % vel_gradient, &
@@ -109,7 +109,7 @@ contains
   end subroutine SST_Source_Terms
 
 
-  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, stiff, n, SpalartShur, k_energy_coupling, &
+  subroutine SST_Blk ( Prim, Res, M, Mt, Volume, WDist, gradv, rc1, rc2, dt, stiff, n, SpalartShur, k_energy_coupling, &
                        point_implicit, compressible )
     use MOSE_Base_Types_m
     use MOSE_Global_m
@@ -124,6 +124,7 @@ contains
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: WDist
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
+    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variables
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
@@ -167,7 +168,7 @@ contains
                     Prim(nt:nt+1,i,j-1,k) / sum( Prim(1:nsc,i,j-1,k) ) ) * 0.5d0
       Grad(:,3) = ( Prim(nt:nt+1,i,j,k+1) / sum( Prim(1:nsc,i,j,k+1) ) - &
                     Prim(nt:nt+1,i,j,k-1) / sum( Prim(1:nsc,i,j,k-1) ) ) * 0.5d0
-      Grad = Matmul ( Grad, M(i,j,k) % c )
+      Grad = Matmul ( Grad, Mt(i,j,k) % c )
 
       ! Blending of coefficients
       F = compute_F ( rho=rho, w=ome, k=kap, mil=mil, gradk=Grad(1,:), gradw=Grad(2,:), d=dist )

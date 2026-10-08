@@ -286,7 +286,10 @@ from the mean edges of the two cells instead. On smooth meshes they approach
 the centre differences as the cells shrink, but where the mesh is not smooth
 (cells of alternating size, nodes moved at random, folds at the faces between
 blocks) the face gradient of a linear field stays wrong by several per cent or
-more at any resolution. The column across the face is kept as $\tfrac12(a_L + a_R)$, which
+more at any resolution. At a fold between two blocks of uniform cells the
+tangential columns of the two metrics coincide; there the error of
+`inverse-mean` came from the ghost cell of the connection, whose geometry is
+extrapolated straight across the fold. The column across the face is kept as $\tfrac12(a_L + a_R)$, which
 is $\mathbf{x}_R - \mathbf{x}_L$, and so are the columns of the index
 directions with one cell (1-D runs, the $k$ direction of 2-D meshes and
 wedges), where the field does not vary: 1-D runs give the bits of
@@ -295,12 +298,20 @@ value is right for a linear field:
 
 - faces between blocks (`101`, `201`): the centre of the cell across, plus the
   translation of a periodic pair;
-- faces whose ghost value is $3u_1 - 3u_2 + u_3$ (walls, `400`, `408` and the
-  other types not listed here): $3\mathbf{x}_1 - 3\mathbf{x}_2 + \mathbf{x}_3$
+- walls (`301`, `302`, `503`–`505`) and `400` faces: the position of the class
+  of each quantity, $2\mathbf{x}_f - \mathbf{x}_1$ for the quantities with a
+  wall value and $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$ for the
+  extrapolated ones (see *Ghost Cells of Walls and 400 Faces* below); a face
+  with such a ghost cell in its stencil takes one metric per group of
+  quantities (species and scalars, temperature, velocity, turbulence
+  variables);
+- faces whose ghost value is $3u_1 - 3u_2 + u_3$ (`408` and the other types not
+  listed here): $3\mathbf{x}_1 - 3\mathbf{x}_2 + \mathbf{x}_3$
   ($2\mathbf{x}_1 - \mathbf{x}_2$, or $\mathbf{x}_1$, in a block with two
-  cells, or one, across the face); chimera (`102`) and mapped (`410`) faces take
-  the same position, an approximation, since their values come from donor cells
-  or from a file;
+  cells, or one, across the face; there the value reads the ghost cell of the
+  opposite face, so value and position agree only with three cells or more);
+  chimera (`102`) and mapped (`410`) faces take the same position, an
+  approximation, since their values come from donor cells or from a file;
 - zero-gradient faces (`0`, `401`–`407`, `420`): the cell itself;
 - symmetry (`300`): the mirror image of the cell across the face; on a face of
   zero area (an axis at $r = 0$) the cell itself, since the ghost value there is
@@ -321,7 +332,8 @@ condition forbids ($\mathbf{g}\cdot\mathbf{n}$, $G - RGR$, $\mathbf{g}\cdot\math
 it stays on the faces next to the boundary, and it vanishes as the solution
 satisfies the condition. Behind the other faces between blocks, the
 zero-gradient faces and the extrapolated ones the gradient is exact for every
-linear field.
+linear field; behind walls for the linear fields that take the wall values
+(next section).
 
 $M_f$ is computed once at setup and stored on every face of the blocks of each
 rank, 27 values per cell (the mesh does not move); the cell centres come from
@@ -420,6 +432,100 @@ one cell wide in another direction they are the ghost cell itself.
     centres they span, and has no such factor.
 
 ---
+
+## Ghost Cells of Walls and 400 Faces
+
+Behind a viscous wall (`301`, `302`, `503`–`505`) and an extrapolation face
+(`400`) the two layers of ghost cells are filled once per stage, before the
+fluxes, and the viscous fluxes, the MUSCL reconstruction and the source terms
+of the turbulence models read the same values. Extrapolated are the quantities
+whose differences the viscous fluxes and the sources take, the mass fractions
+$Y_s$, the temperature $T$, the velocity $\mathbf{u}$ and the specific
+turbulence and scalar variables $\phi = (\rho\phi)/\rho$, and the pressure
+$p$; the ghost state follows from them, $\rho = p/(R(Y)\,T)$,
+$\rho_s = Y_s\rho$, $(\rho\phi) = \rho\phi$. With $q_1$, $q_2$ the values in the
+wall cell and in the next one across the face:
+
+| Class | Quantities | First ghost cell | Position of its value |
+|---|---|---|---|
+| wall value | velocity at `301` and `302` (zero, or the wall velocity of a stationary face of a rotating frame); the turbulence variables at the walls ($k$, $R_{ij}$, $\tilde\nu$ on a smooth wall: zero; $\omega$, $\tilde\nu$ on a rough wall: the wall value of the model) | $2q_w - q_1$ | $2\mathbf{x}_f - \mathbf{x}_1$ |
+| wall temperature | $T$ at `302` | $\max(2T_w - T_1,\ T_w/2)$ | $2\mathbf{x}_f - \mathbf{x}_1$ |
+| extrapolated | $Y_s$, $p$; $T$ at `301`, `400`, `503`–`505`; the velocity at `400` and `503`–`505`; turbulence and scalars at `400`, scalars at the walls | $q_1 + \psi(q_1 - q_2)$ | $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$ |
+
+$\mathbf{x}_f$ is the centre of the face (the mean of its four nodes) and
+$s = l_0/l_1$ the ratio of the distances of the MUSCL reconstruction at the
+first interior face, $l_0 = (\Delta l_g + \Delta l_1)/2$,
+$l_1 = (\Delta l_1 + \Delta l_2)/2$ ($s = 1$ on uniform cells). $\psi \le s$ is
+the largest value that keeps each species, the pressure, the temperature and
+each scalar within $[q_1/2,\ 2q_1]$; the species are then normalised to sum
+one; the velocity is not limited ($\psi = s$). The wall values of the turbulence
+variables are those of the wall fluxes, from the same wall state (`302`: $T_w$;
+`301`: the wall temperature estimated from the heat flux;
+`503`–`505`, whose surface model sets the wall state at every call: the state
+of the wall cell, as an adiabatic wall). With one cell across the face the
+extrapolated quantities are copied (position $\mathbf{x}_1$). In an inviscid
+run the walls carry no wall values and every quantity is extrapolated, as
+behind a `400` face. The second layer takes $2q_w - q_2$,
+$\max(2T_w - T_2,\ T_w/2)$ and $q_1 + 2\psi_2(q_1 - q_2)$; no flux reads it.
+
+Properties, for every mesh and in 3-D, with the hypotheses written:
+
+- **Positivity.** The ghost state has $\rho_s \ge 0$, $p > 0$, $T > 0$ and
+  so $\rho > 0$; the extrapolation amplifies $q_1$ at most by $1 + s$. The
+  temperature and the mass fractions are what the viscous fluxes take
+  differences of, so they must be those of a gas. Before, every primitive was
+  extrapolated as $3q_1 - 3q_2 + q_3$, which can be negative (density that
+  rises steeply away from a hot wall) and amplifies by 3 and 6 on the two
+  layers.
+- **Wall value.** For the first two classes without the floor, the value
+  interpolated at the face centre, $(G_1 + q_1)/2$, is the wall value, for any
+  profile (zero velocity, zero $k$, the model value of $\omega$). The floor
+  $T_w/2$ acts only where $T_1 > 1.5\,T_w$, a first cell much hotter than a
+  cooled wall that the mesh does not resolve; there the wall flux still takes
+  $T_w$, and the ghost cell stays on the cold side of the wall.
+- **Linear fields.** The rules are affine combinations of the values whose
+  coefficients sum to one, so for a linear field the ghost value is the field at
+  the position of the table: for the extrapolated class for every linear field,
+  for the other two for the linear fields that take the wall value at the face
+  centres (zero velocity on the wall, $T(\mathbf{x}_f) = T_w$ of each face).
+  With these positions in the face metrics (`stencil`) the face gradients next
+  to walls and `400` faces are exact for those fields, whatever the density:
+  the quantities differenced are extrapolated themselves. The density gradient
+  of the source terms takes the position of the temperature: exact for the
+  value where the pressure and the composition do not vary across the wall
+  cell (a boundary layer).
+- **Fluxes and sources.** One set of ghost cells: the wall flux routines no
+  longer write ghost values (before, the turbulence variables after the fluxes,
+  and copies of the densities and of the pressure for the sources), and the
+  source terms take the positions of the table.
+
+Where a limit acts the ghost value is no longer the value of the field at its
+position, and the gradients next to the face are first order there: it happens
+only where a quantity changes by more than a factor two between the first two
+cells, or where the first cell is 1.5 times hotter than a `302` wall. At the
+end of a run one line reports the ghost fills in which either acted:
+
+```
+ Ghost cells of walls and 400 faces, fills with the extrapolation cut: <n>, with the 302 temperature at T_w/2: <m>
+```
+
+Declared limits:
+
+- the ghost cells of walls keep the geometry extrapolated from the nodes, so on
+  a mesh stretched across the wall by the ratio $r$ the MUSCL slope of the
+  wall-value classes at the first interior face differs from the slope inside
+  by the factor $2/(3 - r)$ for a linear field (1.11 at $r = 1.2$): bounded and
+  consistent, not exact; the extrapolated class is exact there ($s$);
+- `503`–`505`: the velocity and the temperature are extrapolated (the surface
+  may blow, its state is set at every call of its routine) and the wall value
+  of $\omega$ is that of an adiabatic wall at the state of the cell; with the
+  blowing correction of $\omega$ (`-blowcorr`) the wall flux takes the corrected
+  value, the ghost cell the uncorrected one;
+- the temperature of a `301` wall is extrapolated (consistent, exact for every
+  linear field) rather than set from the heat flux;
+- the SRM grain (`502`) and the other types keep the extrapolation
+  $3q_1 - 3q_2 + q_3$ of the primitives; with a RANS model a `502` boundary
+  stops the run at set-up (see the boundary conditions of the user guide).
 
 ## Axisymmetric Wedge (BC 200)
 

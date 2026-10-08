@@ -3,13 +3,16 @@ module MOSE_Lib_BC_Fluxes_Wall_Temperature
   use MOSE_Advanced_Types_m
   use MOSE_Global_m
   use MOSE_Parameters_m
-  use MOSE_Lib_BC_Fluxes, only: Face_Index, Compute_Modfm, Compute_Wall_Properties
+  use MOSE_Lib_BC_Fluxes, only: Face_Index, Compute_Modfm, Compute_Wall_Properties, Wall_State_Temperature
 
   implicit none
   public
 
 contains
 
+  !> Wall of prescribed temperature T_wall: the viscous flux of the face. Its ghost values, turbulence variables included,
+  !> are those of Fill_Ghost_Cell (Ghost_Wall in MOSE_Lib_Ghost), the one set of ghost cells of the fluxes and of the source
+  !> terms (an SRM grain, 502, which falls back on this wall when it does not burn, runs without a RANS model).
   subroutine BC_Wall_Temperature ( Im, Jm, Km, Fm, Blk, T_wall, Ovar, w_wall, k_rough, rec )
     use MOSE_Config_Types_m, only: obj_rans
     use MOSE_Lib_Fluid
@@ -24,7 +27,7 @@ contains
     real(R8), optional, intent(in) :: k_rough   ! sand-grain roughness of the face (absent = smooth)
     type(MOSE_bc_type), optional, intent(in) :: rec   ! the record of the face: its wall stencil (diffusive-metric = stencil)
     ! Local
-    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, ig, jg, kg
+    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k
     real(R8) :: Normal(3), Area, Dist, M(3,3), Prim(nprim), rho, Rgas, T, rho_wall, dl
     real(R8) :: Prim_wall(nprim), mil, kl, Gradient(nprim,3), Stress(3), Flux(nprim)
     integer  :: vgrad_i
@@ -58,12 +61,10 @@ contains
     ! Initialization
     Gradient = 0d0
 
-    ! Boundary layer: p(wall) = p(cell). Also, non catalytic wall, so R(wall) = R(cell) and ci(wall) = ci(cell), but not roi
-    rho_wall = Prim(np) / ( Rgas * T_wall )
-    Prim_wall(1:nsc) = Prim(1:nsc) * rho_wall / rho
-
-    ! Laminar viscosity/conductivity at interface computed at Twall
-    call co_k_mi_lam_Wilke ( Prim_wall(1:nsc), rho_wall, T_wall, mil, kl )
+    ! Boundary layer: p(wall) = p(cell). Also, non catalytic wall, so R(wall) = R(cell) and ci(wall) = ci(cell), but not roi.
+    ! Laminar viscosity/conductivity at interface computed at Twall. The same wall state as the ghost cells of the wall
+    ! (Ghost_Wall in MOSE_Lib_Ghost).
+    call Wall_State_Temperature ( Prim, rho, Rgas, T_wall, rho_wall, Prim_wall(1:nsc), mil, kl )
 
     ! Difference in Across-face direction: symmetry; tangential direction: null (with the wall stencil, below: the
     ! differences of the wall values)
@@ -131,12 +132,6 @@ contains
                                  rans_gradient=Gradient(nt:nprim,:), &
                                  mul=mil, rho=rho_wall, &
                                  area=area, normal=normal, dist=dist )
-      ! Ghost-cell extrapolation of RANS variables
-      ig = im - guide(fm,1)
-      jg = jm - guide(fm,2)
-      kg = km - guide(fm,3)
-      call RANS_Extrapolate_Wall ( Prim(nt:nprim), Prim_Wall(nt:nprim), &
-                                   rho, rho_wall, Blk % P(nt:nprim,Ig,Jg,Kg) )
     endif
 
     ! Residual update

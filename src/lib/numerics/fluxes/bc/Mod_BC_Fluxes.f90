@@ -3,7 +3,7 @@ module MOSE_Mod_BC_Fluxes
   
   implicit none
   private
-  public :: BC_Fluxes, Wall_RANS_Ghosts
+  public :: BC_Fluxes
 
 contains
 
@@ -368,121 +368,5 @@ contains
     end if
 
   end subroutine Connection_Fluxes
-
-
-  !> Ghost values of the turbulence variables behind the viscous walls (301, 302,
-  !> 503-505) from their wall values, Z_ghost = 2 Z_wall - Z_cell, without the
-  !> other boundary fluxes. The wall flux routines are called as BC_Fluxes does, for
-  !> their ghost cells only: they also add their flux to the residual of the wall
-  !> cell, which must therefore be one that nobody uses. They write nothing else (no
-  !> saved state, no module variables; the gas-surface interaction walls restart
-  !> their temperature iteration from the cell at every call), so an extra call does
-  !> not change their history. Used by the stiffness pass of the time step
-  !> (Turbulence_Stiffness), which evaluates the turbulence sources without the
-  !> fluxes. Call it inside an OpenMP parallel region, like BC_Fluxes; nothing to do
-  !> without a RANS model.
-  subroutine Wall_RANS_Ghosts ( domain )
-    use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rot
-    use MOSE_Global_m, only: model
-    use MOSE_Mod_MPI, only: is_local_block
-    use MOSE_Lib_RotatingFrame
-    use MOSE_Lib_BC_Fluxes_Wall_Heat
-    use MOSE_Lib_BC_Fluxes_Wall_Temperature
-    use MOSE_Lib_BC_Fluxes_GSI_Melting
-    use MOSE_Lib_BC_Fluxes_GSI_Pyrolysis
-    use MOSE_Lib_BC_Fluxes_GSI_Reactions
-    implicit none
-    type(MOSE_domain_type), intent(inout) :: domain
-    ! Local
-    integer  :: f, lower, upper, i, ii, b
-    integer  :: Bm, Im, Jm, Km, Fm
-    real(R8) :: r_fc(3)                              ! Face centre [m] (stationary-wall BCs)
-    logical  :: ablating                             ! GSI walls: is the surface consuming material?
-    real(R8) :: Tw_surface                           ! GSI walls: wall temperature for the inert fallback
-
-    if ( model /= 2 ) return
-
-    ! The lists of BC_Fluxes (build_local_bc_index): the records of the blocks this rank
-    ! owns, block by block and face by face whatever the order of bc.txt, the cells of one
-    ! face in parallel, so that two wall faces of a corner cell never update its residual
-    ! together. The ranges n_bf(b,f) of the record list hold one face of one block only
-    ! when bc.txt is sorted by block and face.
-    blocks: do b = 1, domain % nb
-      if (.not. is_local_block(b)) cycle blocks
-      faces: do f = 1, 6
-
-        lower = domain % local_bf_first(b,f)
-        upper = lower + domain % local_bf_count(b,f) - 1
-
-        !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, r_fc, ablating, Tw_surface)
-        do ii = lower, upper
-          i  = domain % local_bf_idx(ii)
-          Bm = domain % bc(i) % b
-          Im = domain % bc(i) % i
-          Jm = domain % bc(i) % j
-          Km = domain % bc(i) % k
-          Fm = domain % bc(i) % f
-          select case ( domain % bc(i) % type )
-
-            case (301) ! wall: prescribed heat flux
-              if (obj_rot%enabled.AND.RF_Is_Stationary_Face(Bm,Fm)) then
-                call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
-                call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, &
-                                    w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
-                                    rec = domain % bc(i) )
-              else
-                call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, &
-                                    k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
-              endif
-
-            case (302) ! wall: prescribed temperature
-              if (obj_rot%enabled.AND.RF_Is_Stationary_Face(Bm,Fm)) then
-                call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, &
-                                           w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
-                                    rec = domain % bc(i) )
-              else
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, &
-                                           k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
-              endif
-
-            ! Gas-surface interaction walls: the routine of BC_Fluxes, and the same
-            ! fallback to an impermeable wall when the surface is inert.
-            case (503) ! GSI - melting
-              ablating = .false.
-              Tw_surface = domain % bc(i) % Tw
-              call BC_Wall_Melting( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % cp_wall, domain % bc(i) % Tw, &
-                                                                      domain % bc(i) % Ti_wall, domain % bc(i) % dh_wall, &
-                                                                      domain % bc(i) % qrad, domain % bc(i) % ci, &
-                                                                      ablating = ablating, T_surface = Tw_surface )
-              if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
-
-            case (504) ! GSI - pyrolysis
-              ablating = .false.
-              Tw_surface = 0d0
-              call BC_Wall_Pyrolysis( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_pyro_model_id, &
-                                                                        domain % bc(i) % qrad, domain % bc(i) % ci, &
-                                                                        ablating = ablating, T_surface = Tw_surface )
-              if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
-
-            case (505) ! GSI - surface reactions
-              ablating = .false.
-              Tw_surface = 0d0
-              call BC_Wall_Reactions( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_surf_reac_id, &
-                                      domain % bc(i) % qrad, ablating = ablating, T_surface = Tw_surface )
-              if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
-
-          end select
-
-        enddo
-
-      enddo faces
-    enddo blocks
-
-  end subroutine Wall_RANS_Ghosts
 
 end module MOSE_Mod_BC_Fluxes

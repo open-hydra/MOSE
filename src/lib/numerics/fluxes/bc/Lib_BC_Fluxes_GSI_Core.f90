@@ -435,8 +435,8 @@ contains
                                  mul=mu_wall, rho=rho_wall, area=face % area, &
                                  normal=face % normal, dist=WALL_DISTANCE )
 
-      call RANS_Extrapolate_Wall ( Prim(nt:nprim), Prim_wall(nt:nprim), rho, rho_wall, &
-                                   Blk % P(nt:nprim, face % ghost(1), face % ghost(2), face % ghost(3)) )
+      ! The ghost cells of the wall, turbulence variables included, are those of Fill_Ghost_Cell (Ghost_Wall in
+      ! MOSE_Lib_Ghost): one set of ghost cells for the fluxes and the source terms
     end if
 
     ! Residual update

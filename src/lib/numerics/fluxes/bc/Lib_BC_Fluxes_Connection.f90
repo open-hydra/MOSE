@@ -239,13 +239,14 @@ contains
     integer, intent(in)  :: Im, Jm, Km, Fm
     real(R8), intent(in) :: Sc, Sct, Prt, Prl
     logical, intent(in)  :: soot_enabled
-    type(MOSE_block_type), intent(in) :: Blk
+    type(MOSE_block_type), intent(in), target :: Blk
     real(R8), intent(in)              :: Pg(nprim,6)
     real(R8), intent(out)             :: dR(nprim)
     ! Local
     integer :: dir, Face_i, Face_j, Face_k, Ig, Jg, Kg, a, b, c
     integer :: e(3,3)
     real(R8), dimension(nprim) :: Rl, Rr
+    real(R8), pointer, contiguous :: Mg(:,:,:)   ! metrics per group with a wall ghost cell in the stencil, else absent
 
     call Face_Index ( Fm, dir, Im, Jm, Km, Face_i, Face_j, Face_k )
     Ig = Im - guide(Fm,1)
@@ -260,6 +261,8 @@ contains
     Rl = 0d0
     Rr = 0d0
 
+    nullify ( Mg )
+    if ( Blk % dir(dir) % ig(Face_i,Face_j,Face_k) > 0 ) Mg => Blk % dir(dir) % Mg(:,:,:,Blk % dir(dir) % ig(Face_i,Face_j,Face_k))
     associate ( f => Blk % dir(dir) % f(Face_i,Face_j,Face_k), Mf => Blk % dir(dir) % Mf(Face_i,Face_j,Face_k) % c )
     if ( mod(Fm,2) == 0 ) then
       ! the cell is on the low-index side of the face: cell 1 = cell, cell 2 = ghost
@@ -270,7 +273,7 @@ contains
                             Pg(:,3), Pg(:,4),                                                       &
                             Blk % P(:,Im-e(1,c),Jm-e(2,c),Km-e(3,c)), Blk % P(:,Im+e(1,c),Jm+e(2,c),Km+e(3,c)), &
                             Pg(:,5), Pg(:,6),                                                       &
-                            Mf, Rl, Rr, a, b, c, Sc, Sct, Prt, Prl, soot_enabled )
+                            Mf, Rl, Rr, a, b, c, Sc, Sct, Prt, Prl, soot_enabled, Mg = Mg )
       dR = Rl
     else
       ! cell 1 = ghost, cell 2 = cell
@@ -281,7 +284,7 @@ contains
                             Blk % P(:,Im-e(1,b),Jm-e(2,b),Km-e(3,b)), Blk % P(:,Im+e(1,b),Jm+e(2,b),Km+e(3,b)), &
                             Pg(:,5), Pg(:,6),                                                       &
                             Blk % P(:,Im-e(1,c),Jm-e(2,c),Km-e(3,c)), Blk % P(:,Im+e(1,c),Jm+e(2,c),Km+e(3,c)), &
-                            Mf, Rl, Rr, a, b, c, Sc, Sct, Prt, Prl, soot_enabled )
+                            Mf, Rl, Rr, a, b, c, Sc, Sct, Prt, Prl, soot_enabled, Mg = Mg )
       dR = Rr
     end if
     end associate

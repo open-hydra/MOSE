@@ -40,10 +40,15 @@ Runs:
          whose wall cells have nodes moved at random; the other outer faces 400. Checked: the momentum of the wall cells.
   rk3    u = 0, uniform p = 10 Pa, T linear (rho = p/(R T)): steady for the Euler equations and, with a face gradient
          exact for linear fields, for the Navier-Stokes equations, at every stage (the low pressure: see P_LOW).
-         Three-stage Runge-Kutta step, 12 x 12 cells per block (star3, star5 only). The ghost cells of the outer faces
-         extrapolate rho, not T, so their cells drift; that drift travels at most two cells per stage: checked are the
-         cells within 4 cells of the point shared by the blocks, whose stencils at every stage hold the ghost cells and
-         the cells of the other blocks at that point.
+         Three-stage Runge-Kutta step, 12 x 12 cells per block (star3, star5 only). Checked are the cells within 4 cells
+         of the point shared by the blocks, whose stencils at every stage hold the ghost cells and the cells of the
+         other blocks at that point.
+  enep   as ene, but with a uniform pressure p = 10 Pa, so rho = p/(R T) is not uniform: the ghost cells of the walls and
+         400 faces must extrapolate T itself (and the 302 walls take T_w), not the density and the pressure, for T to
+         stay on the linear field. Checked: the energy of the cells without a 400 face.
+  hot    paraT only, uniform T, p = 10 Pa + 4e4 Pa/m (x - 1 cm), walls 302 at T_w = T/2: the first cell is hotter than
+         1.5 T_w and the pressure more than doubles between the first two cells at the 400 faces, so the floor of the
+         wall temperature and the cut of the extrapolation act. Checked: the line of the run that counts them.
 
 Observable: one explicit step from the same state with the Navier-Stokes equations and one reference step (mom: the Euler
 equations; ene, momw: Navier-Stokes with mu = k = 1e-30 and q = 0 on the 301 faces, because the solver refuses walls 301 and
@@ -56,9 +61,11 @@ blocks; corner: two of them, the cells at a point shared by 3 or 5 blocks), symm
 
 ViscousLinearPatch checks every group but wall 302, plus the old metrics: on the rand1 mesh, run mom, diffusive-metric =
 inverse-mean and mean must give, cell by cell, the viscous force of an independent replica of their face gradients
-(written here from Lib_Diffusive.f90 and Lib_Metrics.f90 at bff5a51), within 1e-10 of the scale. ViscousWallPatch checks
-the cells with a 302 face: walls whose temperature varies along the wall, on skewed cells (ene), and the velocity at a
-no-slip wall whose cells have nodes moved at random (momw).
+(written here from Lib_Diffusive.f90 and Lib_Metrics.f90 at bff5a51, with the ghost values of the 400 faces of
+Ghost_Wall), within 1e-10 of the scale. ViscousWallPatch checks the cells with a 302 face: walls whose temperature varies
+along the wall, on skewed cells (ene), and the velocity at a no-slip wall whose cells have nodes moved at random (momw); and
+the cells next to walls 301 and 302 with T linear at uniform pressure (enep), and the count of the limits of the wall ghost
+cells (hot).
 
 Usage (from a test directory):
   python3 -B make_case.py case MESH RUN [METRIC]     INPUT/ic.tec; INPUT/bc-ns.txt, input-ns.ini for the Navier-Stokes
@@ -68,6 +75,7 @@ Usage (from a test directory):
   python3 -B make_case.py check MESH RUN NS REF GROUPS prints the largest error of each group and exits with 0 when the
                                                       groups listed (comma-separated) are below the threshold
   python3 -B make_case.py replica MESH NS REF METRIC  compares the viscous force with the replica of METRIC (mom run)
+  python3 -B make_case.py limits LOG                  the run hot: the counts of the floor and of the cut are positive
 """
 import math
 import os
@@ -91,7 +99,7 @@ TOL = 1.0e-11
 TOL_REPLICA = 1.0e-10
 FMT = '{: .17E}'
 MESHES = ('fold2', 'jump', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
-RUNS = ('mom', 'ene', 'rk3', 'momw')
+RUNS = ('mom', 'ene', 'rk3', 'momw', 'enep', 'hot')
 BC_CONNECT, BC_SYM, BC_Q, BC_T, BC_OPEN = 101, 300, 301, 302, 400
 
 
@@ -427,6 +435,7 @@ g3 = np.array([2000.0, -1500.0, 1000.0])
 gsym = np.array([2000.0, 0.0, 0.0])
 gparaT = np.array([0.0, 2000.0, 0.0])      # normal to the walls y = 2, 3 cm of paraT: T_w uniform along each wall
 gparaQ = np.array([2000.0, 0.0, 0.0])      # along the walls of paraQ: q = k g . n = 0 there
+GP_HOT = 4.0e4                             # run hot: pressure gradient along x, Pa/m (50 Pa per cell of paraT)
 
 
 def field(mesh, run):
@@ -452,6 +461,9 @@ def state(mesh, run, x):
     if run in ('mom', 'momw'):
         u = f['u0'] + f['G'].dot(x - f['x0'])
         return P_LOW / (RGAS * T0), u, P_LOW
+    if run == 'hot':
+        p = P_LOW + GP_HOT * (x[0] - LREF * OFFSET[0])
+        return p / (RGAS * T0), np.zeros(3), p
     T = T0 + f['g'].dot(x - f['x0'])
     if run == 'ene':
         return RHO0, np.zeros(3), RHO0 * RGAS * T
@@ -510,6 +522,8 @@ def write_case(mesh, run, metric):
                         if t == BC_T:
                             xf = 0.25 * sum(face_nodes(X, face, i, j, k))
                             tw = T0 if run == 'momw' else T0 + f['g'].dot(xf - f['x0'])
+                            if run == 'hot':
+                                tw = 0.5 * T0
                             rows.append(head + f'{t:8d}\n' + f'    {tw:.17E},    0.000000E+00,    0.000000E+00,\n')
                         elif t == BC_Q:
                             d = (face + 1) // 2
@@ -673,6 +687,21 @@ def check(mesh, run, ns_path, eu_path, wanted):
     return ok
 
 
+def limits(log):
+    """The run hot: the line of the run that counts the ghost fills with the cut of the extrapolation and with the floor
+    of the 302 wall temperature; both must be positive."""
+    m = None
+    for line in open(log, errors='replace'):
+        m = re.search(r'fills with the extrapolation cut:\s*(\d+), with the 302 temperature at T_w/2:\s*(\d+)', line) or m
+    if m is None:
+        print('    paraT  hot  no line counting the limits of the ghost cells  [FAIL]')
+        return False
+    cut, floor = int(m.group(1)), int(m.group(2))
+    ok = cut > 0 and floor > 0
+    print(f'    paraT  hot  ghost fills with the cut: {cut}, with the floor T_w/2: {floor}  [{"ok  " if ok else "FAIL"}]')
+    return ok
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Replica of the face gradients of inverse-mean and mean (Lib_Diffusive.f90, Lib_Metrics.f90 at bff5a51) for the mom run
 # ----------------------------------------------------------------------------------------------------------------------
@@ -703,8 +732,26 @@ def cell_metric(X, i, j, k):
     return np.linalg.inv(A).T
 
 
+def extrapolation_ratio(X, face, i, j):
+    """s = l0/l1 of the MUSCL distances behind face 1-4 of cell (i, j) of a 2-D block (Extrapolation_Ratio of
+    Lib_Metrics.f90): mean edges across the face of the cell, of the next one and of the ghost cell whose nodes are
+    extrapolated as 3 N0 - 3 N1 + N2."""
+    ni, nj, _ = dims(X)
+    planes = {1: (0, 1, 2), 2: (ni, ni - 1, ni - 2), 3: (0, 1, 2), 4: (nj, nj - 1, nj - 2)}[face]
+    e1 = np.zeros(3); e2 = np.zeros(3); eg = np.zeros(3)
+    for t in ((j - 1, j) if face <= 2 else (i - 1, i)):
+        for k in (0, 1):
+            n0, n1, n2 = ((X[a, t, k] if face <= 2 else X[t, a, k]) for a in planes)
+            e1 += n1 - n0
+            e2 += n2 - n1
+            eg += 3.0 * n1 - n2 - 2.0 * n0
+    l = [float(np.linalg.norm(0.25 * e)) for e in (eg, e1, e2)]
+    return (l[0] + l[1]) / (l[1] + l[2])
+
+
 def replica(mesh, ns_path, eu_path, metric):
-    """mom run, one block, outer faces 400 (no viscous flux; ghost values 3 u1 - 3 u2 + u3), k faces 300 (copies)."""
+    """mom run, one block, outer faces 400 (no viscous flux; ghost values u1 + s (u1 - u2), s = l0/l1 of the MUSCL
+    distances: Ghost_Wall), k faces 300 (copies)."""
     run = 'mom'
     blocks = build(mesh, run)
     if len(blocks) != 1:
@@ -719,11 +766,11 @@ def replica(mesh, ns_path, eu_path, metric):
         for j in range(nj):
             U[i + 1, j + 1] = f['u0'] + f['G'].dot(C[i, j, 0] - f['x0'])
     for j in range(1, nj + 1):
-        U[0, j] = 3 * U[1, j] - 3 * U[2, j] + U[3, j]
-        U[ni + 1, j] = 3 * U[ni, j] - 3 * U[ni - 1, j] + U[ni - 2, j]
+        U[0, j] = U[1, j] + extrapolation_ratio(X, 1, 1, j) * (U[1, j] - U[2, j])
+        U[ni + 1, j] = U[ni, j] + extrapolation_ratio(X, 2, ni, j) * (U[ni, j] - U[ni - 1, j])
     for i in range(1, ni + 1):
-        U[i, 0] = 3 * U[i, 1] - 3 * U[i, 2] + U[i, 3]
-        U[i, nj + 1] = 3 * U[i, nj] - 3 * U[i, nj - 1] + U[i, nj - 2]
+        U[i, 0] = U[i, 1] + extrapolation_ratio(X, 3, i, 1) * (U[i, 1] - U[i, 2])
+        U[i, nj + 1] = U[i, nj] + extrapolation_ratio(X, 4, i, nj) * (U[i, nj] - U[i, nj - 1])
     M = {}
     for i in range(1, ni + 1):
         for j in range(1, nj + 1):
@@ -780,6 +827,8 @@ def main():
     elif what == 'replica':
         mesh, ns, eu, metric = sys.argv[2:6]
         sys.exit(0 if replica(mesh, ns, eu, metric) else 1)
+    elif what == 'limits':
+        sys.exit(0 if limits(sys.argv[2]) else 1)
     else:
         sys.exit('unknown request ' + what)
 

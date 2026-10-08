@@ -52,7 +52,7 @@ contains
     ! Local
     integer :: b
     logical :: SpalartShur, SAR, SAcomp, point_implicit
-    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:), Mc(:,:,:)   ! cell metrics of the sources (Source_Metrics)
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:), Mc(:,:,:), Mt(:,:,:)   ! cell metrics of the sources (Source_Metrics)
 
     SpalartShur = obj_rans%SpalartShur
     SAR         = obj_rans%SAR
@@ -69,10 +69,10 @@ contains
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
-      call Source_Metrics ( domain % blk(b), Mi, Mc )
+      call Source_Metrics ( domain % blk(b), Mi, Mc, Mt=Mt )
       call SA_Source_Blk ( domain % blk(b) % P,            &
                            domain % blk(b) % r,            &
-                           Mi, Mc,                         &
+                           Mi, Mc, Mt,                     &
                            domain % blk(b) % yn,           &
                            domain % blk(b) % k_rough,      &
                            domain % blk(b) % vol,          &
@@ -90,7 +90,7 @@ contains
   end subroutine Spalart_Source_Terms
 
 
-  subroutine SA_Source_Blk ( Prim, Res, M, Mc, yn, k_rough, vol, gradv, rc1, rc2, dt, stiff, n, SpalartShur, SAR, SAcomp, &
+  subroutine SA_Source_Blk ( Prim, Res, M, Mc, Mt, yn, k_rough, vol, gradv, rc1, rc2, dt, stiff, n, SpalartShur, SAR, SAcomp, &
                              point_implicit )
     use MOSE_Base_Types_m
     use MOSE_Global_m
@@ -105,8 +105,9 @@ contains
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: yn
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: k_rough
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: vol
-    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M    ! wall values imposed
-    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mc   ! wall values copied
+    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M    ! velocity
+    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mc   ! density
+    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variable
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
@@ -195,7 +196,7 @@ contains
       Gradnit(3) = ( Prim(nt,i,j,k+1) / sum( Prim(1:nsc,i,j,k+1) ) - &
                      Prim(nt,i,j,k-1) / sum( Prim(1:nsc,i,j,k-1) ) ) * 0.5d0
 
-      Gradnit = Matmul ( Gradnit, M(i,j,k) % c ) ! ni-tilde gradient
+      Gradnit = Matmul ( Gradnit, Mt(i,j,k) % c ) ! ni-tilde gradient
 
       Gradnit2 = Sum ( Gradnit**2 )              ! ni-tilde gradient squared
 
@@ -203,7 +204,7 @@ contains
       Gradrho(1) = ( sum( Prim(1:nsc,i+1,j,k) ) - sum( Prim(1:nsc,i-1,j,k) ) ) * 0.5d0
       Gradrho(2) = ( sum( Prim(1:nsc,i,j+1,k) ) - sum( Prim(1:nsc,i,j-1,k) ) ) * 0.5d0
       Gradrho(3) = ( sum( Prim(1:nsc,i,j,k+1) ) - sum( Prim(1:nsc,i,j,k-1) ) ) * 0.5d0
-      Gradrho = Matmul ( Gradrho, Mc(i,j,k) % c )   ! the wall ghost cells copy the densities
+      Gradrho = Matmul ( Gradrho, Mc(i,j,k) % c )   ! behind a wall the density follows the temperature (Ghost_Wall)
 
       ! Diffusion terms outside the flux div((mu + rho nu~) grad nu~)/sigma: the cb2 term and, with variable density,
       ! -(nu + nu~) grad rho . grad nu~ / sigma, which makes this conservation form equal to the original equation

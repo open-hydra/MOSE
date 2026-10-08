@@ -31,10 +31,12 @@ centres, and the ghost cells of the wall the position at which their value is ri
              (r - 1)/4 in the wall cell and (r - 1)^2/(4 r) in the others, over cb2 in units of the scale. The check is
              on the right-hand side less this term;
   skewed     6 x 16 cells skewed by 20 degrees (x += y tan 20), the sides x = const of 400 type (their columns are not
-             checked), with T and so rho linear along the wall (T = T0 + 2000 K/m (x - x_mid), wall at T(x)). rho is copied
-             into the ghost cell of the wall: at the cell itself the copy is right for any linear field, at the reflection
-             2 x_f - x_c it is not and grad rho takes a normal component, which the term -(nu + nu~) grad rho . grad nu~ /
-             sigma turns into about 0.3 of the scale. The wall distance of MOSE is that to the nearest wall face centre, not y, on skewed cells:
+             checked), with T and so rho linear along the wall (T = T0 + 2000 K/m (x - x_mid), wall at T(x)). The ghost
+             cell of the wall takes T = 2 T_w - T_c at the reflection 2 x_f - x_c of the cell centre and the pressure of the
+             cell, so its density is that of the field at that point (Ghost_Wall), and the cell metric of the density takes
+             that point; a density at a point where it is not right gives grad rho a normal component, which the term
+             -(nu + nu~) grad rho . grad nu~ / sigma turns into about 0.3 of the scale (a copy at the reflection, as before
+             the metrics of the sources took the cell itself for it). The wall distance of MOSE is that to the nearest wall face centre, not y, on skewed cells:
              the equilibrium does not hold, so the same column at uniform T is solved too and the difference of
              (right-hand side)/rho between the two runs, over (cb2/sigma) a^2, is checked; it holds the terms in grad rho;
   skewed3d   the same in 3-D: 5 x 16 x 5 cells, x += y tan 20, z += y tan 10, T linear in x and z, the sides of 400 type.

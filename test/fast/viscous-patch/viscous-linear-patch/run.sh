@@ -17,7 +17,10 @@
 #  symmetry planes and next to walls with a prescribed heat flux (301); also
 #  at every stage of a three-stage step at the points shared by 3 and 5 blocks.
 #  The cells next to walls of prescribed temperature (302) are the test
-#  ViscousWallPatch. Controls that every face metric passes:
+#  ViscousWallPatch, with a T linear at uniform pressure (the density not
+#  uniform) next to walls 301 and 302 and 400 faces, whose ghost cells must
+#  extrapolate T itself, and a run where the limits of those ghost cells act
+#  (counted at the end of the run). Controls that every face metric passes:
 #  walls 301 with q = 0 (here) and 302 with T_w uniform along the wall
 #  (ViscousWallPatch) on parallelogram cells. Plus the face metrics
 #  inverse-mean and mean: they must give the viscous force of an
@@ -53,7 +56,7 @@ step() {
   cp "input-$tag.ini" input.ini
   cp "INPUT/bc-$tag.txt" INPUT/bc.txt
   rm -f INPUT/transport.dat
-  if [[ $tag == ref && ( $run == ene || $run == momw ) ]]; then
+  if [[ $tag == ref && ( $run == ene || $run == enep || $run == momw ) ]]; then
     ln -sf transport-ref.dat INPUT/transport.dat
   else
     ln -sf "../$VISC/transport.dat" INPUT/transport.dat
@@ -85,6 +88,18 @@ if [[ $NAME == ViscousWallPatch ]]; then
     step ref "$mesh" momw
     python3 -B "$MC" check "$mesh" momw "OUTPUT/diag-$mesh-momw-ns.tec" "OUTPUT/diag-$mesh-momw-ref.tec" wall302 || status=1
   done
+  echo "-- T linear at uniform pressure (density not uniform): walls 301, 302 and 400 faces extrapolate T itself --"
+  for mesh in fold2 jump star3 star5 box3d sym paraT; do
+    python3 -B "$MC" case "$mesh" enep > /dev/null || exit 1
+    step ns "$mesh" enep
+    step ref "$mesh" enep
+    python3 -B "$MC" check "$mesh" enep "OUTPUT/diag-$mesh-enep-ns.tec" "OUTPUT/diag-$mesh-enep-ref.tec" \
+      interior,connection,corner,symmetry,wall301,wall302 || status=1
+  done
+  echo "-- limits: a 302 wall colder than 2/3 of its first cell, the pressure doubling at the 400 faces: counted --"
+  python3 -B "$MC" case paraT hot > /dev/null || exit 1
+  step ns paraT hot
+  python3 -B "$MC" limits OUTPUT/paraT-hot-ns.log || status=1
 else
   echo "-- viscous patch test: linear velocity (mom) and linear temperature (ene) --"
   for mesh in fold2 jump star3 star5 box3d sym; do

@@ -228,7 +228,7 @@ contains
     use MOSE_Lib_Shock_Detector
     use MOSE_Lib_Convective
     use MOSE_Lib_Diffusive
-    use MOSE_Lib_Stencil_Metrics, only: Viscous_Face_Metric
+    use MOSE_Lib_Stencil_Metrics, only: Viscous_Face_Metric, METRIC_STENCIL
     implicit none
     ! Inputs
     integer, intent(in)  :: b                ! block id, for error messages only
@@ -245,8 +245,10 @@ contains
     !> face.  Per-thread already — Fluxes_blk runs inside an orphaned parallel
     !> region.
     real(R8) :: dl4(-1:2)
-    !> Face metric handed to Diffusive_Flux (Viscous_Face_Metric)
+    !> Face metric handed to Diffusive_Flux (Viscous_Face_Metric); with a wall ghost cell in the stencil, the metrics per
+    !> group of quantities (absent, a disassociated pointer, elsewhere)
     real(R8) :: Mf(3,3)
+    real(R8), pointer, contiguous :: Mg(:,:,:)
 
     n = blk % dim
 
@@ -294,6 +296,10 @@ contains
       do j = 1, n(2)
       do i = 1, n(1) - 1
       Mf = Viscous_Face_Metric ( blk, 1, i, j, k, metric )
+      nullify ( Mg )
+      if ( metric == METRIC_STENCIL ) then
+        if ( blk % dir(1) % ig(i,j,k) > 0 ) Mg => blk % dir(1) % Mg(:,:,:,blk % dir(1) % ig(i,j,k))
+      end if
       call Diffusive_Flux ( blk % dir(1) % f(i,j,k) % N,  &
                             blk % dir(1) % f(i,j,k) % A,  &
                             blk % yn(i  ,j,k),            &
@@ -314,7 +320,7 @@ contains
                             blk % R(:,i  ,j,k),           &
                             blk % R(:,i+1,j,k),           &
                             1, 2, 3,                &
-                            Sc, Sct, Prt, Prl, soot_enabled)
+                            Sc, Sct, Prt, Prl, soot_enabled, Mg = Mg )
       enddo; enddo; enddo
     endif
 
@@ -341,6 +347,10 @@ contains
       do i = 1, n(1)
       do j = 1, n(2) - 1
       Mf = Viscous_Face_Metric ( blk, 2, i, j, k, metric )
+      nullify ( Mg )
+      if ( metric == METRIC_STENCIL ) then
+        if ( blk % dir(2) % ig(i,j,k) > 0 ) Mg => blk % dir(2) % Mg(:,:,:,blk % dir(2) % ig(i,j,k))
+      end if
       call Diffusive_Flux ( blk % dir(2) % f(i,j,k) % N,  &
                             blk % dir(2) % f(i,j,k) % A,  &
                             blk % yn(i,j  ,k),            &
@@ -361,7 +371,7 @@ contains
                             blk % R(:,i,j  ,k),           &
                             blk % R(:,i,j+1,k),           &
                             2, 1, 3,                &
-                            Sc, Sct, Prt, Prl, soot_enabled)
+                            Sc, Sct, Prt, Prl, soot_enabled, Mg = Mg )
       enddo; enddo; enddo
     end if
 
@@ -388,6 +398,10 @@ contains
       do i = 1, n(1)
       do k = 1, n(3) - 1
       Mf = Viscous_Face_Metric ( blk, 3, i, j, k, metric )
+      nullify ( Mg )
+      if ( metric == METRIC_STENCIL ) then
+        if ( blk % dir(3) % ig(i,j,k) > 0 ) Mg => blk % dir(3) % Mg(:,:,:,blk % dir(3) % ig(i,j,k))
+      end if
       call Diffusive_Flux ( blk % dir(3) % f(i,j,k) % N,  &
                             blk % dir(3) % f(i,j,k) % A,  &
                             blk % yn(i,j,k  ),            &
@@ -408,7 +422,7 @@ contains
                             blk % R(:,i,j,k  ),           &
                             blk % R(:,i,j,k+1),           &
                             3, 1, 2,                &
-                            Sc, Sct, Prt, Prl, soot_enabled )
+                            Sc, Sct, Prt, Prl, soot_enabled, Mg = Mg )
       enddo; enddo; enddo
     endif
 

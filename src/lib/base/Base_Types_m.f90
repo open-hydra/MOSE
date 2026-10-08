@@ -29,6 +29,8 @@ module MOSE_Base_Types_m
   type :: MOSE_d_metrics_type
     type(MOSE_f_metrics_type), allocatable  :: f(:,:,:)   
     type(MOSE_tensor_3D_type), allocatable  :: Mf(:,:,:)  !> Face metric of the viscous fluxes, diffusive-metric = stencil
+    integer, allocatable                    :: ig(:,:,:)  !> Faces with a wall ghost cell in their stencil: column of Mg, else 0
+    real(R8), allocatable                   :: Mg(:,:,:,:) !> Their face metrics per group of quantities (3,3,4,:)
   end type MOSE_d_metrics_type
   !! ------------------------------------------------------
   !! ------------------------------------------------------

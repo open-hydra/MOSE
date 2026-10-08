@@ -1506,6 +1506,55 @@ contains
   end subroutine Yn_Chimera
 
 
+  !> Ratio s = l0/l1 of the distances of the MUSCL reconstruction (Convective_Flux) at the first interior face behind
+  !> boundary face Fm of cell (Im,Jm,Km): l0 = (dl_g + dl_1)/2, l1 = (dl_1 + dl_2)/2 along the direction of the face, with
+  !> the cell lengths of Compute_Metric_Tensor (the norm of the mean edge) and the ghost cell of BC_Extrapolate_Metrics
+  !> (node planes 3 N_0 - 3 N_1 + N_2). 0 with one cell along that direction. From the nodes, so that every rank computes
+  !> the same value for every block: Ghost_Wall extrapolates with it, MOSE_Lib_Stencil_Metrics places the ghost cells
+  !> with it.
+  function Extrapolation_Ratio ( node, Im, Jm, Km, Fm, n ) result ( s )
+    implicit none
+    type(MOSE_vector_3D_type), intent(in) :: node(0:,0:,0:)
+    integer, intent(in) :: Im, Jm, Km, Fm, n(3)
+    real(R8) :: s
+    ! Local
+    integer  :: d, a(0:2), t1, t2, p, q, x(3)
+    real(R8) :: e1(3), e2(3), eg(3), n0(3), n1(3), n2(3)
+
+    s = 0d0
+    d = (Fm + 1) / 2
+    if ( n(d) < 2 ) return
+    ! node planes along d from the face inwards: the face, then the far faces of the first and second cells
+    x = [Im, Jm, Km]
+    if ( mod(Fm,2) == 1 ) then
+      a = [x(d) - 1, x(d), x(d) + 1]
+    else
+      a = [x(d), x(d) - 1, x(d) - 2]
+    end if
+    e1 = 0d0 ; e2 = 0d0 ; eg = 0d0
+    select case (d)
+      case (1) ; t1 = 2 ; t2 = 3
+      case (2) ; t1 = 1 ; t2 = 3
+      case default ; t1 = 1 ; t2 = 2
+    end select
+    do q = 0, 1
+      do p = 0, 1
+        x = [Im, Jm, Km]
+        x(t1) = x(t1) - 1 + p
+        x(t2) = x(t2) - 1 + q
+        x(d) = a(0) ; n0 = node(x(1),x(2),x(3)) % c
+        x(d) = a(1) ; n1 = node(x(1),x(2),x(3)) % c
+        x(d) = a(2) ; n2 = node(x(1),x(2),x(3)) % c
+        e1 = e1 + ( n1 - n0 )
+        e2 = e2 + ( n2 - n1 )
+        eg = eg + ( 3d0 * n1 - n2 - 2d0 * n0 )        ! N_0 - (3 N_0 - 3 N_1 + N_2)
+      enddo
+    enddo
+    s = ( norm2(0.25d0*eg) + norm2(0.25d0*e1) ) / ( norm2(0.25d0*e1) + norm2(0.25d0*e2) )
+
+  end function Extrapolation_Ratio
+
+
   subroutine BC_Extrapolate_Metrics( Im, Jm, Km, Fm, blk, Mg, dlg, volg )
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm

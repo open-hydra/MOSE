@@ -82,11 +82,11 @@
 #     value nu~ = 0 (ghost cell -nu~), not a/2 from a ghost cell that
 #     copies the cell.
 #     The same with cells growing by 1.2 from the wall, and on skewed cells
-#     (2-D and 3-D) with the density linear along the wall, where the ghost
-#     cell of the wall copies the density and the terms in grad rho must stay
-#     zero. SA-RC: the uniform column runs; the same column as two blocks must
-#     stop at setup and say why (its result would depend on the division in
-#     blocks).
+#     (2-D and 3-D) with the density linear along the wall, where the density
+#     of the ghost cell of the wall follows its temperature and the terms in
+#     grad rho must stay zero. SA-RC: the uniform column runs; the same column
+#     as two blocks must stop at setup and say why (its result would depend on
+#     the division in blocks).
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -452,7 +452,7 @@ for case in skewed skewed3d; do
   solve "$case" uni
   if python3 -B wall_gradient.py checkdiff "$case" "OUTPUT/wall-field-$case.tec" "OUTPUT/wall-diagnostic-$case.tec" \
        "OUTPUT/wall-field-$case-uni.tec" "OUTPUT/wall-diagnostic-$case-uni.tec"; then
-    echo "  [ok  ] $case: the copied density of the wall ghost cells sits at the cell itself"
+    echo "  [ok  ] $case: the density of the wall ghost cells sits where its value is right"
   else
     echo "  [FAIL] $case: grad rho of the wall cells takes a wrong normal component"; fail=1
   fi

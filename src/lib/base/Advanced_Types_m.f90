@@ -16,9 +16,10 @@ module MOSE_Advanced_Types_m
     type(MOSE_vector_3D_type), allocatable :: node(:,:,:)      ! Mesh grid points (including ghost)
     type(MOSE_tensor_3D_type), allocatable :: M(:,:,:)         ! Metric transformation tensor
     type(MOSE_tensor_3D_type), allocatable :: Minv(:,:,:)      ! Inverse of M (interior cells only), for the viscous face metric; diffusive-metric = inverse-mean only
-    type(MOSE_tensor_3D_type), allocatable :: Ms(:,:,:)        ! Cell metric of the RANS source terms, diffusive-metric = stencil (wall values imposed)
-    type(MOSE_tensor_3D_type), allocatable :: Msc(:,:,:)       ! the same for the values copied at the walls (densities, pressure)
+    type(MOSE_tensor_3D_type), allocatable :: Ms(:,:,:)        ! Cell metric of the RANS source terms, diffusive-metric = stencil (velocity)
+    type(MOSE_tensor_3D_type), allocatable :: Msc(:,:,:)       ! the same for the density
     type(MOSE_tensor_3D_type), allocatable :: Msa(:,:,:)       ! the same for the values copied behind every boundary face (SA-RC)
+    type(MOSE_tensor_3D_type), allocatable :: Mst(:,:,:)       ! the same for the turbulence variables, where it is not Ms (503-505 walls)
     type(MOSE_vector_3D_type), allocatable :: dl(:,:,:)        ! Average cell length (in i/j/k direction). eg: dl%c(1) is sqrt(dx**2+dy**2+dz**2) of the cell in the i direction
     type(MOSE_d_metrics_type)              :: dir(3)           ! Direction object. Contains: i-faces, j-faces, k-faces; eg: dir(1)%face(i,j,k)%n
     real(R8), allocatable                  :: yn(:,:,:)        ! Nearest wall distance
@@ -70,6 +71,7 @@ module MOSE_Advanced_Types_m
     real(R8)                            :: rel_fac                           ! BC 400 (inflow/outflow) specifications
     real(R8), allocatable               :: ci(:)                             ! BC 400 (inflow/outflow) specifications
     real(R8)                            :: k_rough  = 0.0_R8                 ! Surface roughness height [m]  (wall BCs 301-302)
+    real(R8)                            :: sx       = 0.0_R8                 ! Walls and 400: l0/l1 of the MUSCL distances (Extrapolation_Ratio)
     real(R8)                            :: eps_wall = 0.0_R8                 ! Wall emissivity               (wall BCs 301-302. 503-506)
     real(R8)                            :: cp_wall  = 0.0_R8                 ! Material specific heat capacity   (GSI melting wall 503)
     real(R8)                            :: Ti_wall  = 0.0_R8                 ! Material initial temperature      (GSI melting wall 503)

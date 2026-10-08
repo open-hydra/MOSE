@@ -635,19 +635,22 @@ $$
 Z_\text{ghost} = 2\,Z_\text{wall} - Z_\text{cell}, \qquad Z = \tilde\nu,\ k,\ \omega ,
 $$
 
-with the wall values of the models above (`RANS_Extrapolate_Wall`). It is the rule of CFL3D,
+with the wall values of the models above, here of the specific variables $Z = \tilde\nu, k, \omega$
+(the ghost value of $\rho Z$ is that times the density of the ghost cell). It is the rule of CFL3D,
 «the actual wall boundary conditions for the turbulence quantities (unlike the primitive variables)
 are applied at ghost cells» (S. L. Krist, R. T. Biedron, C. L. Rumsey, *CFL3D User's Manual
-(Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). The wall flux routines set these
-values; the source terms read them in the gradients of the wall cells: the $c_{b2}$ term of SA and
-its term $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST,
-the cross-diffusion of Wilcox 2006. They do so at every stage
-and in the stiffness pass of time-accurate runs (`Turbulence_Stiffness`), which calls the wall flux
-routines for this alone (`Wall_RANS_Ghosts`). With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$
-term of the wall cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell
-that copied the cell, as MOSE did before, gave $a/2$. The other primitive variables are copied into
-the wall ghost cells, with the velocity reversed (`Ghost_Wall_Extrapolation`); the fluxes through the
-first interior faces use the second-order extrapolation of `Fill_Ghost_Cell`.
+(Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). `Fill_Ghost_Cell` sets these
+values once per stage, from the wall values of the wall flux routines (the same wall state), with
+the other ghost values of the wall ([Numerics](numerics.md), *Ghost Cells of Walls and 400 Faces*):
+the fluxes through the first interior faces and the source terms read the same ghost cells, at every
+stage and in the stiffness pass of time-accurate runs (`Turbulence_Stiffness`). The source terms read
+them in the gradients of the wall cells: the $c_{b2}$ term of SA and its term
+$-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST, the
+cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of the wall
+cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell that copied the cell,
+as MOSE did before, gave $a/2$. Before, the wall flux routines wrote these values after the fluxes,
+for the sources only, and the fluxes saw an extrapolation of $\rho Z$ (a `502` boundary, which would
+need the same, stops a RANS run at set-up).
 
 ### Cell gradients of the source terms
 
@@ -661,14 +664,13 @@ difference). On a mesh of equal parallelograms these gradients are the reference
 (Eq. 1), second order on smooth structured meshes. In a wall cell, for a field that is not linear,
 the reflected ghost value $2\phi_\text{wall} - \phi_\text{cell}$ makes the gradient first order, as
 the Green–Gauss gradient is in the boundary cells of [14] (Eq. 13).
-The ghost cells sit where their value is right when the sources are computed: behind a
-wall the velocity and the turbulence variables, whose ghost values are $2\phi_\text{wall} -
-\phi_\text{cell}$, at the reflection of the cell centre in the face centre; the densities, the pressure
-and the other copied variables at the cell itself, which makes the difference across the wall cell
-one-sided and exact for any linear field; behind the other faces the ghost cells of the fluxes, at
-the positions of the face metric ([Numerics](numerics.md)): behind a zero-gradient face (0,
-401-407, 420), whose ghost cell copies the cell, the cell itself, so the difference across the
-boundary cell is one-sided there too. SA-RC copies the velocity gradient of the
+The ghost cells sit where their value is right: those of the fluxes, at the positions
+of the face metric ([Numerics](numerics.md)); behind a wall the position of the class of the
+quantity, one metric per group: the velocity, the density (whose ghost value follows the temperature:
+exact where the pressure and the composition do not vary across the wall cell), the turbulence
+variables (a metric of their own only next to `503`–`505`, where the velocity is extrapolated and they
+take their wall value). Behind a zero-gradient face (0, 401-407, 420), whose ghost cell copies the
+cell, the position is the cell itself, so the difference across the boundary cell is one-sided. SA-RC copies the velocity gradient of the
 cell into the ghost cells of every boundary face, so its strain gradient takes the cell itself there.
 The metrics are computed once at setup (`Cell_Source_Metrics`) and chosen in one place
 (`Source_Metrics`) by the source terms of SA, SA-RC, SST, Wilcox 2006 and SSG/LRR and by the eddy

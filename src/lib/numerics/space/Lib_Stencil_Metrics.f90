@@ -18,12 +18,16 @@
 !>
 !> Positions: the centre of a cell is the mean of its eight nodes; the first layer of ghost cells takes the position at
 !> which its value is right for a linear field: the centre of the cell across a face between blocks (plus the translation of
-!> a periodic pair), 3 x1 - 3 x2 + x3 behind the faces whose ghost value is 3 u1 - 3 u2 + u3 (Ghost_Extrapolate: walls,
-!> 400, 408, ...; 2 x1 - x2, or x1, in a block with two cells, or one, across the face), the cell itself behind the
-!> zero-gradient faces (0, 401-407, 420), its mirror image across a symmetry face (300; the cell itself on a face of zero
-!> area, an axis, where the ghost value is a copy of the cell), and on a 3-D rotational periodic
+!> a periodic pair), behind a wall (301, 302, 503-505) 2 x_f - x1 (x_f the centre of the face) for the quantities with a
+!> wall value and x1 + s (x1 - x2) for the extrapolated ones, behind a 400 face x1 + s (x1 - x2) (Ghost_Wall; s = l0/l1,
+!> x1 with one cell across the face), 3 x1 - 3 x2 + x3 behind the faces whose ghost value is 3 u1 - 3 u2 + u3
+!> (Ghost_Extrapolate: 408, ...; 2 x1 - x2, or x1, in a block with two cells, or one, across the face), the cell itself
+!> behind the zero-gradient faces (0, 401-407, 420), its mirror image across a symmetry face (300; the cell itself on a face
+!> of zero area, an axis, where the ghost value is a copy of the cell), and on a 3-D rotational periodic
 !> face (200) the cell of the other end rotated by the angle of the sector. Chimera (102) and mapped (410) faces take the
-!> extrapolated position too, an approximation: their values come from donor cells or from a file. The centres of every
+!> extrapolated position too, an approximation: their values come from donor cells or from a file. Behind a wall the two
+!> positions of a ghost cell give the faces with that ghost cell in their stencil one metric per group of quantities
+!> (species and scalars, temperature, velocity, turbulence variables: dir(d)%Mg, Diffusive_Flux). The centres of every
 !> block are computed on every rank, from the nodes every rank holds until the end of the setup of the metrics, so no
 !> message is needed; the face metrics are stored for the blocks of the rank only (blk%dir(d)%Mf, on the faces of the
 !> block, interior and boundary).
@@ -41,10 +45,15 @@ module MOSE_Lib_Stencil_Metrics
 
   integer, parameter :: METRIC_MEAN = 0, METRIC_INVERSE_MEAN = 1, METRIC_STENCIL = 2
 
-  !> Cell centres of one block with one layer of ghost cells: x(1:3, 1-gc:n1+gc, 1-gc:n2+gc, 1-gc:n3+gc)
+  !> Cell centres of one block with one layer of ghost cells: x(1:3, 1-gc:n1+gc, 1-gc:n2+gc, 1-gc:n3+gc); behind the walls
+  !> and the 400 faces also the position of the extrapolated quantities, xe, and the groups of quantities that take it, em
+  !> (bit g-1 for group g: 1 species and scalars, 2 temperature, 3 velocity, 4 turbulence variables)
   type :: centres_t
-    real(R8), allocatable :: x(:,:,:,:)
+    real(R8), allocatable :: x(:,:,:,:), xe(:,:,:,:)
+    integer, allocatable  :: em(:,:,:)
   end type centres_t
+
+  integer, parameter :: NG = 4, ALL_EXTRAPOLATED = 15   ! groups of quantities of the viscous fluxes; em with every bit set
 
 contains
 
@@ -152,6 +161,7 @@ contains
     ! Local
     type(centres_t), allocatable :: xc(:)
     integer :: b, i, j, k, n(3), d, r
+    integer, allocatable :: nfill(:,:)
 
     allocate ( xc(domain % nb) )
 
@@ -159,7 +169,11 @@ contains
     do b = 1, domain % nb
       n = domain % blk(b) % dim
       allocate ( xc(b) % x(3, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc) )
+      allocate ( xc(b) % xe, mold = xc(b) % x )
+      allocate ( xc(b) % em(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc) )
       xc(b) % x = 0d0
+      xc(b) % xe = 0d0
+      xc(b) % em = 0
       do k = 1, n(3) ; do j = 1, n(2) ; do i = 1, n(1)
         xc(b) % x(:,i,j,k) = Cell_Centre ( domain % blk(b) % node, i, j, k )
       enddo ; enddo ; enddo
@@ -183,7 +197,9 @@ contains
       end select
     enddo
 
-    ! 4. Face metrics of the blocks of this rank
+    ! 4. Face metrics of the blocks of this rank; with a wall ghost cell in the stencil, one per group of quantities
+    allocate ( nfill(3, domain % nb) )
+    nfill = 0
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
       n = domain % blk(b) % dim
@@ -191,18 +207,24 @@ contains
         allocate ( domain % blk(b) % dir(1) % Mf(0:n(1), n(2), n(3)) )
         allocate ( domain % blk(b) % dir(2) % Mf(n(1), 0:n(2), n(3)) )
         allocate ( domain % blk(b) % dir(3) % Mf(n(1), n(2), 0:n(3)) )
+        allocate ( domain % blk(b) % dir(1) % ig(0:n(1), n(2), n(3)) )
+        allocate ( domain % blk(b) % dir(2) % ig(n(1), 0:n(2), n(3)) )
+        allocate ( domain % blk(b) % dir(3) % ig(n(1), n(2), 0:n(3)) )
       end if
       do d = 1, 3
         domain % blk(b) % dir(d) % Mf(:,:,:) = MOSE_tensor_3D_type(0d0)
+        domain % blk(b) % dir(d) % ig = 0
+        if ( allocated(domain % blk(b) % dir(d) % Mg) ) deallocate ( domain % blk(b) % dir(d) % Mg )
+        allocate ( domain % blk(b) % dir(d) % Mg(3, 3, NG, Group_Faces(domain, xc, b, d)) )
       enddo
-      call Interior_Face_Metrics ( b, domain % blk(b), xc(b) )
+      call Interior_Face_Metrics ( b, domain % blk(b), xc(b), nfill(:,b) )
     enddo
     do r = 1, domain % nbound
       b = domain % bc(r) % b
       if (.not. is_local_block(b)) cycle
       select case ( domain % bc(r) % type )
         case (101, 201)
-          call Connection_Face_Metric ( domain, xc, r )
+          call Connection_Face_Metric ( domain, xc, r, nfill(:,b) )
         case (300)
           call Symmetry_Face_Metric ( domain % blk(b), xc(b), domain % bc(r) )
       end select
@@ -265,6 +287,18 @@ contains
           xc(b) % x(:,Ig,Jg,Kg) = x1
         end if
 
+      case (301, 302, 400, 503:505)             ! walls and 400 (Ghost_Wall): x1 + s (x1 - x2) for the extrapolated
+        y = x1                                  ! quantities (x1 with one cell), 2 x_f - x1 for those with a wall value
+        if ( nd >= 2 ) y = x1 + domain % bc(r) % sx * ( x1 - xc(b) % x(:,c2(1),c2(2),c2(3)) )
+        xc(b) % xe(:,Ig,Jg,Kg) = y
+        xc(b) % em(Ig,Jg,Kg) = Extrapolated_Groups ( domain % bc(r) % type )
+        if ( xc(b) % em(Ig,Jg,Kg) == ALL_EXTRAPOLATED ) then
+          xc(b) % x(:,Ig,Jg,Kg) = y
+        else
+          call Face_Centre_Normal ( domain % blk(b) % node, Im, Jm, Km, Fm, xf, nf )
+          xc(b) % x(:,Ig,Jg,Kg) = 2d0 * xf - x1
+        end if
+
       case default                              ! 3 u1 - 3 u2 + u3 (Ghost_Extrapolate), chimera, mapped
         if ( nd >= 3 ) then
           x2 = xc(b) % x(:,c2(1),c2(2),c2(3))
@@ -303,6 +337,146 @@ contains
                           + Periodic_Shift ( domain, r )
 
   end subroutine Connection_Ghost_Position
+
+
+  !> Groups of quantities extrapolated behind a face of type t (Ghost_Wall), as the bits of em (1 species and scalars,
+  !> 2 temperature, 3 velocity, 4 turbulence variables); the others take the wall value.
+  pure integer function Extrapolated_Groups ( t )
+    implicit none
+    integer, intent(in) :: t
+
+    select case (t)
+      case (301)
+        Extrapolated_Groups = 3                  ! species, temperature
+      case (302)
+        Extrapolated_Groups = 1                  ! species
+      case (503:505)
+        Extrapolated_Groups = 7                  ! species, temperature, velocity
+      case default
+        Extrapolated_Groups = ALL_EXTRAPOLATED   ! 400
+    end select
+
+  end function Extrapolated_Groups
+
+
+  !> Position of the value of group g in cell (i,j,k) of a block: the centre, behind a wall the position of the group.
+  pure function Pos ( xc, i, j, k, g ) result ( y )
+    implicit none
+    type(centres_t), intent(in) :: xc
+    integer, intent(in) :: i, j, k, g
+    real(R8) :: y(3)
+
+    if ( btest(xc % em(i,j,k), g-1) ) then
+      y = xc % xe(:,i,j,k)
+    else
+      y = xc % x(:,i,j,k)
+    end if
+
+  end function Pos
+
+
+  !> A ghost cell behind a wall, whose groups of quantities sit at two positions.
+  pure logical function Wall_Ghost ( xc, i, j, k )
+    implicit none
+    type(centres_t), intent(in) :: xc
+    integer, intent(in) :: i, j, k
+
+    Wall_Ghost = xc % em(i,j,k) /= 0 .and. xc % em(i,j,k) /= ALL_EXTRAPOLATED
+
+  end function Wall_Ghost
+
+
+  !> Interior face of direction d between cell c and the next one along d: a wall ghost cell among the tangential
+  !> neighbours that its face gradient takes.
+  pure logical function Interior_Mixed ( xc, n, d, c ) result ( mixed )
+    implicit none
+    type(centres_t), intent(in) :: xc
+    integer, intent(in) :: n(3), d, c(3)
+    ! Local
+    integer :: t, s, e(3), c2(3), a(3)
+
+    mixed = .false.
+    c2 = c
+    c2(d) = c(d) + 1
+    do t = 1, 3
+      if ( t == d .or. n(t) == 1 ) cycle
+      e = 0
+      e(t) = 1
+      do s = -1, 1, 2
+        a = c + s*e
+        if ( Wall_Ghost(xc, a(1), a(2), a(3)) ) mixed = .true.
+        a = c2 + s*e
+        if ( Wall_Ghost(xc, a(1), a(2), a(3)) ) mixed = .true.
+      enddo
+    enddo
+
+  end function Interior_Mixed
+
+
+  !> Face of record r between blocks: a wall ghost cell among the tangential neighbours its face gradient takes, in this
+  !> block or among the cells of the source block of Pg(:,3:6).
+  logical function Connection_Mixed ( domain, xc, r ) result ( mixed )
+    use MOSE_Advanced_Types_m
+    use MOSE_Lib_BC_Fluxes, only: Face_Index
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    type(centres_t), intent(in) :: xc(:)
+    integer, intent(in) :: r
+    ! Local
+    integer :: b, bs, c(3), dir, fi, fj, fk, q, t, tb(2), sc(3,4), n(3), e(3)
+
+    mixed = .false.
+    b  = domain % bc(r) % b
+    bs = domain % bc(r) % bs
+    c  = [domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k]
+    n  = domain % blk(b) % dim
+    call Face_Index ( domain % bc(r) % f, dir, c(1), c(2), c(3), fi, fj, fk )
+    select case (dir)
+      case (1) ; tb = [2, 3]
+      case (2) ; tb = [1, 3]
+      case default ; tb = [1, 2]
+    end select
+    call Source_Neighbours ( domain % bc(r), sc )
+    do q = 1, 2
+      t = tb(q)
+      if ( n(t) == 1 ) cycle
+      e = 0
+      e(t) = 1
+      if ( Wall_Ghost(xc(b), c(1)+e(1), c(2)+e(2), c(3)+e(3)) ) mixed = .true.
+      if ( Wall_Ghost(xc(b), c(1)-e(1), c(2)-e(2), c(3)-e(3)) ) mixed = .true.
+      if ( Wall_Ghost(xc(bs), sc(1,2*q-1), sc(2,2*q-1), sc(3,2*q-1)) ) mixed = .true.
+      if ( Wall_Ghost(xc(bs), sc(1,2*q), sc(2,2*q), sc(3,2*q)) ) mixed = .true.
+    enddo
+
+  end function Connection_Mixed
+
+
+  !> Number of the faces of direction d of block b (interior, and between blocks) with a wall ghost cell in their stencil.
+  integer function Group_Faces ( domain, xc, b, d ) result ( nf )
+    use MOSE_Advanced_Types_m
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    type(centres_t), intent(in) :: xc(:)
+    integer, intent(in) :: b, d
+    ! Local
+    integer :: i, j, k, r, f, ii, n(3), e(3)
+
+    nf = 0
+    n = domain % blk(b) % dim
+    e = 0
+    e(d) = 1
+    do k = 1, n(3) - e(3) ; do j = 1, n(2) - e(2) ; do i = 1, n(1) - e(1)
+      if ( Interior_Mixed(xc(b), n, d, [i,j,k]) ) nf = nf + 1
+    enddo ; enddo ; enddo
+    do f = 2*d - 1, 2*d                                                 ! the records of the two faces of direction d
+      do ii = domain % local_bf_first(b,f), domain % local_bf_first(b,f) + domain % local_bf_count(b,f) - 1
+        r = domain % local_bf_idx(ii)
+        if ( domain % bc(r) % type /= 101 .and. domain % bc(r) % type /= 201 ) cycle
+        if ( Connection_Mixed(domain, xc, r) ) nf = nf + 1
+      enddo
+    enddo
+
+  end function Group_Faces
 
 
   !> Translation of a periodic pair (201): centre of this face minus centre of the source face; zero for 101.
@@ -384,17 +558,19 @@ contains
   end function Face_Inverse
 
 
-  !> Face metrics of the interior faces of block b.
-  subroutine Interior_Face_Metrics ( b, blk, xc )
+  !> Face metrics of the interior faces of block b; with a wall ghost cell in the stencil also one per group of quantities
+  !> (dir(d)%Mg, column dir(d)%ig, the next of nfill(d)).
+  subroutine Interior_Face_Metrics ( b, blk, xc, nfill )
     use MOSE_Advanced_Types_m, only: MOSE_block_type
     implicit none
     integer, intent(in) :: b
     type(MOSE_block_type), intent(inout) :: blk
     type(centres_t), intent(in) :: xc
+    integer, intent(inout) :: nfill(3)
     ! Local
-    integer :: i, j, k, n(3), d, t, i2, j2, k2
+    integer :: i, j, k, n(3), d, t, i2, j2, k2, g
     integer :: e(3,3)
-    real(R8) :: JT(3,3)
+    real(R8) :: JT(3,3), JTg(3,3)
 
     n = blk % dim
     e = reshape ( [1,0,0, 0,1,0, 0,0,1], [3,3] )
@@ -408,6 +584,18 @@ contains
                              + ( xc % x(:,i2+e(1,t),j2+e(2,t),k2+e(3,t)) - xc % x(:,i2-e(1,t),j2-e(2,t),k2-e(3,t)) ) )
         enddo
         blk % dir(d) % Mf(i,j,k) % c = Face_Inverse ( JT, b, i, j, k, 2*d, 'interior' )
+        if ( .not. Interior_Mixed(xc, n, d, [i,j,k]) ) cycle
+        nfill(d) = nfill(d) + 1
+        blk % dir(d) % ig(i,j,k) = nfill(d)
+        do g = 1, NG
+          JTg = JT
+          do t = 1, 3
+            if ( t == d .or. n(t) == 1 ) cycle
+            JTg(:,t) = 0.25d0 * ( ( Pos(xc, i +e(1,t), j +e(2,t), k +e(3,t), g) - Pos(xc, i -e(1,t), j -e(2,t), k -e(3,t), g) ) &
+                                + ( Pos(xc, i2+e(1,t), j2+e(2,t), k2+e(3,t), g) - Pos(xc, i2-e(1,t), j2-e(2,t), k2-e(3,t), g) ) )
+          enddo
+          blk % dir(d) % Mg(:,:,g,nfill(d)) = Face_Inverse ( JTg, b, i, j, k, 2*d, 'interior' )
+        enddo
       enddo ; enddo ; enddo
     enddo
 
@@ -417,7 +605,7 @@ contains
   !> Face metric of the face of boundary record r between blocks, stored on the face of block b. The two cells in the
   !> order of growing index of block b (L, R) and their tangential neighbours: in block b, and for the ghost cell the
   !> cells of the source block that Fill_BC_Ghost_Connection takes for Pg(:,3:6).
-  subroutine Connection_Face_Metric ( domain, xc, r )
+  subroutine Connection_Face_Metric ( domain, xc, r, nfill )
     use MOSE_Advanced_Types_m
     use MOSE_Parameters_m, only: guide
     use MOSE_Lib_Diffusive, only: Inverse3
@@ -426,10 +614,11 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain
     type(centres_t), intent(in) :: xc(:)
     integer, intent(in) :: r
+    integer, intent(inout) :: nfill(3)
     ! Local
-    integer :: b, bs, Im, Jm, Km, Fm, Ig, Jg, Kg, dir, fi, fj, fk, t, tb(2), q, n(3)
+    integer :: b, bs, Im, Jm, Km, Fm, Ig, Jg, Kg, dir, fi, fj, fk, t, tb(2), q, n(3), g
     integer :: e(3,3), sc(3,4)
-    real(R8) :: JT(3,3), xg(3,4), shift(3), dloc(3), dgh(3)
+    real(R8) :: JT(3,3), xg(3,4), shift(3), dloc(3), dgh(3), JTg(3,3)
 
     b  = domain % bc(r) % b
     bs = domain % bc(r) % bs
@@ -470,6 +659,26 @@ contains
       end if
     enddo
     domain % blk(b) % dir(dir) % Mf(fi,fj,fk) % c = Face_Inverse ( JT, b, Im, Jm, Km, Fm, 'between blocks' )
+
+    ! A wall ghost cell in the stencil: one metric per group of quantities, with the positions of the group
+    if ( .not. Connection_Mixed(domain, xc, r) ) return
+    nfill(dir) = nfill(dir) + 1
+    domain % blk(b) % dir(dir) % ig(fi,fj,fk) = nfill(dir)
+    do g = 1, NG
+      JTg = JT
+      do q = 1, 2
+        t = tb(q)
+        if ( n(t) == 1 ) cycle
+        dloc = Pos(xc(b), Im+e(1,t), Jm+e(2,t), Km+e(3,t), g) - Pos(xc(b), Im-e(1,t), Jm-e(2,t), Km-e(3,t), g)
+        dgh  = Pos(xc(bs), sc(1,2*q), sc(2,2*q), sc(3,2*q), g) - Pos(xc(bs), sc(1,2*q-1), sc(2,2*q-1), sc(3,2*q-1), g)
+        if ( mod(Fm,2) == 0 ) then
+          JTg(:,t) = 0.25d0 * ( dloc + dgh )
+        else
+          JTg(:,t) = 0.25d0 * ( dgh + dloc )
+        end if
+      enddo
+      domain % blk(b) % dir(dir) % Mg(:,:,g,nfill(dir)) = Face_Inverse ( JTg, b, Im, Jm, Km, Fm, 'between blocks' )
+    enddo
 
   end subroutine Connection_Face_Metric
 
@@ -539,8 +748,8 @@ contains
     JT(:,dir) = ( Mirror ( x1, xf, nf ) - x1 ) * modfm2
     do t = 1, 3
       if ( t == dir .or. n(t) == 1 ) cycle
-      xp = xc % x(:,Im+e(1,t),Jm+e(2,t),Km+e(3,t))
-      xm = xc % x(:,Im-e(1,t),Jm-e(2,t),Km-e(3,t))
+      xp = Pos ( xc, Im+e(1,t), Jm+e(2,t), Km+e(3,t), 3 )        ! the velocity (BC_Symmetry_Visc takes no other gradient)
+      xm = Pos ( xc, Im-e(1,t), Jm-e(2,t), Km-e(3,t), 3 )
       JT(:,t) = 0.25d0 * ( ( xp - xm ) + ( Mirror ( xp, xf, nf ) - Mirror ( xm, xf, nf ) ) )
     enddo
     blk % dir(dir) % Mf(fi,fj,fk) % c = Face_Inverse ( JT, rec % b, Im, Jm, Km, Fm, 'symmetry' )
@@ -666,14 +875,14 @@ contains
   !> Cell metrics of the source terms of the turbulence models and of the eddy viscosity of the output, with
   !> diffusive-metric = stencil: M = (J_c^T)^-1, J_c^T(:,d) = (x_{c+e_d} - x_{c-e_d})/2, the same central differences of
   !> the positions that those terms take of the values (along an index direction with one cell, the edge of the cell and
-  !> no difference). Exact for a linear field whose ghost cells sit where their value is right when the sources are
-  !> computed. Behind a wall (301, 302, 503-505) the ghost values are then those of Ghost_Wall_Extrapolation and
-  !> RANS_Extrapolate_Wall: 2 phi_w - phi_c for the velocity (-u_c, the wall at rest) and the turbulence variables, whose
-  !> point is the reflection 2 x_f - x_c of the cell centre in the face centre (blk%Ms); a copy of the cell for the
-  !> densities, the pressure and the other variables, whose point is the cell itself, so that the difference across the
-  !> wall cell is one-sided, exact for any linear field (blk%Msc). Behind the other faces the ghost cells of the fluxes,
-  !> at the positions of Ghost_Position. SA-RC copies the velocity gradient of the cell into the ghost cells of every
-  !> boundary face (Compute_Velocity_Gradient): blk%Msa, the cell itself behind every boundary face.
+  !> no difference). Exact for a linear field whose ghost cells sit where their value is right: the ghost cells of the
+  !> fluxes, at the positions of Ghost_Position, behind a wall that of the group of the quantity (Ghost_Wall: 2 x_f - x_c
+  !> for the quantities with a wall value, x_c + s (x_c - x_2) for the extrapolated ones). One metric per group: the
+  !> velocity (blk%Ms); the density, whose ghost value follows the temperature behind a wall (blk%Msc: exact where the
+  !> pressure and the composition do not vary across the wall cell, as in a boundary layer); the turbulence variables
+  !> (blk%Mst, only on the blocks with a 503-505 wall, where their position is not that of the velocity). SA-RC copies the
+  !> velocity gradient of the cell into the ghost cells of every boundary face (Compute_Velocity_Gradient): blk%Msa, the
+  !> cell itself behind every boundary face.
   subroutine Cell_Source_Metrics ( domain, xc )
     use MOSE_Advanced_Types_m
     use MOSE_Lib_Diffusive, only: Inverse3
@@ -683,100 +892,76 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain
     type(centres_t), intent(in) :: xc(:)
     ! Local
-    type :: wall_map_t
-      logical, allocatable :: w(:,:)
-    end type wall_map_t
-    type(wall_map_t) :: wall(6)
-    integer :: b, f, ii, r, i, j, k, d, s, n(3), c(3), cn(3), tb(2), td(3,2)
-    real(R8) :: JTi(3,3), JTc(3,3), JTa(3,3), Ac(3,3), xs(3), xi(3,2), xcp(3,2), xa(3,2), xf(3), nf(3)
-    logical :: rc, onwall
+    integer, parameter :: gs(3) = [3, 2, 4]                       ! groups of Ms, Msc, Mst
+    integer :: b, i, j, k, d, s, m, n(3), c(3), cn(3)
+    real(R8) :: JT(3,3,3), JTa(3,3), Ac(3,3), xs(3), xg(3,2,3), xa(3,2)
+    logical :: rc, turb
 
     rc = obj_rans % SpalartShur
-    td = reshape ( [2, 1, 1, 3, 3, 2], [3,2] )        ! tangential directions of the faces of direction d
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
       n = domain % blk(b) % dim
+      turb = any ( btest(xc(b) % em, 2) .neqv. btest(xc(b) % em, 3) )
       if ( .not. allocated(domain % blk(b) % Ms) ) then
         allocate ( domain % blk(b) % Ms(lbound(domain % blk(b) % M,1):ubound(domain % blk(b) % M,1), &
                                         lbound(domain % blk(b) % M,2):ubound(domain % blk(b) % M,2), &
                                         lbound(domain % blk(b) % M,3):ubound(domain % blk(b) % M,3)) )
         allocate ( domain % blk(b) % Msc, mold = domain % blk(b) % Ms )
         if ( rc ) allocate ( domain % blk(b) % Msa, mold = domain % blk(b) % Ms )
+        if ( turb ) allocate ( domain % blk(b) % Mst, mold = domain % blk(b) % Ms )
       end if
       domain % blk(b) % Ms = domain % blk(b) % M                          ! the ghost layers keep the cell metric
       domain % blk(b) % Msc = domain % blk(b) % M
       if ( rc ) domain % blk(b) % Msa = domain % blk(b) % M
-      ! Wall records of the six faces of the block, by their two tangential cell indices
-      do f = 1, 6
-        d = (f + 1) / 2
-        tb = td(d,:)
-        allocate ( wall(f) % w(n(tb(1)), n(tb(2))) )
-        wall(f) % w = .false.
-        do ii = domain % local_bf_first(b,f), domain % local_bf_first(b,f) + domain % local_bf_count(b,f) - 1
-          r = domain % local_bf_idx(ii)
-          select case ( domain % bc(r) % type )
-            case (301, 302, 503, 504, 505)
-              c = [domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k]
-              wall(f) % w(c(tb(1)), c(tb(2))) = .true.
-          end select
-        enddo
-      enddo
+      if ( turb ) domain % blk(b) % Mst = domain % blk(b) % M
       do k = 1, n(3) ; do j = 1, n(2) ; do i = 1, n(1)
         c = [i, j, k]
         xs = xc(b) % x(:,i,j,k)
         Ac = Inverse3 ( domain % blk(b) % M(i,j,k) % c )                   ! columns: the edges of the cell
         do d = 1, 3
           if ( n(d) == 1 ) then
-            JTi(:,d) = Ac(:,d) ; JTc(:,d) = Ac(:,d) ; JTa(:,d) = Ac(:,d)
+            do m = 1, 3
+              JT(:,d,m) = Ac(:,d)
+            enddo
+            JTa(:,d) = Ac(:,d)
             cycle
           end if
           do s = 1, 2                                                     ! s = 1: c + e_d, s = 2: c - e_d
             cn = c
             cn(d) = c(d) + 3 - 2*s
-            if ( cn(d) >= 1 .and. cn(d) <= n(d) ) then
-              xi(:,s) = xc(b) % x(:,cn(1),cn(2),cn(3))
-              xcp(:,s) = xi(:,s) ; xa(:,s) = xi(:,s)
-              cycle
-            end if
-            f = 2*d - s + 1                                               ! face 2d behind c + e_d, 2d-1 behind c - e_d
-            tb = td(d,:)
-            onwall = wall(f) % w(c(tb(1)), c(tb(2)))
-            if ( onwall ) then
-              call Face_Centre_Normal ( domain % blk(b) % node, i, j, k, f, xf, nf )
-              xi(:,s) = 2d0 * xf - xs
-              xcp(:,s) = xs
-            else
-              xi(:,s) = xc(b) % x(:,cn(1),cn(2),cn(3))
-              xcp(:,s) = xi(:,s)
-            end if
-            xa(:,s) = xs
+            do m = 1, 3
+              xg(:,s,m) = Pos ( xc(b), cn(1), cn(2), cn(3), gs(m) )
+            enddo
+            xa(:,s) = xc(b) % x(:,cn(1),cn(2),cn(3))
+            if ( cn(d) < 1 .or. cn(d) > n(d) ) xa(:,s) = xs
           enddo
-          JTi(:,d) = 0.5d0 * ( xi(:,1) - xi(:,2) )
-          JTc(:,d) = 0.5d0 * ( xcp(:,1) - xcp(:,2) )
+          do m = 1, 3
+            JT(:,d,m) = 0.5d0 * ( xg(:,1,m) - xg(:,2,m) )
+          enddo
           JTa(:,d) = 0.5d0 * ( xa(:,1) - xa(:,2) )
         enddo
-        domain % blk(b) % Ms(i,j,k) % c = Face_Inverse ( JTi, b, i, j, k, 0, 'cell, source terms' )
-        domain % blk(b) % Msc(i,j,k) % c = Face_Inverse ( JTc, b, i, j, k, 0, 'cell, source terms, copied values' )
+        domain % blk(b) % Ms(i,j,k) % c = Face_Inverse ( JT(:,:,1), b, i, j, k, 0, 'cell, source terms, velocity' )
+        domain % blk(b) % Msc(i,j,k) % c = Face_Inverse ( JT(:,:,2), b, i, j, k, 0, 'cell, source terms, density' )
+        if ( turb ) domain % blk(b) % Mst(i,j,k) % c = Face_Inverse ( JT(:,:,3), b, i, j, k, 0, &
+                                                                      'cell, source terms, turbulence variables' )
         if ( rc ) domain % blk(b) % Msa(i,j,k) % c = Face_Inverse ( JTa, b, i, j, k, 0, 'cell, SA-RC' )
       enddo ; enddo ; enddo
-      do f = 1, 6
-        deallocate ( wall(f) % w )
-      enddo
     enddo
 
   end subroutine Cell_Source_Metrics
 
 
   !> The cell metrics of the source terms of block blk: with diffusive-metric = stencil those of Cell_Source_Metrics (Mi
-  !> for the quantities whose wall ghost value is imposed, Mc for those it copies, Ma for those SA-RC copies behind every
-  !> boundary face), otherwise the metric of the cell for all of them, as before. The one place that chooses them.
-  subroutine Source_Metrics ( blk, Mi, Mc, Ma )
+  !> for the velocity, Mc for the density, Mt for the turbulence variables, Ma for the velocity gradient that SA-RC copies
+  !> behind every boundary face), otherwise the metric of the cell for all of them, as before. The one place that chooses
+  !> them.
+  subroutine Source_Metrics ( blk, Mi, Mc, Ma, Mt )
     use MOSE_Advanced_Types_m, only: MOSE_block_type
     use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
     implicit none
     type(MOSE_block_type), intent(in), target :: blk
     type(MOSE_tensor_3D_type), pointer, intent(out) :: Mi(:,:,:)
-    type(MOSE_tensor_3D_type), pointer, intent(out), optional :: Mc(:,:,:), Ma(:,:,:)
+    type(MOSE_tensor_3D_type), pointer, intent(out), optional :: Mc(:,:,:), Ma(:,:,:), Mt(:,:,:)
 
     Mi => blk % M
     if ( allocated(blk % Ms) ) Mi => blk % Ms
@@ -787,6 +972,10 @@ contains
     if ( present(Ma) ) then
       Ma => blk % M
       if ( allocated(blk % Msa) ) Ma => blk % Msa
+    end if
+    if ( present(Mt) ) then
+      Mt => Mi
+      if ( allocated(blk % Mst) ) Mt => blk % Mst
     end if
 
   end subroutine Source_Metrics

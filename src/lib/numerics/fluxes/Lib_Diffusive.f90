@@ -10,10 +10,12 @@ contains
   !> Viscous flux of the face between cells 1 (Prim1) and 2 (Prim2), along the normal from 1 to 2: the difference across
   !> the face (index direction a) and the mean central differences of the two cells along the face (b: Prim3..Prim6, c:
   !> Prim7..Prim10), mapped to Cartesian components with the face metric Mf (MOSE_Lib_Stencil_Metrics:
-  !> Viscous_Face_Metric); Res1 takes -flux, Res2 +flux.
+  !> Viscous_Face_Metric); Res1 takes -flux, Res2 +flux. With a wall ghost cell in the stencil, Mg: one face metric per
+  !> group of quantities (1 species and scalars, 2 temperature, 3 velocity, 4 turbulence variables), whose ghost values sit
+  !> at different positions (Ghost_Wall).
   subroutine Diffusive_Flux ( normal, area, waldis1, waldis2, kr1, kr2, Prim1, Prim2, Prim3, Prim4, Prim5, &
                               Prim6, Prim7, Prim8, Prim9, Prim10, Mf, Res1, Res2, a, b, c, &
-                              Sc, Sct, Prt, Prl, soot_enabled )
+                              Sc, Sct, Prt, Prl, soot_enabled, Mg )
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
     implicit none
@@ -25,10 +27,11 @@ contains
     real(R8), intent(in), dimension(nprim) :: Prim1, Prim2, Prim3, Prim4, Prim5, Prim6
     real(R8), intent(in), dimension(nprim) :: Prim7, Prim8, Prim9, Prim10
     real(R8), intent(in), dimension(3,3) :: Mf       ! face metric
+    real(R8), intent(in), optional :: Mg(3,3,4)      ! face metrics per group of quantities
     real(R8), intent(inout), dimension(nprim) :: Res1, Res2
     ! Local
     real(R8) :: rho1, Rgas, T1, rho2, T2, Gradient(nprim,3), Prim(nprim), waldis, k_rough, Flux(nprim)
-    integer  :: v
+    integer  :: v, g
     real(R8) :: g1, g2, g3
 
     ! Gradient in the same direction of the face: 1 and 2
@@ -54,12 +57,25 @@ contains
     !> Explicit loop, not `Gradient = matmul(Gradient,M)`: Gradient aliases
     !> itself there, so the compiler must build the whole (nprim,3) result in a
     !> temporary on every face.
-    do v = 1, nprim
-      g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
-      Gradient(v,1) = g1*Mf(1,1) + g2*Mf(2,1) + g3*Mf(3,1)
-      Gradient(v,2) = g1*Mf(1,2) + g2*Mf(2,2) + g3*Mf(3,2)
-      Gradient(v,3) = g1*Mf(1,3) + g2*Mf(2,3) + g3*Mf(3,3)
-    end do
+    if ( present(Mg) ) then
+      do v = 1, nprim
+        g = 1                                        ! species, soot and passive scalars
+        if ( v == np ) g = 2                         ! temperature
+        if ( v >= nu .and. v <= nw ) g = 3           ! velocity
+        if ( nrans > 0 .and. v >= nt ) g = 4         ! turbulence variables
+        g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
+        Gradient(v,1) = g1*Mg(1,1,g) + g2*Mg(2,1,g) + g3*Mg(3,1,g)
+        Gradient(v,2) = g1*Mg(1,2,g) + g2*Mg(2,2,g) + g3*Mg(3,2,g)
+        Gradient(v,3) = g1*Mg(1,3,g) + g2*Mg(2,3,g) + g3*Mg(3,3,g)
+      end do
+    else
+      do v = 1, nprim
+        g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
+        Gradient(v,1) = g1*Mf(1,1) + g2*Mf(2,1) + g3*Mf(3,1)
+        Gradient(v,2) = g1*Mf(1,2) + g2*Mf(2,2) + g3*Mf(3,2)
+        Gradient(v,3) = g1*Mf(1,3) + g2*Mf(2,3) + g3*Mf(3,3)
+      end do
+    end if
 
     Prim = 0.5d0 * ( Prim1 + Prim2 )
     call Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, k_rough, Flux, Sc, Sct, Prt, Prl, soot_enabled )

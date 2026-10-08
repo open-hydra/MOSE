@@ -585,7 +585,7 @@ contains
   subroutine RF_Torque_Walls(domain, iter, time)
     use MOSE_Advanced_Types_m
     use MOSE_Global_m, only: np
-    use MOSE_Lib_Ghost, only: Is_Wall
+    use MOSE_Lib_BC_Fluxes, only: Is_Wall
     use MOSE_Mod_MPI, only: is_local_block, mpi_is_root, mpi_reduce_sum_r8_array
     use MOSE_Config_Types_m, only: obj_sim_param
 
