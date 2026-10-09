@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=premium
-#SBATCH --job-name=swbli-sstM
+#SBATCH --job-name=swbli-sst
 #SBATCH --nodes=1
 #SBATCH --ntasks=32
 #SBATCH --time=24:00:00
@@ -8,7 +8,7 @@
 #SBATCH --error=slurm-%j.err
 
 # ---------------------------------------------------------------
-# SWBLI - rhoCentralFoam (SA, LTS) on monolith (OpenFOAM-10, .org)
+# SWBLI - rhoCentralFoam (SST, LTS) on monolith (OpenFOAM-10, .org)
 #
 # OpenFOAM environment comes from the login shell (~/.bashrc).
 # The solver is linked against OpenMPI 4.1.4, which has no SLURM

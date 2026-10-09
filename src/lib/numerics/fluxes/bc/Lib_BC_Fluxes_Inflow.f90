@@ -151,7 +151,7 @@ contains
     Face_Prim(1:nsc)  = Face_rho * BC_ci
     Face_Prim(nu:nw)  = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Prim(np)     = p3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS  ! density-weighted inputs (rho*nu~, rho*k, rho*omega), as in the IC
 
     call Compute_Flux_from_Face (Face_Prim, Face_rho, Face_Rgas, Area, Normal, Flux, fmass)
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
@@ -230,7 +230,7 @@ contains
     Face_Prim(1:nsc)  = Face_rho * BC_ci
     Face_Prim(nu:nw)  = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Prim(np)     = p3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS  ! density-weighted inputs (rho*nu~, rho*k, rho*omega), as in the IC
 
     call Compute_Flux_from_Face (Face_Prim, Face_rho, Face_Rgas, Area, Normal, Flux, fmass)
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
@@ -308,7 +308,7 @@ contains
     Face_Prim(1:nsc)  = Face_rho * BC_ci
     Face_Prim(nu:nw)  = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Prim(np)     = p3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS  ! density-weighted inputs (rho*nu~, rho*k, rho*omega), as in the IC
 
     call Compute_Flux_from_Face (Face_Prim, Face_rho, Face_Rgas, Area, Normal, Flux, fmass)
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
@@ -407,7 +407,7 @@ contains
     Sup_Prim(nu) = BC_Mach_local * Sup_Sound * cos(alpha_eff) * cos(beta_eff)
     Sup_Prim(nv) = BC_Mach_local * Sup_Sound * sin(alpha_eff) * cos(beta_eff)
     Sup_Prim(nw) = BC_Mach_local * Sup_Sound * sin(beta_eff)
-    if (model==2) Sup_Prim(nt:nprim) = Sup_rho * BC_RANS
+    if (model==2) Sup_Prim(nt:nprim) = BC_RANS  ! density-weighted inputs (rho*nu~, rho*k, rho*omega), as in the IC
 
     ! building a 3 cell stencil to extrapolate the solution at the interface
 
@@ -536,7 +536,7 @@ contains
     Face_Prim(1:nsc) = BC_ci * Face_rho
     Face_Prim(nu:nw) = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Un = Un3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS  ! density-weighted inputs (rho*nu~, rho*k, rho*omega), as in the IC
 
     Face_Enthalpy = 0d0
     Face_T = Face_Prim(np) / ( Face_Rgas * Face_rho )

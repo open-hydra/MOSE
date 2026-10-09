@@ -58,18 +58,24 @@ Every IC file must contain the same set of variables:
 | $u,\, v,\, w$ | Velocity components | m/s |
 | $p$ | Pressure | Pa |
 
+The turbulence variables are the **density-weighted** (conserved) quantities MOSE
+solves for, not the specific ones. The same convention holds for the inlet
+boundary values ([Boundary Conditions](boundary-conditions.md#inlet-outlet)), so
+one set of numbers in `input.ini` (`mit`, `kappa`, `omega`) serves both the
+`[ICB-Block*]` initial condition and the `[inflow]` boundary.
+
 If Spalart-Allmaras turbulence model is used, the IC file must also include:  
 
 | Variable | Description | Units |
 |----------|-------------|-------|
-| $\tilde{\nu}$ | Spalart-Allmaras working variable | m²/s |
+| $\rho\tilde{\nu}$ (`mi_t`, written back as `mi_tilde`) | Spalart-Allmaras working variable times density | kg/(m·s) |
 
 If $k-\omega$ or SST turbulence model is used, the IC file must also include:  
 
 | Variable | Description | Units |
 |----------|-------------|-------|
-| $k$ | Turbulent kinetic energy | m²/s² |
-| $\omega$ | Specific dissipation rate | 1/s |
+| $\rho k$ (`kappa`) | Turbulent kinetic energy times density | kg/(m·s²) |
+| $\rho\omega$ (`omega`) | Specific dissipation rate times density | kg/(m³·s) |
 
 ---
 

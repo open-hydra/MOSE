@@ -1,4 +1,29 @@
-!> @brief Module for Kappa-Omega SST (2003) model. see https://turbmodels.larc.nasa.gov/sst.html.
+!> @brief Menter k-omega SST model in its SST-2003 form (Menter, Kuntz & Langtry 2003), as specified
+!> by the NASA Turbulence Modeling Resource (TMR): https://tmbwg.github.io/turbmodels/sst.html
+!> (formerly https://turbmodels.larc.nasa.gov/sst.html).
+!>
+!> Production term, by option. TMR naming; MOSE keeps -2/3 rho k delta_ij out of the stress
+!> tensor of the momentum and energy equations (Stress_Vector_Std), hence the m/e suffixes:
+!>   sst-production = incompressible (default)  P = mu_t S^2, S^2 = 2 S_ij S_ij   -> SST-2003m
+!>   sst-production = compressible              P = tau_ij du_i/dx_j (exact)     -> SST-2003e
+!>     with the dilatation terms arranged as in OpenFOAM's kOmegaSST (OpenFOAM-10,
+!>     kOmegaSSTBase.C): the limiter acts on the deviatoric part mu_t (S^2 - 2/3 divU^2), and
+!>     -2/3 rho k divU (k equation) and -2/3 gamma rho omega divU (omega equation) are added
+!>     outside it.
+!> In both forms P is limited to 10 beta* rho omega k and the omega production is
+!> (gamma rho / mu_t) times the limited P (SST-2003 with the TMR correction of the paper's typo).
+!> The Spalart-Shur rotation/curvature multiplier fr1 (Smirnov & Menter 2009, TMR SST-RC) is
+!> applied when obj_rans%SpalartShur is set, i.e. for a turbulence name containing "-RC".
+!>
+!> References
+!>   Menter, F. R., "Two-Equation Eddy-Viscosity Turbulence Models for Engineering Applications",
+!>     AIAA J. 32(8), 1994, pp. 1598-1605, doi:10.2514/3.12149 (SST).
+!>   Menter, F. R., Kuntz, M., Langtry, R., "Ten Years of Industrial Experience with the SST
+!>     Turbulence Model", Turbulence, Heat and Mass Transfer 4, Begell House, 2003, pp. 625-632
+!>     (SST-2003).
+!>   Smirnov, P. E., Menter, F. R., "Sensitization of the SST Turbulence Model to Rotation and
+!>     Curvature by Applying the Spalart-Shur Correction Term", J. Turbomach. 131(4), 2009,
+!>     041010, doi:10.1115/1.3070573 (SST-RC).
 module MOSE_Lib_SST
   use iso_fortran_env, only: I4 => int32, R8 => real64
 
@@ -56,14 +81,15 @@ contains
                      domain % blk(b) % dtlocal,      &
                      domain % blk(b) % dim,          &
                      SpalartShur, k_energy_coupling, &
-                     obj_rans%point_implicit )
+                     obj_rans%point_implicit, obj_rans%sst_compressible )
 
     end do
 
   end subroutine SST_Source_Terms
 
 
-  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, point_implicit )
+  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, point_implicit, &
+                       compressible )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -71,7 +97,7 @@ contains
     use MOSE_Lib_RotatingFrame, only: obj_rot
     implicit none
     integer, intent(in) :: n(3)
-    logical, intent(in) :: SpalartShur, k_energy_coupling, point_implicit
+    logical, intent(in) :: SpalartShur, k_energy_coupling, point_implicit, compressible
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
@@ -153,8 +179,13 @@ contains
       !   Prod(1) = Prod(1) + Tij(ii,jj)*Gradvel(ii,jj)
       ! end do
       ! end do
-      Prod(1) = mi_t * S**2 ! SST-2003m
+      ! Production (see the module header for the variants and references)
+      Prod(1) = mi_t * S**2 ! SST-2003m (TMR), sst-production = incompressible
+      ! sst-production = compressible (SST-2003e, OpenFOAM kOmegaSST arrangement), deviatoric part:
+      ! mu_t*(S^2 - 2/3 divU^2) = 2 mu_t S_dev:S_dev >= 0
+      if ( compressible ) Prod(1) = Prod(1) - 2d0/3d0 * mi_t * Divel**2
 
+      ! Rotation/curvature correction, Smirnov & Menter (2009): P multiplied by fr1 (TMR SST-RC)
       if ( SpalartShur ) then
         rstar = rc1(i,j,k)
         D = sqrt( max ( S**2, 0.09d0*ome**2) )
@@ -164,8 +195,16 @@ contains
         Prod(1) = fr1*Prod(1)
       end if
 
-      Prod(1) = Min( Prod(1), 10d0*beta_star*rho*ome*kap ) ! k-eqn production limiter
+      ! SST-2003 production limiter (10 beta*, Menter et al. 2003); the omega production uses the
+      ! limited value, as corrected on the TMR page (the 2003 paper has the unlimited one)
+      Prod(1) = Min( Prod(1), 10d0*beta_star*rho*ome*kap )
       Prod(2) = ( gamma*rho / mi_t ) * Prod(1)
+
+      ! Compressible form, dilatation part (-2/3 rho k delta_ij in tau_ij), outside the limiter
+      if ( compressible ) then
+        Prod(1) = Prod(1) - 2d0/3d0 * rho * kap * Divel
+        Prod(2) = Prod(2) - 2d0/3d0 * gamma * rho * ome * Divel
+      end if
 
       ! Cross Diffusion term
       dkDotdw = Dot_Product ( Grad(1,:), Grad(2,:) )

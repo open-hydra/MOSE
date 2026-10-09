@@ -58,6 +58,19 @@ contains
       error stop ( 'Error: omega-wall-bc must be "practical" or "asymptotic".' )
     end select
 
+    ! SST production term.
+    ! 'incompressible' -> P = mu_t*S^2 (SST-2003).
+    ! 'compressible'   -> P = tau_ij*du_i/dx_j with tau_ij = mu_t*(2 S_ij - 2/3 divU delta_ij)
+    !                     - 2/3 rho k delta_ij: the dilatation terms matter across shocks.
+    select case ( trim(obj_rans%sst_production) )
+    case ( 'incompressible' )
+      obj_rans%sst_compressible = .false.
+    case ( 'compressible' )
+      obj_rans%sst_compressible = .true.
+    case default
+      error stop ( 'Error: sst-production must be "incompressible" or "compressible".' )
+    end select
+
     obj_rans%description = 'RANS model: '//trim(obj_rans%model)
 
     ! Setting RANS or NS model

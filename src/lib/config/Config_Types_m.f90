@@ -287,9 +287,11 @@ module MOSE_Config_Types_m
     logical :: QCR2000, blowing_corr, k_energy_coupling
     logical :: point_implicit  ! Point-implicit (Patankar) treatment of turbulence destruction source terms
     character(len=llen) :: omega_wall_bc  ! omega wall condition: 'practical' or 'asymptotic'
+    character(len=llen) :: sst_production ! SST production: 'incompressible' or 'compressible'
     ! Useful variables
     logical :: RSM, SD
     real(R8) :: omega_wall_coef  ! coefficient C in omega_wall = C*mi_l/dist**2 (set by Setup_RANS_Model)
+    logical :: sst_compressible  ! SST production with the dilatation terms (set by Setup_RANS_Model)
   end type rans_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------

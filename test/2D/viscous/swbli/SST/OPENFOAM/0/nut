@@ -11,7 +11,7 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-// nut_inf = k_inf/omega_inf = 5.23e-7 m2/s
+// nut_inf = k_inf/omega_inf = 2.032e-7 m2/s
 
 dimensions      [0 2 -1 0 0 0 0];
 

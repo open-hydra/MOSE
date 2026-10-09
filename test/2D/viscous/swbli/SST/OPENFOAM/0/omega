@@ -12,7 +12,9 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 // NASA TMR freestream for SST:
-//   omega_inf = 1e-6 * rho_inf * a_inf^2 / mu_inf = 472.2 1/s
+//   omega_inf = 1e-6 * rho_inf * a_inf^2 / mu_inf = 1e-6 * a_inf^2 / nu_inf = 1215.8 1/s
+// (a_inf = 165.66 m/s, nu_inf = 2.257e-5 m2/s with Sutherland).
+// MOSE input: omega = rho_inf * omega_inf = 248.1 (density-weighted).
 
 dimensions      [0 0 -1 0 0 0 0];
 
@@ -31,19 +33,15 @@ boundaryField
     }
     bottomWall
     {
-        // omegaWallFunction carries Menter's viscous-sublayer form
-        // omega_w = 6*nu/(beta1*y^2), so it is valid on this resolved mesh
-        type            omegaWallFunction;
-        beta1           0.0075;   // => omega_w = 6*nu/(0.0075*y^2) = 800*nu/y^2
-                                  //    == MOSE Menter practical BC (60*nu/(0.075*y^2))
-        value           uniform 1215.8;
+        // omega wall condition, selected by ./variant.sh: system/omegaFaceBC
+        // (asymptotic, MOSE's face condition) or omegaWallFunction (wallfunction)
+        #include "$FOAM_CASE/system/omegaFaceBC"
+        value           uniform 1e9;
     }
     topWall
     {
-        type            omegaWallFunction;
-        beta1           0.0075;   // => omega_w = 6*nu/(0.0075*y^2) = 800*nu/y^2
-                                  //    == MOSE Menter practical BC (60*nu/(0.075*y^2))
-        value           uniform 1215.8;
+        #include "$FOAM_CASE/system/omegaFaceBC"
+        value           uniform 1e9;
     }
     symTop
     {

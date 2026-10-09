@@ -116,7 +116,7 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 | `beta` | Out-of-plane flow angle [rad] or `normal` |
 | `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation) |
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
-| `turb_vars` | Turbulence quantities ($k$, $\omega$ or $k$, $\varepsilon$) |
+| `turb_vars` | Turbulence quantities, **density-weighted** as in the initial condition: $\rho\tilde\nu$ (SA), $\rho k$ and $\rho\omega$ (SST, Wilcox 2006). They are imposed as given, whatever density the inlet state produces ([Freestream and inlet values](../theory/turbulence.md#freestream-and-inlet-values-k-omega-tildenu)) |
 
 ### Viscous Walls
 

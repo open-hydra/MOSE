@@ -171,7 +171,7 @@ contains
    !        Sup_Prim(nv) = Sup_Prim(nu) * Tan(alpha)
    !        Sup_Prim(nw) = Sup_Prim(nu) * Tan(beta)
     Sup_Prim(nu:nw) = g / Sup_rho * normal
-    if (model==2) Sup_Prim(nt:nprim) = Sup_rho * BC_RANS
+    if (model==2) Sup_Prim(nt:nprim) = BC_RANS  ! density-weighted inputs (rho*nu~, rho*k, rho*omega), as in the IC
 
     ! building a 3 cell stencil to extrapolate the solution at the interface
 
@@ -398,7 +398,7 @@ contains
       Face_Prim(nu:nw) = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
       Face_Prim(np) = p3
       Face_Un = Un3
-      if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+      if (model==2) Face_Prim(nt:nprim) = BC_RANS  ! density-weighted inputs (rho*nu~, rho*k, rho*omega), as in the IC
     
     Face_Enthalpy = 0d0
     Face_T = Face_Prim(np) / ( Face_Rgas * Face_rho )
@@ -501,7 +501,7 @@ contains
     Face_Prim(1:nsc) = Face_rho * BC_ci
     Face_Prim(nu:nw) = u3 *Normal
     Face_Un = u3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS  ! density-weighted inputs (rho*nu~, rho*k, rho*omega), as in the IC
 
     Face_Enthalpy = 0d0
     Face_T = Face_Prim(np) / ( Face_Rgas * Face_rho )

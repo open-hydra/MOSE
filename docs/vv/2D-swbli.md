@@ -4,11 +4,11 @@ Supersonic turbulent flow at Mach 5 over a flat plate with an isothermal wall, i
 
 The case is treated in three stages, in the order in which the questions arise:
 
-1. **Verification** - a code-to-code comparison against OpenFOAM (`rhoCentralFoam`) run **on the same grid**, with the same freestream, thermodynamics and transport. Two codes solving the same equations on the same mesh must produce the same flow field; whatever difference remains has to be explained.
+1. **Verification** - a code-to-code comparison against OpenFOAM (`rhoCentralFoam`) run **on the same grid**, with the same freestream, thermodynamics, transport and turbulence-model formulation. Two codes solving the same equations on the same mesh must produce the same flow field; whatever difference remains has to be explained.
 2. **Validation** - a comparison of the verified solution against the Schulein experiment and the Wind-US and SU2 reference solutions.
-3. **Boundary-condition sensitivity** - the effect of the $\omega$ wall condition on the MOSE solution.
+3. **Model sensitivity** - the effect of the $\omega$ wall condition and of the SST production form on the MOSE solution.
 
-**References**: Schulein experimental dataset (as distributed with this case), Wind-US and SU2 reference solutions, and an OpenFOAM companion case (`test/2D/viscous/swbli/{SA,SST}/OPENFOAM`).
+**References**: Schulein experimental dataset (as distributed with this case), Wind-US and SU2 reference solutions, and an OpenFOAM companion case (`test/2D/viscous/swbli/{SA,SST}/OPENFOAM`). Every MOSE and OpenFOAM wall solution shown on this page is stored in `test/2D/viscous/swbli/{SA,SST}/reference`, with the inputs and the procedure to reproduce it in the case README.
 
 <figure>
   {% include "vv/images/SWBLI-field.svg" %}
@@ -38,7 +38,8 @@ where $\tau_w$ is the streamwise wall shear stress, and $\rho_\infty$, $U_\infty
 | Prandtl numbers | $Pr = 0.69$, $Pr_t = 0.85$ |
 | Wall | Isothermal, 300 K |
 | Wall resolution | $y^+ \approx 0.3$ (wall-resolved, no wall functions) |
-| Turbulence model | Spalart-Allmaras (SA), Shear Stress Transport (SST) |
+| Turbulence model | Spalart-Allmaras (SA); Shear Stress Transport (SST) with `sst-production = compressible` |
+| Turbulence freestream | SA: $\tilde\nu_\infty = 4.90\times10^{-6}$ m²/s; SST: NASA TMR, $k_\infty = 9\times10^{-9}a_\infty^2$, $\omega_\infty = 10^{-6}a_\infty^2/\nu_\infty$ |
 
 The viscosity follows Sutherland's law, so that the unit Reynolds number is $36.7\times10^6$ /m - the value of the NASA NPARC/Wind-US reference case (total conditions $p_0 = 307.48$ psia, $T_0 = 738\,^\circ$R). Across the interaction the temperature ranges from 68 K at the boundary-layer edge to 300 K at the wall, over which $\mu$ varies by a factor of four; a constant viscosity would run the case at 39% of the reference Reynolds number and is not used.
 
@@ -75,14 +76,21 @@ The published reference solutions come from different codes, on different meshes
 | Freestream | $M=5$, $p=4000$ Pa, $T=68.3$ K | identical |
 | Thermodynamics | ideal gas, $\gamma = 1.4$, $R = 287$ | identical |
 | Transport | Sutherland $\mu(T)$, Eucken $\kappa$ ($Pr = 0.69$) | identical ($A_s$, $T_s$; Eucken) |
-| Turbulence freestream | $\tilde{\nu}$, $k$, $\omega$ (density-weighted inputs) | converted to the same physical values |
-| $\omega$ wall condition (SST) | asymptotic, $6\nu/(\beta_1 y^2) = 80\,\nu/y^2$ | **the same** (default `omegaWallFunction`) |
+| Turbulence freestream | $\rho\tilde{\nu}$, $\rho k$, $\rho\omega$ (density-weighted inputs) | the same physical values |
+| SST production | `sst-production = compressible` | `kOmegaSST` - the same form |
+| $\omega$ wall condition (SST) | $80\,\nu_w/y_c^2$ on the wall face, wall cell solved | the same, through a coded condition (`system/omegaFaceBC`) |
 | Riemann solver | HLLC + MUSCL / Van Leer | Kurganov central-upwind + Van Leer |
 | Time integration | RK3, local CFL | local time stepping (LTS) |
 
-Two entries deserve a note. MOSE's turbulence inputs are *density-weighted* ($\texttt{mit} = \rho\tilde{\nu}$, $\texttt{kappa} = \rho k$, $\texttt{omega} = \rho\omega$), so the OpenFOAM values are converted accordingly rather than copied. And on this wall-resolved ($y^+ \approx 0.3$) mesh both codes use the **asymptotic** $\omega$ wall condition $80\,\nu/y^2$ - the exact $y \to 0$ limit of the $\omega$ equation and the consistent choice when the viscous sublayer is resolved (the alternative *practical* form is examined in the validation section). Both codes take the Eucken conductivity that OpenFOAM's Sutherland transport implies, $\kappa = \mu\,C_v(1.32 + 1.77\,R/C_v)$, i.e. $Pr = 0.69$, so the thermal transport matches as well.
+Three entries need a note.
 
-With those conversions, the codes are given the same physical problem and only the discretisation differs.
+- **Turbulence inputs.** MOSE's turbulence inputs are *density-weighted* ($\texttt{mit} = \rho\tilde{\nu}$, $\texttt{kappa} = \rho k$, $\texttt{omega} = \rho\omega$), for the initial condition and the inlet boundary alike, so the OpenFOAM values are converted rather than copied: $k_\infty = 2.470\times10^{-4}$ m²/s² and $\omega_\infty = 1216$ s⁻¹ in OpenFOAM are `kappa = 5.040e-5` and `omega = 248.1` in MOSE ([Freestream and inlet values](../theory/turbulence.md#freestream-and-inlet-values-k-omega-tildenu)).
+- **SST production.** "SST" names a family of models. MOSE's default production is $\mu_t S^2$ (NASA TMR's SST-2003m); OpenFOAM's `kOmegaSST` keeps the dilatation terms of $\tau_{ij}\,\partial u_i/\partial x_j$. MOSE carries both, and runs the compressible one here so that the two codes solve the same equations ([Compressible production](../theory/turbulence.md#compressible-production-sst-production)).
+- **$\omega$ wall condition.** On this wall-resolved mesh ($y^+ \approx 0.3$) both codes use the asymptotic value $6\nu_w/(\beta_1 y_c^2) = 80\,\nu_w/y_c^2$, with $y_c$ the wall distance of the first cell centre. MOSE imposes it on the wall **face** and solves the wall-adjacent cell; OpenFOAM's standard `omegaWallFunction` would instead **fix** the wall-adjacent cell to that value. The OpenFOAM case therefore replaces it with a `codedFixedValue` that applies MOSE's face condition ([Wall boundary conditions](../theory/turbulence.md#wall-boundary-conditions)).
+
+Both codes take the Eucken conductivity that OpenFOAM's Sutherland transport implies, $\kappa = \mu\,C_v(1.32 + 1.77\,R/C_v)$, i.e. $Pr = 0.69$, so the thermal transport matches as well. With these settings the two codes solve the same equations on the same grid, and only the discretisation differs.
+
+Both solutions are converged in the sense that matters: separation and reattachment do not move over the last 225k (OpenFOAM) and 175k (MOSE) iterations, and between saves the wall fields change by less than 0.01% in MOSE and by 1-2% cell-to-cell, without trend, in OpenFOAM.
 
 ### Wall pressure
 
@@ -91,81 +99,94 @@ With those conversions, the codes are given the same physical problem and only t
   Wall pressure $p_w / p_\infty$, SST. MOSE (orange) and OpenFOAM (aqua).
 </figure>
 
-The pressure the interaction imposes on the wall - the inviscid driver of the whole problem - agrees to **0.05%** upstream of the interaction and to **0.46%** through the plateau after reattachment. The residual cell-to-cell ripple downstream is 3-7x larger in OpenFOAM, the expected signature of a central-upwind flux against HLLC.
+The pressure the interaction imposes on the wall - the inviscid driver of the whole problem - agrees to **0.03%** upstream of the interaction and to **0.43%** through the plateau after reattachment. The residual cell-to-cell ripple downstream is 3-5x larger in OpenFOAM, the expected signature of a central-upwind flux against HLLC.
 
-The pressure field also carries the shock system, which is resolved identically: the incident shock is captured over the same number of cells in both codes (6 cells at $y = 0.020$, 8 cells at $y = 0.030$) and arrives at the same place with the same strength, so **no downstream difference can be attributed to shock smearing**.
+The pressure field also carries the shock system. The incident shock arrives at the same place in both codes (within 0.2 mm, less than one cell) with the same strength (within 0.4%); OpenFOAM spreads it over one to two more cells and leaves a small post-shock overshoot, again the signature of the central-upwind flux.
 
 ### Skin friction
 
 <figure>
   {% include "vv/images/SWBLI-cf-sa-openfoam.svg" %}
-  $C_f$ through the interaction, SA model. MOSE (orange) and OpenFOAM (aqua), on the same grid.
+  $C_f$ , SA model.
 </figure>
 
 <figure>
   {% include "vv/images/SWBLI-cf-sst-openfoam.svg" %}
-  $C_f$ through the interaction, SST model. MOSE (orange) and OpenFOAM (aqua), on the same grid.
+  $C_f$, SST model.
 </figure>
 
 ### Quantitative agreement
 
 | Quantity (SST) | MOSE | OpenFOAM | Difference |
 |---|---|---|---|
-| Incoming BL $\delta_{99}$ at $x = 0.25$ | 3.581 mm | 3.513 mm | -1.9% |
-| Incoming BL $\theta$ (compressible) | 0.1688 mm | 0.1674 mm | -0.8% |
-| Incoming shape factor $H_i$ | 1.4233 | 1.4335 | +0.7% |
-| $C_f$ before the interaction ($x = 0.30$) | 0.00113 | 0.00112 | -0.9% |
-| Wall pressure, $x = 0.10 \ldots 0.30$ | - | - | 0.05% |
-| Wall pressure plateau, $x = 0.38 \ldots 0.50$ | - | - | 0.46% |
-| Incident shock position at $y = 0.020$ | 0.2901 | 0.2904 | 0.3 mm |
-| Incident shock strength $p_2/p_1$ | 3.07 | 2.96 | -3% |
-| Incident shock thickness at $y = 0.020$ | 6 cells | 6 cells | 0 |
-| Incident shock thickness at $y = 0.030$ | 8 cells | 8 cells | 0 |
+| Incoming BL $\delta_{99}$ at $x = 0.25$ | 3.477 mm | 3.402 mm | -2.2% |
+| Incoming BL $\theta$ (compressible) | 0.1706 mm | 0.1683 mm | -1.3% |
+| Incoming shape factor $H_i$ | 1.4389 | 1.4420 | +0.2% |
+| $C_f$ before the interaction ($x = 0.30$) | 0.00113 | 0.00113 | +0.2% |
+| Wall pressure, $x = 0.10 \ldots 0.30$ | - | - | 0.03% |
+| Wall pressure plateau, $x = 0.38 \ldots 0.50$ | - | - | 0.43% |
+| Incident shock position at $y = 0.020$ | 0.2886 | 0.2884 | 0.2 mm |
+| Incident shock strength $p_2/p_1$ at $y = 0.020$ | 3.111 | 3.124 | +0.4% |
+| Incident shock 10-90% width at $y = 0.020$ / $0.030$ | 6.2 / 7.3 cells | 8.4 / 8.5 cells | +1-2 cells |
+| Separation $x_\text{sep}$ | 0.32738 | 0.32738 | same cell |
+| Reattachment $x_\text{reatt}$ | 0.34297 | 0.34285 | one cell (0.12 mm) |
+| Separation bubble length | 15.60 mm | 15.48 mm | -0.8% |
 
-Everything that the grid and the boundary conditions determine matches to within 2%: the incoming boundary layer, the shock system, and the pressure field. The incident shock is set by the generator geometry and the mesh, not by the viscosity, so it is unchanged from the reference conditions.
+Everything that the grid, the boundary conditions and the model determine matches: the incoming boundary layer to about 2%, the pressure field to better than 0.5%, the shock position and strength, and the separation bubble, which starts on the same cell and ends one cell apart.
 
-### Sources of discrepancy
-
-The single quantity that differs materially is the **separation onset**, and therefore the bubble length - the most scheme- and near-wall-sensitive quantity in the problem. Averaged over the wall, the two codes differ by
+Averaged over the wall, the two codes differ by
 
 | Mean \|$C_f$ difference\| | upstream (0.10-0.30) | post-reattachment (0.35-0.40) | downstream (0.45-0.52) |
 |---|---|---|---|
-| SA | 0.3% | 2.3% | 0.5% |
-| SST | 1.3% | 13.7% | 1.1% |
+| SA | 0.4% | 2.5% | 0.5% |
+| SST | 0.3% | 3.2% | 0.8% |
 
-The footprint is created inside the bubble and then progressively forgotten downstream, as the pointwise values show:
+and pointwise by
 
 | $x$ [m] | 0.30 | 0.36 | 0.40 | 0.45 | 0.51 |
 |---|---|---|---|---|---|
-| $C_f$ difference, SA | +0.2% | +3.0% | +1.7% | +1.3% | +0.2% |
-| $C_f$ difference, SST | -1.1% | +18.0% | +4.2% | +1.7% | -0.3% |
+| $C_f$ difference, SA | +0.2% | +3.3% | +1.8% | +1.4% | +0.2% |
+| $C_f$ difference, SST | +0.2% | +2.8% | +1.7% | +1.8% | +1.1% |
 
-The +18.0% at $x = 0.36$ is a *local* value immediately behind reattachment, where $C_f$ is still recovering from zero and a relative error is correspondingly inflated; the representative figure for the interaction region is the 13.7% mean above.
+The largest values sit immediately behind reattachment, where $C_f$ is recovering from zero and a relative difference is inflated, and they fade downstream. What is left is the discretisation:
 
-Three implementation differences account for it, each traceable to a specific line of source:
+1. **Convective scheme.** HLLC with MUSCL reconstruction against the Kurganov central-upwind flux. Behind reattachment OpenFOAM's $C_f$ carries a staircase (steps 3.5-4.5 mm apart) from a fan of weak stationary waves next to the wall that the central-upwind flux leaves undamped; MOSE shows the same feature at about a third of the amplitude. It is steady - identical at every saved time - and accounts for the 3-5x larger wall ripple noted above.
 
-1. **$\omega$ wall boundary condition (SST) - the way it is *applied*.** The *formula* is matched here: both codes impose the asymptotic form $80\,\nu/y^2$. What cannot be matched from any input is *how* the condition is imposed. MOSE sets $\rho\,\omega_w = 80\,\mu/y^2$ at the wall *face* and then solves the wall-adjacent cell; OpenFOAM's `omegaWallFunction` **forces** the value into the wall-adjacent cell instead of solving there. OpenFOAM's first-cell $\omega$ therefore differs from MOSE's, and this is the dominant remaining term - it accounts for the larger MOSE separation bubble.
+2. **SA $\hat{S}$ limiter (SA only).** MOSE uses Spalart's smooth rational limiter, OpenFOAM the hard clip $\max(\Omega + \bar{S},\ 0.3\,\Omega)$. The two are identical unless $\bar{S} < -0.7\,\Omega$, which happens only *inside the separation bubble*, where $\Omega$ passes near zero. There OpenFOAM's $\hat{S}$ is larger, producing more $\tilde{\nu}$ in the bubble.
 
-2. **SA $\hat{S}$ limiter.** MOSE uses Spalart's smooth rational limiter, OpenFOAM the hard clip $\max(\Omega + \bar{S},\ 0.3\,\Omega)$. The two are identical unless $\bar{S} < -0.7\,\Omega$, which happens only *inside the separation bubble*, where $\Omega$ passes near zero. There OpenFOAM's $\hat{S}$ is larger, producing more $\tilde{\nu}$ in the bubble.
+Run with its defaults - production $\mu_t S^2$ - MOSE's SST bubble is 18.1 mm against OpenFOAM's 15.4 mm with its defaults (`omegaWallFunction`), an 18% difference that is *not* numerical. To attribute it, OpenFOAM was run with MOSE's choices switched in one at a time (differences relative to the OpenFOAM default):
 
-3. **Convective scheme.** HLLC with MUSCL reconstruction against the Kurganov central-upwind flux, responsible for the different levels of wall-pressure ripple noted above.
+| OpenFOAM run | $x_\text{sep}$ | $x_\text{reatt}$ | Bubble | $C_f$, 0.10-0.30 | $C_f$, 0.35-0.40 |
+|---|---|---|---|---|---|
+| default (`kOmegaSST`, `omegaWallFunction`) | 0.32844 | 0.34381 | 15.36 mm | - | - |
+| + $\omega$ on the wall face | 0.32738 | 0.34285 | 15.48 mm | +1.6% | +6.1% |
+| + production $\mu_t S^2$ | 0.32661 | 0.34428 | 17.67 mm | +1.6% | -10.3% |
+| + both | 0.32537 | 0.34333 | 17.96 mm | +3.2% | -4.9% |
+| *MOSE, default production* | *0.32537* | *0.34345* | *18.08 mm* | *+3.1%* | *-8.5%* |
+
+- **The production form sets the bubble length.** $\mu_t S^2$ alone adds 2.3 mm of bubble and lowers $C_f$ by 10% after reattachment. Through the compressions at the separation-shock foot and at reattachment ($\nabla\!\cdot\!\mathbf{v} < 0$) the dilatation terms raise $k$ more than $\omega$, so $\mu_t$ grows and the boundary layer resists separation and recovers faster.
+- **Where $\omega$ is imposed moves the bubble without lengthening it.** The face condition puts $\omega$ in the first cell at about a quarter of the sublayer value and shifts separation and reattachment about 1 mm upstream, with a 1.6% higher $C_f$ upstream.
+- **With both, OpenFOAM reproduces MOSE**: separation on MOSE's cell, reattachment one cell off, bubble within 0.12 mm.
+
+The comparison is therefore closed in both directions: OpenFOAM given MOSE's default model reproduces MOSE, and the two codes given the same compressible model (the verification above) reproduce each other.
 
 ### Assessment
 
 | Separation bubble | SA | SST |
 |---|---|---|
 | SU2 | 5.3 mm | 7.9 mm |
-| OpenFOAM | 7.4 mm | 15.4 mm |
-| MOSE | 7.2 mm | 18.1 mm |
 | Wind-US | 6.0 mm | 16.6 mm |
+| OpenFOAM | 7.4 mm | 15.5 mm |
+| MOSE | 7.2 mm | 15.6 mm |
+| MOSE, default SST production | - | 18.1 mm |
 
-For SA the four codes agree within 5.3-7.4 mm. For SST MOSE and OpenFOAM differ by 2.7 mm (15%) in bubble length, while **SU2 and Wind-US differ from each other by a factor of two on the same quantity** (7.9 against 16.6 mm), and MOSE and OpenFOAM both lie inside that envelope. Every grid- and boundary-condition-determined quantity matches to within 2%, and the residual is confined to documented model-implementation choices - which is the intended outcome: the codes agree wherever they are solving the same problem, and differ only where they are known to implement the model differently.
+For SA the four codes agree within 5.3-7.4 mm. For SST, MOSE and OpenFOAM solving the same model agree to 0.12 mm - one cell - while **SU2 and Wind-US differ from each other by a factor of two on the same quantity** (7.9 against 16.6 mm). Every grid-, boundary-condition- and model-determined quantity matches, and the residual is the expected footprint of two different convective schemes.
 
 ---
 
 ## Validation: against experiment, Wind-US and SU2
 
-With the numerics verified, the solution is compared with the reference data. Both codes use the asymptotic $\omega$ wall condition on this resolved mesh (see below).
+With the numerics verified, the solution is compared with the reference data. MOSE and OpenFOAM are shown in the verification configuration (SST: compressible production, asymptotic $\omega$ wall condition on the wall face).
 
 <figure>
   {% include "vv/images/SWBLI-cf-sst-validation.svg" %}
@@ -177,7 +198,7 @@ With the numerics verified, the solution is compared with the reference data. Bo
   Skin friction $C_f$, SA model: MOSE (orange) and OpenFOAM (aqua) against Schulein (circles) and Wind-US (blue).
 </figure>
 
-At the reference Reynolds number MOSE reproduces the expected SWBLI behaviour - the negative-$C_f$ pocket of the shock-induced separation and the recovery after reattachment - and agrees with the reference trends in both the location and the amplitude of the separation/reattachment signature, for both turbulence models. It tracks Wind-US closely through the recovery and sits within the spread of the reference codes, which is itself wide: SU2 and Wind-US differ from each other by a factor of two in separation-bubble length. All the RANS solutions, MOSE included, under-predict the experimental peak skin friction well downstream - a known limitation of eddy-viscosity turbulence models in the strong-interaction recovery, not specific to MOSE.
+At the reference Reynolds number MOSE reproduces the expected SWBLI behaviour - the negative-$C_f$ pocket of the shock-induced separation and the recovery after reattachment - and sits within the spread of the reference codes, which is itself wide: SU2 and Wind-US differ from each other by a factor of two in separation-bubble length. All the RANS solutions separate earlier than the experiment, whose $C_f$ crosses zero near $x = 0.334$. Through the recovery the compressible SST form tracks the measurements closely - at $x = 0.3585$ MOSE gives $C_f = 0.00373$ against 0.00373 measured (Wind-US 0.00328; MOSE's default production 0.00301). Well downstream all the RANS solutions, MOSE included, under-predict the experimental peak skin friction by about 25%, a known limitation of eddy-viscosity models in the strong-interaction recovery, not specific to MOSE.
 
 ---
 
@@ -190,7 +211,27 @@ On a wall-resolved mesh the $\omega$ wall condition (SST) can take two forms, an
 
 <figure>
   {% include "vv/images/SWBLI-cf-sst-omegaBC-mose.svg" %}
-  Effect of the $\omega$ wall condition in MOSE: two constant-viscosity runs on the same grid, identical except for the wall condition. The asymptotic form gives a higher recovered $C_f$ than the practical form.
+  Effect of the $\omega$ wall condition in MOSE: two runs on the same grid with the verification setup identical except for the wall condition.
 </figure>
 
-Switching from the practical to the asymptotic form raises MOSE's recovered skin friction through the reattachment recovery. On this resolved mesh the asymptotic form is the theoretically correct condition - the exact $y \to 0$ limit - and the `omega-wall-bc = asymptotic` option makes it the recommended MOSE setting for wall-resolved meshes.
+The practical form puts ten times more $\omega$ at the wall and damps the inner-layer turbulence accordingly: $C_f$ is 1.4% lower upstream of the interaction and 4-6% lower through the recovery ($x = 0.35 \ldots 0.45$), and the separation bubble moves 1.4 mm downstream and shortens slightly (15.27 against 15.60 mm). The wall condition thus shifts the interaction by about as much as the way it is imposed (face or cell, about 1 mm; see the attribution table in [Quantitative agreement](#quantitative-agreement)), and changes the bubble length far less than [the production form](#effect-of-the-sst-production-form-in-mose) does.
+
+On this resolved mesh the asymptotic form is the theoretically correct condition - the exact $y \to 0$ limit - and the `omega-wall-bc = asymptotic` option makes it the recommended MOSE setting for wall-resolved meshes.
+
+---
+
+## Effect of the SST production form in MOSE
+
+MOSE carries two forms of the SST production term through the `sst-production` input option ([Compressible production](../theory/turbulence.md#compressible-production-sst-production)):
+
+- **Incompressible** (default), $P_k = \mu_t S^2$ - NASA TMR's SST-2003m, which drops the dilatation terms.
+- **Compressible**, $P_k = \tau_{ij}\,\partial u_i/\partial x_j$ - NASA TMR's SST-2003e: keeps $-\tfrac23\mu_t(\nabla\!\cdot\!\mathbf{v})^2$ and $-\tfrac23\rho k\,\nabla\!\cdot\!\mathbf{v}$, and $-\tfrac23\gamma\rho\omega\,\nabla\!\cdot\!\mathbf{v}$ in the $\omega$ equation, as OpenFOAM's `kOmegaSST` does.
+
+<figure>
+  {% include "vv/images/SWBLI-cf-sst-production-mose.svg" %}
+  Effect of the SST production form in MOSE: two runs on the same grid with the verification setup identical except for the production term.
+</figure>
+
+The two forms differ where the flow is compressed - at the separation-shock foot and at reattachment. In the incoming boundary layer, where the dilatation is small, the incompressible form gives only a 1.8% higher $C_f$; through the interaction it separates 2.0 mm earlier and reattaches 0.5 mm later, so its bubble is 16% longer (18.08 against 15.60 mm), and it recovers more slowly: $C_f$ is 11% lower on average over $x = 0.35 \ldots 0.40$ (17% at $x = 0.36$) and reaches 90% of its plateau 7.8 mm further downstream. Beyond $x = 0.45$ the two agree within 1%.
+
+The production form is the largest model sensitivity in the problem - it moves the separation point further than the $\omega$ wall condition (2.0 against 1.4 mm) and changes the bubble length seven times as much (2.5 against 0.33 mm) - and through the recovery the compressible form is the one that tracks the experiment ([Validation](#validation-against-experiment-wind-us-and-su2)).
