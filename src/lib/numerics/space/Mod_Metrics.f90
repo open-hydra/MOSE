@@ -24,6 +24,9 @@ contains
 
     call Check_Mesh_Type ( domain )
 
+    ! A cell folded at one of its corners, or turned against its block, stops the run here
+    call Check_Folded_Cells ( domain )
+
     ! Wall roughness is modelled by Spalart-Allmaras only (SA-rough). With any
     ! other model, or laminar, drop it up front so every wall is consistently smooth.
     if ( any( domain % bc(:) % k_rough > 0d0 ) .and. .not. ( model == 2 .and. nRANS == 1 ) ) then
@@ -259,5 +262,83 @@ contains
     enddo
 
   end subroutine Check_Wedge_Axis
+
+
+  !> A cell is the image of the unit cube by the trilinear map of its eight nodes, and a finite volume needs that map
+  !> one-to-one: its Jacobian keeps the sign of the block in the whole cell. At a corner the Jacobian is
+  !> J = e_i . (e_j x e_k), with e_i, e_j and e_k the three edges from that corner along i, j and k. The run stops at
+  !> setup when, at a corner of a cell of a local block, s J <= 1e-12 |e_i| |e_j| |e_k| (Hadamard's bound, the measure of
+  !> the determinant check of Compute_Metric_Tensor), with s the sign of the determinant of the mean edges of the first
+  !> cell of the block, the cell from which Compute_Norm_Area takes the orientation of the normals; a degenerate first
+  !> cell, which gives the block no orientation, stops the run there, as that determinant check would. A corner with an
+  !> edge of zero length (nodes that coincide on an axis) is not checked. On a 2-D mesh, plane or a wedge whose nodes are
+  !> off the axis, the corners decide for the whole cell; in 3-D they are a necessary condition (docs/theory/numerics.md).
+  !> The volume of a cell, a sum of tetrahedra in absolute value, does not see a fold. Setup_Metrics calls this on every
+  !> multigrid level, whose nodes are every other node of the level above: a stop there names the level.
+  subroutine Check_Folded_Cells ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Mod_MPI, only: is_local_block, mpi_abort_all
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    ! Local
+    integer  :: b, i, j, k, ca, cb, cc, n(3)
+    real(R8) :: s, det, hm, ei(3), ej(3), ek(3), h, Jv, Am(3,3)
+    character(len=32) :: lev
+
+    lev = ':'
+    if ( domain % mg_level > 1 ) write(lev,'(A,I0,A)') ' of multigrid level ', domain % mg_level, ':'
+
+    do b = 1, domain % nb
+      if ( .not. is_local_block(b) ) cycle
+      n = domain % blk(b) % dim
+      associate ( node => domain % blk(b) % node )
+        ! Orientation of the block: the determinant of the mean edges of its first cell, as Compute_Metric_Tensor; a
+        ! degenerate first cell gives none, and stops the run here as it would there
+        Am(1,:) = node(1,0,0)%c - node(0,0,0)%c + node(1,0,1)%c - node(0,0,1)%c &
+                + node(1,1,0)%c - node(0,1,0)%c + node(1,1,1)%c - node(0,1,1)%c
+        Am(2,:) = node(0,1,0)%c - node(0,0,0)%c + node(0,1,1)%c - node(0,0,1)%c &
+                + node(1,1,0)%c - node(1,0,0)%c + node(1,1,1)%c - node(1,0,1)%c
+        Am(3,:) = node(0,0,1)%c - node(0,0,0)%c + node(0,1,1)%c - node(0,1,0)%c &
+                + node(1,0,1)%c - node(1,0,0)%c + node(1,1,1)%c - node(1,1,0)%c
+        Am  = 0.25d0 * Am
+        det = Triple ( Am(1,:), Am(2,:), Am(3,:) )
+        hm  = norm2 ( Am(1,:) ) * norm2 ( Am(2,:) ) * norm2 ( Am(3,:) )
+        if ( .not. ( abs(det) > 1d-12 * hm ) ) then
+          write(*,'(A,I0,A,ES12.4,A,ES12.4)') ' [ERROR] Mesh'//trim(lev)//' block ', b, &
+            ', cell 1 1 1: degenerate, so the block has no orientation; det = ', det, ', |A1| |A2| |A3| = ', hm
+          call mpi_abort_all ( 'degenerate cell in the mesh (see above)' )
+        end if
+        s = sign ( 1d0, det )
+        do k = 1, n(3); do j = 1, n(2); do i = 1, n(1)
+          do cc = 0, 1; do cb = 0, 1; do ca = 0, 1
+            ei = node(i,      j-1+cb, k-1+cc)%c - node(i-1,    j-1+cb, k-1+cc)%c
+            ej = node(i-1+ca, j,      k-1+cc)%c - node(i-1+ca, j-1,    k-1+cc)%c
+            ek = node(i-1+ca, j-1+cb, k     )%c - node(i-1+ca, j-1+cb, k-1   )%c
+            h = norm2 ( ei ) * norm2 ( ej ) * norm2 ( ek )
+            if ( h == 0d0 ) cycle          ! an edge of zero length: nodes that coincide on an axis
+            Jv = Triple ( ei, ej, ek )
+            if ( s * Jv > 1d-12 * h ) cycle
+            write(*,'(A,I0,A,3(1X,I0),A,3(1X,I0),A)') ' [ERROR] Mesh'//trim(lev)//' block ', b, ', cell', i, j, k, &
+                                                     ', corner node', i-1+ca, j-1+cb, k-1+cc, &
+                                                     ': the cell is folded or turned against its block'
+            write(*,'(A,ES12.4,A,ES12.4,A,I0)') ' [ERROR]   e_i . (e_j x e_k) = ', Jv, ', |e_i| |e_j| |e_k| = ', h, &
+                                               ', sign of the block (from its first cell): ', nint(s)
+            write(*,'(A)') ' [ERROR]   At every corner of a cell the edges along i, j and k must keep the orientation of the block.'
+            write(*,'(A,3(1X,ES14.6))') ' [ERROR]   corner node:', node(i-1+ca, j-1+cb, k-1+cc)%c
+            call mpi_abort_all ( 'folded cell in the mesh (see above)' )
+          enddo; enddo; enddo
+        enddo; enddo; enddo
+      end associate
+    enddo
+
+  contains
+
+    pure function Triple ( u, v, w ) result ( t )
+      real(R8), intent(in) :: u(3), v(3), w(3)
+      real(R8)             :: t
+      t = u(1) * ( v(2)*w(3) - v(3)*w(2) ) + u(2) * ( v(3)*w(1) - v(1)*w(3) ) + u(3) * ( v(1)*w(2) - v(2)*w(1) )
+    end function Triple
+
+  end subroutine Check_Folded_Cells
 
 end module MOSE_Mod_Metrics

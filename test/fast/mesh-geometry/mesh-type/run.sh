@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Mesh type: plane mesh, axisymmetric wedge, rotational periodicity (fast)
+#  Mesh type: plane mesh, axisymmetric wedge, rotational periodicity,
+#  folded cells (fast)
 #
 #  MOSE tells a plane 2-D mesh from an axisymmetric wedge, and a 3-D sector
 #  from a translated periodic slab, by the nodes of the mesh (make_case.py):
@@ -31,7 +32,12 @@
 #  - mixed: a wedge block and a plane block in one mesh must stop the run at
 #    set-up with a non-zero exit code and a message on the mesh type;
 #  - slab3d: a 3-D slab periodic in k (type 200, no rotation) must keep a
-#    uniform flow uniform within 1e-12 for five steps.
+#    uniform flow uniform within 1e-12 for five steps;
+#  - folded, folded3d: a plane 2-D block and a 3-D block with one interior
+#    node moved across the next cell, which is folded at that corner while the
+#    determinant of its mean edges stays positive, must stop the run at set-up
+#    with a non-zero exit code and a message on the folded cell;
+#  - folded-real: one cell of a real 3-D mesh, folded at a corner, the same.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -176,6 +182,20 @@ else
   echo "  [FAIL] mixed: exit code $rc, the run was not stopped on the mesh type (see OUTPUT/mixed.log)"
   fail=1
 fi
+
+echo "-- a cell folded at one corner, in a 2-D and in a 3-D block, and one of a real 3-D mesh --"
+for name in folded folded3d folded-real; do
+  python3 -B make_case.py case "$name" || exit 1
+  euler_input 1
+  "$LOCAL" > "OUTPUT/$name.log" 2>&1
+  rc=$?
+  if [[ $rc -ne 0 ]] && grep -a -q 'folded or turned against its block' "OUTPUT/$name.log"; then
+    echo "  [ok  ] $name: stopped at set-up, exit code $rc"
+  else
+    echo "  [FAIL] $name: exit code $rc, the run was not stopped on the folded cell (see OUTPUT/$name.log)"
+    fail=1
+  fi
+done
 
 echo "-- 3-D slab periodic in k (type 200, no rotation), uniform flow --"
 python3 -B make_case.py case slab3d || exit 1

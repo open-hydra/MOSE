@@ -262,7 +262,28 @@ centred at $2\mathbf{x}_f - \mathbf{x}_1$ ($\mathbf{x}_f$ the mean of the nodes
 of the face, $\mathbf{x}_1$ that of the cell). A cell whose determinant is zero
 to $10^{-12}$ of the product of its edge lengths, or a ghost cell whose
 determinant is not that of the first cell in sign and to $10^{-12}$ in size,
-stops the run at setup, with its block, cell and face. Behind a face of zero
+stops the run at setup, with its block, cell and face. So does a cell folded at
+one of its corners, or turned against its block, with its block, cell and corner
+node: a cell is the image of the unit cube by the trilinear map of its eight
+nodes, and at a corner the Jacobian of that map is
+$J = \mathbf{e}_i\cdot(\mathbf{e}_j\times\mathbf{e}_k)$, with
+$\mathbf{e}_i, \mathbf{e}_j, \mathbf{e}_k$ the three edges from that corner along
+$i$, $j$ and $k$. At every corner it must have the sign of the block (the sign of
+the determinant of the first cell, from which the face normals of the block take
+their orientation) and exceed $10^{-12}\,|\mathbf{e}_i||\mathbf{e}_j||\mathbf{e}_k|$;
+a corner with an edge of zero length (nodes that coincide on an axis) is not
+checked. On a plane 2-D mesh $J = \Delta z\, j(\xi, \eta)$, with $j$ the Jacobian
+of the bilinear map of the section, $\mathbf{x} = \mathbf{a} + \mathbf{b}\xi +
+\mathbf{c}\eta + \mathbf{d}\xi\eta$: $j = (\mathbf{b} + \mathbf{d}\eta)\times
+(\mathbf{c} + \mathbf{d}\xi)$ is affine in $(\xi, \eta)$ because
+$\mathbf{d}\times\mathbf{d} = 0$, so its sign in the cell is decided at the
+corners. On the 2-D wedge $J = R\,\sin\delta\; j_m(\xi, \eta)$, with $R > 0$ the
+bilinear radius when no node is on the axis and $j_m$ the Jacobian of the
+meridional section, affine as above: the corners decide again. In 3-D the corners
+are a necessary condition only. The volume of a cell, a sum of five tetrahedra
+taken in absolute value, does not see a fold. The check runs on every multigrid
+level too, whose nodes are every other node of the level above, and a stop there
+names the level. Behind a face of zero
 area (an axis) the ghost cells are the reflection of the first cell through the
 axis, whose determinant has the opposite sign by construction: their sign is
 not checked, and a wall on such a face stops as said below. The ghost values of a
