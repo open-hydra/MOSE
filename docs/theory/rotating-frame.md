@@ -72,6 +72,8 @@ follows from $\nabla\times(\boldsymbol{\Omega}\times\boldsymbol{r}) = 2\boldsymb
 | Wilcox 2006 $k$–$\omega$ | $f_\beta$ vortex-stretching limiter, $W_{ij}W_{jk}\hat S_{ki}$ |
 | SSG–LRR (RSM) | $W_{ij}^{\rm abs}$ in the $C_5$ pressure-strain term |
 
+In SA-RC and SST-RC the rate of change of the strain in $\tilde r$ is its steady convective part $\mathbf{u}\cdot\nabla S_{ij}$: the frame enters through the absolute vorticity, but the frame-rotation term $(\epsilon_{imn}S_{jn} + \epsilon_{jmn}S_{in})\,\Omega_m$ of the published $\tilde r$ is not included.
+
 **Strain-rate-based production is frame-invariant.** The $S_{ij}$-driven production used by SST and Wilcox 2006 needs no correction — only the vorticity-dependent auxiliary terms above receive the $2\boldsymbol{\Omega}$ shift.
 
 **Caveat for baseline SA at high $\Omega$.** Because $|\boldsymbol{\omega}_{\rm abs}| = 2|\boldsymbol{\Omega}|$ in a region of pure rigid-body co-rotation, baseline SA produces a non-zero $\tilde S$ there and will generate eddy viscosity from the frame rotation alone. This is the correct inertial-frame answer (the absolute vorticity really is non-zero in that region), but in flows where streamline curvature does not enhance turbulence the production is spurious. SA-RC's $f_{r1}$ is designed to attenuate exactly this contribution — so the recommended pairing in a rotating frame is **SA-RC**, not baseline SA.

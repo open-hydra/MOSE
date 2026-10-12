@@ -284,7 +284,8 @@ module MOSE_Config_Types_m
     real(R8) :: Prt    ! Prandtl turbolento
     character(len=llen) :: model
     logical :: SAcomp, SpalartShur, SAR
-    logical :: QCR2000, blowing_corr, k_energy_coupling
+    logical :: QCR2000, blowing_corr
+    logical :: k_energy_coupling = .false. ! k in the total energy (k-energy-coupling, two-equation models)
     logical :: point_implicit  ! Point-implicit (Patankar) treatment of turbulence destruction source terms
     character(len=llen) :: omega_wall_bc  ! omega wall condition: 'practical' or 'asymptotic'
     character(len=llen) :: sst_production ! SST production: 'incompressible' or 'compressible'

@@ -78,7 +78,7 @@
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | equations |  | euler , navier-stokes | yes | Gas dynamics equations |
-| turbulence | none | SA, SA-R, SA-RC, SAcomp, SST, Wilcox2006, none |  no | RANS turbulence model |
+| turbulence | none | SA, SA-R, SA-RC, SAcomp, SST, SST-RC, Wilcox2006, none |  no | RANS turbulence model |
 | chemistry | frozen | frozen, finite-rate, equilibrium |  no | Chemistry model |
 | soot-generation | none | LL91, LIN, none |  no | Soot generation model |
 | rotational-frame | none | rigid-body, none |  no | Rotational frame model |
@@ -107,6 +107,7 @@
 | point-implicit | .true. | logical |  no | Point-implicit (Patankar) treatment of turbulence destruction source terms |
 | omega-wall-bc | practical | practical, asymptotic |  no | Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2)) or asymptotic (6*nu/(beta1*y^2), exact y->0 limit, for wall-resolved meshes) |
 | sst-production | incompressible | incompressible, compressible |  no | SST production (NASA TMR naming): incompressible (P = mu_t*S^2, SST-2003m) or compressible (P = tau_ij*du_i/dx_j, SST-2003e, as OpenFOAM kOmegaSST: adds -2/3*mu_t*divU^2 - 2/3*rho*k*divU, and -2/3*gamma*rho*omega*divU to the omega equation) |
+| k-energy-coupling | .false. | logical |  no | Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants |
 
 ## MOSE-Rotating-Frame
 

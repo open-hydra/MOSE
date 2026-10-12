@@ -204,20 +204,24 @@ MOSE implements the **SST-2003** version of the model (Menter, Kuntz &
 Langtry [3]; the original model is Menter 1994 [2]) as specified by the NASA
 Turbulence Modeling Resource [8]: eddy viscosity built from the strain
 invariant $S$, production limiter $10\,\beta^\ast\rho\,\omega k$ in both
-equations, and the 2003 constants.  The production term comes in two forms,
-selected by `sst-production` ([below](#compressible-production-sst-production));
-in TMR's naming they are
+equations, and the 2003 constants.  Two options select the remaining
+details, and together they span TMR's naming of the variants:
 
-| `sst-production` | Production $P$ | TMR name |
-|---|---|---|
-| `incompressible` (default) | $\mu_t S^2$ | SST-2003m |
-| `compressible` | $\tau_{ij}\,\partial u_i/\partial x_j$ (exact) | SST-2003e |
+| `sst-production` | Production $P$ | `k-energy-coupling = false` (default) | `k-energy-coupling = true` |
+|---|---|---|---|
+| `incompressible` (default) | $\mu_t S^2$ | SST-2003m | SST-2003s |
+| `compressible` | $\tau_{ij}\,\partial u_i/\partial x_j$ (exact) | SST-2003e | SST-2003 |
 
-The suffix records the approximations: in both forms MOSE leaves the
-$-\tfrac23\rho k\,\delta_{ij}$ part of $\tau_{ij}$ out of the momentum and
-energy equations; "m" further approximates the production by $\mu_t S^2$,
-which TMR describes as exact for incompressible flow and "typically considered a
-very good approximation, except perhaps for very high Mach number flows" [8].
+The suffix records the approximations [8]: without the
+[energy coupling](#energy-coupling-k-energy-coupling) the
+$-\tfrac23\rho k\,\delta_{ij}$ part of $\tau_{ij}$ is left out of the
+momentum and energy equations ("m", "e"); "m" and "s" approximate the production
+by $\mu_t S^2$, which TMR describes as exact for incompressible flow and
+"typically considered a very good approximation, except perhaps for very high
+Mach number flows".  (With `compressible`, the limiter acts on the deviatoric
+part of $P$ only, as in OpenFOAM, where TMR's SST-2003 limits all of it; see
+[below](#compressible-production-sst-production).)  `turbulence = SST-RC` adds
+the [rotation/curvature correction](#rotationcurvature-correction-sst-rc).
 
 ### Transport equations
 
@@ -293,6 +297,40 @@ shock feet, reattachment) the dilatation terms amplify $k$ more than $\omega$
 [shock/boundary-layer interaction](../vv/2D-swbli.md) the incompressible form gives
 a separation bubble about 16% longer and a slower recovery of $C_f$.
 
+### Rotation/curvature correction (SST-RC)
+
+`turbulence = SST-RC` sensitizes the model to streamline curvature and system
+rotation with the Spalart–Shur correction as adapted to SST by Smirnov and
+Menter [10] (TMR SST-RC [8]; on SST-2003, SST-2003RC).  The production $P$ of
+both equations is multiplied by
+
+$$
+f_{r1} = \max\!\bigl[\min(f_\text{rot},\,1.25),\,0\bigr], \qquad
+f_\text{rot} = (1 + c_{r1})\,\frac{2\,r^\ast}{1 + r^\ast}
+  \bigl[1 - c_{r3}\arctan(c_{r2}\,\tilde r)\bigr] - c_{r1},
+$$
+
+$$
+r^\ast = \frac{S}{\Omega}, \qquad
+\tilde r = \frac{2\,\Omega_{ik}\,S_{jk}}{\Omega\,D^3}\,\frac{DS_{ij}}{Dt}, \qquad
+D^2 = \max(S^2,\;0.09\,\omega^2),
+$$
+
+with $c_{r1} = 1$, $c_{r2} = 2$, $c_{r3} = 1$, $S = \sqrt{2S_{ij}S_{ij}}$,
+$\Omega = \sqrt{2\Omega_{ij}\Omega_{ij}}$.  $f_{r1}$ multiplies $P$ before the
+production limiter, so it reaches the $\omega$ equation through the limited
+$P$.  In simple shear $r^\ast = 1$ and $\tilde r = 0$, so $f_{r1} = 1$ and the
+model reduces to SST.
+
+Implementation notes: $r^\ast$ and the numerator of $\tilde r$ are shared with
+SA-RC (`Lib_SpalartShur`).  $DS_{ij}/Dt$ is its steady convective part
+$\mathbf{u}\!\cdot\!\nabla S_{ij}$; in a [rotating frame](rotating-frame.md)
+the frame enters through the absolute vorticity in $\Omega_{ik}$ and $\Omega$,
+but the frame-rotation term $(\epsilon_{imn}S_{jn} + \epsilon_{jmn}S_{in})\,\Omega^\text{rot}_m$
+of the published $\tilde r$ is not included.  $\Omega$ is floored at
+$10^{-30}$ s⁻¹, so cells with no vorticity take the limit $f_{r1} = 1.25$
+instead of an undefined value (their production is negligible there).
+
 ### Eddy viscosity
 
 $$
@@ -361,18 +399,45 @@ Either value grows as $1/y_c^2$ under grid refinement, which is the origin of th
 near-wall stiffness handled by the [point-implicit source
 treatment](#numerical-treatment-of-the-source-terms).
 
-### Energy coupling *(optional)*
+### Energy coupling (`k-energy-coupling`)
 
-When enabled, the turbulence kinetic energy production/destruction
-contributes to the mean-flow energy equation:
+The compressible RANS equations [11] carry the turbulent kinetic energy in two
+places: the total energy, $E = e + \tfrac12 u_iu_i + k$, and the Boussinesq
+Reynolds stress,
+$\tau_{ij} = 2\mu_t\bigl(S_{ij} - \tfrac13\nabla\!\cdot\!\mathbf{v}\,\delta_{ij}\bigr) - \tfrac23\rho k\,\delta_{ij}$.
+By default MOSE drops both (the TMR "m"/"e" variants): its energy is that of the
+mean flow, $E_m = e + \tfrac12 u_iu_i$, and the $-\tfrac23\rho k$ term is not in
+the stress.  With `k-energy-coupling = true` (two-equation models: SST and
+Wilcox 2006) MOSE keeps both:
+
+- the stress of the momentum and energy equations includes
+  $-\tfrac23\rho k\,\delta_{ij}$, so it also enters the work term
+  $\nabla\!\cdot\!(\boldsymbol{\tau}\cdot\mathbf{v})$ of the energy equation;
+- the mean-flow energy gives up what the turbulence receives,
 
 $$
-\frac{\partial(\rho e)}{\partial t} \mathrel{+}= S_k
+\frac{\partial(\rho E_m)}{\partial t} + \dots = \dots - \bigl(P_k - \beta^\ast\rho\,\omega\,k\bigr),
 $$
+
+with the same source as the $k$ equation (including its
+[point-implicit](#point-implicit-patankar-destruction) factor), so $E_m + k$ is
+conserved.  This is the total-energy form of TMR [11] and Wilcox [4] written for
+$E_m$: subtracting the $k$ equation from the equation for $E = E_m + k$ leaves
+exactly this sink, and the diffusion of $k$ in the two equations cancels.  The
+pressure follows from $e = E_m - \tfrac12 u_iu_i$, MOSE's conserved energy being
+$E_m$ in either case: for an ideal gas this is TMR's
+$p = (\gamma-1)\,\rho\,(E - \tfrac12 u_iu_i - k)$.  TMR notes that the $k$
+terms are sometimes dropped "for non-supersonic speed flows"; they matter where
+$k$ is not small against the kinetic energy of the mean flow.
 
 ---
 
 ## Wilcox 2006 $k$–$\omega$ — Two-Equation Model
+
+The Wilcox (2006) model [4, 12] with the exact production
+$P = \tau_{ij}\,\partial u_i/\partial x_j$ and the optional TMR $k$-equation
+limiter (below): TMR's Wilcox2006-klim, in its "e" form (Wilcox2006-klim-e) unless
+[`k-energy-coupling`](#energy-coupling-k-energy-coupling) is on [8].
 
 ### Model constants
 
@@ -421,10 +486,11 @@ $$
 
 ### Production limiter
 
-More permissive than SST:
+More permissive than SST, and in the $k$ equation only (the $\omega$ production
+uses the unlimited $P$), as in TMR's Wilcox2006-klim:
 
 $$
-P_k = \min\!\bigl(\mu_t\,S^2,\;20\,\beta^\ast\,\rho\,\omega\,k\bigr)
+P_k = \min\!\bigl(\tau_{ij}\,\partial u_i/\partial x_j,\;20\,\beta^\ast\,\rho\,\omega\,k\bigr)
 $$
 
 ---
@@ -631,6 +697,14 @@ fallback when a model's destruction Jacobian is not readily available.
 8. NASA Langley Turbulence Modeling Resource, "The Menter Shear Stress
    Transport turbulence model," <https://tmbwg.github.io/turbmodels/sst.html>
    (formerly turbmodels.larc.nasa.gov/sst.html): definitions and naming of the
-   SST variants (SST-2003, SST-2003m, SST-2003e).
+   SST variants (SST-2003, SST-2003m/s/e, SST-RC) and of Wilcox2006-klim.
 9. OpenFOAM Foundation, OpenFOAM-10, `kOmegaSST` model
    (`src/MomentumTransportModels/momentumTransportModels/Base/kOmegaSST/kOmegaSSTBase.C`).
+10. P. E. Smirnov, F. R. Menter, "Sensitization of the SST turbulence model to
+    rotation and curvature by applying the Spalart–Shur correction term,"
+    *J. Turbomach.*, 131(4), 041010, 2009, doi:10.1115/1.3070573.
+11. NASA Langley Turbulence Modeling Resource, "Implementing turbulence models
+    into the compressible RANS equations,"
+    <https://tmbwg.github.io/turbmodels/implementrans.html>.
+12. D. C. Wilcox, "Formulation of the k-ω turbulence model revisited,"
+    *AIAA J.*, 46(11), pp. 2823–2838, 2008, doi:10.2514/1.36541.
