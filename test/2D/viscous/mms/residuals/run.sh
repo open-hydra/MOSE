@@ -84,9 +84,11 @@
 #     The same with cells growing by 1.2 from the wall, and on skewed cells
 #     (2-D and 3-D) with the density linear along the wall, where the density
 #     of the ghost cell of the wall follows its temperature and the terms in
-#     grad rho must stay zero. SA-RC: the uniform column runs; the same column
-#     as two blocks must stop at setup and say why (its result would depend on
-#     the division in blocks).
+#     grad rho must stay zero. SA-RC, on the uniform column with a shear flow
+#     whose strain rate varies along x: the column as two blocks, and as two
+#     blocks with the indices of the second permuted, gives the change of rho
+#     nu~ of one block to round-off (the ghost cells of the face between the
+#     blocks hold the velocity gradient of the cell across, at its position).
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -458,22 +460,31 @@ for case in skewed skewed3d; do
   fi
 done
 
-echo "-- SA-RC: one block runs, two blocks stop at setup --"
+echo "-- SA-RC: the shear column as one block, as two blocks, with permuted indices --"
 sed -i 's/^turbulence = SA$/turbulence = SA-RC/' input.ini
-python3 -B wall_gradient.py case uniform || exit 1
-rm -f OUTPUT/field.tec
-"$LOCAL" > OUTPUT/wall-run-sarc-1.log 2>&1
-if [[ -f OUTPUT/field.tec ]] && ! grep -a -qE 'NaN|Integration failed|ABORT' OUTPUT/wall-run-sarc-1.log; then
-  echo "  [ok  ] one block: the run completes"
+printf '\n[MOSE-IO]\nsol-format = vtk raw\n' >> input.ini
+# sarc <layout>: one explicit step, the field kept as OUTPUT/wall-sarc-<layout>/{field.vtm,vtk}
+sarc() {
+  python3 -B wall_gradient.py case shear "$1" || exit 1
+  rm -rf OUTPUT/field.vtm OUTPUT/vtk "OUTPUT/wall-sarc-$1"
+  mkdir -p OUTPUT/vtk "OUTPUT/wall-sarc-$1"
+  "$LOCAL" > "OUTPUT/wall-run-sarc-$1.log" 2>&1
+  if [[ ! -f OUTPUT/field.vtm ]] || grep -a -qE 'NaN|Integration failed|ABORT' "OUTPUT/wall-run-sarc-$1.log"; then
+    echo "  [FAIL] the SA-RC run $1 did not complete (see OUTPUT/wall-run-sarc-$1.log)"
+    return 1
+  fi
+  mv OUTPUT/field.vtm OUTPUT/vtk "OUTPUT/wall-sarc-$1/"
+}
+if sarc one; then
+  for layout in two permuted; do
+    if sarc "$layout" && python3 -B wall_gradient.py sarcsame OUTPUT/wall-sarc-one "OUTPUT/wall-sarc-$layout" "$layout"; then
+      echo "  [ok  ] $layout: the result of one block (the ghost cells of the cut hold the gradient of the cell across)"
+    else
+      echo "  [FAIL] $layout: the result depends on the division of the column into blocks"; fail=1
+    fi
+  done
 else
-  echo "  [FAIL] SA-RC on one block did not complete (see OUTPUT/wall-run-sarc-1.log)"; fail=1
-fi
-python3 -B wall_gradient.py case uniform2 || exit 1
-"$LOCAL" > OUTPUT/wall-run-sarc-2.log 2>&1
-if python3 -B wall_gradient.py sarcstop OUTPUT/wall-run-sarc-2.log; then
-  echo "  [ok  ] two blocks: the run stops at setup and says why"
-else
-  echo "  [FAIL] SA-RC on two blocks does not stop with the message (see OUTPUT/wall-run-sarc-2.log)"; fail=1
+  fail=1
 fi
 
 if [[ $fail -ne 0 ]]; then

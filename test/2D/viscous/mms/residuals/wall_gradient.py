@@ -41,22 +41,35 @@ centres, and the ghost cells of the wall the position at which their value is ri
              (right-hand side)/rho between the two runs, over (cb2/sigma) a^2, is checked; it holds the terms in grad rho;
   skewed3d   the same in 3-D: 5 x 16 x 5 cells, x += y tan 20, z += y tan 10, T linear in x and z, the sides of 400 type.
 
-SA-RC, the rotation-curvature correction, copies the velocity gradient of each cell into the ghost cells of the faces
-between blocks, so its result would depend on how the mesh is divided into blocks: a run with more than one block must stop
-at setup and say so. The uniform column with turbulence = SA-RC runs; the same column as two blocks of 2 x 16 cells
-(uniform2: a face between the blocks, 101, and the periodic pair across x, 201) stops with the message.
+SA-RC, the rotation-curvature correction, takes the gradient of the strain rate from the velocity gradients of the cell and
+of its neighbours; next to a face between blocks the neighbour across is the ghost cell, which must hold the gradient of the
+cell across (and the metric its position), so that the result does not depend on how the mesh is divided into blocks. The
+uniform column with a shear flow whose strain rate varies along x, u = U0 (y/H) (1 + AMP sin(2 pi x/Lx)), v = w = 0
+(DS/Dt = u dS/dx is not zero and varies across the cut), one explicit step with turbulence = SA-RC, the change of rho nu~
+over the step (the only quantity the correction acts on in one step) against that of one block, periodic on itself (201):
+  two       two blocks of 2 x 16 cells along x (a face between the blocks, 101, and the periodic pair, 201);
+  permuted  the same two blocks with the indices of the second permuted (its i along y, j along x: the face between the
+            blocks is its face 3, the periodic pair its face 4, the wall its face 1).
+Both to 1e-9 of its largest value (one ulp of rho nu~ is about 1e-12 of it). A ghost cell that copies the gradient of the
+cell, with the cell itself as its position (a one-sided difference), changes it by about 3e-2 in the two columns next to
+the face between the blocks; the gradient of the cell across with the cell itself as its position, by about 3e-2 too.
+The other variables differ next to that face in the last bits, with or without SA-RC: the fluxes of a face between blocks
+are not computed as those of an interior face (ConnectionFlux).
 
 Usage (from the test directory):
   python3 -B wall_gradient.py case [CASE [uni]]   INPUT/ic.tec and INPUT/bc.txt; CASE uniform (default), stretched, skewed,
-                                              skewed3d; uni: at uniform temperature (skewed cases)
+                                              skewed3d; uni: at uniform temperature (skewed cases); shear LAYOUT: the shear
+                                              column of SA-RC, LAYOUT one, two or permuted
   python3 -B wall_gradient.py check FIELD DIAG [CASE]                    exit status 0 when the right-hand side passes
   python3 -B wall_gradient.py checkdiff CASE FIELD DIAG FIELD_UNI DIAG_UNI   the same for the skewed cases
-  python3 -B wall_gradient.py sarcstop LOG                 exit status 0 when the run of LOG stopped at setup with the message
-                                                       on SA-RC and more than one block, without NaN or trap
+  python3 -B wall_gradient.py sarcsame DIR_ONE DIR LAYOUT   exit status 0 when the SA-RC run of DIR (field.vtm and vtk/, vtk
+                                                       raw) gives the change of rho nu~ of one block in DIR_ONE
 """
+import base64
 import math
 import os
 import re
+import struct
 import sys
 
 RGAS = 8314.46261815324 / 28.970418          # gas constant of FLINT for air, J/(kg K)
@@ -69,6 +82,7 @@ ROWS = 14
 R_STRETCH, DY1_STRETCH, NJ_STRETCH = 1.2, 6.0e-6, 12   # first cell 6 um: rho nu~ = 2.3e-10 there, above the floor of
                                                          # 1e-10 that MOSE keeps; 12 rows: chi below 1.6e-3 at the top
 TX, TZ = 2000.0, 1000.0             # K/m: temperature gradient along the wall of the skewed cases
+U0, AMP = 1.0, 0.3                  # SA-RC: the shear flow u = U0 (y/H) (1 + AMP sin(2 pi x/Lx)) of the uniform column
 
 
 def write_case():
@@ -114,30 +128,45 @@ def write_case():
         f.write("".join(out))
 
 
-def write_case_two_blocks():
-    """The uniform column as two blocks of 2 x 16 cells along x: block 1 at x in [0, 2 dx], block 2 at [2 dx, 4 dx]; the
-    face between them (101) and the periodic pair (201) from block 1, face 1, to block 2, face 2."""
+def shear_blocks(layout):
+    """Blocks of the shear column of SA-RC: (ni, nj, g), g mapping node (i, j) of the block, and cell (i, j) counted from 0,
+    to the node and the cell of the column."""
+    half = NI // 2
+    if layout == 'one':
+        return [(NI, NJ, lambda i, j: (i, j))]
+    second = (half, NJ, lambda i, j: (half + i, j)) if layout == 'two' else (NJ, half, lambda i, j: (half + j, i))
+    return [(half, NJ, lambda i, j: (i, j)), second]
+
+
+def write_shear(layout):
+    """The uniform column with the shear flow of the SA-RC checks, as one block (one), as two blocks of 2 x 16 cells along x
+    (two: block 1 at x in [0, 2 dx], block 2 at [2 dx, 4 dx]; the face between them, 101, and the periodic pair, 201, from
+    block 1, face 1, to block 2, face 2), or as the same two blocks with block 2 written with i along y and j along x
+    (permuted). Every node and cell value is that of the column, bit for bit."""
     rho = P0 / (RGAS * T0)
     half = NI // 2
-    y = [j * DY for j in range(NJ + 1)]
+    lx, hc = NI * DX, NJ * DY
+    blocks = shear_blocks(layout)
     for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
         if os.path.lexists(p):
             os.remove(p)
     with open("INPUT/ic.tec", "w") as f:
         f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoNuTilde"\n')
-        for b in (1, 2):
-            x = [((b - 1) * half + i) * DX for i in range(half + 1)]
-            f.write(f" ZONE  T = B{b}-IG, I={half + 1}, J={NJ + 1}, K=2, DATAPACKING=BLOCK, "
+        for b, (ni, nj, g) in enumerate(blocks, 1):
+            f.write(f" ZONE  T = B{b}-IG, I={ni + 1}, J={nj + 1}, K=2, DATAPACKING=BLOCK, "
                     "VARLOCATION=([1-3]=NODAL,[4-9]=CELLCENTERED), SOLUTIONTIME=0.0\n")
             for c in range(3):
                 for k in range(2):
-                    for j in range(NJ + 1):
-                        for i in range(half + 1):
-                            f.write(f" {(x[i], y[j], k * DX)[c]:.16E}\n")
-            n = half * NJ
+                    for j in range(nj + 1):
+                        for i in range(ni + 1):
+                            ig, jg = g(i, j)
+                            f.write(f" {(ig * DX, jg * DY, k * DX)[c]:.16E}\n")
+            cells = [g(i, j) for j in range(nj) for i in range(ni)]
+            n = ni * nj
             zero = [0.0] * n
-            nut = [rho * A * (j + 0.5) * DY for j in range(NJ) for _ in range(half)]
-            for col in ([rho] * n, zero, zero, zero, [P0] * n, nut):
+            u = [U0 * ((jg + 0.5) * DY / hc) * (1.0 + AMP * math.sin(2.0 * math.pi * (ig + 0.5) * DX / lx))
+                 for ig, jg in cells]
+            for col in ([rho] * n, u, zero, zero, [P0] * n, [rho * A * (jg + 0.5) * DY for _, jg in cells]):
                 f.write("".join(f" {v:.16E}\n" for v in col))
 
     def rec(b, i, j, face, t):
@@ -146,32 +175,107 @@ def write_case_two_blocks():
     def con(*a):
         return '%10d %7d %7d %7d %7d %7d %7d %7d %7d\n' % a
 
+    wall = f"    {T0:.6E}, 0.000000E+00, 0.000000E+00,\n"
     out = []
-    for j in range(1, NJ + 1):
-        out += [rec(1, 1, j, 1, 201), con(2, half, j, 1, 2, 1, 0, 0, 1)]
-        out += [rec(1, half, j, 2, 101), con(2, 1, j, 1, 1, 1, 0, 0, 1)]
-        out += [rec(2, 1, j, 1, 101), con(1, half, j, 1, 2, 1, 0, 0, 1)]
-        out += [rec(2, half, j, 2, 201), con(1, 1, j, 1, 1, 1, 0, 0, 1)]
-    for b in (1, 2):
-        for i in range(1, half + 1):
-            out += [rec(b, i, 1, 3, 302), f"    {T0:.6E}, 0.000000E+00, 0.000000E+00,\n"]
-        for i in range(1, half + 1):
-            out.append(rec(b, i, NJ, 4, 300))
+    if layout == 'one':
+        for j in range(1, NJ + 1):
+            out += [rec(1, 1, j, 1, 201), con(1, NI, j, 1, 2, 1, 0, 0, 1)]
+            out += [rec(1, NI, j, 2, 201), con(1, 1, j, 1, 1, 1, 0, 0, 1)]
+    elif layout == 'two':
+        for j in range(1, NJ + 1):
+            out += [rec(1, 1, j, 1, 201), con(2, half, j, 1, 2, 1, 0, 0, 1)]
+            out += [rec(1, half, j, 2, 101), con(2, 1, j, 1, 1, 1, 0, 0, 1)]
+            out += [rec(2, 1, j, 1, 101), con(1, half, j, 1, 2, 1, 0, 0, 1)]
+            out += [rec(2, half, j, 2, 201), con(1, 1, j, 1, 1, 1, 0, 0, 1)]
+    else:
+        # block 2 cell (i, j) is the column cell (half + j, i): its face 3 is the face between the blocks, its face 4 the
+        # periodic side; +j of block 1 is +i of block 2 (d11 = 1), +k is +k
+        for j in range(1, NJ + 1):
+            out += [rec(1, 1, j, 1, 201), con(2, j, half, 1, 4, 1, 0, 0, 1)]
+            out += [rec(1, half, j, 2, 101), con(2, j, 1, 1, 3, 1, 0, 0, 1)]
+            out += [rec(2, j, 1, 3, 101), con(1, half, j, 1, 2, 1, 0, 0, 1)]
+            out += [rec(2, j, half, 4, 201), con(1, 1, j, 1, 1, 1, 0, 0, 1)]
+    for b, (ni, nj, g) in enumerate(shear_blocks(layout), 1):
+        if b == 2 and layout == 'permuted':                     # wall on face 1 (y = 0), symmetry on face 2
+            for j in range(1, nj + 1):
+                out += [rec(b, 1, j, 1, 302), wall]
+                out.append(rec(b, ni, j, 2, 300))
+        else:
+            for i in range(1, ni + 1):
+                out += [rec(b, i, 1, 3, 302), wall]
+                out.append(rec(b, i, nj, 4, 300))
         for face in (5, 6):
-            out += [rec(b, i, j, face, 0) for j in range(1, NJ + 1) for i in range(1, half + 1)]
+            out += [rec(b, i, j, face, 0) for j in range(1, nj + 1) for i in range(1, ni + 1)]
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(out))
 
 
-def sarc_stop(log):
-    """The run stopped at setup with the message on SA-RC and more than one block, without NaN or trap before it."""
-    text = open(log, errors="replace").read()
-    head = re.search(r"\[ERROR\] turbulence = SA-RC needs a mesh of one block; this one has 2 blocks", text)
-    remedy = "Use a mesh of one block, or another turbulence model" in text
-    clean = "ABORT:" in text and not re.search(r"NaN|Floating-point exception|SIGFPE|Program received signal", text)
-    print(f"    message on SA-RC with two blocks: {'yes' if head else 'no'}; remedy named: {'yes' if remedy else 'no'}; "
-          f"clean stop without NaN or trap: {'yes' if clean else 'no'}")
-    sys.exit(0 if head and remedy and clean else 1)
+def vtk_cells(path):
+    """Float64 cell arrays of one block of a vtk output of MOSE (DataArray "binary": base64 of an Int32 byte count and the
+    little-endian data; "appended": raw AppendedData, each array an Int32 byte count and the data, at its offset)."""
+    raw = open(path, "rb").read()
+    head, _, appended = raw.partition(b'<AppendedData encoding="raw">')
+    text = head.decode("latin-1")
+    if appended:
+        appended = appended[appended.index(b"_") + 1:]
+    cell = re.search(r"<CellData[^>]*>(.*?)</CellData>", text, re.S)
+    if not cell:
+        sys.exit(f"{path}: no CellData")
+    out = {}
+    for m in re.finditer(r'<DataArray([^>]*?)(/>|>(.*?)</DataArray>)', cell.group(1), re.S):
+        attrs = dict(re.findall(r'(\w+)="([^"]*)"', m.group(1)))
+        name = re.search(r'Name="+([^"]*)"+', m.group(1)).group(1)
+        if attrs.get("type") != "Float64":
+            continue
+        if attrs.get("format") == "binary":
+            blob = base64.b64decode("".join(m.group(3).split()))
+            data = blob[4:4 + struct.unpack("<i", blob[:4])[0]]
+        elif attrs.get("format") == "appended":
+            off = int(attrs["offset"])
+            data = appended[off + 4:off + 4 + struct.unpack("<i", appended[off:off + 4])[0]]
+        else:
+            sys.exit(f"{path}: format {attrs.get('format')} not handled")
+        out[name] = struct.unpack("<%dd" % (len(data) // 8), data)
+    return out
+
+
+def shear_column(directory, layout):
+    """Cell arrays of the SA-RC run of DIR (field.vtm and vtk/), each a dict (ig, jg) -> value over the column."""
+    files = re.findall(r'file="([^"]+)"', open(os.path.join(directory, "field.vtm")).read())
+    blocks = shear_blocks(layout)
+    if len(files) != len(blocks):
+        sys.exit(f"{directory}: {len(files)} blocks in field.vtm, {len(blocks)} expected")
+    out = {}
+    for name, (ni, nj, g) in zip(files, blocks):
+        path = os.path.normpath(os.path.join(directory, name.replace("../", "").replace("//", "/")))
+        for var, values in vtk_cells(path).items():
+            cells = [g(i, j) for j in range(nj) for i in range(ni)]
+            out.setdefault(var, {}).update(zip(cells, values))
+    return out
+
+
+def sarc_same(dir_one, dir_other, layout):
+    """The change of rho nu~ over the step, which SA-RC acts on, that of one block to 1e-9 of its largest value (one ulp
+    of rho nu~ is about 1e-12 of it; a ghost cell that copies the gradient of the cell changes it by about 3e-2 in the two
+    columns next to the face between the blocks). The largest difference of every variable is printed: the inviscid and
+    viscous fluxes of a face between blocks differ from those of an interior face in the last bits (ConnectionFlux)."""
+    a, b = shear_column(dir_one, 'one'), shear_column(dir_other, layout)
+    if set(a) != set(b) or not a:
+        print(f"    variables differ: {sorted(a)} / {sorted(b)}")
+        sys.exit(1)
+    vel = max(abs(v) for var in ("u", "v", "w") for v in a[var].values())
+    worst = {}
+    for var in sorted(a):
+        scale = vel if var in ("u", "v", "w") else max(abs(v) for v in a[var].values())
+        worst[var] = max(abs(b[var][c] - x) for c, x in a[var].items()) / scale
+    rho = P0 / (RGAS * T0)
+    change = {lab: {c: v - rho * A * (c[1] + 0.5) * DY for c, v in col["rhoNuTilde"].items()} for lab, col in (("a", a), ("b", b))}
+    scale = max(abs(v) for v in change["a"].values())
+    err = max(abs(change["b"][c] - v) for c, v in change["a"].items()) / scale
+    print(f"    {layout}: change of rho nu~ over the step against one block, largest difference {err:.3e} of its largest "
+          f"value; largest differences of the variables (velocity over the largest velocity): "
+          + ", ".join(f"{k} {v:.1e}" for k, v in worst.items()))
+    sys.exit(0 if err < 1e-9 else 1)
 
 
 def layout(case):
@@ -345,8 +449,8 @@ def main():
         case = sys.argv[2] if len(sys.argv) > 2 else 'uniform'
         if case == 'uniform':
             write_case()
-        elif case == 'uniform2':
-            write_case_two_blocks()
+        elif case == 'shear':
+            write_shear(sys.argv[3])
         else:
             write_case_general(case, len(sys.argv) > 3 and sys.argv[3] == 'uni')
     elif what == "check":
@@ -355,8 +459,8 @@ def main():
         check(sys.argv[2], sys.argv[3])
     elif what == "checkdiff":
         check_diff(*sys.argv[2:7])
-    elif what == "sarcstop":
-        sarc_stop(sys.argv[2])
+    elif what == "sarcsame":
+        sarc_same(*sys.argv[2:5])
     else:
         sys.exit(f"unknown request {what}")
 

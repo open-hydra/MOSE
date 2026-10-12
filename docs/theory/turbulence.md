@@ -244,20 +244,36 @@ steady flows only: «Without the time term, the model is not correct in a time-d
 (NASA Turbulence Modeling Resource, Spalart–Allmaras page, SA-RC). Time-accurate runs with the
 correction print a warning at start-up.
 
-MOSE takes $\partial S_{ij}/\partial x_k$ with central differences of the velocity gradients of the
-cells, and the ghost cells of every face of a block hold a copy of the gradient of the cell
-(`Compute_Velocity_Gradient`). Next to a face between blocks the central difference is then
-$(S_{c+1} - S_c)/2$, half the one-sided difference: for $S_{ij}$ linear across the face, its
-derivative across the face in the cell next to it, and the part of $DS_{ij}/Dt$ that comes from it,
-is half the true value when the mesh is divided there, and whole when it is not, so the result
-depends on how the mesh is divided into blocks (and among MPI ranks).
-On a column with a shear flow whose strain rate varies across the face, the right-hand side of
-$\rho\tilde\nu$ of the column divided in two blocks differs from that of the undivided column in
-the two columns of cells next to the face, and agrees to round-off elsewhere. A run with SA-RC on a
-mesh of more than one block therefore stops
-at setup with a message; before, it ran with that dependence. Exchanging the velocity gradients
-across the faces between blocks would remove the limit, and is left for a later version. At the
-faces of the physical boundaries (walls, inflow, outflow) the copy is a choice of the model.
+MOSE takes $\partial S_{ij}/\partial x_k$ with central differences of the velocity gradients
+$G = \nabla\mathbf{u}$ of the cell and of its neighbours (`Compute_Velocity_Gradient`,
+`Compute_RC_Terms`), mapped to Cartesian components with a cell metric. Next to a block face the
+neighbour is the first ghost cell, and the difference is right when the ghost cell holds the value
+of a definite cell and the metric takes the position of that same cell: for $S_{ij}$ linear in
+space the difference is then exact (with `diffusive-metric = stencil`, the metric of the
+differences of these positions: [Cell gradients of the source terms](#cell-gradients-of-the-source-terms)).
+
+- Behind a face between blocks (`101`) or of a periodic pair (`201`) the ghost cell holds $G$ of the
+  cell across, the source cell of the record (from another MPI rank by message), and the metric
+  takes its centre, plus the translation of a periodic pair. $G$ is a tensor in Cartesian
+  components: it is copied whatever the orientation of the two blocks. The cell next to the face
+  then takes the central difference of the undivided mesh, and the result does not depend on how
+  the mesh is divided into blocks or among ranks.
+- Behind a face of rotational periodicity (`200`), the ghost cell holds $R\,G\,R^{\mathsf T}$, $G$ of
+  the image cell that the velocity takes there, turned by the same rotation $R$ about $x$: a flow
+  invariant under the turn, $\mathbf{u}(R\mathbf{x}) = R\,\mathbf{u}(\mathbf{x})$, has
+  $G(R\mathbf{x}) = R\,G(\mathbf{x})\,R^{\mathsf T}$. On a 3-D sector the image is the cell next to the
+  opposite face and the metric takes its position turned; on the 2-D wedge it is the cell itself,
+  and along $k$ the metric takes the edge of the cell, as for the velocity. With a zero sector angle
+  (a planar mesh, a translated sector) the ghost cell holds a copy of the cell, as below.
+- Behind the other faces (walls, symmetry, inflow, outflow, chimera, mapped faces) the ghost cell
+  holds a copy of the gradient of the cell and the metric takes the cell itself: the difference
+  across the boundary cell is one-sided, a choice of the model.
+
+Before, every ghost cell held the copy: next to a face between blocks the cell took the one-sided
+difference (the half difference $(S_{c+1} - S_c)/2$ with the cell metric of `mean` and
+`inverse-mean`) where the undivided mesh takes the central one, so the result depended on the
+division into blocks (in the two columns of cells next to the face, on a column with a shear
+flow whose strain rate varies across it).
 
 ---
 
@@ -670,8 +686,10 @@ quantity, one metric per group: the velocity, the density (whose ghost value fol
 exact where the pressure and the composition do not vary across the wall cell), the turbulence
 variables (a metric of their own only next to `503`–`505`, where the velocity is extrapolated and they
 take their wall value). Behind a zero-gradient face (0, 401-407, 420), whose ghost cell copies the
-cell, the position is the cell itself, so the difference across the boundary cell is one-sided. SA-RC copies the velocity gradient of the
-cell into the ghost cells of every boundary face, so its strain gradient takes the cell itself there.
+cell, the position is the cell itself, so the difference across the boundary cell is one-sided. The
+strain gradient of SA-RC takes, behind the faces between blocks and of a turned sector, the position
+of the cell whose velocity gradient the ghost cell holds, and the cell itself behind the other faces
+(see SA-RC above).
 The metrics are computed once at setup (`Cell_Source_Metrics`) and chosen in one place
 (`Source_Metrics`) by the source terms of SA, SA-RC, SST, Wilcox 2006 and SSG/LRR and by the eddy
 viscosity of the output. With `inverse-mean` and `mean` the metric is that of the cell, as before:

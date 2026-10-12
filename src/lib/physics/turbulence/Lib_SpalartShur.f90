@@ -9,7 +9,11 @@ module MOSE_Lib_SpalartShur
   implicit none
 
 contains
-  
+
+  !> Velocity gradient of every cell, from the central differences of the velocity along the index directions and the
+  !> cell metric of the source terms, and in the first layer of ghost cells the gradient that the strain-rate gradient of
+  !> Compute_RC_Terms takes there: behind the faces between blocks and of rotational periodicity the gradient of the cell
+  !> across (Ghost_Velocity_Gradient), behind the other faces a copy of the cell.
   subroutine Compute_Velocity_Gradient ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
@@ -38,7 +42,8 @@ contains
         domain%blk(b)%vel_gradient(i,j,k)%c = matmul ( vel_diff + 1d-40, Mi(i,j,k)%c )
       end do ; end do ; end do
 
-      ! Extrapolation in ghost cells -as second derivatives must be computed
+      ! Ghost cells, as second derivatives must be computed: a copy of the cell (replaced below behind the faces between
+      ! blocks and of rotational periodicity)
       ! i faces
       !$omp do collapse(2) private(n)
       do k = 1, domain % blk(b) % dim(3)
@@ -68,7 +73,71 @@ contains
 
     end do
 
+    call Ghost_Velocity_Gradient ( domain )
+
   end subroutine Compute_Velocity_Gradient
+
+
+  !> First layer of ghost cells of the velocity gradient behind the faces between blocks (101), of a periodic pair (201)
+  !> and of rotational periodicity (200): the gradient of the cell across, as Ghost_Connection and Ghost_Axysimmetry fill
+  !> the velocity, so that next to these faces the strain-rate gradient of Compute_RC_Terms is that of the undivided mesh.
+  !> The gradient is a tensor in Cartesian components: it is copied whatever the orientation of the two blocks, and from
+  !> another rank by exchange_velocity_gradient. Behind a 200 face it is that of the image cell turned about x as the
+  !> velocity is, R G R^T; with a zero sector angle (a planar mesh, a translated sector) the copy of the cell stays.
+  !> Cell_Source_Metrics puts each of these values at the position of its cell.
+  subroutine Ghost_Velocity_Gradient ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m, only: ndir
+    use MOSE_Parameters_m, only: guide
+    use MOSE_Lib_Metrics, only: delthe
+    use MOSE_Mod_MPI, only: is_local_block, mpi_size_
+    use MOSE_Mod_GhostExchange, only: exchange_velocity_gradient
+
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    ! Local
+    integer  :: ii, r, b, bs, f, g(3), s(3)
+    real(R8) :: Rot(3,3), cs, sn
+    logical  :: turned
+
+    turned = .not. ( delthe >= 0d0 .and. delthe <= 0d0 )   ! a wedge or a sector turned about x
+    cs = cos ( delthe )
+    sn = sin ( delthe )
+
+    !$omp do schedule (dynamic, 64) private(ii, r, b, bs, f, g, s, Rot)
+    do ii = 1, domain % n_local_bc
+      r = domain % local_bc_idx(ii)
+      b = domain % bc(r) % b
+      f = domain % bc(r) % f
+      g = [ domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k ] - guide(f,:)
+      select case ( domain % bc(r) % type )
+        case (101, 201)
+          bs = domain % bc(r) % bs
+          if ( .not. is_local_block(bs) ) cycle              ! from another rank, below
+          domain % blk(b) % vel_gradient(g(1),g(2),g(3)) % c = &
+            domain % blk(bs) % vel_gradient(domain % bc(r) % is, domain % bc(r) % js, domain % bc(r) % ks) % c
+        case (200)
+          if ( .not. turned ) cycle
+          ! the image of Ghost_Axysimmetry: the cell itself on a wedge, the cell next to the opposite k face of a sector,
+          ! turned about x by -guide(f,3) delthe (v' = cos v + guide(f,3) sin w, w' = -guide(f,3) sin v + cos w)
+          s = [ domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k ]
+          if ( ndir == 3 ) s(3) = domain % blk(b) % dim(3) - s(3) + 1
+          Rot = reshape ( [ 1d0, 0d0, 0d0,  0d0, cs, -guide(f,3)*sn,  0d0, guide(f,3)*sn, cs ], [3,3] )
+          domain % blk(b) % vel_gradient(g(1),g(2),g(3)) % c = &
+            matmul ( Rot, matmul ( domain % blk(b) % vel_gradient(s(1),s(2),s(3)) % c, transpose ( Rot ) ) )
+      end select
+    enddo
+    !$omp end do
+
+    ! Faces between ranks: the gradient of the source cell, by message (MPI_THREAD_FUNNELED: the primary thread)
+    if ( mpi_size_ > 1 ) then
+      !$omp master
+      call exchange_velocity_gradient ( domain )
+      !$omp end master
+      !$omp barrier
+    end if
+
+  end subroutine Ghost_Velocity_Gradient
 
 
   ! Computation of 2 r*/(1 + r*) and rtilde (missing denominator) for the Spalart-Shur correction.
@@ -90,7 +159,7 @@ contains
     real(R8), dimension(3,3,3) :: strain_gradient
     real(R8), dimension(3,3) :: Sij, Wij, strain_transport, c
     real(R8) :: omega(3), S, O, rtilde
-    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:), Ma(:,:,:)   ! Ma: the velocity gradient copied behind every boundary face
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:), Ma(:,:,:)   ! Ma: the positions of the ghost velocity gradients
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle

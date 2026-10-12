@@ -880,11 +880,15 @@ contains
   !> for the quantities with a wall value, x_c + s (x_c - x_2) for the extrapolated ones). One metric per group: the
   !> velocity (blk%Ms); the density, whose ghost value follows the temperature behind a wall (blk%Msc: exact where the
   !> pressure and the composition do not vary across the wall cell, as in a boundary layer); the turbulence variables
-  !> (blk%Mst, only on the blocks with a 503-505 wall, where their position is not that of the velocity). SA-RC copies the
-  !> velocity gradient of the cell into the ghost cells of every boundary face (Compute_Velocity_Gradient): blk%Msa, the
-  !> cell itself behind every boundary face.
+  !> (blk%Mst, only on the blocks with a 503-505 wall, where their position is not that of the velocity). The velocity
+  !> gradients of SA-RC (Compute_Velocity_Gradient): blk%Msa, behind the faces between blocks (101, 201) and of a sector
+  !> turned about x (200) the position of the cell across, whose gradient the ghost cell holds (Connection_Ghost_Position,
+  !> Ghost_Position), behind the other faces the cell itself, whose gradient is copied there.
   subroutine Cell_Source_Metrics ( domain, xc )
     use MOSE_Advanced_Types_m
+    use MOSE_Global_m, only: gc, ndir
+    use MOSE_Parameters_m, only: guide
+    use MOSE_Lib_Metrics, only: delthe
     use MOSE_Lib_Diffusive, only: Inverse3
     use MOSE_Mod_MPI, only: is_local_block
     use MOSE_Config_Types_m, only: obj_rans
@@ -893,15 +897,36 @@ contains
     type(centres_t), intent(in) :: xc(:)
     ! Local
     integer, parameter :: gs(3) = [3, 2, 4]                       ! groups of Ms, Msc, Mst
-    integer :: b, i, j, k, d, s, m, n(3), c(3), cn(3)
+    integer :: b, i, j, k, d, s, m, n(3), c(3), cn(3), f, ii, r, g(3)
     real(R8) :: JT(3,3,3), JTa(3,3), Ac(3,3), xs(3), xg(3,2,3), xa(3,2)
-    logical :: rc, turb
+    logical :: rc, turb, turned
+    logical, allocatable :: across(:,:,:)
 
     rc = obj_rans % SpalartShur
+    turned = ndir == 3 .and. .not. ( delthe >= 0d0 .and. delthe <= 0d0 )   ! a sector turned about x
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
       n = domain % blk(b) % dim
       turb = any ( btest(xc(b) % em, 2) .neqv. btest(xc(b) % em, 3) )
+      if ( rc ) then
+        ! ghost cells holding the velocity gradient of the cell across (Ghost_Velocity_Gradient)
+        allocate ( across(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc) )
+        across = .false.
+        do f = 1, 6
+          do ii = domain % local_bf_first(b,f), domain % local_bf_first(b,f) + domain % local_bf_count(b,f) - 1
+            r = domain % local_bf_idx(ii)
+            select case ( domain % bc(r) % type )
+              case (101, 201)
+              case (200)
+                if ( .not. turned ) cycle
+              case default
+                cycle
+            end select
+            g = [ domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k ] - guide(f,:)
+            across(g(1),g(2),g(3)) = .true.
+          enddo
+        enddo
+      end if
       if ( .not. allocated(domain % blk(b) % Ms) ) then
         allocate ( domain % blk(b) % Ms(lbound(domain % blk(b) % M,1):ubound(domain % blk(b) % M,1), &
                                         lbound(domain % blk(b) % M,2):ubound(domain % blk(b) % M,2), &
@@ -933,7 +958,9 @@ contains
               xg(:,s,m) = Pos ( xc(b), cn(1), cn(2), cn(3), gs(m) )
             enddo
             xa(:,s) = xc(b) % x(:,cn(1),cn(2),cn(3))
-            if ( cn(d) < 1 .or. cn(d) > n(d) ) xa(:,s) = xs
+            if ( rc .and. ( cn(d) < 1 .or. cn(d) > n(d) ) ) then
+              if ( .not. across(cn(1),cn(2),cn(3)) ) xa(:,s) = xs
+            end if
           enddo
           do m = 1, 3
             JT(:,d,m) = 0.5d0 * ( xg(:,1,m) - xg(:,2,m) )
@@ -946,15 +973,15 @@ contains
                                                                       'cell, source terms, turbulence variables' )
         if ( rc ) domain % blk(b) % Msa(i,j,k) % c = Face_Inverse ( JTa, b, i, j, k, 0, 'cell, SA-RC' )
       enddo ; enddo ; enddo
+      if ( allocated(across) ) deallocate ( across )
     enddo
 
   end subroutine Cell_Source_Metrics
 
 
   !> The cell metrics of the source terms of block blk: with diffusive-metric = stencil those of Cell_Source_Metrics (Mi
-  !> for the velocity, Mc for the density, Mt for the turbulence variables, Ma for the velocity gradient that SA-RC copies
-  !> behind every boundary face), otherwise the metric of the cell for all of them, as before. The one place that chooses
-  !> them.
+  !> for the velocity, Mc for the density, Mt for the turbulence variables, Ma for the velocity gradients of SA-RC, with
+  !> their ghost cells), otherwise the metric of the cell for all of them, as before. The one place that chooses them.
   subroutine Source_Metrics ( blk, Mi, Mc, Ma, Mt )
     use MOSE_Advanced_Types_m, only: MOSE_block_type
     use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
