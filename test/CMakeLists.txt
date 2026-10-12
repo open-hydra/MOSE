@@ -275,7 +275,8 @@ if(USE_MPI)
     mose_add_mpi_script(MPIBoundaryRecords mpi/boundary-records "needs-mpi;implementation;2D")
 
     # Viscous connection stencil at a vertex shared by four blocks: the same
-    # bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads.
+    # bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads; with equilibrium
+    # chemistry, the same bits on 1x1 and 2x1.
     mose_add_mpi_script(MPIVertexStencil mpi/vertex-stencil "needs-mpi;implementation;2D")
 
     # MPI calls only from the main thread (MPI_THREAD_FUNNELED): a probe

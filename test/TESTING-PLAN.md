@@ -120,7 +120,8 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
   Spalart–Allmaras model, ordered and reversed (1×1, 1×4, 2×2);
   `test/mpi/vertex-stencil` (`MPIVertexStencil`) — a
   2×2 box of viscous blocks with a vortex on the common vertex, bit-identical on 1×1,
-  1×4, 2×1, 4×1 and 2×2 ranks × threads.
+  1×4, 2×1, 4×1 and 2×2 ranks × threads; with chemistry = equilibrium, bit-identical
+  on 1×1 and 2×1.
 - ☑ **I6 — MPI thread level**: MOSE requests `MPI_THREAD_FUNNELED`, so only the thread
   that initialised MPI may call it. *Done (needs-mpi tier):* `test/mpi/thread-funnel`
   (`MPIThreadFunnel`) — a probe library preloaded into the solver counts no MPI call
