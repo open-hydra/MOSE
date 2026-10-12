@@ -18,7 +18,7 @@ import sympy as sp
 x, y = sp.symbols('x y', real=True)
 
 # ---- baked constants (MUST match the solver's thermo/transport) -------------
-Runiv = sp.Rational(831451, 100)          # 8314.51 J/(kmol K)  (FLINT)
+Runiv = sp.Rational(831446261815324, 10**11)  # 8314.46261815324 J/(kmol K)  (FLINT, exact SI N_A*k_B)
 W     = sp.Float('28.970418')             # air molecular weight (phase.txt)
 R     = Runiv / W                         # specific gas constant
 cp    = sp.Float('1004.5')                # constant cp (thermo.dat)

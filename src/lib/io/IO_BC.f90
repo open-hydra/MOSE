@@ -119,11 +119,11 @@ contains
       ! IDs with NO property line:
       !   300 = symmetry | 400 = extrapolation | 409 = forced outlet
       ! IDs with VARIABLE-length property lines:
-      !   102 = chimera
+      !   102 = chimera | 104 = coupled multi-solver chimera
       select case(ti)
       case(101, 103, 201, 301, 302, 401:408, 410, 420, 501:506)
         read( unitfile,*,iostat=ios )
-      case(102)
+      case(102, 104)
         read( unitfile,*,iostat=ios ) ci, cii
         do c = 1, ci+cii
           read( unitfile,*,iostat=ios )
@@ -223,8 +223,8 @@ contains
           allocate ( bc(i) % Pg (nprim, 6) )
 
         ! ─────────────────────────────────────────────────────────────────────
-        ! Chimera overlap BC
-        case(102)
+        ! Chimera overlap BC (102) and coupled multi-solver chimera (104, donors are FUSS cells)
+        case(102, 104)
           if (level == 1) nchimera = nchimera + 1
           read( unitfile,*,iostat=ios ) (bc(i)%ni(cc),cc=1,2)
           allocate(bc(i)%donorID(1:sum(bc(i)%ni),1:4))
@@ -239,7 +239,16 @@ contains
               sum(bc(i)%volume_fraction(bc(i)%ni(1)+1:sum(bc(i)%ni))) < 0.5d0) then
             nzero_chim = nzero_chim + 1
           endif
-          allocate ( bc(i) % Pg (nprim, 6) )
+          if (bc(i)%type == 102) then
+            allocate ( bc(i) % Pg (nprim, 6) )
+          else
+            if (level == 1) ncoupled = ncoupled + 1
+            ! 104: coupled wall as for 103 (solid T stencil, coupling flux, wall output)
+            obj_io_bc%coupling_flag( bc(i)%b , bc(i)%f ) = .true.
+            allocate ( bc(i) % Pg (1, 6) )
+            allocate ( bc(i) % ext_flux (nprim) )
+            bc(i) % ext_flux = 0.0
+          endif
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Axisymmetry

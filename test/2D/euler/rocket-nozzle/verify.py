@@ -105,7 +105,7 @@ cp_cea_fz = np.array([2.0970,   2.0768,  2.0043,   1.9430,   1.8757,   1.8023])
 # For equilibrium case, use "WITH FROZEN REACTIONS" Cp from CEA (frozen chemistry path)
 cp_cea_eq = np.array([2.0981,   2.0877,  2.0482,   2.0094,   1.9621,   1.9090])
 # Compute gamma = cp/cv = cp/(cp - R) where R = Runi/M
-Runi = 8314.51  # J/(kmol·K)
+Runi = 8314.51  # J/(kmol·K), the constant of CEA (whose M and Cp these are)
 R_cea_fz = Runi / mw_cea_fz  # J/(kg·K)
 R_cea_eq = Runi / mw_cea_eq  # J/(kg·K)
 g_cea_fz = (cp_cea_fz * 1000) / (cp_cea_fz * 1000 - R_cea_fz)  # convert Cp to J/(kg·K)
@@ -146,7 +146,7 @@ u2d_fz   = frozen['u'][:, :, 0]
 v2d_fz   = frozen['v'][:, :, 0]
 a2d_fz   = np.sqrt(g2d_fz * p2d_fz / rho2d_fz)
 M2d_fz   = np.sqrt(u2d_fz**2 + v2d_fz**2) / a2d_fz
-mw2d_fz  = 8314.51/frozen['R'][:, :, 0]
+mw2d_fz  = 8314.46261815324/frozen['R'][:, :, 0]
 
 rho2d_fr = finite_rate['rho'][:, :, 0]
 p2d_fr   = finite_rate['p'][:, :, 0]
@@ -156,7 +156,7 @@ u2d_fr   = finite_rate['u'][:, :, 0]
 v2d_fr   = finite_rate['v'][:, :, 0]
 a2d_fr   = np.sqrt(g2d_fr * p2d_fr / rho2d_fr)
 M2d_fr   = np.sqrt(u2d_fr**2 + v2d_fr**2) / a2d_fr
-mw2d_fr  = 8314.51/finite_rate['R'][:, :, 0]
+mw2d_fr  = 8314.46261815324/finite_rate['R'][:, :, 0]
 
 rho2d_eq = equilibrium['rho'][:, :, 0]
 p2d_eq   = equilibrium['p'][:, :, 0]
@@ -166,7 +166,7 @@ u2d_eq   = equilibrium['u'][:, :, 0]
 v2d_eq   = equilibrium['v'][:, :, 0]
 a2d_eq   = np.sqrt(g2d_eq * p2d_eq / rho2d_eq)
 M2d_eq   = np.sqrt(u2d_eq**2 + v2d_eq**2) / a2d_eq
-mw2d_eq  = 8314.51/equilibrium['R'][:, :, 0]
+mw2d_eq  = 8314.46261815324/equilibrium['R'][:, :, 0]
 
 # Cell-centre coordinates for Mach contour
 x_cent = 0.25 * (xn[:-1, :-1] + xn[1:, :-1] + xn[:-1, 1:] + xn[1:, 1:])

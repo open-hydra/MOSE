@@ -15,7 +15,7 @@
 !>     u   = 40.0  + 8.0 *sin(om x) sin(om y)
 !>     v   = 30.0  + 8.0 *cos(om x) cos(om y)
 !>     p   = 8.0e3 + 8.0e2*cos(om x) sin(om y)   (low sound speed -> M~0.47)
-!> Baked constants (MUST match INPUT/): R = Runiv/W = 8314.51/28.970418,
+!> Baked constants (MUST match INPUT/): R = Runiv/W = 8314.46261815324/28.970418,
 !> cp = 1004.5, gamma = 1.4, mu = 10.0 (flat transport.dat; Re~5), Pr = 0.72
 !> (input.ini Prl), k = mu*cp/Pr.  The S_* expressions below are the analytic flux
 !> divergence div(Fc - Fv) generated with sympy and cross-checked against a
@@ -117,13 +117,13 @@ contains
     integer  :: i, j, k
     real(R8) :: x, y, S_rho, S_mx, S_my, S_E
     real(R8) :: t0,t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13,t14,t15,t16,t17,t18,t19
-    real(R8) :: t20,t21,t22,t23,t24,t25,t26,t27,t28,t29,t30,t31,t32,t33,t34,t35,t36,t37,t38
+    real(R8) :: t20,t21,t22,t23,t24,t25,t26,t27,t28,t29,t30,t31,t32,t33,t34,t35,t36,t37,t38,t39
     real(R8), parameter :: pi = 3.14159265358979323846d0
 
     !$omp do collapse(3) &
     !$omp private( i,j,k,x,y,S_rho,S_mx,S_my,S_E, &
     !$omp t0,t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13,t14,t15,t16,t17,t18,t19, &
-    !$omp t20,t21,t22,t23,t24,t25,t26,t27,t28,t29,t30,t31,t32,t33,t34,t35,t36,t37,t38 )
+    !$omp t20,t21,t22,t23,t24,t25,t26,t27,t28,t29,t30,t31,t32,t33,t34,t35,t36,t37,t38,t39 )
     do k = 1, n(3)
     do j = 1, n(2)
     do i = 1, n(1)
@@ -173,22 +173,23 @@ contains
       t31 = t4**2
       t32 = pi*t7**2
       t33 = t18 + 1
-      t34 = pi/t33**2
+      t34 = t33**(-2)
       t35 = 800.0d0*t20 + 8000.0d0
-      t36 = 3.8888888729863d0*t35/t33**3
-      t37 = 160.0d0*t16 + 90.0d0*t28
-      t38 = 0.05d0*t17 + 0.5d0
+      t36 = pi*t35
+      t37 = 3.88891103469958d0/t33**3
+      t38 = 160.0d0*t16 + 90.0d0*t28
+      t39 = 0.05d0*t17 + 0.5d0
       S_rho = 0.2d0*pi*(t10 - t12)
       S_mx = pi*(-0.2d0*t12*t6 + t14 + 320.0d0*t16*t9 + t17*t25 + t19*t22 - &
       t20*t24 - 1600.0d0*t5)
       S_my = pi*(0.2d0*t10*t11 - t17*t24 - t19*t30 + t20*t25 + t26 - 180.0d0* &
       t28*t5 + 1600.0d0*t9)
-      S_E = pi*(-pi*t2**2*t31*t36 + 89288888.8888889d0*pi*t20/( &
-      28.7000001173611d0*t17 + 287.000001173611d0) + t11*t26 + t11*( &
-      -t37*t5 + t38*(t17*t21 - t30) + 5599.99997710027d0*t9) + t14*t6 - &
-      38.888888729863d0*t17*t34*t35 - 10240.0d0*t31*t32 - t32*t36*t8**2 &
-      - 62222.2219677808d0*t34*t5*t9 + t6*(t37*t9 + t38*(-t17*t29 + t22 &
-      ) - 5599.99997710027d0*t5))
+      S_E = pi*(89288888.8888889d0*pi*t20/(28.6998365648478d0*t17 + &
+      286.998365648478d0) - 62222.5765551933d0*pi*t34*t5*t9 + t11*t26 + &
+      t11*(-t38*t5 + t39*(t17*t21 - t30) + 5600.0318899674d0*t9) + t14* &
+      t6 - 38.8891103469958d0*t17*t34*t36 - t2**2*t31*t36*t37 - &
+      10240.0d0*t31*t32 - t32*t35*t37*t8**2 + t6*(t38*t9 + t39*(-t17* &
+      t29 + t22) - 5600.0318899674d0*t5))
 
       ! ---- accumulate:  R -= S * vol ----
       Res(1,  i, j, k) = Res(1,  i, j, k) - S_rho * vol(i,j,k)   ! continuity

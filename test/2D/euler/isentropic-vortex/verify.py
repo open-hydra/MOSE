@@ -62,7 +62,7 @@ def exact_rho(xc, yc):
 
 Ns, errs = [], []
 for N in GRIDS:
-    path = f"reference/field_{N}.tec"
+    path = f"OUTPUT/field_{N}.tec"
     if not os.path.exists(path):
         print(f"isentropic-vortex: FAIL — missing {path} (run './MOSE.sh test' first)")
         sys.exit(1)

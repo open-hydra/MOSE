@@ -36,9 +36,9 @@ from pathlib import Path
 import numpy as np
 
 ORDER_MIN = 1.6                 # minimum acceptable observed order (finest pair)
-# refinement sequence (ratio 2). Only the grids whose field_<N>.tec is present
-# are used, so the fast CTest subset (32/64) and the full documented study
-# (32/64/128) share one verifier.
+# refinement sequence (ratio 2). Only the grids whose OUTPUT/field_<N>.tec (written
+# by MOSE.sh) is present are used, so the fast CTest subset (32/64) and the full
+# documented study (32/64/128) share one verifier.
 ALL_GRIDS = [32, 64, 128]
 
 # manufactured-field parameters — must match build_ic.py and src/app/mms.f90
@@ -78,7 +78,7 @@ def exact(xc, yc):
     }
 
 
-GRIDS = [N for N in ALL_GRIDS if os.path.exists(f"reference/field_{N}.tec")]
+GRIDS = [N for N in ALL_GRIDS if os.path.exists(f"OUTPUT/field_{N}.tec")]
 if len(GRIDS) < 2:
     print("mms: FAIL — need at least two field_<N>.tec (run './MOSE.sh test' or "
           "'./MOSE.sh testfast' first)")
@@ -89,7 +89,7 @@ L2 = {v: [] for v in VARS}
 LI = {v: [] for v in VARS}
 Ns = []
 for N in GRIDS:
-    x_, y_, _, var_, _ = read_TEC(f"reference/field_{N}.tec")
+    x_, y_, _, var_, _ = read_TEC(f"OUTPUT/field_{N}.tec")
     xn, yn = x_[0][:, :, 0], y_[0][:, :, 0]
     xc = 0.25 * (xn[:-1, :-1] + xn[1:, :-1] + xn[:-1, 1:] + xn[1:, 1:])
     yc = 0.25 * (yn[:-1, :-1] + yn[1:, :-1] + yn[:-1, 1:] + yn[1:, 1:])

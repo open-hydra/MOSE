@@ -236,7 +236,9 @@ def parse_tecplot(path):
     """Tecplot reader: DATAPACKING=BLOCK, nodal x,y,z + cell-centred fields."""
     with open(path) as f:
         lines = f.readlines()
-    variables = re.findall(r'"([^"]+)"', lines[0])
+    # variable names: quoted ("x" "y") or bare (x y), as ORION writes them since v1.7
+    header = lines[0].split("=", 1)[1]
+    variables = re.findall(r'"([^"]+)"', header) or re.split(r"[\s,]+", header.strip())
 
     zones = []
     for i, ln in enumerate(lines):

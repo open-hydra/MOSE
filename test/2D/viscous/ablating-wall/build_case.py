@@ -33,7 +33,7 @@ LX, LY = 2.0e-3, 6.0e-3         # [m]
 LZ     = 5.0e-4                 # [m] (single cell, 2-D plane)
 
 P0     = 101325.0               # ambient / outflow pressure [Pa]
-R_AIR  = 8314.51 / 28.970418    # gas constant of the single-species gas
+R_AIR  = 8314.46261815324 / 28.970418    # gas constant of the single-species gas (FLINT Runiv)
 
 # Boundary condition type codes (see src/lib/io/IO_BC.f90)
 BC_UNUSED, BC_SYMMETRY, BC_EXTRAPOLATION = 0, 300, 400

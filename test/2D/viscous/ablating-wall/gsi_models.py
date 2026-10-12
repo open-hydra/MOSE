@@ -8,7 +8,7 @@ failing.
 
 from math import exp, sqrt
 
-RUNIV = 8314.51          # universal gas constant [J/(kmol K)], as in FLINT
+RUNIV = 8314.46261815324  # universal gas constant [J/(kmol K)], as in FLINT
 P_ATM = 101325.0
 
 # --- melting (BC 503), paraffin-like -----------------------------------------

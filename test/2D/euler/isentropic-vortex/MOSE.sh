@@ -71,6 +71,8 @@ if [[ $1 == solve || $1 == test ]]; then
     GRIDS="32 64 128"
   fi
 
+  # verify.py reads OUTPUT/field_<N>.tec: drop those of earlier runs
+  rm -f OUTPUT/field.tec OUTPUT/field_*.tec
   for N in $GRIDS; do
     cd INPUT
     ln -sf ic-$N.tec ic.tec
@@ -81,7 +83,7 @@ if [[ $1 == solve || $1 == test ]]; then
     else
       $LOCAL 2>errors_file >logfile
     fi
-    mv OUTPUT/field.tec OUTPUT/field_$N.tec
+    mv OUTPUT/field.tec OUTPUT/field_$N.tec || exit 1
   done
 fi
 
