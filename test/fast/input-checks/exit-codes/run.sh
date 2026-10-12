@@ -56,10 +56,12 @@
 #  check of the state update must catch a value that is not finite in any
 #  build; -ffast-math, an option of the RELEASE build, lets gfortran fold
 #  isnan to false), an initial condition with fewer variables than the model
-#  needs (set-up), a rotating frame with an axis of zero length (set-up).
-#  The exit code must be between 1 and 128 (128 is what ifx gives to ERROR
-#  STOP; above 128 the shell reports a signal) and the log must hold the
-#  message.
+#  needs (set-up), a rotating frame with an axis of zero length (set-up),
+#  chemistry = equilibrium without the elements of the species,
+#  INPUT/composition.txt (set-up; the run used to start and go on with an
+#  equilibrium of no element). The exit code must be between 1 and 128 (128
+#  is what ifx gives to ERROR STOP; above 128 the shell reports a signal)
+#  and the log must hold the message.
 #
 #  And a valid run must end with exit code 0: with finite-rate chemistry and
 #  exclude-blocks = 1 the same tube must run, its set-up summary listing
@@ -327,6 +329,8 @@ rotational-frame = rigid-body" "
 [MOSE-Rotating-Frame]
 omega = 1.0
 axis = 0.0 0.0 0.0"
+run_case chem-elements "chemistry = equilibrium needs the elements of the species" "equations = euler
+chemistry = equilibrium"
 
 echo "-- a valid run ends with exit code 0 --"
 write_case chem-excl "equations = euler

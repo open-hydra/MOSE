@@ -11,7 +11,8 @@ contains
 
   subroutine Setup_Chemistry()
     use MOSE_Config_Types_m,      only: obj_chemistry
-    use MOSE_Global_m,            only: nsc
+    use MOSE_Global_m,            only: nsc, MOSE_phase_prefix
+    use FLINT_Lib_Thermodynamic,  only: species_composition
     use FLINT_Lib_Chemistry_wdot, only: Assign_Mechanism
     use FLINT_Lib_Chemistry_rhs,  only: set_analytical_jacobian
     use FLINT_CEA_setup,          only: CEA_initialize_global
@@ -19,6 +20,7 @@ contains
     use strings,                  only: parse
     implicit none
     integer :: ios, i
+    logical :: elements
     character(len=4) :: args(100)
     character(len=128) :: nochem_str
     integer :: nochem_blocks
@@ -27,9 +29,19 @@ contains
     ! Initialize chemistry model
     if (obj_chemistry%model=='equilibrium') then
 
-      ! Master thread initializes; other threads will lazy-init
-      ! inside CEA_solve on first call (threadprivate variables).
-      call CEA_initialize_global()
+      ! The equilibrium keeps the amount of each element, so it needs the elements of the species, which
+      ! INPUT/<prefix>composition.txt gives; when that file is missing the tables load without them
+      ! (the number of elements is the first dimension of species_composition, which the file allocates)
+      elements = allocated(species_composition)
+      if (elements) elements = size(species_composition, 1) > 0
+      if (elements) then
+        ! Master thread initializes; other threads will lazy-init
+        ! inside CEA_solve on first call (threadprivate variables).
+        call CEA_initialize_global()
+      else
+        obj_chemistry%error_message = '[ERROR] chemistry = equilibrium needs the elements of the species, from INPUT/'// &
+                                      trim(MOSE_phase_prefix)//'composition.txt: none was read'
+      end if
       obj_chemistry%use_strang = .false.
       obj_chemistry%imodel = 2
 

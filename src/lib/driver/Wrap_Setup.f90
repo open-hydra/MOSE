@@ -384,6 +384,9 @@ contains
       if (index(obj_soot%error_message,'ERROR')>0) then
         write(*,'(A)') obj_soot%error_message;       has_error = .true.
       endif
+      if (index(obj_chemistry%error_message,'ERROR')>0) then
+        write(*,'(A)') obj_chemistry%error_message;  has_error = .true.
+      endif
       ! Numerical scheme errors
       if (index(obj_time_scheme%error_message,'ERROR')>0) then
         write(*,'(A)') obj_time_scheme%error_message;  has_error = .true.
