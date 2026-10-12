@@ -206,7 +206,13 @@ D^2 = \tfrac{1}{2}\,(S^2 + \Omega^2)
 $$
 
 where $\omega_{ik}$ is the rotation tensor of the absolute vorticity and $\Omega'$ the rotation rate
-of the frame, zero in a fixed frame (NASA Turbulence Modeling Resource, SA-RC).
+of the frame, zero in a fixed frame (NASA Turbulence Modeling Resource, SA-RC). MOSE computes the
+factor $2r^\ast/(1 + r^\ast)$ of $f_{r1}$ below as $2S/(S + \Omega)$: where the vorticity vanishes it
+takes its limit, 2. Where strain and vorticity are both below $10^{-30}\ \mathrm{s^{-1}}$, in a fluid
+at rest in a fixed frame or a uniform flow, $r^\ast$ is not defined (the velocity gradient there is the
+$10^{-40}$ that MOSE adds to the velocity differences, times the metric of the cell): MOSE takes the
+value of simple shear, 1, with $\tilde r = 0$, so that the correction does not act and the production
+there is that of SA.
 
 The correction factor:
 

@@ -109,11 +109,11 @@ contains
     ! Local
     integer :: i, j, k
     real(R8) :: rho, Rgas, nit, mil, Gradvel(3,3), Gradnit(3), omega(3), Om, abs_Eij, Wij(3,3)
-    real(R8) :: Eij(3,3), chi, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, rstar, D2, rtilde
+    real(R8) :: Eij(3,3), chi, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, D2, rtilde
     real(R8) :: Production, Diffusion, Destruction, Source, fnu, d, fv2_, Gradrho(3)
 
     !$omp do collapse (3) private ( rho, Rgas, nit, mil, Gradvel, Gradnit, omega, Om, abs_Eij, Wij, Gradrho ), &
-    !$omp private ( Eij, chi, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, rstar, D2, rtilde ), &
+    !$omp private ( Eij, chi, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, D2, rtilde ), &
     !$omp private ( Production, Diffusion, Destruction, Source, fnu, d, fv2_, i, j, k)
     
     do k = 1, n(3)
@@ -165,10 +165,11 @@ contains
       if ( SpalartShur ) then
 
         Wij = Vorticity_Tensor ( omega )
-        rstar = rc1(i,j,k)
+        ! rc1 is 2 r*/(1 + r*) (Compute_RC_Terms); where strain and vorticity both vanish rc2 is zero, and so is rtilde
         D2 = 0.5d0*(abs_Eij**2 + Om**2)
-        rtilde = rc2(i,j,k) / D2**2
-        fr1 = (1.d0 + cr1)*(2.d0*rstar/(1.d0 + rstar))*(1.d0 - cr3*datan(cr2*rtilde)) - cr1
+        rtilde = 0d0
+        if ( D2 > 0d0 ) rtilde = rc2(i,j,k) / D2**2
+        fr1 = (1.d0 + cr1)*rc1(i,j,k)*(1.d0 - cr3*datan(cr2*rtilde)) - cr1
         Production = fr1 * cb1 * Stilde * nit
 
       elseif ( SAR ) then

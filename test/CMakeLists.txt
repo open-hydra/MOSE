@@ -164,8 +164,10 @@ mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
 # Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).
 # Spalart-Allmaras with variable density: the right-hand side of the equation
 # for rho nu~ converges to the standard conservation form; with SA-RC, the
-# right-hand side of a 3-D flow does not depend on how the flow is turned and
-# takes the rotation of the frame in r~.
+# right-hand side of a 3-D flow does not depend on how the flow is turned, it
+# takes the rotation of the frame in r~, a uniform flow keeps nu~, and air at
+# rest next to a wall, or flowing along it on stretched cells, changes nu~ as
+# with SA.
 mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")
 
 # Steady state with the point-implicit factor: it must not depend on the time

@@ -123,12 +123,12 @@ contains
     ! Local
     integer :: i, j, k, ii, jj
     real(R8) :: rho, Rgas, mil, kap, ome, dist, Gradvel(3,3), Divel, Sij(3,3), S, Wij(3,3), diag, mi_t, F(2)
-    real(R8) :: vort(3), O, rstar, D, rtilde, frot, fr1
+    real(R8) :: vort(3), O, D, rtilde, frot, fr1
     real(R8) :: Tij(3,3), Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2), fk, fw
 
     !$omp do collapse (3) private ( rho, Rgas, mil, kap, ome, dist, Gradvel, Divel, Sij, S, Wij, diag, mi_t, F ), &
     !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj ), &
-    !$omp private ( vort, O, rstar, D, rtilde, frot, fr1 )
+    !$omp private ( vort, O, D, rtilde, frot, fr1 )
     
     do k = 1, n(3)
     do j = 1, n(2)
@@ -188,10 +188,11 @@ contains
 
       ! Rotation/curvature correction, Smirnov & Menter (2009), TMR SST-RC
       if ( SpalartShur ) then
-        rstar = rc1(i,j,k)
+        ! rc1 is 2 r*/(1 + r*) (Compute_RC_Terms); where the vorticity vanishes rc2 is zero, and so is rtilde
         D = sqrt( max ( S**2, 0.09d0*ome**2) )
-        rtilde = rc2(i,j,k) / ( max(O, 1d-30)*D**3 )
-        frot = (1.d0 + cr1)*(2.d0*rstar/(1.d0 + rstar))*(1.d0 - cr3*atan(cr2*rtilde)) - cr1
+        rtilde = 0d0
+        if ( O > 0d0 ) rtilde = rc2(i,j,k) / ( O*D**3 )
+        frot = (1.d0 + cr1)*rc1(i,j,k)*(1.d0 - cr3*atan(cr2*rtilde)) - cr1
         fr1 = max ( min(frot, 1.25d0), 0d0 )
         Prod(1) = fr1*Prod(1)
       end if

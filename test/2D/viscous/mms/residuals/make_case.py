@@ -40,7 +40,20 @@ p = 1 bar, T = 300 K, rho nu~ uniform, 3 mu. One explicit step, time-accurate, f
   shear    a frame turning at OMEGA3 about z (rigid body), and the uniform shear u = GAMMA3 (y - y_c) in it: DS_ij/Dt = 0, so
            that r~ comes from the rotation of the frame alone. With rho and nu~ uniform and no mass flux across the cells, the
            change of rho nu~ in the step is dt rho c_b1 f_r1 S~ nu~ in every cell, with S~ = |omega_abs| (+ nu~ f_v2/(kappa d)^2,
-           1e-20 here); checked within RTOL_3.
+           1e-20 here); checked within RTOL_3;
+  uniform  a uniform flow along x in a fixed frame: the vorticity is zero and r* = S/omega divides by zero (the strain of the
+           solver is not exactly zero either: its velocity gradient carries 1e-40 added to the velocity differences); the
+           production, proportional to S~, is zero here whatever f_r1: the run completes and rho nu~ does not change, within
+           RTOL_3 of its value.
+  rest     air at rest next to a wall, with SA and with SA-RC: the face j = 1 is an isothermal wall (302) at T, rho nu~
+           uniform, CHI_REST mu, so that the near-wall part of S~, nu~ f_v2/(kappa d)^2, is positive and nu~ is produced (with
+           3 mu, f_v2 < 0 and S~ is clipped to 0). Strain and vorticity vanish (to the 1e-40 of the velocity gradient), f_r1
+           takes the value 1, and SA-RC must change rho nu~ in the step as SA does, within RTOL_REST of the largest change.
+  stream   the same wall and air, flowing along x at U3, with SA and with SA-RC, on cells whose widths along x grow by RX3
+           from one cell to the next. Off the wall row the velocity differences are zero in the step: strain, vorticity and
+           the material derivative of the strain come from the 1e-40 of the velocity gradient alone (times a metric that here
+           changes along the flow, so that the derivative is not zero), and r~ is a ratio of them. f_r1 takes the value 1
+           (r~ = 0), and in the rows j >= 2 SA-RC must change rho nu~ as SA does, within RTOL_REST of the largest change there.
 
 Usage (from the test directory):
   python3 -B make_case.py case N                 INPUT/ic.tec and INPUT/bc.txt of part 1
@@ -48,8 +61,12 @@ Usage (from the test directory):
   python3 -B make_case.py check E32 E64          exit status 0 when the errors on N = 32 and N = 64 pass
   python3 -B make_case.py rotation a|b [MODEL]   INPUT/ic.tec and INPUT/bc.txt of part 2 (MODEL SA-RC, the default, or SST-RC)
   python3 -B make_case.py rotation-check FA FB   exit status 0 when the field.tec of a and b agree
-  python3 -B make_case.py rc shear               INPUT/ic.tec and INPUT/bc.txt of part 3
+  python3 -B make_case.py rc shear|uniform       INPUT/ic.tec and INPUT/bc.txt of part 3
   python3 -B make_case.py rc-check KIND FIELD    exit status 0 when the field.tec of the case passes
+  python3 -B make_case.py rest                   INPUT/ic.tec and INPUT/bc.txt of the case at rest of part 3
+  python3 -B make_case.py rest-check FSA FRC     exit status 0 when the field.tec of SA and of SA-RC agree
+  python3 -B make_case.py stream                 INPUT/ic.tec and INPUT/bc.txt of the uniform flow along a wall of part 3
+  python3 -B make_case.py stream-check FSA FRC   exit status 0 when the field.tec of SA and of SA-RC agree off the wall row
 """
 import math
 import os
@@ -70,8 +87,11 @@ KR, OMR = 1.0, 3.0e3                # part 2 with SST-RC: k (m2/s2) and omega (1
 RTOL_R = 1.0e-9
 N3, DX3 = 8, 2.0 ** -13             # part 3: N3 x N3 cells of DX3 m, dyadic, so that the cells are cubes to the bit
 GAMMA3, OMEGA3 = 1000.0, 200.0      # shear rate, 1/s, and rotation rate of the frame, rad/s
+U3 = 10.0                           # m/s, uniform flow
 CB1, CR1, CR2, CR3 = 0.1355, 1.0, 12.0, 1.0
 RTOL_3 = 1.0e-6
+CHI_REST, RTOL_REST = 0.5, 1.0e-12   # part 3, air at rest next to a wall
+RX3 = 1.15                          # part 3, uniform flow along a wall: ratio of the widths along x of neighbouring cells
 
 
 def temp(x, y):
@@ -231,7 +251,7 @@ def write_rc(kind):
     for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
         if os.path.lexists(p):
             os.remove(p)
-    u = [GAMMA3 * ((j + 0.5) * DX3 - yc) for j in range(N3) for _ in range(N3)]
+    u = [GAMMA3 * ((j + 0.5) * DX3 - yc) if kind == "shear" else U3 for j in range(N3) for _ in range(N3)]
     with open("INPUT/ic.tec", "w") as f:
         f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoNuTilde"\n')
         f.write(f" ZONE  T = B1-IG, I={N3 + 1}, J={N3 + 1}, K=2, DATAPACKING=BLOCK, "
@@ -295,7 +315,69 @@ def rc_check(kind, path):
         print(f"    dt = {t:.6e} s, r~ = {rt:.6e}, f_r1 = {fr1:.6f}; change of rho nu~ expected {want:.6e}, "
               f"computed {min(got):.6e} to {max(got):.6e} kg/(m s), largest difference {err / abs(want):.3e} of it")
         sys.exit(0 if err <= RTOL_3 * abs(want) else 1)
-    sys.exit(f"unknown case {kind}")
+    err = max(abs(v - start) for v in new)
+    print(f"    largest change of rho nu~ in the step {err:.3e} kg/(m s) ({err / start:.3e} of its value)")
+    sys.exit(0 if err <= RTOL_3 * start else 1)
+
+
+def write_rest(u=0.0, rx=1.0):
+    """Part 3, air next to a wall: the planar block of write_rc, the face j = 1 an isothermal wall (302) at T0; the air at
+    rest (case rest) or flowing along x at u, with the widths along x growing by rx from one cell to the next (case stream)."""
+    rho0 = P0 / (RGAS * T0)
+    xs = [DX3 * i for i in range(N3 + 1)]
+    if rx != 1.0:
+        xs = [0.0]
+        for i in range(N3):
+            xs.append(xs[-1] + DX3 * rx ** i)
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoNuTilde"\n')
+        f.write(f" ZONE  T = B1-IG, I={N3 + 1}, J={N3 + 1}, K=2, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-9]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for axis in range(3):
+            for k in range(2):
+                for j in range(N3 + 1):
+                    for i in range(N3 + 1):
+                        f.write(f" {(xs[i], DX3 * j, DX3 * k)[axis]:.17E}\n")
+        for v in (rho0, u, 0.0, 0.0, P0, CHI_REST * MU):
+            f.write(f" {v:.17E}\n" * N3 * N3)
+    rows = []
+    for face, idx in ((1, lambda m: (1, m)), (2, lambda m: (N3, m)), (3, lambda m: (m, 1)), (4, lambda m: (m, N3))):
+        for m in range(1, N3 + 1):
+            i, j = idx(m)
+            if face == 3:
+                rows.append(f"       1     {i:3d}     {j:3d}       1       {face}     302\n    {T0:.6E}, 0.000000E+00, 0.000000E+00,\n")
+            else:
+                rows.append(f"       1     {i:3d}     {j:3d}       1       {face}     400\n")
+    for face in (5, 6):
+        for j in range(1, N3 + 1):
+            for i in range(1, N3 + 1):
+                rows.append(f"       1     {i:3d}     {j:3d}       1       {face}       0\n")
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(rows))
+
+
+def rest_check(fsa, frc, first_row=0):
+    """SA against SA-RC in the rows from first_row (0-based) up: the whole block at rest, off the wall row in the stream."""
+    try:
+        zsa, n1 = read_zone(fsa)
+        zrc, n2 = read_zone(frc)
+    except (OSError, ValueError, KeyError) as err:
+        print(f"    no field of the case ({err})")
+        sys.exit(1)
+    start = CHI_REST * MU
+    dsa = [v - start for v in zsa["rhoNuTilde"][first_row * N3:]]
+    drc = [v - start for v in zrc["rhoNuTilde"][first_row * N3:]]
+    if n1 != N3 or n2 != N3 or any(math.isnan(v) or math.isinf(v) for v in dsa + drc):
+        print("    rho nu~ is not a number after the step, or the zone is not the case")
+        sys.exit(1)
+    scale = max(abs(v) for v in dsa)
+    diff = max(abs(a - b) for a, b in zip(dsa, drc))
+    print(f"    change of rho nu~ in the step: largest {scale:.6e} kg/(m s) with SA; largest difference between SA-RC and SA "
+          f"{diff:.3e} ({diff / scale if scale > 0 else float('nan'):.3e} of it)")
+    sys.exit(0 if scale > 0.0 and diff <= RTOL_REST * scale else 1)
 
 
 def read_zone(path):
@@ -347,6 +429,14 @@ def main():
         write_rc(sys.argv[2])
     elif what == "rc-check":
         rc_check(sys.argv[2], sys.argv[3])
+    elif what == "rest":
+        write_rest()
+    elif what == "rest-check":
+        rest_check(sys.argv[2], sys.argv[3])
+    elif what == "stream":
+        write_rest(U3, RX3)
+    elif what == "stream-check":
+        rest_check(sys.argv[2], sys.argv[3], first_row=1)
     else:
         sys.exit(f"unknown request {what}")
 

@@ -22,13 +22,26 @@
 #     largest value. A rotation tensor whose W_23 has the sign opposite to
 #     that of W_12 and W_13 (+omega_x/2 instead of -omega_x/2) makes the two
 #     changes differ by their own size.
-#  3. SA-RC in a rotating frame: f_r1 multiplies the production of nu~, and
-#     its r~ takes, in a rotating frame, the rotation of the frame next to the
-#     material derivative of the strain (same page, SA-RC). A planar block of
-#     8 x 8 cubic cells, one explicit step: a uniform shear in a frame turning
-#     about z, where the change of rho nu~ must be dt rho c_b1 f_r1 S~ nu~ in
-#     every cell within 1e-6 of it, with r~ from the rotation of the frame
-#     alone (f_r1 = 4.65; 1.5 without the rotation term).
+#  3. SA-RC in a rotating frame and where the vorticity vanishes: f_r1
+#     multiplies the production of nu~, and its r~ takes, in a rotating frame,
+#     the rotation of the frame next to the material derivative of the strain
+#     (same page, SA-RC). A planar block of 8 x 8 cubic cells, one explicit
+#     step: a uniform shear in a frame turning about z, where the change of
+#     rho nu~ must be dt rho c_b1 f_r1 S~ nu~ in every cell within 1e-6 of it,
+#     with r~ from the rotation of the frame alone (f_r1 = 4.65; 1.5 without
+#     the rotation term); and a uniform flow in a fixed frame, where the
+#     vorticity is zero and r* = S/omega divides by zero: the run must
+#     complete and rho nu~ must not change.
+#     And air at rest next to a wall (an isothermal wall on one face, rho nu~
+#     = 0.5 mu, so that nu~ is produced next to the wall), with SA and with
+#     SA-RC: strain and vorticity vanish, f_r1 takes the value 1, and SA-RC
+#     must change rho nu~ as SA does, within 1e-12 of the largest change.
+#     And the same air flowing at 10 m/s along the wall, on cells whose widths
+#     along the flow grow by 1.15 from one to the next: off the wall row the
+#     velocity differences are zero, so that strain, vorticity and r~ come from
+#     the 1e-40 of the velocity gradient alone; f_r1 must take the value 1
+#     there too (r~ = 0), and SA-RC must change rho nu~ in those rows as SA
+#     does, within 1e-12 of the largest change.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -142,7 +155,7 @@ EOF
   fi
 done
 
-echo "-- 3. SA-RC in a rotating frame, one step --"
+echo "-- 3. SA-RC in a rotating frame and where the vorticity vanishes, one step --"
 # write_rc_ini <rotational-frame>
 write_rc_ini() {
   {
@@ -156,8 +169,8 @@ write_rc_ini() {
     fi
   } > input.ini
 }
-for kind in shear; do
-  write_rc_ini rigid-body
+for kind in shear uniform; do
+  if [[ $kind == shear ]]; then write_rc_ini rigid-body; else write_rc_ini none; fi
   python3 -B make_case.py rc "$kind" || exit 1
   rm -f OUTPUT/field.tec "OUTPUT/field-$kind.tec"
   "$LOCAL" > "OUTPUT/rc-$kind.log" 2>&1
@@ -170,6 +183,38 @@ for kind in shear; do
     echo "  [ok  ] $kind: the change of rho nu~ is the one of f_r1"
   else
     echo "  [FAIL] $kind: the change of rho nu~ is not the one of f_r1"
+    fail=1
+  fi
+done
+
+# write_rest_ini <turbulence model>: the cases next to a wall, fixed frame, one step
+write_rest_ini() {
+  {
+    printf '%s\n' '[MOSE-Parameters]' 'iter-threshold = 1' 'newrun = true' 'res-threshold = 1e-300' ''
+    printf '%s\n' '[MOSE-Physics]' 'equations = navier-stokes' "turbulence = $1" 'rotational-frame = none' ''
+    printf '%s\n' '[MOSE-Numerics]' 'cfl = 0.1' 'time-accurate = true' 'time-scheme = euler' \
+                  'integration-variables = cons' 'space-reconstruction = first-order' 'riemann-solver = HLLC' ''
+    printf '%s\n' '[MOSE-IO]' 'sol-format = tecplot ascii'
+  } > input.ini
+}
+for kind in rest stream; do
+  python3 -B make_case.py "$kind" || exit 1
+  for model in SA SA-RC; do
+    write_rest_ini "$model"
+    rm -f OUTPUT/field.tec "OUTPUT/field-$kind-$model.tec"
+    "$LOCAL" > "OUTPUT/$kind-$model.log" 2>&1
+    if [[ -f OUTPUT/field.tec ]]; then
+      cp OUTPUT/field.tec "OUTPUT/field-$kind-$model.tec"
+    else
+      echo "  ($kind $model: no OUTPUT/field.tec, see OUTPUT/$kind-$model.log)"
+    fi
+  done
+  where="next to the wall"
+  [[ $kind == stream ]] && where="off the wall row of a uniform flow on stretched cells"
+  if python3 -B make_case.py "$kind-check" "OUTPUT/field-$kind-SA.tec" "OUTPUT/field-$kind-SA-RC.tec"; then
+    echo "  [ok  ] $kind: SA-RC changes rho nu~ $where as SA does"
+  else
+    echo "  [FAIL] $kind: SA-RC does not change rho nu~ $where as SA does"
     fail=1
   fi
 done
