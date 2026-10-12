@@ -60,6 +60,13 @@
 #  The exit code must be between 1 and 128 (128 is what ifx gives to ERROR
 #  STOP; above 128 the shell reports a signal) and the log must hold the
 #  message.
+#
+#  And a valid run must end with exit code 0: with finite-rate chemistry and
+#  exclude-blocks = 1 the same tube must run, its set-up summary listing
+#  block 1 under "Inactive blocks" (the setup deallocated that list before it
+#  was ever allocated: exit code 153 with ifx, "allocatable array or pointer
+#  is not allocated"). The air has no reaction (no mechanism file): the
+#  chemistry leaves the state as it is.
 #===============================================================================
 set -uo pipefail
 
@@ -320,6 +327,21 @@ rotational-frame = rigid-body" "
 [MOSE-Rotating-Frame]
 omega = 1.0
 axis = 0.0 0.0 0.0"
+
+echo "-- a valid run ends with exit code 0 --"
+write_case chem-excl "equations = euler
+chemistry = finite-rate" "
+[MOSE-Chemistry]
+exclude-blocks = 1
+ode-solver = sdirk4b"
+"$LOCAL" > OUTPUT/chem-excl.log 2>&1
+rc=$?
+if [[ $rc -eq 0 ]] && grep -a -q -E 'Inactive blocks +1 *$' OUTPUT/chem-excl.log; then
+  echo "  [ok  ] chem-excl: exit code 0, block 1 under Inactive blocks"
+else
+  echo "  [FAIL] chem-excl: exit code $rc (required 0), block 1 $(grep -a -q -E 'Inactive blocks +1 *$' OUTPUT/chem-excl.log && echo listed || echo not listed) under Inactive blocks (see OUTPUT/chem-excl.log)"
+  fail=1
+fi
 
 if [[ $fail -ne 0 ]]; then
   echo "ExitCodes: FAILED"

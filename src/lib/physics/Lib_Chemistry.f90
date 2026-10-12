@@ -61,7 +61,7 @@ contains
       call parse(nochem_str, ' ', args)
       nochem_blocks = count(args /= '')
       if (nochem_blocks > 0) then
-        deallocate(obj_chemistry%no_chem_list)
+        if (allocated(obj_chemistry%no_chem_list)) deallocate(obj_chemistry%no_chem_list)
         allocate(obj_chemistry%no_chem_list(nochem_blocks))
         do i = 1, nochem_blocks
           read(args(i), '(I3)', iostat=ios) obj_chemistry%no_chem_list(i)
