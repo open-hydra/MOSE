@@ -1,6 +1,6 @@
-"""Inputs of the MMSResiduals fast test, and the check of its output.
+"""Inputs of the MMSResiduals fast test, and the checks of its outputs.
 
-A constructed field for the Spalart-Allmaras equation with variable density. Square of side L = 1 mm, periodic in x and in y
+Part 1. A constructed field for the Spalart-Allmaras equation with variable density. Square of side L = 1 mm, periodic in x and in y
 (connections 201 on itself), N x N cells, null k faces; air of test/common/Air-viscous (mu and k constant) at rest at 1 bar,
 with smooth periodic temperature and nu~:
   T   = T0 [1 + 0.3 sin(2 pi x/L) (1 + 0.4 sin(2 pi y/L))],                       T0 = 300 K, rho = p/(R T);
@@ -17,10 +17,25 @@ step of each cell, so their ratio is the right-hand side the solver evaluated. I
 the analytic fields by fourth-order differences) to second order: on N = 32 and N = 64 the largest difference over the cells,
 divided by the largest value of the right-hand side, must be below 0.02 on N = 64 and fall with an observed order above 1.5.
 
+Part 2. The rotation tensor W_ij = (du_i/dx_j - du_j/dx_i)/2 of a flow is a tensor: SA-RC and SST-RC, whose term r~ uses its
+components, must give the same scalars for a flow and for the same flow turned in space. A cube of NR^3 cells of DXR, one block,
+extrapolation (400) on all faces; the same air at p = 1 bar and T = 300 K, a velocity u = U0 + G x + H(x, x)/2 about the centre
+of the cube, with vorticity along x, y and z and a strain that varies in space, so that the material derivative of the strain,
+and with it r~, is not zero; rho nu~ uniform, 3 mu (SA-RC), or k and omega uniform, KR and OMR (SST-RC: in the interior
+cells f_r1 lies between its bounds 0 and 1.25 and the production of k below its limiter). One explicit step, time-accurate,
+first order:
+  a  the field above;
+  b  the same field turned by the rotation R that takes x to y, y to z and z to x: u'(x') = R u(R^T x'), on the same cube.
+The cell (i, j, k) of b sits where the cell (j, k, i) of a sits, turned, and holds the same numbers, permuted. The change of
+rho nu~ (rho k and rho omega with SST-RC) in the step must be the same in the two cells within RTOL_R of its largest value: the
+differences come from the order of floating-point sums only.
+
 Usage (from the test directory):
-  python3 -B make_case.py case N             INPUT/ic.tec and INPUT/bc.txt
-  python3 -B make_case.py error FILE         prints the error of the right-hand side in OUTPUT/diagnostic.tec
-  python3 -B make_case.py check E32 E64      exit status 0 when the errors on N = 32 and N = 64 pass
+  python3 -B make_case.py case N                 INPUT/ic.tec and INPUT/bc.txt of part 1
+  python3 -B make_case.py error FILE             prints the error of the right-hand side in OUTPUT/diagnostic.tec
+  python3 -B make_case.py check E32 E64          exit status 0 when the errors on N = 32 and N = 64 pass
+  python3 -B make_case.py rotation a|b [MODEL]   INPUT/ic.tec and INPUT/bc.txt of part 2 (MODEL SA-RC, the default, or SST-RC)
+  python3 -B make_case.py rotation-check FA FB   exit status 0 when the field.tec of a and b agree
 """
 import math
 import os
@@ -32,6 +47,13 @@ MU = 1.1858686e-5                   # test/common/Air-viscous
 T0, P0, L = 300.0, 1.0e5, 1.0e-3
 SIGMA, CB2 = 2.0 / 3.0, 0.622       # Spalart-Allmaras
 NU0 = 1.0e-4
+NR, DXR = 8, 1.0e-3                 # part 2: cube of NR^3 cells of DXR
+U0R = (10.0, 5.0, 3.0)                                                  # m/s
+GR = ((0.0, 300.0, 200.0), (-100.0, 0.0, 400.0), (250.0, -150.0, 0.0))  # du_i/dx_j, 1/s
+HR = {(0, 1, 2): 2.0e4, (0, 2, 1): 2.0e4, (1, 0, 0): 1.5e4, (1, 2, 2): -1.0e4,
+      (2, 0, 1): -2.5e4, (2, 1, 0): -2.5e4, (2, 1, 1): 1.2e4}          # d2u_i/dx_j dx_k, 1/(m s)
+KR, OMR = 1.0, 3.0e3                # part 2 with SST-RC: k (m2/s2) and omega (1/s), uniform
+RTOL_R = 1.0e-9
 
 
 def temp(x, y):
@@ -108,6 +130,83 @@ def write_case(n):
         f.write("".join(out))
 
 
+def write_rotation(name, model="SA-RC"):
+    rho0 = P0 / (RGAS * T0)
+    names, turb = ('"rhoNuTilde"', (3.0 * MU,)) if model == "SA-RC" else ('"rhoK" "rhoOmega"', (rho0 * KR, rho0 * OMR))
+    c = 0.5 * NR * DXR
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    va = {}                                                         # (i, j, k) -> velocity of the field a
+    for k in range(NR):
+        for j in range(NR):
+            for i in range(NR):
+                x = ((i + 0.5) * DXR - c, (j + 0.5) * DXR - c, (k + 0.5) * DXR - c)
+                u = [U0R[m] + sum(GR[m][n] * x[n] for n in range(3)) for m in range(3)]
+                for (m, n, l), h in HR.items():
+                    u[m] += 0.5 * h * x[n] * x[l]
+                va[i, j, k] = u
+    if name == "b":
+        # cell (i, j, k) of b takes R u of the cell (j, k, i) of a: (R u)_x = u_z, (R u)_y = u_x, (R u)_z = u_y
+        vel = {(i, j, k): (va[j, k, i][2], va[j, k, i][0], va[j, k, i][1]) for (i, j, k) in va}
+    else:
+        vel = va
+    order = [(i, j, k) for k in range(NR) for j in range(NR) for i in range(NR)]
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(f' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" {names}\n')
+        f.write(f" ZONE  T = B1-IG, I={NR + 1}, J={NR + 1}, K={NR + 1}, DATAPACKING=BLOCK, "
+                f"VARLOCATION=([1-3]=NODAL,[4-{8 + len(turb)}]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for axis in range(3):
+            for k in range(NR + 1):
+                for j in range(NR + 1):
+                    for i in range(NR + 1):
+                        f.write(f" {(DXR * i, DXR * j, DXR * k)[axis]:.17E}\n")
+        f.write(f" {rho0:.17E}\n" * NR ** 3)
+        for axis in range(3):
+            f.write("".join(f" {vel[q][axis]:.17E}\n" for q in order))
+        f.write(f" {P0:.17E}\n" * NR ** 3)
+        for v in turb:
+            f.write(f" {v:.17E}\n" * NR ** 3)
+    rows = []
+    for face in range(1, 7):
+        for b in range(1, NR + 1):
+            for a in range(1, NR + 1):
+                i, j, k = {1: (1, a, b), 2: (NR, a, b), 3: (a, 1, b), 4: (a, NR, b), 5: (a, b, 1), 6: (a, b, NR)}[face]
+                rows.append(f"       1     {i:3d}     {j:3d}     {k:3d}       {face}     400\n")
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(rows))
+
+
+def rotation_check(fa, fb):
+    """The change of rho nu~ (or of rho k and rho omega) in cell (i, j, k) of b against cell (j, k, i) of a, over the largest
+    change."""
+    rho0 = P0 / (RGAS * T0)
+    try:
+        za, na = read_zone(fa)
+        zb, nb = read_zone(fb)
+    except (OSError, ValueError, KeyError) as err:
+        print(f"    no field to compare ({err})")
+        sys.exit(1)
+    if na != NR or nb != NR:
+        print(f"    unexpected zones: {na} and {nb} cells per side")
+        sys.exit(1)
+
+    ok = True
+    for name, start in (("rhoNuTilde", 3.0 * MU), ("rhoK", rho0 * KR), ("rhoOmega", rho0 * OMR)):
+        if name not in za:
+            continue
+
+        def at(z, i, j, k):
+            return z[name][i + NR * (j + NR * k)] - start
+
+        scale = max(abs(at(za, i, j, k)) for k in range(NR) for j in range(NR) for i in range(NR))
+        diff = max(abs(at(zb, i, j, k) - at(za, j, k, i)) for k in range(NR) for j in range(NR) for i in range(NR))
+        print(f"    change of {name} in the step: largest {scale:.6e}; largest difference between the flow and the "
+              f"flow turned {diff:.3e} ({diff / scale if scale > 0 else float('nan'):.3e} of it)")
+        ok = ok and scale > 0.0 and diff <= RTOL_R * scale
+    sys.exit(0 if ok else 1)
+
+
 def read_zone(path):
     """Cell values of a one-zone MOSE ASCII file (BLOCK packing), names quoted or not, and the number of cells per side."""
     with open(path) as f:
@@ -149,6 +248,10 @@ def main():
         error(sys.argv[2])
     elif what == "check":
         check(float(sys.argv[2]), float(sys.argv[3]))
+    elif what == "rotation":
+        write_rotation(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "SA-RC")
+    elif what == "rotation-check":
+        rotation_check(sys.argv[2], sys.argv[3])
     else:
         sys.exit(f"unknown request {what}")
 

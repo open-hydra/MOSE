@@ -85,8 +85,9 @@ $$
 \tilde{S} = \Omega + \frac{\tilde\nu}{\kappa^2 y^2}\,f_{v2}(\chi)
 $$
 
-where $\Omega = \sqrt{2\,W_{ij}\,W_{ij}}$ is the vorticity magnitude and
-$y$ is the distance to the nearest wall.
+where $\Omega = \sqrt{2\,W_{ij}\,W_{ij}}$ is the vorticity magnitude, with the rotation tensor
+$W_{ij} = \tfrac{1}{2}\left(\partial u_i/\partial x_j - \partial u_j/\partial x_i\right)$ (NASA Turbulence
+Modeling Resource, Spalart–Allmaras page), and $y$ is the distance to the nearest wall.
 
 Destruction function:
 

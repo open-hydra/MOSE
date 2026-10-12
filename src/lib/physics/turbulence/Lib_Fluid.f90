@@ -112,6 +112,8 @@ contains
   end function
 
 
+  !> The rotation tensor W_ij = (du_i/dx_j - du_j/dx_i)/2 = -eps_ijk omega_k/2 of the vorticity vector omega
+  !> (Vorticity_Vector, with Gradvel(i,j) = du_i/dx_j)
   pure function Vorticity_Tensor ( omega ) result ( W )
     implicit none
     real(R8), intent(in), dimension(3) :: omega
@@ -125,8 +127,8 @@ contains
     W(1,3) =  0.5d0*omega(2)
     W(3,1) = -0.5d0*omega(2)
 
-    W(2,3) =  0.5d0*omega(1)
-    W(3,2) = -0.5d0*omega(1)
+    W(2,3) = -0.5d0*omega(1)
+    W(3,2) =  0.5d0*omega(1)
   end function
 
 
