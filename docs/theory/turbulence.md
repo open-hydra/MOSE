@@ -200,15 +200,13 @@ production term via a correction factor $f_{r1}$:
 
 $$
 r^\ast = \frac{S}{\Omega}, \qquad
-\tilde{r} = \frac{C_D}{D_A^2}
+\tilde{r} = \frac{2\,\omega_{ik}\,S_{jk}}{D^4}\left(\frac{DS_{ij}}{Dt}
+  + (\varepsilon_{imn}S_{jn} + \varepsilon_{jmn}S_{in})\,\Omega'_m\right), \qquad
+D^2 = \tfrac{1}{2}\,(S^2 + \Omega^2)
 $$
 
-where $C_D$ involves the material derivative interaction between the
-strain and vorticity tensors:
-
-$$
-C_D = W_{ij}\,S_{jk}\!\left(\frac{DS_{ki}}{Dt} - \frac{DW_{ki}}{Dt}\right)
-$$
+where $\omega_{ik}$ is the rotation tensor of the absolute vorticity and $\Omega'$ the rotation rate
+of the frame, zero in a fixed frame (NASA Turbulence Modeling Resource, SA-RC).
 
 The correction factor:
 

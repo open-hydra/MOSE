@@ -30,12 +30,26 @@ The cell (i, j, k) of b sits where the cell (j, k, i) of a sits, turned, and hol
 rho nu~ (rho k and rho omega with SST-RC) in the step must be the same in the two cells within RTOL_R of its largest value: the
 differences come from the order of floating-point sums only.
 
+Part 3. The rotation-curvature correction of Spalart-Allmaras (SA-RC) multiplies the production c_b1 S~ nu~ by
+  f_r1 = (1 + c_r1) 2 r*/(1 + r*) [1 - c_r3 atan(c_r2 r~)] - c_r1,   r* = S/omega,
+  r~ = 2 omega_ik S_jk [DS_ij/Dt + (eps_imn S_jn + eps_jmn S_in) Omega'_m] / D^4,   D^2 = (S^2 + omega^2)/2,
+with omega_ij the rotation tensor of the absolute vorticity and Omega' the rotation rate of the frame (NASA Turbulence Modeling
+Resource, SA-RC; c_r1 = 1, c_r2 = 12, c_r3 = 1). A planar block of N3 x N3 cells of DX3 (cubic cells, dyadic sizes),
+extrapolation (400) on the i and j faces, null (0) k faces, no wall (wall distance 1e8: no destruction); the same air at
+p = 1 bar, T = 300 K, rho nu~ uniform, 3 mu. One explicit step, time-accurate, first order:
+  shear    a frame turning at OMEGA3 about z (rigid body), and the uniform shear u = GAMMA3 (y - y_c) in it: DS_ij/Dt = 0, so
+           that r~ comes from the rotation of the frame alone. With rho and nu~ uniform and no mass flux across the cells, the
+           change of rho nu~ in the step is dt rho c_b1 f_r1 S~ nu~ in every cell, with S~ = |omega_abs| (+ nu~ f_v2/(kappa d)^2,
+           1e-20 here); checked within RTOL_3.
+
 Usage (from the test directory):
   python3 -B make_case.py case N                 INPUT/ic.tec and INPUT/bc.txt of part 1
   python3 -B make_case.py error FILE             prints the error of the right-hand side in OUTPUT/diagnostic.tec
   python3 -B make_case.py check E32 E64          exit status 0 when the errors on N = 32 and N = 64 pass
   python3 -B make_case.py rotation a|b [MODEL]   INPUT/ic.tec and INPUT/bc.txt of part 2 (MODEL SA-RC, the default, or SST-RC)
   python3 -B make_case.py rotation-check FA FB   exit status 0 when the field.tec of a and b agree
+  python3 -B make_case.py rc shear               INPUT/ic.tec and INPUT/bc.txt of part 3
+  python3 -B make_case.py rc-check KIND FIELD    exit status 0 when the field.tec of the case passes
 """
 import math
 import os
@@ -54,6 +68,10 @@ HR = {(0, 1, 2): 2.0e4, (0, 2, 1): 2.0e4, (1, 0, 0): 1.5e4, (1, 2, 2): -1.0e4,
       (2, 0, 1): -2.5e4, (2, 1, 0): -2.5e4, (2, 1, 1): 1.2e4}          # d2u_i/dx_j dx_k, 1/(m s)
 KR, OMR = 1.0, 3.0e3                # part 2 with SST-RC: k (m2/s2) and omega (1/s), uniform
 RTOL_R = 1.0e-9
+N3, DX3 = 8, 2.0 ** -13             # part 3: N3 x N3 cells of DX3 m, dyadic, so that the cells are cubes to the bit
+GAMMA3, OMEGA3 = 1000.0, 200.0      # shear rate, 1/s, and rotation rate of the frame, rad/s
+CB1, CR1, CR2, CR3 = 0.1355, 1.0, 12.0, 1.0
+RTOL_3 = 1.0e-6
 
 
 def temp(x, y):
@@ -207,6 +225,79 @@ def rotation_check(fa, fb):
     sys.exit(0 if ok else 1)
 
 
+def write_rc(kind):
+    rho0 = P0 / (RGAS * T0)
+    yc = 0.5 * N3 * DX3
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    u = [GAMMA3 * ((j + 0.5) * DX3 - yc) for j in range(N3) for _ in range(N3)]
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoNuTilde"\n')
+        f.write(f" ZONE  T = B1-IG, I={N3 + 1}, J={N3 + 1}, K=2, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-9]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for axis in range(3):
+            for k in range(2):
+                for j in range(N3 + 1):
+                    for i in range(N3 + 1):
+                        f.write(f" {(DX3 * i, DX3 * j, DX3 * k)[axis]:.17E}\n")
+        f.write(f" {rho0:.17E}\n" * N3 * N3)
+        f.write("".join(f" {v:.17E}\n" for v in u))
+        f.write(f" {0.0:.17E}\n" * N3 * N3 * 2)
+        f.write(f" {P0:.17E}\n" * N3 * N3)
+        f.write(f" {3.0 * MU:.17E}\n" * N3 * N3)
+    rows = []
+    for face, idx in ((1, lambda m: (1, m)), (2, lambda m: (N3, m)), (3, lambda m: (m, 1)), (4, lambda m: (m, N3))):
+        for m in range(1, N3 + 1):
+            i, j = idx(m)
+            rows.append(f"       1     {i:3d}     {j:3d}       1       {face}     400\n")
+    for face in (5, 6):
+        for j in range(1, N3 + 1):
+            for i in range(1, N3 + 1):
+                rows.append(f"       1     {i:3d}     {j:3d}       1       {face}       0\n")
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(rows))
+
+
+def f_r1_shear():
+    """f_r1 of the uniform shear u = GAMMA3 y in a frame turning at OMEGA3 about z (NASA TMR, SA-RC), |omega_abs| and r~."""
+    s = 0.5 * GAMMA3                                 # S_12 = S_21
+    w = 0.5 * (GAMMA3 - 2.0 * OMEGA3)                # omega_12 of the absolute vorticity: -(omega_3 + 2 Omega)/2
+    S = GAMMA3                                       # sqrt(2 S_ij S_ij)
+    O = abs(GAMMA3 - 2.0 * OMEGA3)                   # |omega_abs|
+    # (eps_imn S_jn + eps_jmn S_in) Omega_m = diag(-OMEGA3 GAMMA3, OMEGA3 GAMMA3, 0); omega_ik S_jk = diag(w s, -w s, 0)
+    num = 2.0 * ((-OMEGA3 * GAMMA3) * (w * s) + (OMEGA3 * GAMMA3) * (-w * s))
+    D2 = 0.5 * (S ** 2 + O ** 2)
+    rt = num / D2 ** 2
+    return (1.0 + CR1) * (2.0 * S / (S + O)) * (1.0 - CR3 * math.atan(CR2 * rt)) - CR1, O, rt
+
+
+def rc_check(kind, path):
+    try:
+        z, n = read_zone(path)
+        with open(path) as f:
+            f.readline()
+            t = float(re.search(r"SOLUTIONTIME\s*=\s*([-+0-9.eEdD]+)", f.readline()).group(1).replace("D", "E"))
+    except (OSError, ValueError, KeyError, AttributeError) as err:
+        print(f"    no field of the case {kind} ({err})")
+        sys.exit(1)
+    rho0 = P0 / (RGAS * T0)
+    start = 3.0 * MU
+    new = z["rhoNuTilde"]
+    if n != N3 or any(math.isnan(v) or math.isinf(v) for v in new):
+        print(f"    rho nu~ is not a number after the step, or the zone is not the case ({n} cells per side)")
+        sys.exit(1)
+    if kind == "shear":
+        fr1, om, rt = f_r1_shear()
+        want = t * rho0 * CB1 * fr1 * om * (start / rho0)
+        got = [v - start for v in new]
+        err = max(abs(g - want) for g in got)
+        print(f"    dt = {t:.6e} s, r~ = {rt:.6e}, f_r1 = {fr1:.6f}; change of rho nu~ expected {want:.6e}, "
+              f"computed {min(got):.6e} to {max(got):.6e} kg/(m s), largest difference {err / abs(want):.3e} of it")
+        sys.exit(0 if err <= RTOL_3 * abs(want) else 1)
+    sys.exit(f"unknown case {kind}")
+
+
 def read_zone(path):
     """Cell values of a one-zone MOSE ASCII file (BLOCK packing), names quoted or not, and the number of cells per side."""
     with open(path) as f:
@@ -252,6 +343,10 @@ def main():
         write_rotation(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "SA-RC")
     elif what == "rotation-check":
         rotation_check(sys.argv[2], sys.argv[3])
+    elif what == "rc":
+        write_rc(sys.argv[2])
+    elif what == "rc-check":
+        rc_check(sys.argv[2], sys.argv[3])
     else:
         sys.exit(f"unknown request {what}")
 

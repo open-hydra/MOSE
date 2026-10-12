@@ -22,6 +22,13 @@
 #     largest value. A rotation tensor whose W_23 has the sign opposite to
 #     that of W_12 and W_13 (+omega_x/2 instead of -omega_x/2) makes the two
 #     changes differ by their own size.
+#  3. SA-RC in a rotating frame: f_r1 multiplies the production of nu~, and
+#     its r~ takes, in a rotating frame, the rotation of the frame next to the
+#     material derivative of the strain (same page, SA-RC). A planar block of
+#     8 x 8 cubic cells, one explicit step: a uniform shear in a frame turning
+#     about z, where the change of rho nu~ must be dt rho c_b1 f_r1 S~ nu~ in
+#     every cell within 1e-6 of it, with r~ from the rotation of the frame
+#     alone (f_r1 = 4.65; 1.5 without the rotation term).
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -131,6 +138,38 @@ EOF
     echo "  [ok  ] $model: the change of the turbulence variables does not depend on how the flow is turned"
   else
     echo "  [FAIL] $model: the change of the turbulence variables depends on how the flow is turned"
+    fail=1
+  fi
+done
+
+echo "-- 3. SA-RC in a rotating frame, one step --"
+# write_rc_ini <rotational-frame>
+write_rc_ini() {
+  {
+    printf '%s\n' '[MOSE-Parameters]' 'iter-threshold = 1' 'newrun = true' 'res-threshold = 1e-300' ''
+    printf '%s\n' '[MOSE-Physics]' 'equations = navier-stokes' 'turbulence = SA-RC' "rotational-frame = $1" ''
+    printf '%s\n' '[MOSE-Numerics]' 'cfl = 0.1' 'time-accurate = true' 'time-scheme = euler' \
+                  'integration-variables = cons' 'space-reconstruction = first-order' 'riemann-solver = HLLC' ''
+    printf '%s\n' '[MOSE-IO]' 'sol-format = tecplot ascii'
+    if [[ $1 == rigid-body ]]; then
+      printf '\n%s\n' '[MOSE-Rotating-Frame]' 'omega = 200.0' 'axis = 0.0 0.0 1.0' 'origin = 0.0 0.0 0.0'
+    fi
+  } > input.ini
+}
+for kind in shear; do
+  write_rc_ini rigid-body
+  python3 -B make_case.py rc "$kind" || exit 1
+  rm -f OUTPUT/field.tec "OUTPUT/field-$kind.tec"
+  "$LOCAL" > "OUTPUT/rc-$kind.log" 2>&1
+  if [[ -f OUTPUT/field.tec ]]; then
+    cp OUTPUT/field.tec "OUTPUT/field-$kind.tec"
+  else
+    echo "  (rc $kind: no OUTPUT/field.tec, see OUTPUT/rc-$kind.log)"
+  fi
+  if python3 -B make_case.py rc-check "$kind" "OUTPUT/field-$kind.tec"; then
+    echo "  [ok  ] $kind: the change of rho nu~ is the one of f_r1"
+  else
+    echo "  [FAIL] $kind: the change of rho nu~ is not the one of f_r1"
     fail=1
   fi
 done
