@@ -28,6 +28,17 @@
 #           Resource, Wilcox 2006 page), within 1e-6 of it. Here S^ is zero
 #           on the diagonal: a S^ without its off-diagonal part gives
 #           f_beta = 1 instead of 0.85 and a change 39 % larger.
+#    wall   the asymptotic omega wall value of the k-omega models
+#           (omega-wall-bc = asymptotic), Wilcox 2006 and SST: the channel at
+#           rest, with omega equal everywhere to the asymptotic wall value
+#           6 nu/(beta d^2) of the model (d the distance of the centre of a
+#           wall cell from the wall; beta_0 = 0.0708 for Wilcox 2006, beta_1 =
+#           0.075 for SST: NASA Turbulence Modeling Resource), one explicit
+#           step. The wall then takes the omega of its cells and no omega
+#           diffuses through it: rho omega of the wall cells must change by
+#           the destruction alone, -dt beta rho omega^2, within 1e-6 of it. A
+#           Wilcox 2006 wall with the beta_1 of SST (80 nu/d^2 instead of
+#           84.7 nu/d^2) makes omega diffuse through the wall.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -179,6 +190,43 @@ else
   echo "  [FAIL] the change of rho omega is not the one of f_beta"
   fail=1
 fi
+
+for model in Wilcox2006 SST; do
+  echo "-- $model, omega-wall-bc = asymptotic: omega at its wall value, one step --"
+  python3 -B make_case.py "wall-$model" || exit 1
+  cat > input.ini <<EOF
+[MOSE-Parameters]
+iter-threshold = 1
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = navier-stokes
+turbulence = $model
+schmidt = 0.7
+
+[MOSE-Turbulence]
+omega-wall-bc = asymptotic
+
+[MOSE-Numerics]
+cfl = 0.1
+vnn = 0.1
+time-accurate = true
+time-scheme = euler
+integration-variables = cons
+space-reconstruction = first-order
+riemann-solver = HLLC
+EOF
+  rm -f OUTPUT/field.tec "OUTPUT/wall-$model.tec"
+  "$LOCAL" > "OUTPUT/wall-$model.log" 2>&1
+  [[ -f OUTPUT/field.tec ]] && cp OUTPUT/field.tec "OUTPUT/wall-$model.tec"
+  if python3 -B make_case.py wall-check "$model" "OUTPUT/wall-$model.tec"; then
+    echo "  [ok  ] the wall cells change by the destruction alone: the wall takes their omega"
+  else
+    echo "  [FAIL] the wall cells do not change by the destruction alone: the wall does not take 6 nu/(beta d^2)"
+    fail=1
+  fi
+done
 
 if [[ $fail -ne 0 ]]; then
   echo "TurbulenceSources: FAILED"

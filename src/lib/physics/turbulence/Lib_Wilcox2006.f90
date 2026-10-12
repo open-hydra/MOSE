@@ -22,6 +22,10 @@ module MOSE_Lib_Wilcox2006
   gamma = 13d0/25d0, &
   Clim = 7d0/8d0
 
+  !> C of the asymptotic omega wall condition, omega_wall = C nu/d**2: the limit 6/beta_0 of the omega equation as y -> 0
+  !> (NASA Turbulence Modeling Resource, Wilcox 2006 page)
+  real(R8), parameter, public :: Wilcox2006_omega_wall_asymptotic = 6d0/beta_0
+
 contains
 
   subroutine Wilcox2006_Source_Terms ( domain )
@@ -258,7 +262,7 @@ contains
 
     rkw(1) = 0d0 ! Solid surface condition on k
     ! Smooth-surface BC: omega_wall = C*mi_l/dist**2, with C set by omega-wall-bc
-    ! (800 = Menter practical, 80 = asymptotic y->0 limit). See Setup_RANS_Model.
+    ! (800 = Menter practical, 6/beta_0 = asymptotic y->0 limit). See Setup_RANS_Model.
     rkw(2) = obj_rans%omega_wall_coef * mi_l / ( dist**2 )
 
   end subroutine Wilcox2006_Set_Wall_Values

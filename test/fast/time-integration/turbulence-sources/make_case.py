@@ -31,6 +31,15 @@ P_omega = (gamma omega/k) tau_ij du_i/dx_j = 2 gamma rho S_ij S_ij, chi_w = |W_i
 S^_ki = S_ki - (1/2) du_m/dx_m delta_ki = S_ki here (NASA Turbulence Modeling Resource, Wilcox 2006 page; the contraction of
 chi_w is that of MOSE and of Wilcox's model, the page prints W_ij W_ij S^_ki), f_beta = (1 + 85 chi_w)/(1 + 100 chi_w).
 
+A third geometry, for the asymptotic omega wall value of the k-omega models (cases wall-Wilcox2006 and wall-SST,
+omega-wall-bc = asymptotic): the channel above with NJW uniform rows of DYW (dyadic) and square cells, the air at rest at
+300 K and 1 bar, uniform k = KWALL and, everywhere, omega = 6 nu/(beta d^2), the asymptotic wall value of the model (NASA
+Turbulence Modeling Resource: beta_0 = 0.0708 on the Wilcox 2006 page, beta_1 = 0.075 on the SST page), d = DYW/2 the
+distance of the centre of a wall cell from the wall. At rest there is no production, and with omega uniform and equal to its
+wall value no omega diffuses through the wall and the cross-diffusion is zero: one explicit step changes rho omega of the
+wall cells by the destruction alone, -dt beta rho omega^2 (f_beta = 1 without vorticity; the blending of SST is 1 in those
+cells, where 500 nu/(d^2 omega) = 6.25, so beta = beta_1).
+
 Usage (from the test directory):
   python3 -B make_case.py CASE                         INPUT/ic.tec and INPUT/bc.txt
   python3 -B make_case.py order MODEL SCHEME F1 F2 F4  time order of the turbulence variables from the final fields
@@ -39,6 +48,9 @@ Usage (from the test directory):
   python3 -B make_case.py pos CASE CFL VNN LOG         positivity check of a run (exit status 0 when it holds)
   python3 -B make_case.py wilcox-check FIELD           the change of rho omega in the one step of the case wilcox
                                                        (exit status 0 when it is the one of f_beta within RTOL_W)
+  python3 -B make_case.py wall-check MODEL FIELD       the change of rho omega in the wall cells in the one step of the
+                                                       case wall-MODEL (exit status 0 when it is the destruction alone
+                                                       within RTOL_W)
 """
 import math
 import os
@@ -63,6 +75,8 @@ GW = ((0.0, 1000.0, 600.0), (-400.0, 0.0, 800.0), (-500.0, 300.0, 0.0))   # du_i
 KW, OMW = 1.0, 5000.0               # m2/s2 and 1/s, uniform; omega-hat limit C_lim sqrt(2 S:S/beta*) = 3666 1/s
 GAMMA_W, BETA0_W, CLIM_W = 13.0 / 25.0, 0.0708, 7.0 / 8.0                  # Wilcox 2006 (NASA TMR)
 RTOL_W = 1.0e-6
+NJW, DYW, KWALL = 4, 2.0 ** -17, 1.0e-2   # cases wall-MODEL: rows, cell size (m), k (m2/s2)
+BETA_WALL = {"Wilcox2006": BETA0_W, "SST": BETA1}   # beta of the omega equation next to the wall
 
 
 def fade(y):
@@ -242,6 +256,65 @@ def transport_step(case, cfl, vnn):
     return best
 
 
+def omega_wall(model):
+    """The asymptotic wall value of omega of a model at the centre of a wall cell, 6 nu/(beta d^2), d = DYW/2."""
+    return 6.0 * NU / (BETA_WALL[model] * (0.5 * DYW) ** 2)
+
+
+def write_wall(model):
+    om = omega_wall(model)
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoK" "rhoOmega"\n')
+        f.write(f" ZONE  T = B1-IG, I={NI + 1}, J={NJW + 1}, K=2, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-10]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for fun in (lambda i, j, k: i * DYW, lambda i, j, k: j * DYW, lambda i, j, k: k * DYW):
+            for k in range(2):
+                for j in range(NJW + 1):
+                    for i in range(NI + 1):
+                        f.write(f" {fun(i, j, k):.17E}\n")
+        for v in (RHO0, 0.0, 0.0, 0.0, P0, RHO0 * KWALL, RHO0 * om):
+            f.write(f" {v:.17E}\n" * (NI * NJW))
+    out = []
+    for j in range(1, NJW + 1):
+        out.append('%9d %7d %7d %7d %7d %7d\n' % (1, 1, j, 1, 1, 201))
+        out.append('%10d %7d %7d %7d %7d %7d %7d %7d %7d\n' % (1, NI, j, 1, 2, 1, 0, 0, 1))
+    for j in range(1, NJW + 1):
+        out.append('%9d %7d %7d %7d %7d %7d\n' % (1, NI, j, 1, 2, 201))
+        out.append('%10d %7d %7d %7d %7d %7d %7d %7d %7d\n' % (1, 1, j, 1, 1, 1, 0, 0, 1))
+    for i in range(1, NI + 1):
+        out.append('%9d %7d %7d %7d %7d %7d\n' % (1, i, 1, 1, 3, 301))
+        out.append('    0.000000E+00,    0.000000E+00,    0.000000E+00,\n')
+    for i in range(1, NI + 1):
+        out.append('%9d %7d %7d %7d %7d %7d\n' % (1, i, NJW, 1, 4, 300))
+    for face in (5, 6):
+        for j in range(1, NJW + 1):
+            for i in range(1, NI + 1):
+                out.append('%9d %7d %7d %7d %7d %7d\n' % (1, i, j, 1, face, 0))
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(out))
+
+
+def wall_check(model, path):
+    try:
+        z, t = read_field(path)
+    except (OSError, ValueError, KeyError, IndexError, AttributeError) as err:
+        print(f"    no field of the case wall-{model} ({err})")
+        sys.exit(1)
+    om = omega_wall(model)
+    want = -t * BETA_WALL[model] * RHO0 * om ** 2
+    got = [v - RHO0 * om for v in z["rhoOmega"][:NI]]      # the wall row, j = 1
+    if len(z["rhoOmega"]) != NI * NJW or any(math.isnan(v) for v in got):
+        print(f"    the field is not the case wall-{model}, or rho omega is not a number")
+        sys.exit(1)
+    err = max(abs(g - want) for g in got)
+    print(f"    dt = {t:.6e} s, omega = {om:.6e} 1/s, beta = {BETA_WALL[model]}; change of rho omega in the wall cells expected "
+          f"{want:.6e}, computed {min(got):.6e} to {max(got):.6e} kg/(m3 s), largest difference {err / abs(want):.3e} of it")
+    sys.exit(0 if err <= RTOL_W * abs(want) else 1)
+
+
 def read_field(path):
     """Cell values and solution time of a one-zone MOSE ASCII field (BLOCK packing), names quoted or not."""
     with open(path) as f:
@@ -319,6 +392,10 @@ def main():
         write_wilcox()
     elif what == "wilcox-check":
         wilcox_check(sys.argv[2])
+    elif what in ("wall-Wilcox2006", "wall-SST"):
+        write_wall(what[5:])
+    elif what == "wall-check":
+        wall_check(sys.argv[2], sys.argv[3])
     else:
         sys.exit(f"unknown request {what}")
 

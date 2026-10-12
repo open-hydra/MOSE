@@ -518,6 +518,14 @@ $\Omega_{ij}\Omega_{ij}\hat S_{ki}$, whose indices do not close; MOSE takes $W_{
 1998 model on the same page ($\Omega_{ij}\Omega_{jk}S_{ki}$) and the only one for which the statement of the page that
 $\chi_\omega$ is zero in 2-D holds. In 2-D flows the product $W_{ij}W_{jk}\hat S_{ki}$ is zero and $f_\beta = 1$.
 
+### Wall boundary conditions
+
+$k_\text{wall} = 0$. With `omega-wall-bc = asymptotic` the wall takes the near-wall limit of the $\omega$ equation of the
+model, $\omega_\text{wall} = 6\nu/(\beta_0 y^2)$ with $\beta_0 = 0.0708$ (NASA Turbulence Modeling Resource, Wilcox 2006
+page), that is $84.7\,\nu/y^2$, $y$ the distance of the centre of the wall cell from the wall. With `practical`, the default,
+it takes Menter's condition of the [SST section](#wall-boundary-conditions), $800\,\nu/y^2$ with the $\beta_1$ of SST,
+as the same page advises for this model.
+
 ### Cross-diffusion *(conditional)*
 
 Cross-diffusion is included only when $\nabla k\!\cdot\!\nabla\omega \le 0$:
