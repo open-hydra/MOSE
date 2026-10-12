@@ -327,4 +327,8 @@ if(USE_MPI)
     # rank 0, 110 blocks, fewer blocks than ranks) gives the one-rank field; a
     # map for other ranks stops every rank with the same message.
     mose_add_mpi_script(MPIDecompositionMap mpi/decomposition-map "needs-mpi;implementation;2D")
+
+    # Exit codes under MPI: an input error that rank 0 finds at set-up stops both
+    # ranks of a 2-rank run within 60 s, with exit code 1 to 128.
+    mose_add_mpi_script(MPIExitCodes mpi/exit-codes "needs-mpi;implementation;1D")
 endif()
