@@ -28,6 +28,10 @@
 #     vanleer into Van Leer), which the check after each reading found out
 #     of the rules: the run with the required keys only stopped at its
 #     first reading.
+#  4. a key that the reader does not take is named at setup: a comment line
+#     that holds "=" in [MOSE-Numerics], before cfl, ends the reading of that
+#     section (FiNeR stops at a line it cannot parse), so cfl keeps its
+#     default; the setup must warn that cfl, at its line, is not read.
 #===============================================================================
 set -uo pipefail
 
@@ -166,6 +170,19 @@ for c in minimal written; do
          "readings: $same: $(command grep -m1 -E 'ERROR\]|must be' "$d/solve.log" | sed 's/^ *//') (see $d/solve.log)"; status=1
   fi
 done
+
+echo "-- 4. a comment line with \"=\" before cfl: the setup says that cfl is not read --"
+d=runs/comment
+prepare "$d"; write_ini "$d" 0.5
+sed -i 's/^iter-threshold = 40$/iter-threshold = 1/' "$d/input.ini"
+sed -i 's/^\[MOSE-Numerics\]$/[MOSE-Numerics]\n; a slower start: cfl = 0.1/' "$d/input.ini"
+line=$(command grep -n '^cfl ' "$d/input.ini" | cut -d: -f1)
+( cd "$d" && "$SOLVER" > solve.log 2>&1 )
+if command grep -q -E "WARNING\] input.ini, line ${line:-0}: cfl of \[MOSE-Numerics\] is not read" "$d/solve.log"; then
+  echo "  ok — $(command grep -m1 'is not read' "$d/solve.log" | cut -c1-80)…"
+else
+  echo "  FAIL — no warning that cfl, at line ${line:-?}, is not read (see $d/solve.log)"; status=1
+fi
 
 if [[ $status -eq 0 ]]; then
   echo "RuntimeInput: all checks passed"

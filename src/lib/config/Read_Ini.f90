@@ -38,7 +38,50 @@ contains
     ! Registry is built, now load the values from the ini file
     call Load_Ini(fini)
 
+    ! The keys of input.ini that the reader does not give
+    call Warn_Unread_Keys(fini)
+
   end subroutine Read_Inifile
+
+
+  !> The INI reader (FiNeR) stops reading a section at the first line it cannot parse, such as a comment line (one that starts
+  !> with !, ; or #) that holds "=": the keys after it are not read, and their parameters keep their defaults. Prints a
+  !> warning for every line "key = value" of input.ini whose key the reader does not give in its section.
+  subroutine Warn_Unread_Keys(fini)
+    use Finer,        only: file_ini
+    use MOSE_Mod_MPI, only: mpi_is_root
+    implicit none
+    type(file_ini), intent(in) :: fini
+    ! Local
+    character(len=1024) :: line, section, key, val
+    integer :: unit, ios, n, eq, error
+
+    if (.not. mpi_is_root) return
+    open(newunit=unit, file='input.ini', status='old', action='read', iostat=ios)
+    if (ios /= 0) return
+    section = ''
+    n = 0
+    do
+      read(unit, '(A)', iostat=ios) line
+      if (ios /= 0) exit
+      n = n + 1
+      line = adjustl(line)
+      if (len_trim(line) == 0) cycle
+      if (scan(line(1:1), '!;#') == 1) cycle
+      if (line(1:1) == '[') then
+        if (index(line, ']') > 2) section = adjustl(line(2:index(line, ']')-1))
+        cycle
+      end if
+      eq = index(line, '=')
+      if (eq <= 1) cycle
+      key = adjustl(line(1:eq-1))
+      call fini%get(section_name=trim(section), option_name=trim(key), val=val, error=error)
+      if (error /= 0) write(*,'(A,I0,A)') '[WARNING] input.ini, line ', n, ': '//trim(key)//' of ['//trim(section)// &
+        '] is not read (the reader stops a section at a line it cannot parse, such as a comment line that holds "=")'
+    end do
+    close(unit)
+
+  end subroutine Warn_Unread_Keys
 
 
   subroutine Read_Inifile_Runtime()
