@@ -39,6 +39,7 @@ contains
     logical  :: endsim, iosim, endmg, accurate
     integer  :: i_rk, i_strang, b, level, aaa
     real(R8) :: average(nres), time_old, time_new
+    real(R8), allocatable :: res_block(:,:)   ! residual sums over the cells of each block
 
     call timer_iter_begin()
 
@@ -130,7 +131,12 @@ contains
 
     ! Save residuals
     if ( (obj_sim_param%iter_from_call == 1) .or. (mod (domain(level) % iter, obj_io%res_diter) == 0) ) then
+      ! Sums in a fixed order, the same for any number of threads and ranks: over the cells of each block
+      ! (Compute_Residual), then over the blocks in turn on the root; each column of res_block comes from the one rank that
+      ! holds the block, so its sum over the ranks is exact
       obj_sim_param%residuotot = 0.d0
+      allocate ( res_block(nres, domain(level)%nb) )
+      res_block = 0.d0
       do b = 1, domain(level) % nb
         if (.not. is_local_block(b)) cycle
         call Compute_Residual ( new=domain(level)%blk(b)%P, &
@@ -138,12 +144,18 @@ contains
                                 dt=domain(level)%blk(b)%dtlocal, &
                                 n=domain(level)%blk(b)%dim, &
                                 average=average, &
-                                total=obj_sim_param%residuotot )
+                                total=res_block(:,b) )
       enddo
       call timer_sync_begin()
-      call mpi_reduce_sum_r8_array(obj_sim_param%residuotot, nres)
+      call mpi_reduce_sum_r8_array(res_block, nres*domain(level)%nb)
       call timer_sync_end()
-      if (mpi_is_root) obj_sim_param%residuotot = sqrt ( obj_sim_param%residuotot ) ! L2 norm time derivative
+      if (mpi_is_root) then
+        do b = 1, domain(level) % nb
+          obj_sim_param%residuotot = obj_sim_param%residuotot + res_block(:,b)
+        enddo
+        obj_sim_param%residuotot = sqrt ( obj_sim_param%residuotot ) ! L2 norm time derivative
+      endif
+      deallocate ( res_block )
     endif
 
     ! Determine simulation control flags on root, then broadcast to all ranks
