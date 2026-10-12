@@ -294,6 +294,23 @@ positive results up to $\nu = 1$ in 1D and about $2/3$ in 2D). With moving shock
 $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$ is replaced by the preconditioned eigenvalue
 $\bigl(u_n (1-\alpha) + c^\ast\bigr)|\nabla\xi_d|$.
 
+The local time step takes the wave speeds of the cell alone, $|\mathbf{v}\cdot\nabla\xi_d| + a\,|\nabla\xi_d|$. The HLLC
+flux lets waves enter a cell through a face with the speeds of Batten et al. (SIAM J. Sci. Comput. 18, 1553–1570, 1997, doi:10.1137/S1064827593260140, eq. 51), which
+include the Roe-averaged state of the face: on the slow side of a shock the fastest wave entering a cell is faster than the
+cell's own $|u_n| + a$, so the Courant number of that face exceeds the CFL number. For a gas with $\gamma = 1.4$ and a
+stationary shock captured on one face, the ratio is 1.27 at Mach 3 and at most 1.34 for a normal shock aligned with the cells,
+at most 1.25 for the sum over the two directions of a square cell, the quantity the time step rule uses, and up to 1.47 in one
+direction of a stretched cell whose face is inclined to a strong shock (1.32 at Mach 3, 1.45 at Mach 10). With CFL = 0.8 the
+face Courant number is thus at most 1.08, 1.00 and 1.18 respectively: below the linear stability limit of RK3 with the
+first-order upwind flux, 1.256, the limit that applies where the limiter has removed the slope (the limit of the limited scheme
+itself is not derived), and below the limit with the smooth MUSCL reconstruction, 1.176, except on stretched cells crossed
+obliquely by shocks stronger than about Mach 50 (1.177 in the limit of a strong shock). Lower $\gamma$ raises the ratios (1.49
+instead of 1.34 for $\gamma = 1.2$). With strong shocks keep CFL ≤ 0.8 for RK3. The positivity of the first-order Euler step
+with the HLLC flux, guaranteed by CFL ≤ 1/2 in smooth flow, also holds at shocks on square cells (the sum of the incoming waves
+is at most 1.90 times the cell's own rate), but not on stretched cells crossed obliquely by a strong shock, which need
+CFL ≤ 0.41 at Mach 10; with MUSCL it is observed, not proven. The local step changes the path of a steady run, not the steady
+solution it converges to.
+
 ### Global time step
 
 In a time-accurate run all cells advance with the smallest local step:
