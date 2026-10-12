@@ -142,10 +142,11 @@ contains
       if ( dkDotdw <= 0d0 ) sigma_d = 0d0
       Diff = sigma_d * rho / ome * dkDotdw
 
-      ! Dissipation term
-      Sij_hat(1,1) = Sij(1,1) - 0.5d0 * Divel 
-      Sij_hat(2,2) = Sij(2,2) - 0.5d0 * Divel 
-      Sij_hat(3,3) = Sij(3,3) - 0.5d0 * Divel 
+      ! Dissipation term. S^_ki = S_ki - (1/2) du_m/dx_m delta_ki: off the diagonal S^ = S
+      Sij_hat = Sij
+      Sij_hat(1,1) = Sij(1,1) - 0.5d0 * Divel
+      Sij_hat(2,2) = Sij(2,2) - 0.5d0 * Divel
+      Sij_hat(3,3) = Sij(3,3) - 0.5d0 * Divel
 
       omega_w = Vorticity_Vector ( Gradvel )
       ! Use absolute vorticity for f_beta: W_ij^abs = W_ij^rel + Omega_frame tensor.

@@ -507,10 +507,16 @@ vortex-stretching function $f_\beta$:
 
 $$
 \beta = \beta_0\,f_\beta, \qquad
-X_\omega = \frac{|W_{ij}\,W_{jk}\,S_{ki}|}{(\beta^\ast\omega)^3},
+X_\omega = \frac{|W_{ij}\,W_{jk}\,\hat S_{ki}|}{(\beta^\ast\omega)^3},
 \qquad
 f_\beta = \frac{1 + 85\,X_\omega}{1 + 100\,X_\omega}
 $$
+
+with $\hat S_{ki} = S_{ki} - \tfrac{1}{2}\,(\partial u_m/\partial x_m)\,\delta_{ki}$ (NASA Turbulence Modeling
+Resource, Wilcox 2006 page): off the diagonal $\hat S = S$. On that page the formula of $\chi_\omega$ reads
+$\Omega_{ij}\Omega_{ij}\hat S_{ki}$, whose indices do not close; MOSE takes $W_{ij}W_{jk}\hat S_{ki}$, the form of the Wilcox
+1998 model on the same page ($\Omega_{ij}\Omega_{jk}S_{ki}$) and the only one for which the statement of the page that
+$\chi_\omega$ is zero in 2-D holds. In 2-D flows the product $W_{ij}W_{jk}\hat S_{ki}$ is zero and $f_\beta = 1$.
 
 ### Cross-diffusion *(conditional)*
 

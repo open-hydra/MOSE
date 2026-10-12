@@ -15,6 +15,19 @@
 #           the transport acts: no stage may make nu~, k or omega negative
 #           (count printed by the solver at the end of the run), and the step
 #           must have been limited by the turbulence sources.
+#  and, on its own case,
+#    wilcox the vortex-stretching function of Wilcox 2006: a cube of 6^3
+#           cells, one block, a velocity whose every component varies
+#           linearly along the other two coordinates (divergence-free: with
+#           uniform density and pressure the flux of rho omega through the
+#           faces of a cell adds up to zero), uniform k and omega, one
+#           explicit step. The change of rho omega must be
+#           dt [2 gamma rho S_ij S_ij - beta_0 f_beta rho omega^2], with
+#           f_beta from chi_w = |W_ij W_jk S^_ki|/(beta* omega)^3 and
+#           S^_ki = S_ki - (1/2) du_m/dx_m delta_ki (NASA Turbulence Modeling
+#           Resource, Wilcox 2006 page), within 1e-6 of it. Here S^ is zero
+#           on the diagonal: a S^ without its off-diagonal part gives
+#           f_beta = 1 instead of 0.85 and a change 39 % larger.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -134,6 +147,38 @@ for model in SA SST; do
     fi
   done
 done
+
+echo "-- Wilcox 2006, vortex stretching: a 3-D flow, one step --"
+python3 -B make_case.py wilcox || exit 1
+cat > input.ini <<EOF
+[MOSE-Parameters]
+iter-threshold = 1
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = navier-stokes
+turbulence = Wilcox2006
+schmidt = 0.7
+
+[MOSE-Numerics]
+cfl = 0.1
+vnn = 0.1
+time-accurate = true
+time-scheme = euler
+integration-variables = cons
+space-reconstruction = first-order
+riemann-solver = HLLC
+EOF
+rm -f OUTPUT/field.tec OUTPUT/wilcox.tec
+"$LOCAL" > OUTPUT/wilcox.log 2>&1
+[[ -f OUTPUT/field.tec ]] && cp OUTPUT/field.tec OUTPUT/wilcox.tec
+if python3 -B make_case.py wilcox-check OUTPUT/wilcox.tec; then
+  echo "  [ok  ] the change of rho omega is the one of f_beta"
+else
+  echo "  [FAIL] the change of rho omega is not the one of f_beta"
+  fail=1
+fi
 
 if [[ $fail -ne 0 ]]; then
   echo "TurbulenceSources: FAILED"

@@ -21,12 +21,24 @@ The turbulence profiles fade out as exp(-(y/0.4 mm)^4): beyond 1 mm from the wal
 free-stream values (rho nu~ = rho k = 2e-10, twice the realizability floor; omega = 1e-2 1/s), so the turbulence and its
 stiffness vanish there and nothing diffuses into the thin cells at the symmetry plane.
 
+A second geometry, for the vortex-stretching function f_beta of Wilcox 2006 (case wilcox): a cube of NW^3 cells of DXW (dyadic:
+cubes to the bit), one block, extrapolation (400) on all faces, the same air at 300 K and 1 bar, the velocity u_i = GW_ij x_j
+about the centre of the cube with GW zero on the diagonal (each component varies along the other two coordinates only:
+divergence-free, and the normal velocity of a face is the same on its two sides, so with uniform density and pressure the HLLC
+flux of rho omega through the faces of a cell adds up to zero), uniform k = KW and omega = OMW, above the limiter of omega
+(omega-hat = omega). One explicit step: the change of rho omega is dt (P_omega - beta_0 f_beta rho omega^2), with
+P_omega = (gamma omega/k) tau_ij du_i/dx_j = 2 gamma rho S_ij S_ij, chi_w = |W_ij W_jk S^_ki|/(beta* omega)^3,
+S^_ki = S_ki - (1/2) du_m/dx_m delta_ki = S_ki here (NASA Turbulence Modeling Resource, Wilcox 2006 page; the contraction of
+chi_w is that of MOSE and of Wilcox's model, the page prints W_ij W_ij S^_ki), f_beta = (1 + 85 chi_w)/(1 + 100 chi_w).
+
 Usage (from the test directory):
   python3 -B make_case.py CASE                         INPUT/ic.tec and INPUT/bc.txt
   python3 -B make_case.py order MODEL SCHEME F1 F2 F4  time order of the turbulence variables from the final fields
                                                        of the runs at cfl c, c/2 and c/4 (exit status 0 when it is at
                                                        least 1.8 with RK2, 2.7 with RK3)
   python3 -B make_case.py pos CASE CFL VNN LOG         positivity check of a run (exit status 0 when it holds)
+  python3 -B make_case.py wilcox-check FIELD           the change of rho omega in the one step of the case wilcox
+                                                       (exit status 0 when it is the one of f_beta within RTOL_W)
 """
 import math
 import os
@@ -46,6 +58,11 @@ KAPPA, BETA1, BETASTAR = 0.41, 0.075, 0.09
 CV1, SIGMA = 7.1, 2.0 / 3.0         # Spalart-Allmaras
 NUT_INF = K_INF = 2.0e-10 / RHO0
 OMEGA_INF = 1.0e-2
+NW, DXW = 6, 2.0 ** -10             # case wilcox: cube of NW^3 cells of DXW m
+GW = ((0.0, 1000.0, 600.0), (-400.0, 0.0, 800.0), (-500.0, 300.0, 0.0))   # du_i/dx_j, 1/s, zero on the diagonal
+KW, OMW = 1.0, 5000.0               # m2/s2 and 1/s, uniform; omega-hat limit C_lim sqrt(2 S:S/beta*) = 3666 1/s
+GAMMA_W, BETA0_W, CLIM_W = 13.0 / 25.0, 0.0708, 7.0 / 8.0                  # Wilcox 2006 (NASA TMR)
+RTOL_W = 1.0e-6
 
 
 def fade(y):
@@ -130,6 +147,75 @@ def write_case(case):
                 out.append('%9d %7d %7d %7d %7d %7d\n' % (1, i, j, 1, face, 0))
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(out))
+
+
+def write_wilcox():
+    c = 0.5 * NW * DXW
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    order = [(i, j, k) for k in range(NW) for j in range(NW) for i in range(NW)]
+    vel = {}
+    for (i, j, k) in order:
+        x = ((i + 0.5) * DXW - c, (j + 0.5) * DXW - c, (k + 0.5) * DXW - c)
+        vel[i, j, k] = [sum(GW[m][n] * x[n] for n in range(3)) for m in range(3)]
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoK" "rhoOmega"\n')
+        f.write(f" ZONE  T = B1-IG, I={NW + 1}, J={NW + 1}, K={NW + 1}, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-10]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for axis in range(3):
+            for k in range(NW + 1):
+                for j in range(NW + 1):
+                    for i in range(NW + 1):
+                        f.write(f" {(DXW * i, DXW * j, DXW * k)[axis]:.17E}\n")
+        f.write(f" {RHO0:.17E}\n" * NW ** 3)
+        for axis in range(3):
+            f.write("".join(f" {vel[q][axis]:.17E}\n" for q in order))
+        f.write(f" {P0:.17E}\n" * NW ** 3)
+        f.write(f" {RHO0 * KW:.17E}\n" * NW ** 3)
+        f.write(f" {RHO0 * OMW:.17E}\n" * NW ** 3)
+    rows = []
+    for face in range(1, 7):
+        for b in range(1, NW + 1):
+            for m in range(1, NW + 1):
+                i, j, k = {1: (1, m, b), 2: (NW, m, b), 3: (m, 1, b), 4: (m, NW, b), 5: (m, b, 1), 6: (m, b, NW)}[face]
+                rows.append(f"       1     {i:3d}     {j:3d}     {k:3d}       {face}     400\n")
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(rows))
+
+
+def wilcox_source():
+    """Source of rho omega of the case wilcox (NASA TMR, Wilcox 2006), f_beta and chi_w."""
+    S = [[0.5 * (GW[i][j] + GW[j][i]) for j in range(3)] for i in range(3)]
+    W = [[0.5 * (GW[i][j] - GW[j][i]) for j in range(3)] for i in range(3)]
+    div = GW[0][0] + GW[1][1] + GW[2][2]
+    Sh = [[S[i][j] - (0.5 * div if i == j else 0.0) for j in range(3)] for i in range(3)]
+    ss = sum(S[i][j] ** 2 for i in range(3) for j in range(3))
+    sbar = [[S[i][j] - (div / 3.0 if i == j else 0.0) for j in range(3)] for i in range(3)]
+    if OMW <= CLIM_W * math.sqrt(2.0 * sum(v ** 2 for row in sbar for v in row) / BETASTAR):
+        sys.exit("the case puts omega under the limiter of omega-hat")
+    num = sum(W[i][j] * W[j][k] * Sh[k][i] for i in range(3) for j in range(3) for k in range(3))
+    chi = abs(num / (BETASTAR * OMW) ** 3)
+    fbeta = (1.0 + 85.0 * chi) / (1.0 + 100.0 * chi)
+    return 2.0 * GAMMA_W * RHO0 * ss - BETA0_W * fbeta * RHO0 * OMW ** 2, fbeta, chi
+
+
+def wilcox_check(path):
+    try:
+        z, t = read_field(path)
+    except (OSError, ValueError, KeyError, IndexError, AttributeError) as err:
+        print(f"    no field of the case wilcox ({err})")
+        sys.exit(1)
+    src, fbeta, chi = wilcox_source()
+    want = t * src
+    got = [v - RHO0 * OMW for v in z["rhoOmega"]]
+    if len(got) != NW ** 3 or any(math.isnan(v) for v in got):
+        print("    the field is not the case wilcox, or rho omega is not a number")
+        sys.exit(1)
+    err = max(abs(g - want) for g in got)
+    print(f"    dt = {t:.6e} s, chi_w = {chi:.4f}, f_beta = {fbeta:.5f}; change of rho omega expected {want:.6e}, computed "
+          f"{min(got):.6e} to {max(got):.6e} kg/(m3 s), largest difference {err / abs(want):.3e} of it")
+    sys.exit(0 if err <= RTOL_W * abs(want) else 1)
 
 
 def transport_step(case, cfl, vnn):
@@ -229,6 +315,10 @@ def main():
         pos(sys.argv[2], float(sys.argv[3]), float(sys.argv[4]), sys.argv[5])
     elif what in ("order-SA", "order-SST", "pos-SA", "pos-SST"):
         write_case(what)
+    elif what == "wilcox":
+        write_wilcox()
+    elif what == "wilcox-check":
+        wilcox_check(sys.argv[2])
     else:
         sys.exit(f"unknown request {what}")
 
