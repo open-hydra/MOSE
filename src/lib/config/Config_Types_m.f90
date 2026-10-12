@@ -25,6 +25,8 @@ module MOSE_Config_Types_m
     integer         :: iter_from_call
     real(R8)        :: time_from_call
     real(R8), allocatable :: residuotot(:)
+    real(R8)        :: res_reference = 0._R8   ! Density residual of the first iteration (grid level), the unit of res-threshold
+    logical         :: res_restored = .false.  ! res_reference read with the restart solution: its first iteration keeps it
     integer         :: nthreads         ! Number of threads for simulation
     integer         :: TODO             ! Decide solve and/or postprocess
     logical         :: HYDRA_time_accurate = .false.
@@ -39,7 +41,8 @@ module MOSE_Config_Types_m
   !! ------------------------------------------------------
   !> Counters stored with every vtk solution (field data of its .vts files) and read back by a
   !> restart, so that the restarted run goes on as the uninterrupted one would: CFL ramp and
-  !> output cadence, output numbering, residual history and probe rows, multigrid level.
+  !> output cadence, output numbering, residual history and probe rows, multigrid level,
+  !> convergence test.
   type :: restart_counters_t
     logical   :: found = .false.            ! The restart solution holds the counters
     logical   :: steady = .false.           ! The restart solution is a steady one (vtk: negative TIME)
@@ -48,6 +51,8 @@ module MOSE_Config_Types_m
     integer   :: output_number = 0          ! Number of the last numbered solution
     integer   :: grid_level = 1             ! Grid level being solved
     real(R8)  :: last_output_time = 0._R8   ! Time of the last time-based solution
+    real(R8)  :: res_reference = 0._R8      ! Density residual of the first iteration of the grid level
+    logical   :: res_found = .false.        ! The solution holds it (vtk solutions written before it was stored do not)
   end type restart_counters_t
 
   type :: io_t

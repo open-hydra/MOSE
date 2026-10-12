@@ -2,8 +2,9 @@
 #===============================================================================
 #  Time control (fast tier)
 #
-#  A 1-D subsonic duct (100 cells, stagnation inlet, back-pressure outlet;
-#  inputs written by make_case.py) checks how a run uses its time:
+#  How a run uses its time and when it ends: a 1-D subsonic duct (100 cells,
+#  stagnation inlet, back-pressure outlet) for 1 to 3, a 1-D supersonic tube
+#  for 4; inputs written by make_case.py:
 #    1. order in time with a time-dependent inlet (BC 402, p0(t) =
 #       p0 (1 + 1e-4 sin(2 pi t / Tp))): every Runge-Kutta stage must see the
 #       boundary data of its own time t^n + c_k dt, which gives second order
@@ -16,8 +17,27 @@
 #       same p0, in a steady run (time -1) and in a time-accurate run that
 #       starts before the table;
 #    3. res-threshold does not end a time-accurate run: a run started from
-#       the steady state, with res-threshold = 1e-3 above every residual of
-#       the run, reaches its time-threshold.
+#       the steady state, with res-threshold = 2, which would end a steady
+#       run at its first iteration, reaches its time-threshold;
+#    4. res-threshold ends a steady run when the density residual has fallen
+#       by that factor from the first iteration, whatever the level of
+#       density, and a restart ends where the run in one go ends. A tube of
+#       air at Mach 2 (40 cells, extrapolation on the i faces) carries an
+#       entropy wave out: steady, forward Euler, res-threshold = 1e-6. The
+#       Euler equations do not change when density and pressure are scaled
+#       by the same factor at fixed velocity and temperature, and with an
+#       even power of 2 the scaling is exact in floating point, the square
+#       roots of the density in the Roe averages included: the same run at
+#       p = 1 bar and at p = 1 bar x 2^-24 takes the same iterations, every
+#       residual scaled. The run at low pressure must not end before its
+#       residual has fallen by 1e-6, and the two runs must end at the same
+#       iteration (a residual compared with res-threshold as it is, in
+#       kg/m3, ends the run at low pressure after its first iteration). The
+#       run at 1 bar in two parts, 60 iterations and a restart from the vtk
+#       raw solution of the first part, which holds the residual of the
+#       first iteration (MOSE_RES_REFERENCE), must end at the same iteration
+#       as the run in one go, with the same ratio of the last residual to
+#       the first.
 #  First-order reconstruction keeps the semi-discrete operator smooth.
 #===============================================================================
 set -uo pipefail
@@ -100,8 +120,34 @@ python3 -B check.py same accurate-401 accurate-402 1e-12 || fail=1
 echo "-- 3. res-threshold in a time-accurate run --"
 python3 -B make_case.py bc401 || exit 1
 TEND=$(python3 -c "print(repr(20.5 * $DT0))")
-solve accurate-steady true RK3 0.5 "time-threshold = $TEND" "res-threshold = 1e-3"
+solve accurate-steady true RK3 0.5 "time-threshold = $TEND" "res-threshold = 2"
 python3 -B check.py reached accurate-steady "$TEND" || fail=1
+
+echo "-- 4. res-threshold in a steady run --"
+SPLIT=60
+# solve_steady <tag> <iter-threshold> <newrun>: the tube, steady, with vtk raw solutions; the residual
+# history of the run is kept in OUTPUT/residual-history-<tag>.dat (removed first: no check reads an older run)
+solve_steady() {
+  rm -f "OUTPUT/$1.log" "OUTPUT/residual-history-$1.dat"
+  printf '%s\n' '[MOSE-Parameters]' "iter-threshold = $2" "newrun = $3" 'res-threshold = 1e-6' '' \
+                '[MOSE-Physics]' 'equations = euler' '' \
+                '[MOSE-Numerics]' 'cfl = 0.5' 'time-accurate = false' 'time-scheme = euler' \
+                'integration-variables = cons' 'space-reconstruction = first-order' 'riemann-solver = HLLC' '' \
+                '[MOSE-IO]' 'sol-format = vtk raw' > input.ini
+  "$LOCAL" > "OUTPUT/$1.log" 2>&1 || echo "  ($1: exit code $?, see OUTPUT/$1.log)"
+  cp OUTPUT/residual-history.dat "OUTPUT/residual-history-$1.dat" 2>/dev/null || echo "  ($1: no residual-history.dat)"
+}
+for tag in bar tiny; do
+  python3 -B make_case.py tube "$tag" || exit 1
+  rm -rf OUTPUT/residual-history.dat OUTPUT/field.vtm OUTPUT/vtk
+  solve_steady "$tag" 3000 true
+done
+# The run at 1 bar in two parts: the restart reads the final solution of the first part, and no other
+python3 -B make_case.py tube bar || exit 1
+rm -rf OUTPUT/residual-history.dat OUTPUT/field.vtm OUTPUT/vtk
+solve_steady split-first "$SPLIT" true
+solve_steady split-restart 3000 false
+python3 -B check.py threshold 1e-6 "$SPLIT" || fail=1
 
 if [[ $fail -ne 0 ]]; then
   echo "TimeControl: FAILED"

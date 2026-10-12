@@ -156,20 +156,29 @@ contains
         obj_sim_param%residuotot = sqrt ( obj_sim_param%residuotot ) ! L2 norm time derivative
       endif
       deallocate ( res_block )
+      ! The unit of res-threshold: the density residual of the first iteration of the run (of the grid level), or that of
+      ! the uninterrupted run, read with the restart solution (MOSE_Wrap_Setup)
+      if ( obj_sim_param%iter_from_call == 1 ) then
+        if ( mpi_is_root .and. .not. obj_sim_param%res_restored ) obj_sim_param%res_reference = obj_sim_param%residuotot(1)
+        obj_sim_param%res_restored = .false.
+      endif
     endif
 
     ! Determine simulation control flags on root, then broadcast to all ranks
     if (mpi_is_root) then
       endsim = .false.
       endmg  = .false.
-      ! res-threshold is a convergence test of steady runs: the change per iteration does not end a time-accurate run
+      ! res-threshold is a convergence test of steady runs: the change per iteration does not end a time-accurate run.
+      ! A steady run ends when its density residual has fallen by res-threshold from the first iteration.
       if (level == 1) then
         endsim = ( obj_sim_param%iter_from_call >= domain(1) % itermax ) &
-            .or. ( .not. accurate .and. obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
+            .or. ( .not. accurate .and. &
+                   obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold * obj_sim_param%res_reference ) &
             .or. ( domain(1) % time >= obj_sim_param%time_threshold )
       else
         endmg = ( obj_sim_param%iter_from_call >= domain(level) % itermax ) &
-           .or. ( .not. accurate .and. obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
+           .or. ( .not. accurate .and. &
+                  obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold * obj_sim_param%res_reference ) &
            .or. ( domain(level) % time >= obj_sim_param%time_threshold )
       endif
 

@@ -13,8 +13,9 @@
 #              every 7 iterations (sol-overwrite = false) with the diagnostic
 #              output, a probe every 3 iterations; 20 + 20 against 40. Carries
 #              the iteration count, the global iteration count (residual
-#              history, probe rows, steady solution time) and the output
-#              number.
+#              history, probe rows, steady solution time), the output
+#              number and the residual of the first iteration (the field data
+#              MOSE_RES_REFERENCE of the solutions; res-threshold is off here).
 #   dtime      time-accurate, a solution every 0.0083 s of physical time,
 #              25 + 25 against 50 iterations with the first part ending
 #              between two outputs. Carries the time of the last output.

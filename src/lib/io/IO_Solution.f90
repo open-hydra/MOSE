@@ -4,8 +4,8 @@ module MOSE_IO_Solution
 
   !> Names of the counters stored as field data with every vtk solution, next to TIME and to
   !> CYCLE (the iteration count over all grid levels): see restart_counters_t in Config_Types_m
-  character(len=21), parameter, public :: restart_counter_names(4) = [character(len=21) :: &
-    'MOSE_ITERATION', 'MOSE_OUTPUT_NUMBER', 'MOSE_GRID_LEVEL', 'MOSE_LAST_OUTPUT_TIME']
+  character(len=21), parameter, public :: restart_counter_names(5) = [character(len=21) :: &
+    'MOSE_ITERATION', 'MOSE_OUTPUT_NUMBER', 'MOSE_GRID_LEVEL', 'MOSE_LAST_OUTPUT_TIME', 'MOSE_RES_REFERENCE']
 
   !> Concrete procedure pointing to one of the subroutine realizations
   procedure(r_solution_if), pointer, public :: Read_IC
@@ -162,11 +162,12 @@ contains
         ! The solution time of the file, where the Tecplot reader stores it
         IOfield%solutiontime = obj_io%IOtime
       else
-        ! Restart: also the counters stored with the solution, when it holds them all
+        ! Restart: also the counters stored with the solution, when it holds them all; the last one, the residual
+        ! reference, is not in the solutions written before it was stored
         error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4), &
                                                vtspath=trim(vtspath),time=obj_io%IOtime,cycle=cycle, &
                                                fldnames=restart_counter_names,fldvalues=counters,fldfound=found)
-        obj_io%restart%found  = all(found)
+        obj_io%restart%found  = all(found(1:4))
         ! A steady run writes its solutions at time -1, a time-accurate one at t >= 0
         obj_io%restart%steady = ( obj_io%IOtime < 0.d0 )
         if ( obj_io%restart%found ) then
@@ -175,6 +176,8 @@ contains
           obj_io%restart%output_number    = nint(counters(2))
           obj_io%restart%grid_level       = nint(counters(3))
           obj_io%restart%last_output_time = counters(4)
+          obj_io%restart%res_found        = found(5)
+          obj_io%restart%res_reference    = counters(5)
         endif
         ! The solution time where the Tecplot reader stores it, with its convention for a steady
         ! solution: the iteration count (0 when the file holds no counters, as before)
@@ -491,7 +494,8 @@ contains
                                                cycle=int(obj_sim_param%iter_general,I4P), &
                                                fldnames=restart_counter_names, &
                                                fldvalues=[real(domain%iter,R8P), real(obj_io%output_number,R8P), &
-                                                          real(obj_multigrid%MG_level,R8P), obj_sim_param%time_from_call])
+                                                          real(obj_multigrid%MG_level,R8P), obj_sim_param%time_from_call, &
+                                                          obj_sim_param%res_reference])
       else
         E_IO = tec_write_structured_multiblock(orion=IOfield,varnames=obj_io%Ovarnames,filename=trim(path)//trim(file)//trim(IOfield%tec%extension))
       end if

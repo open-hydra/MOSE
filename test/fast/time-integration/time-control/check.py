@@ -10,6 +10,15 @@
       max norm, rho, u, p).
   python3 -B check.py reached TAG TIME
       the solution time of OUTPUT/<TAG>.tec is >= TIME.
+  python3 -B check.py threshold EPS SPLIT
+      OUTPUT/residual-history-{bar,tiny,split-restart}.dat are the steady runs
+      of part 4 with res-threshold = EPS: at 1 bar, at 1 bar x 2^-24, and at
+      1 bar in two parts with the restart after SPLIT iterations. The run at
+      low pressure ends after its first iteration with its last density
+      residual at most EPS times the first; the runs at the two pressures
+      end at the same iteration, after SPLIT; the run in two parts ends at
+      that iteration too, with the same ratio of the last density residual
+      to the first.
 """
 import math
 import sys
@@ -78,6 +87,44 @@ def reached(tag, time):
     return ok
 
 
+def history(path):
+    """Iterations and density residuals of a residual-history.dat (columns: iteration, time, density, ...)."""
+    rows = []
+    with open(path) as f:
+        for line in f:
+            v = line.split()
+            if len(v) >= 3:
+                rows.append((int(v[0]), float(v[2].replace("D", "E"))))
+    return rows
+
+
+def threshold(eps, n_split):
+    runs = {}
+    for tag in ("bar", "tiny", "split-restart"):
+        try:
+            runs[tag] = history(f"OUTPUT/residual-history-{tag}.dat")
+        except FileNotFoundError:
+            runs[tag] = []
+        if not runs[tag]:
+            print(f"  [FAIL] {tag}: no residual history")
+            return False
+        h = runs[tag]
+        print(f"    {tag}: last iteration {h[-1][0]}, first density residual {h[0][1]:.6e}, "
+              f"last {h[-1][1]:.6e}, last/first {h[-1][1] / h[0][1]:.3e}")
+    hb, ht, hs = runs["bar"], runs["tiny"], runs["split-restart"]
+    checks = [
+        (ht[-1][0] > 1 and ht[-1][1] <= eps * ht[0][1],
+         f"the run at 1 bar x 2^-24 ends once its residual has fallen by {eps:.0e} from the first iteration"),
+        (hb[-1][0] == ht[-1][0], "the runs at 1 bar and at 1 bar x 2^-24 end at the same iteration"),
+        (hb[-1][0] > n_split, f"the run at 1 bar ends after iteration {n_split}, where the run in two parts restarts"),
+        (hs[-1][0] == hb[-1][0] and hs[-1][1] / hs[0][1] == hb[-1][1] / hb[0][1],
+         "the run in two parts ends where the run in one go ends, with the same last/first residual"),
+    ]
+    for ok, text in checks:
+        print(f"  [{'ok  ' if ok else 'FAIL'}] {text}")
+    return all(ok for ok, _ in checks)
+
+
 def main():
     what = sys.argv[1]
     if what == "order":
@@ -86,6 +133,8 @@ def main():
         ok = same(sys.argv[2], sys.argv[3], float(sys.argv[4]))
     elif what == "reached":
         ok = reached(sys.argv[2], float(sys.argv[3]))
+    elif what == "threshold":
+        ok = threshold(float(sys.argv[2]), int(sys.argv[3]))
     else:
         sys.exit(f"unknown check {what}")
     return 0 if ok else 1

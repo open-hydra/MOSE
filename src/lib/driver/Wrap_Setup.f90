@@ -243,6 +243,9 @@ contains
           simulation%domain(1)%iter    = obj_io%restart%iteration
           obj_sim_param%time_from_call = obj_io%restart%last_output_time
           obj_io%output_number         = obj_io%restart%output_number
+          ! The unit of res-threshold, when the solution holds it: the first iteration of the restart keeps it
+          obj_sim_param%res_reference  = obj_io%restart%res_reference
+          obj_sim_param%res_restored   = obj_io%restart%res_found
           ! A run that went on past the solution read left in residual-history.dat and in the probe files
           ! the rows of the iterations after it, which the restart writes again: drop them
           if (mpi_is_root) then
@@ -257,6 +260,11 @@ contains
           if (obj_rot%enabled .and. mpi_is_root) &
             call Drop_Rows_After ( 'OUTPUT/torque.dat', 4, obj_io%restart%cycle, simulation%domain(1)%time )
         endif
+        ! Without it (Tecplot, a vtk solution written before it was stored, or a time-accurate one), a steady restart
+        ! takes the density residual of its own first iteration, as a new run
+        if ( .not. ( obj_sim_param%newrun .or. obj_time_scheme%time_accurate .or. obj_sim_param%res_restored ) ) &
+          obj_io%warning_message = '[WARNING] The restart solution holds no residual reference of a steady run: '// &
+            'res-threshold is relative to the density residual of the first iteration of the restart.'
         ! Time-based probe rows fall on the multiples of their dtime: a restart that goes on in time
         ! writes the next one not reached yet; a new transient starts from the first, as a new run
         if ( .not. obj_sim_param%newrun ) then

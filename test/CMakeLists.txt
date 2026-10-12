@@ -122,7 +122,9 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # test/fast/time-integration/run.sh.
 # Time control: second order in time with a time-dependent inlet (BC 402,
 # boundary data at the stage times), time tables before their first instant,
-# res-threshold not ending a time-accurate run.
+# res-threshold not ending a time-accurate run, and ending a steady run when the
+# density residual has fallen by that factor from the first iteration, at any
+# level of density and across a restart.
 # Local time step: stable on square and skewed 2-D cells, on cubic 3-D cells
 # and in diffusion-dominated cells (heat conduction, species), with Heun and RK3;
 # heat conduction on 3-D rhombohedra at 115 degrees with Heun at vnn 0.5.

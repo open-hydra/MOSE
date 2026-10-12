@@ -226,11 +226,26 @@ MOSE | Iter =      384 | Global iter =      384 | Density residual = 0.998459E-1
 ### Stopping criteria
 
 A run ends after `iter-threshold` iterations, at `time-threshold` (time-accurate
-runs) or, in steady runs only, when the density residual falls below
-`res-threshold`. The density residual is the L2 norm, over all the cells, of
-the change of density in one iteration: it is not normalized, so a suitable
-`res-threshold` depends on the density level and on the number of cells. In
-time-accurate runs it is reported but does not end the run.
+runs) or, in steady runs only, when the density residual has fallen by the
+factor `res-threshold` from the first iteration of the run (of each grid level
+of a multigrid sequence). The density residual is the L2 norm, over all the
+cells, of the change of density in one iteration; `residual-history.dat` and
+the screen report it as it is, while the convergence test takes it relative to
+the first iteration, so that the density level and the number of cells do not
+set the threshold. An input written for the absolute test of earlier versions
+keeps its stop with `res-threshold` divided by the density residual of the
+first iteration, R₁: Rₙ ≤ (ε/R₁) R₁ is Rₙ ≤ ε. R₁ is the first row of
+`residual-history.dat` when `res-diter` is 1 (ten digits) and the
+`MOSE_RES_REFERENCE` of the vtk solutions (all its bits); this holds on one
+grid level, since a sequence of grids measures each level from its own first
+residual. A residual that rises before it falls is still measured
+from the first iteration: the run goes on until the residual is
+`res-threshold` times that of the first iteration, not times its peak, so it
+ends later than a test relative to the peak would, never earlier. A restart
+from a vtk solution keeps the residual of the first iteration of the
+uninterrupted run, with all its bits in `vtk raw` and to 15 significant
+digits in `vtk ascii` (see [Restart](initial-conditions.md#restart)). In
+time-accurate runs the residual is reported but does not end the run.
 
 ### Timing
 

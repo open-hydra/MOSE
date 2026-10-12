@@ -166,7 +166,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
 | F5c | Limiter defaults (MUSCL without limiter, first-order with limiter) | field bit-identical to the explicit setting; matching warnings and summary | ☑ `InputChecks`/`LimiterDefaults` | <1 s |
 | F5d | Residual smoothing with time-accurate runs | refused at set-up, no solution; steady runs keep it | ☑ `InputChecks`/`IRSTimeAccurate` | <1 s |
-| F5e | Time control (1-D duct, time-dependent inlet 402) | order in time ≥ 1.8 (RK2, RK3); table held before its first instant; time-threshold reached | ☑ `TimeIntegration`/`TimeControl` | ~5 s |
+| F5e | Time control (1-D duct, time-dependent inlet 402; 1-D tube of air at Mach 2 with an entropy wave, steady, `res-threshold` = 1e-6, at 1 bar and at 1 bar × 2⁻²⁴, and at 1 bar in two parts with a restart from `vtk raw` after 60 iterations) | order in time ≥ 1.8 (RK2, RK3); table held before its first instant; time-threshold reached; the steady runs end at the same iteration, with the density residual at most 1e-6 of that of the first iteration, the run in two parts as the run in one go | ☑ `TimeIntegration`/`TimeControl` | ~5 s |
 | F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart`, `Restart`/`RestartCounters` | ~3 s, ~6 s |
 | I11 | Wall output in vtk raw (2x2-block box of 8 × 8 cells, adiabatic no-slip walls (301) on its four sides, 5 RK3 steps) | the run ends; every wall file `wallB<b>F<f>.vts` has the extent of its face (WholeExtent and Piece Extent, from `fieldBlock<b>.vts`), its points and one value of each wall variable per cell, as raw appended data | ☑ `OutputFiles`/`WallOutput` | <1 s |
 | I5 | Serial vs OpenMP equivalence: the Sod tube; a chimera case, a block overset on another whose four chimera faces meet at its edges (Navier–Stokes; it passes on the parent of its commit too: the race it guards shows under ThreadSanitizer with Archer, in three runs of three) | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~3 s |
@@ -195,7 +195,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F25 | Probes given by position (planar 2-D duct, a different pressure in every cell, probes at cell centres in the mid-plane) | each probe holds the values of its cell, never a neighbour or a ghost cell | ☑ `OutputFiles`/`ProbePosition` | <1 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
-Current `ctest -L fast`: **20 tests, ~126 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **20 tests, ~129 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, InputChecks,
 TimeIntegration, BoundaryConditions, Conservation, OpenMPEquiv, Connections,
 Restart, OutputFiles, MMSResiduals, AblatingWall, MeshGeometry, QCR2000Stress).
