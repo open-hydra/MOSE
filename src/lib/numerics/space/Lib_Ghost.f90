@@ -103,6 +103,9 @@ contains
           call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(103,104,301,302,400,503:505) ! walls (103, 104: coupled to another solver) and extrapolation faces
           call Ghost_Wall ( domain % bc(i), domain % blk(Bm) )
+        case(502) ! SRM grain: extrapolation; in a RANS run the turbulence variables from the wall values of the grain
+          call Ghost_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
+          if ( model == 2 ) call Ghost_SRM_Turbulence ( domain % bc(i), domain % blk(Bm) )
         case(102)
           ! Chimera: processed after the donor-cell MPI exchange completes (below)
           continue
@@ -842,6 +845,35 @@ contains
     enddo
 
   end subroutine Ghost_Wall
+
+
+  !> Turbulence variables of the two layers of ghost cells of an SRM grain face (502) in a RANS run, after
+  !> Ghost_Extrapolate: 2 phi_w - phi_l times the density of the ghost cell (phi = Z/rho; l = 1 the boundary cell, l = 2
+  !> the next one along the direction of the face, the cell itself in a block of one cell), the rule of the walls
+  !> (Ghost_Wall), with the wall values that the boundary flux of the grain takes (SRM_Wall_Turbulence): those of the
+  !> blowing wall while the surface burns, of the wall at the flame temperature when it does not. The other variables keep
+  !> the extrapolation. MOSE_Lib_Stencil_Metrics puts these values at 2 x_f - x_1.
+  subroutine Ghost_SRM_Turbulence ( rec, blk )
+    use MOSE_Lib_BC_Fluxes_GSI_SRM, only: SRM_Wall_Turbulence
+    implicit none
+    type(MOSE_bc_type), intent(in)       :: rec
+    type(MOSE_block_type), intent(inout) :: blk
+    ! Local
+    integer  :: Im, Jm, Km, Fm, c(3), l
+    real(R8) :: rho_w, rw(nrans), phiw(nrans)
+
+    Im = rec % i ; Jm = rec % j ; Km = rec % k ; Fm = rec % f
+    call SRM_Wall_Turbulence ( Im, Jm, Km, Fm, blk, rec % aCoeff, rec % n, rec % pRef, rec % Taf, rec % ci, rho_w, rw )
+    phiw = rw / rho_w
+    do l = 1, 2
+      c = [Im, Jm, Km]
+      if ( l == 2 .and. blk % dim((Fm+1)/2) > 1 ) c = c + guide(Fm,:)
+      associate ( G => blk % P(:,Im-l*guide(Fm,1),Jm-l*guide(Fm,2),Km-l*guide(Fm,3)), Pc => blk % P(:,c(1),c(2),c(3)) )
+      G(nt:nprim) = sum ( G(1:nsc) ) * ( 2d0 * phiw - Pc(nt:nprim) / sum ( Pc(1:nsc) ) )
+      end associate
+    enddo
+
+  end subroutine Ghost_SRM_Turbulence
 
 
   !> q_1 + psi (q_1 - q_2) on the first ghost layer and q_1 + 2 psi_2 (q_1 - q_2) on the second, with psi <= sx and

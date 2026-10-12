@@ -600,8 +600,11 @@ Declared limits:
 - the temperature of a `301` wall is extrapolated (consistent, exact for every
   linear field) rather than set from the heat flux;
 - the SRM grain (`502`) and the other types keep the extrapolation
-  $3q_1 - 3q_2 + q_3$ of the primitives; with a RANS model a `502` boundary
-  stops the run at set-up (see the boundary conditions of the user guide).
+  $3q_1 - 3q_2 + q_3$ of the primitives; in a RANS run the turbulence variables
+  of a `502` grain take their wall values instead, $2\phi_w - \phi_l$ at
+  $2\mathbf{x}_f - \mathbf{x}_1$ as behind a wall, with the wall values of the
+  flux of the grain (the blowing wall while it burns, the wall at the flame
+  temperature when it does not).
 
 ## Axisymmetric Wedge (BC 200)
 

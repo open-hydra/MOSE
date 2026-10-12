@@ -13,9 +13,13 @@
 #  A property line with an empty required value must stop the run at set-up,
 #  naming the line of bc.txt, the record, its type and the value; so must a
 #  line short of a value, or with a word for a number, and a flow direction
-#  that is neither a number nor normal. An SRM grain boundary (502) with a
-#  RANS model, which it does not support, must stop the run at set-up.
-#  Gas: test/common/Air.
+#  that is neither a number nor normal. An SRM grain boundary (502) with the
+#  Spalart-Allmaras model runs (40 steps), and so with SST, and its ghost
+#  cells hold the wall value nu~ = 0: one explicit step at rest from a uniform
+#  rho nu~ changes it in the cell next to the grain by the flux through the
+#  grain and the cb2 term of the gradient to the wall value (make_case.py
+#  srmcheck).
+#  Gas: test/common/Air (test/common/Air-viscous for the grain).
 #===============================================================================
 set -uo pipefail
 
@@ -146,10 +150,36 @@ sed -e 's/^equations = euler$/equations = navier-stokes\nturbulence = SA\nschmid
 rm -f OUTPUT/field.tec
 "$LOCAL" > OUTPUT/srm-rans.log 2>&1
 rc=$?
-if [[ $rc -ne 0 ]] && grep -a -q 'type 502' OUTPUT/srm-rans.log; then
-  echo "  [ok  ] srm-rans: stopped at set-up, exit code $rc"
+if [[ $rc -eq 0 && -f OUTPUT/field.tec ]] && ! grep -a -qE 'NaN|Integration failed' OUTPUT/srm-rans.log; then
+  echo "  [ok  ] srm-rans: 40 steps, exit code 0"
 else
-  echo "  [FAIL] srm-rans: exit code $rc, the 502 boundary with a RANS model was not refused (see OUTPUT/srm-rans.log)"
+  echo "  [FAIL] srm-rans: exit code $rc, the run with the grain and Spalart-Allmaras did not complete (see OUTPUT/srm-rans.log)"
+  fail=1
+fi
+python3 -B make_case.py srm sst || exit 1
+sed -e 's/^turbulence = SA$/turbulence = SST/' input.ini > input-sst.ini
+mv input.ini input-sa.ini && mv input-sst.ini input.ini
+rm -f OUTPUT/field.tec
+"$LOCAL" > OUTPUT/srm-sst.log 2>&1
+rc=$?
+if [[ $rc -eq 0 && -f OUTPUT/field.tec ]] && ! grep -a -qE 'NaN|Integration failed' OUTPUT/srm-sst.log && \
+   grep -a -q 'Turbulence variables below zero after a stage (set to the floor): 0$' OUTPUT/srm-sst.log; then
+  echo "  [ok  ] srm-sst: 40 steps with SST, exit code 0, k and omega never below zero"
+else
+  echo "  [FAIL] srm-sst: exit code $rc, the run with the grain and SST did not complete as it should (see OUTPUT/srm-sst.log)"
+  fail=1
+fi
+mv input-sa.ini input.ini
+python3 -B make_case.py srm rest || exit 1
+sed -e 's/^iter-threshold = 40$/iter-threshold = 1/' -e 's/^time-accurate = true$/time-accurate = false/' \
+    -e 's/^time-scheme = RK3$/time-scheme = euler/' -e 's/^schmidt = 0.7$/schmidt = 0.7\n\n[MOSE-Turbulence]\npoint-implicit = false/' \
+    input.ini > input-rest.ini && mv input-rest.ini input.ini
+rm -f OUTPUT/field.tec OUTPUT/diagnostic.tec
+"$LOCAL" > OUTPUT/srm-rest.log 2>&1
+if [[ -f OUTPUT/field.tec && -f OUTPUT/diagnostic.tec ]] && python3 -B make_case.py srmcheck OUTPUT/field.tec OUTPUT/diagnostic.tec; then
+  echo "  [ok  ] srm-rest: the ghost cells of the grain hold the wall value nu~ = 0"
+else
+  echo "  [FAIL] srm-rest: the source terms next to the grain do not see the wall value nu~ = 0 (see OUTPUT/srm-rest.log)"
   fail=1
 fi
 

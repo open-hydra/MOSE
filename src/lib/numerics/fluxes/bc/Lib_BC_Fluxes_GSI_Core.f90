@@ -436,7 +436,8 @@ contains
                                  normal=face % normal, dist=WALL_DISTANCE )
 
       ! The ghost cells of the wall, turbulence variables included, are those of Fill_Ghost_Cell (Ghost_Wall in
-      ! MOSE_Lib_Ghost): one set of ghost cells for the fluxes and the source terms
+      ! MOSE_Lib_Ghost; for an SRM grain Ghost_SRM_Turbulence, with these wall values): one set of ghost cells for the
+      ! fluxes and the source terms
     end if
 
     ! Residual update

@@ -266,9 +266,13 @@ the surface reactions alone.
     whenever the flow cannot sustain the process; see
     [Inert surfaces](../theory/gsi.md#inert-surfaces).
 
-!!! warning
-    Type `502` cannot be used with a RANS model (`turbulence` set): it sets no
-    turbulence values for the gas it injects, and the run stops at set-up.
+!!! note
+    With a RANS model (`turbulence` set) the gas a `502` grain injects carries
+    the turbulence values of a smooth wall: $\tilde\nu = 0$ (Spalart–Allmaras),
+    $k = 0$ and the wall value of $\omega$ (SST, Wilcox 2006), whose distance is
+    the wall distance of the cell (the grain is not a wall for it). The ghost
+    cells behind the grain take these wall values, as behind a wall; a grain that
+    does not burn is a wall at the flame temperature.
 
 !!! warning
     Type `505` requires a thermodynamic table containing O₂, CO₂, CO, H₂O, H₂,

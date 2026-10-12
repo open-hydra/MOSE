@@ -665,8 +665,9 @@ $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-d
 cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of the wall
 cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell that copied the cell,
 as MOSE did before, gave $a/2$. Before, the wall flux routines wrote these values after the fluxes,
-for the sources only, and the fluxes saw an extrapolation of $\rho Z$ (a `502` boundary, which would
-need the same, stops a RANS run at set-up).
+for the sources only, and the fluxes saw an extrapolation of $\rho Z$. An SRM grain (`502`) takes the
+same rule for its turbulence variables, with the wall values of its flux: those of the blowing wall while
+it burns, of the wall at the flame temperature when it does not.
 
 ### Cell gradients of the source terms
 

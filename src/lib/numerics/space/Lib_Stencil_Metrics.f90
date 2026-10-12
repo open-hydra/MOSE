@@ -21,7 +21,8 @@
 !> a periodic pair), behind a wall (301, 302, 503-505) 2 x_f - x1 (x_f the centre of the face) for the quantities with a
 !> wall value and x1 + s (x1 - x2) for the extrapolated ones, behind a 400 face x1 + s (x1 - x2) (Ghost_Wall; s = l0/l1,
 !> x1 with one cell across the face), 3 x1 - 3 x2 + x3 behind the faces whose ghost value is 3 u1 - 3 u2 + u3
-!> (Ghost_Extrapolate: 408, ...; 2 x1 - x2, or x1, in a block with two cells, or one, across the face), the cell itself
+!> (Ghost_Extrapolate: 408, 502, ...; 2 x1 - x2, or x1, in a block with two cells, or one, across the face; in a RANS run
+!> the turbulence variables of an SRM grain, 502, at 2 x_f - x1, as they take their wall values), the cell itself
 !> behind the zero-gradient faces (0, 401-407, 420), its mirror image across a symmetry face (300; the cell itself on a face
 !> of zero area, an axis, where the ghost value is a copy of the cell), and on a 3-D rotational periodic
 !> face (200) the cell of the other end rotated by the angle of the sector. Chimera (102) and mapped (410) faces take the
@@ -244,7 +245,7 @@ contains
   !> Position of the first ghost cell of boundary record r (not a face between blocks).
   subroutine Ghost_Position ( domain, xc, r )
     use MOSE_Advanced_Types_m
-    use MOSE_Global_m, only: ndir
+    use MOSE_Global_m, only: ndir, model
     use MOSE_Parameters_m, only: guide
     use MOSE_Lib_Metrics, only: delthe
     implicit none
@@ -310,6 +311,13 @@ contains
         else
           xc(b) % x(:,Ig,Jg,Kg) = x1
         end if
+        ! An SRM grain in a RANS run: its turbulence variables take their wall values (Ghost_SRM_Turbulence), at 2 x_f - x1
+        if ( domain % bc(r) % type == 502 .and. model == 2 ) then
+          xc(b) % xe(:,Ig,Jg,Kg) = xc(b) % x(:,Ig,Jg,Kg)
+          xc(b) % em(Ig,Jg,Kg) = Extrapolated_Groups ( 502 )
+          call Face_Centre_Normal ( domain % blk(b) % node, Im, Jm, Km, Fm, xf, nf )
+          xc(b) % x(:,Ig,Jg,Kg) = 2d0 * xf - x1
+        end if
 
     end select
 
@@ -339,8 +347,9 @@ contains
   end subroutine Connection_Ghost_Position
 
 
-  !> Groups of quantities extrapolated behind a face of type t (Ghost_Wall), as the bits of em (1 species and scalars,
-  !> 2 temperature, 3 velocity, 4 turbulence variables); the others take the wall value.
+  !> Groups of quantities extrapolated behind a face of type t (Ghost_Wall; Ghost_SRM_Turbulence for 502 in a RANS run), as
+  !> the bits of em (1 species and scalars, 2 temperature, 3 velocity, 4 turbulence variables); the others take the wall
+  !> value.
   pure integer function Extrapolated_Groups ( t )
     implicit none
     integer, intent(in) :: t
@@ -350,7 +359,7 @@ contains
         Extrapolated_Groups = 3                  ! species, temperature
       case (302)
         Extrapolated_Groups = 1                  ! species
-      case (503:505)
+      case (502:505)
         Extrapolated_Groups = 7                  ! species, temperature, velocity
       case default
         Extrapolated_Groups = ALL_EXTRAPOLATED   ! 400

@@ -12,7 +12,7 @@ contains
 
   !> Wall of prescribed temperature T_wall: the viscous flux of the face. Its ghost values, turbulence variables included,
   !> are those of Fill_Ghost_Cell (Ghost_Wall in MOSE_Lib_Ghost), the one set of ghost cells of the fluxes and of the source
-  !> terms (an SRM grain, 502, which falls back on this wall when it does not burn, runs without a RANS model).
+  !> terms (an SRM grain, 502, falls back on this wall when it does not burn: Ghost_SRM_Turbulence takes its wall values).
   subroutine BC_Wall_Temperature ( Im, Jm, Km, Fm, Blk, T_wall, Ovar, w_wall, k_rough, rec )
     use MOSE_Config_Types_m, only: obj_rans
     use MOSE_Lib_Fluid

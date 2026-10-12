@@ -18,7 +18,17 @@ Usage (from the test directory):
   python3 -B make_case.py case NAME      INPUT/ic.tec, INPUT/bc.txt naming the table NAME, and the table under that name
   python3 -B make_case.py same A B       exit status 0 when the fields A and B hold the same values (cell data, bit for bit)
   python3 -B make_case.py bad KIND       the case of p0.dat with the line of bc.txt that BAD[KIND] gives
-  python3 -B make_case.py srm            the duct with a viscous gas and nu~, its inlet an SRM grain boundary (502)
+  python3 -B make_case.py srm [rest] [sst]   the duct with a viscous gas and nu~, its inlet an SRM grain boundary (502);
+                                         rest: the gas at rest at T0 and PB; sst: k and omega instead of nu~
+  python3 -B make_case.py srmcheck FIELD DIAG   exit status 0 when the change of rho nu~ over one step in the cell next to
+                                         the grain is that of the wall value nu~ = 0 (below)
+
+SRM grain with Spalart-Allmaras. Its turbulence values are those of a smooth wall, nu~_w = 0, and the ghost cells behind it
+hold -nu~ of the cell (2 nu~_w - nu~_1) at the reflection of the cell centre, as behind a wall. With the gas at rest, rho nu~
+= m uniform, and no wall for the wall distance (production and destruction vanish with it), one explicit step changes rho
+nu~ in the cell next to the grain by the flux through the grain, -(mu/sigma) (2 nu~/h)/h per unit volume, and the cb2 term
+of the gradient nu~/h that the ghost cell gives, (cb2/sigma) rho (nu~/h)^2: (m/(sigma rho h^2)) (cb2 m - 2 mu). A ghost
+cell that extrapolates nu~ (3 q1 - 3 q2 + q3, uniform) gives no gradient there: (m/(sigma rho h^2)) (-2 mu).
 """
 import math
 import os
@@ -38,8 +48,8 @@ def uniform_state():
     return PB / (RGAS * t), mach * c, PB
 
 
-def write_case(name):
-    rho, u, p = uniform_state()
+def write_case(name, state=None):
+    rho, u, p = state or uniform_state()
     with open("INPUT/ic.tec", "w") as f:
         f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
         f.write(f" ZONE  T = B1-IG, I={N + 1}, J=2, K=2, DATAPACKING=BLOCK, "
@@ -93,24 +103,65 @@ def write_bad(kind):
 
 
 MU = 1.8467e-5                                       # a viscosity of air, Pa s: nu~ = 3 MU / rho needs only to be positive
+MU_GAS = 1.1858686e-5                                # the viscosity of test/common/Air-viscous (constant), Pa s
+SIGMA, CB2 = 2.0 / 3.0, 0.622                        # Spalart-Allmaras
 
 
-def write_srm():
-    """The duct of p0.dat with nu~ = 3 nu (mi_tilde) for the Spalart-Allmaras model, and record 1 (the inlet) an SRM grain
-    boundary (502): T_af, a, n, p_ref, rho_grain, SF_geo and the mass fraction of the single species."""
-    write_case("p0.dat")
+def write_srm(rest=False, sst=False):
+    """The duct of p0.dat with rho nu~ = 3 MU (mi_tilde) for the Spalart-Allmaras model, and record 1 (the inlet) an SRM
+    grain boundary (502): T_af, a, n, p_ref, rho_grain, SF_geo and the mass fraction of the single species. rest: the gas
+    at rest at T0 and PB; sst: k = 1 m2/s2 and omega = 1e3 1/s (kappa = rho k, omega = rho omega) for SST instead."""
+    rho, u, p = (PB / (RGAS * T0), 0.0, PB) if rest else uniform_state()
+    write_case("p0.dat", (rho, u, p))
     with open("INPUT/ic.tec") as f:
         lines = f.read().splitlines(True)
-    lines[0] = lines[0].replace('"p"\n', '"p" "rhoNuTilde"\n')
-    lines[1] = lines[1].replace("[4-8]=CELLCENTERED", "[4-9]=CELLCENTERED")
+    if sst:
+        lines[0] = lines[0].replace('"p"\n', '"p" "rhoK" "rhoOmega"\n')
+        lines[1] = lines[1].replace("[4-8]=CELLCENTERED", "[4-10]=CELLCENTERED")
+        turb = f" {rho * 1.0:.15E}\n" * N + f" {rho * 1.0e3:.15E}\n" * N
+    else:
+        lines[0] = lines[0].replace('"p"\n', '"p" "rhoNuTilde"\n')
+        lines[1] = lines[1].replace("[4-8]=CELLCENTERED", "[4-9]=CELLCENTERED")
+        turb = f" {3.0 * MU:.15E}\n" * N
     with open("INPUT/ic.tec", "w") as f:
-        f.write("".join(lines) + f" {3.0 * MU:.15E}\n" * N)
+        f.write("".join(lines) + turb)
     with open("INPUT/bc.txt") as f:
         bc = f.readlines()
     bc[0] = bc[0].replace("     402\n", "     502\n")
     bc[1] = "3.0E+03, 1.0E-05, 0.4, 1.0E+06, 1.7E+03, 1.0, 1.0\n"
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(bc))
+
+
+def read_zone(path):
+    """Cell values of a one-zone MOSE ASCII file (BLOCK packing), by variable name."""
+    with open(path) as f:
+        lines = f.read().splitlines()
+    names = lines[0].split('=', 1)[1].replace('"', ' ').split()
+    head = lines[1].replace(',', ' ').split()
+    ni, nj, nk = (int(next(w for w in head if w.startswith(k + '=')).split('=')[1]) for k in ('I', 'J', 'K'))
+    values = [float(v) for v in " ".join(l for l in lines[2:] if not l.startswith("DATASETAUXDATA")).split()]
+    nn, nc, out, pos = ni * nj * nk, (ni - 1) * max(nj - 1, 1) * max(nk - 1, 1), {}, 0
+    for k, name in enumerate(names):
+        cnt = nn if k < 3 else nc
+        out[name] = values[pos:pos + cnt]
+        pos += cnt
+    return out
+
+
+def srm_check(field, diag):
+    """The change of rho nu~ over the step in the cell next to the grain, times sigma rho h^2 / m over dt, against
+    cb2 m - 2 mu (the wall value nu~_w = 0 in the ghost cell); the cell next to it, where everything is uniform, changes
+    by round-off."""
+    f, d = read_zone(field), read_zone(diag)
+    rho, m, h = PB / (RGAS * T0), 3.0 * MU, LX / N
+    r = [(new - m) / t * SIGMA * rho * h * h / m for new, t in zip(f["rhoNuTilde"], d["dt"])]
+    expect = CB2 * m - 2.0 * MU_GAS
+    err = abs(r[0] - expect) / (2.0 * MU_GAS)
+    print(f"    change of rho nu~ next to the grain, times sigma rho h^2/(m dt): {r[0]:.6e}, from the wall value nu~ = 0 "
+          f"{expect:.6e} (an extrapolated ghost cell: {-2.0 * MU_GAS:.6e}); difference {err:.1e} of 2 mu; second cell "
+          f"{r[1]:.1e}")
+    sys.exit(0 if err < 1e-6 and abs(r[1]) < 1e-6 * 2.0 * MU_GAS else 1)
 
 
 def cell_values(path):
@@ -127,7 +178,9 @@ def main():
     elif what == "bad":
         write_bad(sys.argv[2])
     elif what == "srm":
-        write_srm()
+        write_srm("rest" in sys.argv[2:], "sst" in sys.argv[2:])
+    elif what == "srmcheck":
+        srm_check(sys.argv[2], sys.argv[3])
     elif what == "same":
         a, b = cell_values(sys.argv[2]), cell_values(sys.argv[3])
         sys.exit(0 if a == b and len(a) > 0 else 1)
