@@ -179,21 +179,21 @@ codes see the same mesh. The node counts in `mesh.geo` are duplicated from
 OpenFOAM's `sutherland` transport takes the Eucken conductivity (Pr ≈ 0.69), and
 the MOSE transport table is built to match.
 
-**Same freestream.** MOSE's turbulence inputs are *density-weighted*
-(`mit` = ρν̃, `kappa` = ρk, `omega` = ρω) for the initial condition and, since
-the inlet fix in `Lib_BC_Fluxes_Inflow.f90`, for the inlet boundary as well, so
-the OpenFOAM values are converted:
+**Same freestream.** MOSE's turbulence inputs are *specific*, like OpenFOAM's,
+so the two cases carry the same numbers:
 
 | | MOSE `input.ini` | OpenFOAM `0/` |
 |---|---|---|
-| SA | `mit = 1e-6` | `nuTilda = 4.9005e-06` |
-| SST | `kappa = 5.040e-5`, `omega = 248.1` | `k = 2.4699e-04`, `omega = 1215.8` |
+| SA | `nuTilde = 4.9005e-6` | `nuTilda = 4.9005e-06` |
+| SST | `k = 2.4699e-4`, `omega = 1215.8` | `k = 2.4699e-04`, `omega = 1215.8` |
+
+MOSE solves for ρν̃, ρk, ρω: ATLAS ICB multiplies the inputs by the cell density
+when it writes an initial condition, and the inlet multiplies the `bc*.txt` values
+by the inlet density. The solution files (`OUTPUT/field*.tec`) carry these
+density-weighted variables, named `rhoK`, `rhoOmega` and `rhoNuTilde` (= ρν̃)
+(ρ∞ = 0.20406 kg/m³).
 
 The SST levels are the NASA TMR freestream (k = 9e-9·a∞², ω = 1e-6·ρ∞a∞²/μ∞).
-Before that fix MOSE multiplied the inlet values by ρ, and the SST `INPUT/bc*.txt`
-still carried an older ω, so MOSE actually ran k∞ 4.9x and ω∞ 12.6x below
-OpenFOAM (SA: ν̃∞ 4.9x below). It turned out not to change the boundary layer,
-but the two codes now see the same numbers.
 
 **Same SST model.** Two implementation choices are aligned explicitly:
 

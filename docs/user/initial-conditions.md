@@ -58,24 +58,31 @@ Every IC file must contain the same set of variables:
 | $u,\, v,\, w$ | Velocity components | m/s |
 | $p$ | Pressure | Pa |
 
-The turbulence variables are the **density-weighted** (conserved) quantities MOSE
-solves for, not the specific ones. The same convention holds for the inlet
-boundary values ([Boundary Conditions](boundary-conditions.md#inlet-outlet)), so
-one set of numbers in `input.ini` (`mit`, `kappa`, `omega`) serves both the
-`[ICB-Block*]` initial condition and the `[inflow]` boundary.
 
 If Spalart-Allmaras turbulence model is used, the IC file must also include:  
 
 | Variable | Description | Units |
 |----------|-------------|-------|
-| $\rho\tilde{\nu}$ (`mi_t`, written back as `mi_tilde`) | Spalart-Allmaras working variable times density | kg/(m·s) |
+| $\rho\tilde{\nu}$ (`rhoNuTilde`) | Spalart-Allmaras working variable times density | kg/(m·s) |
 
 If $k-\omega$ or SST turbulence model is used, the IC file must also include:  
 
 | Variable | Description | Units |
 |----------|-------------|-------|
-| $\rho k$ (`kappa`) | Turbulent kinetic energy times density | kg/(m·s²) |
-| $\rho\omega$ (`omega`) | Specific dissipation rate times density | kg/(m³·s) |
+| $\rho k$ (`rhoK`) | Turbulent kinetic energy times density | kg/(m·s²) |
+| $\rho\omega$ (`rhoOmega`) | Specific dissipation rate times density | kg/(m³·s) |
+
+The turbulence variables are always the density-weighted ones MOSE advances, in the
+IC file as in the restart and solution files, under the names `rhoNuTilde`,
+`rhoK`, `rhoOmega` ($\rho\tilde\nu$ is the variable the Spalart-Allmaras model
+transports, not the eddy viscosity $\mu_t$, which MOSE writes as `mut`). ATLAS ICB
+writes them from either the specific keys `nuTilde`, `k`, `omega` (multiplied by the
+density of each cell) or the density-weighted keys `rhoNuTilde`, `rhoK`, `rhoOmega`
+(written as given). MOSE reads the variables by position. When the file carries their names
+(ASCII Tecplot), it checks the turbulence names: the earlier names of the same
+variables (`mi_t`, `mi_tilde`, and `kappa` with its `omega`) are accepted, and any
+other name, such as the specific `nuTilde` or `k`, or the eddy viscosity `mut`,
+stops the run.
 
 ---
 

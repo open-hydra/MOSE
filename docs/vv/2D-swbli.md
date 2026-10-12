@@ -76,15 +76,14 @@ The published reference solutions come from different codes, on different meshes
 | Freestream | $M=5$, $p=4000$ Pa, $T=68.3$ K | identical |
 | Thermodynamics | ideal gas, $\gamma = 1.4$, $R = 287$ | identical |
 | Transport | Sutherland $\mu(T)$, Eucken $\kappa$ ($Pr = 0.69$) | identical ($A_s$, $T_s$; Eucken) |
-| Turbulence freestream | $\rho\tilde{\nu}$, $\rho k$, $\rho\omega$ (density-weighted inputs) | the same physical values |
+| Turbulence freestream | $\tilde{\nu}$, $k$, $\omega$ | identical |
 | SST production | `sst-production = compressible` | `kOmegaSST` - the same form |
 | $\omega$ wall condition (SST) | $80\,\nu_w/y_c^2$ on the wall face, wall cell solved | the same, through a coded condition (`system/omegaFaceBC`) |
 | Riemann solver | HLLC + MUSCL / Van Leer | Kurganov central-upwind + Van Leer |
 | Time integration | RK3, local CFL | local time stepping (LTS) |
 
-Three entries need a note.
+Two entries need a note.
 
-- **Turbulence inputs.** MOSE's turbulence inputs are *density-weighted* ($\texttt{mit} = \rho\tilde{\nu}$, $\texttt{kappa} = \rho k$, $\texttt{omega} = \rho\omega$), for the initial condition and the inlet boundary alike, so the OpenFOAM values are converted rather than copied: $k_\infty = 2.470\times10^{-4}$ m²/s² and $\omega_\infty = 1216$ s⁻¹ in OpenFOAM are `kappa = 5.040e-5` and `omega = 248.1` in MOSE ([Freestream and inlet values](../theory/turbulence.md#freestream-and-inlet-values-k-omega-tildenu)).
 - **SST production.** "SST" names a family of models. MOSE's default production is $\mu_t S^2$ (NASA TMR's SST-2003m); OpenFOAM's `kOmegaSST` keeps the dilatation terms of $\tau_{ij}\,\partial u_i/\partial x_j$. MOSE carries both, and runs the compressible one here so that the two codes solve the same equations ([Compressible production](../theory/turbulence.md#compressible-production-sst-production)).
 - **$\omega$ wall condition.** On this wall-resolved mesh ($y^+ \approx 0.3$) both codes use the asymptotic value $6\nu_w/(\beta_1 y_c^2) = 80\,\nu_w/y_c^2$, with $y_c$ the wall distance of the first cell centre. MOSE imposes it on the wall **face** and solves the wall-adjacent cell; OpenFOAM's standard `omegaWallFunction` would instead **fix** the wall-adjacent cell to that value. The OpenFOAM case therefore replaces it with a `codedFixedValue` that applies MOSE's face condition ([Wall boundary conditions](../theory/turbulence.md#wall-boundary-conditions)).
 

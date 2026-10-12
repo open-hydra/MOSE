@@ -574,12 +574,29 @@ $k_\infty = 2.47\times10^{-4}$ m² s⁻², $\omega_\infty = 1216$ s⁻¹.
 Values of $\omega_\infty$ orders of magnitude below the $\mu_t/\mu$ estimate are
 a frequent cause of $k$ runaway.
 
-**The inputs are density-weighted.**  `mit` $= \rho_\infty\tilde\nu_\infty$,
-`kappa` $= \rho_\infty k_\infty$ and `omega` $= \rho_\infty\omega_\infty$ - the
-conserved variables MOSE solves for.  The same values are set for the initial
-condition (`[ICB-Block*]`) and the inflow (`[inflow]`), and the inlet boundary
-conditions impose them as given, whatever density the inlet state produces.
-For the example above: `kappa = 5.040e-5`, `omega = 248.1`.
+**Inputs and files.**  The turbulence keys of ATLAS come in pairs, a specific one
+and a density-weighted one, under the names of the
+[NASA Turbulence Modeling Resource](https://tmbwg.github.io/turbmodels/): `nuTilde` $= \tilde\nu$ and `rhoNuTilde` $= \rho\tilde\nu$, `k` and
+`rhoK` $= \rho k$, `omega` and `rhoOmega` $= \rho\omega$.  $\tilde\nu$ is the
+variable the Spalart-Allmaras model transports, not the eddy viscosity
+$\mu_t = \rho\tilde\nu f_{v1}$, which is not an input and is written as `mut`
+(`sol-variables = transport`).  The specific values are those
+TMR and OpenFOAM give, and the same ones serve the initial condition
+(`[ICB-Block*]`) and the inflow (`[inflow]`).  MOSE solves for the
+density-weighted variables $\rho\tilde\nu$, $\rho k$, $\rho\omega$:
+
+- the initial condition: ATLAS ICB multiplies the specific keys `nuTilde`, `k`, `omega`
+  by the density of each cell (it also takes the density-weighted keys `rhoNuTilde`,
+  `rhoK`, `rhoOmega`, written as given);
+- the inlet: the boundary takes the specific `nuTilde`, `k`, `omega` only, and MOSE
+  multiplies the `bc.txt` values by the density of the inlet state;
+- the IC, restart and solution files all carry the density-weighted variables
+  under the names of the density-weighted keys: `rhoNuTilde`, `rhoK`, `rhoOmega` (divide
+  by $\rho$ to read $\tilde\nu$, $k$ and $\omega$).  MOSE reads them by position
+  and, in an ASCII file, checks the names
+  ([Initial Conditions](../user/initial-conditions.md#required-variables)).
+
+For the example above: `k = 2.4699e-4`, `omega = 1215.8`.
 
 ---
 
