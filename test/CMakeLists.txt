@@ -110,7 +110,8 @@ function(mose_add_fast_script NAME DIR)
     endif()
 endfunction()
 
-# Riemann smoke-matrix (F5): every shock-capturing solver stays positive.
+# Riemann smoke-matrix (F5): every shock-capturing solver stays positive;
+# shock-detector = Tramel turns the shock sensor on.
 mose_add_fast_script(RiemannSmoke   fast/riemann-smoke  "fast;numerics;1D")
 
 # Numerics smoke (N4): limiter / time-scheme / reconstruction / int-var sweep.

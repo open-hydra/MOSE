@@ -191,6 +191,8 @@ All non-trivial limiters fall within Sweby's TVD region in the $(r,\,\phi)$ diag
 
 Near strong shocks the MUSCL reconstruction can produce oscillations even with TVD limiters. This is the case of the well-knwon shock carbuncle. MOSE uses a Jameson-type pressure sensor to detect shocks and smoothly degrade to first order in their vicinity.
 
+The key `shock-detector` of `input.ini` turns on the sensor below (`Tramel`) or that of Chen (`Chen`); without it, HLLC+Tramel and HLLE++ take the sensor below, HLLC+Chen and AUSM+M that of Chen, and the other Riemann solvers none ($\beta = 1$).
+
 ### Sensor formulation
 
 A $3\times 3\times 3$ stencil of pressures centred on cell $(i,j,k)$ is

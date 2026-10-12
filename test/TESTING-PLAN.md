@@ -153,7 +153,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F2 | Sod coarse (existing) | shock/contact positions, positivity | ☑ `Sod79` | ~1 s |
 | F3 | Conservation in closed box | mass conserved to round-off | ☑ `Conservation` | <1 s |
 | F4 | Single- vs multi-block equivalence | identical field | ☑ `Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder` (I7, I7b) | see I7, I7b |
-| F5 | Riemann smoke matrix | no NaN, ρ,p>0 | ☑ `RiemannSmoke` | ~4 s |
+| F5 | Riemann smoke matrix; shock-detector = Tramel with HLLC and HLLC+Tramel | no NaN, ρ,p>0; the set-up summary names the shock sensor, and HLLC+Tramel gives the field.tec of the run without the key | ☑ `RiemannSmoke` | ~3 s |
 | F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
 | F5c | Limiter defaults (MUSCL without limiter, first-order with limiter) | field bit-identical to the explicit setting; matching warnings and summary | ☑ `InputChecks`/`LimiterDefaults` | <1 s |
 | F5d | Residual smoothing with time-accurate runs | refused at set-up, no solution; steady runs keep it | ☑ `InputChecks`/`IRSTimeAccurate` | <1 s |

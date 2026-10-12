@@ -45,11 +45,13 @@ contains
     call Assign_Riemann_Solver()
 
     !! Shock detector
+    ! shock-detector takes the values of its rule, Tramel and Chen; left out, the sensor that the name of the Riemann solver
+    ! carries, if any
     obj_shock_detector%id = 0
-    if (obj_shock_detector%description=='tramel') then
-      obj_shock_detector%id = 1; obj_shock_detector%description='Tramel'
-    elseif (obj_shock_detector%description=='chen') then
-      obj_shock_detector%id = 2; obj_shock_detector%description='Chen'
+    if (obj_shock_detector%description=='Tramel') then
+      obj_shock_detector%id = 1
+    elseif (obj_shock_detector%description=='Chen') then
+      obj_shock_detector%id = 2
     elseif (obj_shock_detector%description=='' .and. index(obj_riemann%name,'Tramel')>0) then
       obj_shock_detector%id = 1; obj_shock_detector%description='Tramel'
     elseif (obj_shock_detector%description=='' .and. index(obj_riemann%name,'Chen')>0) then
