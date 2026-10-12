@@ -1,4 +1,9 @@
-!>@brief: Module to evaluate correction terms (depending on DSij/Dt) in -RC turbulence corrections.
+!>@brief: Module to evaluate correction terms (depending on DSij/Dt) in -RC turbulence corrections:
+!> r* = S/Omega and the numerator of r~, 2 W_ik S_jk DS_ij/Dt, shared by SA-RC (Spalart & Shur 1997;
+!> Shur et al. 2000) and SST-RC (Smirnov & Menter 2009).  DS_ij/Dt is the steady convective part
+!> u.grad(S_ij); the frame-rotation term (eps_imn S_jn + eps_jmn S_in) Omega_m of the published r~
+!> is not included, so in a rotating frame the correction sees the frame only through the
+!> absolute vorticity in W_ik and Omega.
 module MOSE_Lib_SpalartShur
   use iso_fortran_env, only: I4 => int32, R8 => real64
   implicit none
@@ -18,7 +23,7 @@ contains
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
-      !$omp do collapse(3)
+      !$omp do collapse(3) private(vel_diff)
       do k = 1, domain % blk(b) % dim(3)
       do j = 1, domain % blk(b) % dim(2)
       do i = 1, domain % blk(b) % dim(1)
@@ -112,7 +117,7 @@ contains
         if (obj_rot%enabled) omega = omega + 2.0_R8 * obj_rot%Omega_vec
         Wij = Vorticity_Tensor( omega )
         S = sqrt ( 2d0*sum (Sij**2) )
-        O = sqrt ( sum(omega**2) )
+        O = max ( sqrt ( sum(omega**2) ), 1d-30 )
         domain%blk(b)%rc_term1(i,j,k) = S/O
         ! Material derivative of strain rate tensor, neglecting the time term
         do ii = 1, 3

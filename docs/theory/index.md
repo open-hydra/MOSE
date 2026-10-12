@@ -52,7 +52,7 @@ schemes, turbulence closures, and the thermochemistry framework.
 
     ---
 
-    Spalart–Allmaras (+ SA-RC, SAcomp, SAR), Menter SST k–ω, Wilcox 2006 k–ω
+    Spalart–Allmaras (+ SA-RC, SAcomp, SAR), Menter SST k–ω (+ SST-RC), Wilcox 2006 k–ω
 
     [:octicons-arrow-right-24: Turbulence models](turbulence.md)
 

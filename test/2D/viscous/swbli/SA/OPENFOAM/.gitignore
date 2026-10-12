@@ -8,3 +8,6 @@ slurm-*.out
 slurm-*.err
 processor*/
 postProcessing/
+
+# Your own wall sample (the reference copies live in ../reference/)
+bottomWall.xy

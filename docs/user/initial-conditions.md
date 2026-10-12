@@ -58,18 +58,31 @@ Every IC file must contain the same set of variables:
 | $u,\, v,\, w$ | Velocity components | m/s |
 | $p$ | Pressure | Pa |
 
+
 If Spalart-Allmaras turbulence model is used, the IC file must also include:  
 
 | Variable | Description | Units |
 |----------|-------------|-------|
-| $\tilde{\nu}$ | Spalart-Allmaras working variable | m²/s |
+| $\rho\tilde{\nu}$ (`rhoNuTilde`) | Spalart-Allmaras working variable times density | kg/(m·s) |
 
 If $k-\omega$ or SST turbulence model is used, the IC file must also include:  
 
 | Variable | Description | Units |
 |----------|-------------|-------|
-| $k$ | Turbulent kinetic energy | m²/s² |
-| $\omega$ | Specific dissipation rate | 1/s |
+| $\rho k$ (`rhoK`) | Turbulent kinetic energy times density | kg/(m·s²) |
+| $\rho\omega$ (`rhoOmega`) | Specific dissipation rate times density | kg/(m³·s) |
+
+The turbulence variables are always the density-weighted ones MOSE advances, in the
+IC file as in the restart and solution files, under the names `rhoNuTilde`,
+`rhoK`, `rhoOmega` ($\rho\tilde\nu$ is the variable the Spalart-Allmaras model
+transports, not the eddy viscosity $\mu_t$, which MOSE writes as `mut`). ATLAS ICB
+writes them from either the specific keys `nuTilde`, `k`, `omega` (multiplied by the
+density of each cell) or the density-weighted keys `rhoNuTilde`, `rhoK`, `rhoOmega`
+(written as given). MOSE reads the variables by position. When the file carries their names
+(ASCII Tecplot), it checks the turbulence names: the earlier names of the same
+variables (`mi_t`, `mi_tilde`, and `kappa` with its `omega`) are accepted, and any
+other name, such as the specific `nuTilde` or `k`, or the eddy viscosity `mut`,
+stops the run.
 
 ---
 

@@ -200,6 +200,29 @@ The Shear Stress Transport model blends a $k$–$\omega$ formulation
 (near walls) with a $k$–$\varepsilon$-like behaviour (in the
 freestream) using blending functions.
 
+MOSE implements the **SST-2003** version of the model (Menter, Kuntz &
+Langtry [3]; the original model is Menter 1994 [2]) as specified by the NASA
+Turbulence Modeling Resource [8]: eddy viscosity built from the strain
+invariant $S$, production limiter $10\,\beta^\ast\rho\,\omega k$ in both
+equations, and the 2003 constants.  Two options select the remaining
+details, and together they span TMR's naming of the variants:
+
+| `sst-production` | Production $P$ | `k-energy-coupling = false` (default) | `k-energy-coupling = true` |
+|---|---|---|---|
+| `incompressible` (default) | $\mu_t S^2$ | SST-2003m | SST-2003s |
+| `compressible` | $\tau_{ij}\,\partial u_i/\partial x_j$ (exact) | SST-2003e | SST-2003 |
+
+The suffix records the approximations [8]: without the
+[energy coupling](#energy-coupling-k-energy-coupling) the
+$-\tfrac23\rho k\,\delta_{ij}$ part of $\tau_{ij}$ is left out of the
+momentum and energy equations ("m", "e"); "m" and "s" approximate the production
+by $\mu_t S^2$, which TMR describes as exact for incompressible flow and
+"typically considered a very good approximation, except perhaps for very high
+Mach number flows".  (With `compressible`, the limiter acts on the deviatoric
+part of $P$ only, as in OpenFOAM, where TMR's SST-2003 limits all of it; see
+[below](#compressible-production-sst-production).)  `turbulence = SST-RC` adds
+the [rotation/curvature correction](#rotationcurvature-correction-sst-rc).
+
 ### Transport equations
 
 $$
@@ -229,7 +252,7 @@ $$
 This prevents unbounded growth of $k$ in stagnation regions.
 
 !!! note "$\omega$-production uses the *limited* $P_k$"
-    Per the NASA Turbulence-Modelling-Resource SST-2003 specification, the
+    Per the NASA Turbulence-Modelling-Resource SST-2003 specification [8], the
     $\omega$-equation production is
 
     $$
@@ -244,6 +267,69 @@ This prevents unbounded growth of $k$ in stagnation regions.
     on the TMR page.)  MOSE therefore applies the production limiter first and
     forms $P_\omega$ from the limited value; this matches the reference SST-2003
     codes (e.g. SU2's default `V2003`).
+
+### Compressible production (`sst-production`)
+
+The production above is the SST-2003m form $\mu_t S^2$, which drops the
+dilatation terms of $P = \tau_{ij}\,\partial u_i/\partial x_j$.  With
+`sst-production = compressible` (default `incompressible`) MOSE keeps them, with
+$\tau_{ij} = \mu_t\bigl(2S_{ij} - \tfrac23\,\nabla\!\cdot\!\mathbf{v}\,\delta_{ij}\bigr) - \tfrac23\,\rho k\,\delta_{ij}$:
+
+$$
+P_k = \min\!\Bigl(\mu_t\bigl[S^2 - \tfrac23(\nabla\!\cdot\!\mathbf{v})^2\bigr],\;10\,\beta^\ast\rho\,\omega\,k\Bigr)
+      - \tfrac23\,\rho k\,\nabla\!\cdot\!\mathbf{v},
+$$
+
+$$
+P_\omega = \frac{\gamma\,\rho}{\mu_t}\,\min\!\Bigl(\mu_t\bigl[S^2 - \tfrac23(\nabla\!\cdot\!\mathbf{v})^2\bigr],\;10\,\beta^\ast\rho\,\omega\,k\Bigr)
+      - \tfrac23\,\gamma\,\rho\,\omega\,\nabla\!\cdot\!\mathbf{v}.
+$$
+
+This is the exact SST-2003 production (TMR's SST-2003e, since the
+$-\tfrac23\rho k$ term still stays out of the momentum and energy equations), with
+the dilatation terms arranged as in OpenFOAM's `kOmegaSST` [9]: the deviatoric
+part, $\mu_t[S^2 - \tfrac23(\nabla\!\cdot\!\mathbf{v})^2] = 2\mu_t S^{d}_{ij}S^{d}_{ij} \ge 0$,
+stays under the limiter, and the dilatation terms are added outside it (TMR's
+SST-2003 limits the whole of $P$).  In attached, nearly incompressible boundary
+layers the two forms coincide; through a compression ($\nabla\!\cdot\!\mathbf{v}<0$:
+shock feet, reattachment) the dilatation terms amplify $k$ more than $\omega$
+($\gamma<1$), so $\mu_t$ grows.  In the Mach-5
+[shock/boundary-layer interaction](../vv/2D-swbli.md) the incompressible form gives
+a separation bubble about 16% longer and a slower recovery of $C_f$.
+
+### Rotation/curvature correction (SST-RC)
+
+`turbulence = SST-RC` sensitizes the model to streamline curvature and system
+rotation with the Spalart–Shur correction as adapted to SST by Smirnov and
+Menter [10] (TMR SST-RC [8]; on SST-2003, SST-2003RC).  The production $P$ of
+both equations is multiplied by
+
+$$
+f_{r1} = \max\!\bigl[\min(f_\text{rot},\,1.25),\,0\bigr], \qquad
+f_\text{rot} = (1 + c_{r1})\,\frac{2\,r^\ast}{1 + r^\ast}
+  \bigl[1 - c_{r3}\arctan(c_{r2}\,\tilde r)\bigr] - c_{r1},
+$$
+
+$$
+r^\ast = \frac{S}{\Omega}, \qquad
+\tilde r = \frac{2\,\Omega_{ik}\,S_{jk}}{\Omega\,D^3}\,\frac{DS_{ij}}{Dt}, \qquad
+D^2 = \max(S^2,\;0.09\,\omega^2),
+$$
+
+with $c_{r1} = 1$, $c_{r2} = 2$, $c_{r3} = 1$, $S = \sqrt{2S_{ij}S_{ij}}$,
+$\Omega = \sqrt{2\Omega_{ij}\Omega_{ij}}$.  $f_{r1}$ multiplies $P$ before the
+production limiter, so it reaches the $\omega$ equation through the limited
+$P$.  In simple shear $r^\ast = 1$ and $\tilde r = 0$, so $f_{r1} = 1$ and the
+model reduces to SST.
+
+Implementation notes: $r^\ast$ and the numerator of $\tilde r$ are shared with
+SA-RC (`Lib_SpalartShur`).  $DS_{ij}/Dt$ is its steady convective part
+$\mathbf{u}\!\cdot\!\nabla S_{ij}$; in a [rotating frame](rotating-frame.md)
+the frame enters through the absolute vorticity in $\Omega_{ik}$ and $\Omega$,
+but the frame-rotation term $(\epsilon_{imn}S_{jn} + \epsilon_{jmn}S_{in})\,\Omega^\text{rot}_m$
+of the published $\tilde r$ is not included.  $\Omega$ is floored at
+$10^{-30}$ s⁻¹, so cells with no vorticity take the limit $f_{r1} = 1.25$
+instead of an undefined value (their production is negligible there).
 
 ### Eddy viscosity
 
@@ -287,28 +373,71 @@ $$
 
 $$
 k_\text{wall} = 0, \qquad
-\omega_\text{wall} = 10\,\frac{6\,\nu}{\beta_1\,y^2} = \frac{800\,\nu}{y^2}
+\omega_\text{wall} = C\,\frac{\nu_w}{y_c^2}
 $$
 
-with $\beta_1 = 0.075$.  The factor of 10 over the analytical near-wall limit
-$6\nu/(\beta_1 y^2)$ is Menter's recommended over-specification, which forces
-the correct $\omega$ behaviour in the first off-wall cell.  Note that this
-value grows as $1/y^2$ under grid refinement and is the origin of the
+with $y_c$ the wall distance of the wall-adjacent cell centre and $\nu_w$ the
+laminar viscosity at the wall.  `omega-wall-bc` selects $C$:
+
+- `practical` (default): $C = 10 \times 6/\beta_1 = 800$, Menter's
+  over-specification of the near-wall limit, robust on meshes that do not
+  resolve the viscous sublayer;
+- `asymptotic`: $C = 6/\beta_1 = 80$, the viscous-sublayer solution
+  $\omega = 6\nu/(\beta_1 y^2)$ evaluated at $y_c$, for wall-resolved meshes.
+
+MOSE imposes $\omega_\text{wall}$ on the wall **face** (ghost value
+$2\,\omega_\text{wall} - \omega_P$) and solves the $\omega$ equation in the
+wall-adjacent cell.  Codes that instead **fix the wall-adjacent cell** to
+$6\nu_w/(\beta_1 y_c^2)$ (OpenFOAM's `omegaWallFunction`) are not equivalent
+even with the same $C$: since the sublayer solution is infinite at the wall, the
+face value $80\,\nu_w/y_c^2$ yields $\omega \approx 6\nu/[\beta_1 (y + y_c)^2]$,
+about a quarter of the sublayer value in the first cell.  In the
+[SWBLI case](../vv/2D-swbli.md) that alone moves the separation point by about
+1 mm, so a code-to-code comparison must apply the condition in the same way.
+
+Either value grows as $1/y_c^2$ under grid refinement, which is the origin of the
 near-wall stiffness handled by the [point-implicit source
 treatment](#numerical-treatment-of-the-source-terms).
 
-### Energy coupling *(optional)*
+### Energy coupling (`k-energy-coupling`)
 
-When enabled, the turbulence kinetic energy production/destruction
-contributes to the mean-flow energy equation:
+The compressible RANS equations [11] carry the turbulent kinetic energy in two
+places: the total energy, $E = e + \tfrac12 u_iu_i + k$, and the Boussinesq
+Reynolds stress,
+$\tau_{ij} = 2\mu_t\bigl(S_{ij} - \tfrac13\nabla\!\cdot\!\mathbf{v}\,\delta_{ij}\bigr) - \tfrac23\rho k\,\delta_{ij}$.
+By default MOSE drops both (the TMR "m"/"e" variants): its energy is that of the
+mean flow, $E_m = e + \tfrac12 u_iu_i$, and the $-\tfrac23\rho k$ term is not in
+the stress.  With `k-energy-coupling = true` (two-equation models: SST and
+Wilcox 2006) MOSE keeps both:
+
+- the stress of the momentum and energy equations includes
+  $-\tfrac23\rho k\,\delta_{ij}$, so it also enters the work term
+  $\nabla\!\cdot\!(\boldsymbol{\tau}\cdot\mathbf{v})$ of the energy equation;
+- the mean-flow energy gives up what the turbulence receives,
 
 $$
-\frac{\partial(\rho e)}{\partial t} \mathrel{+}= S_k
+\frac{\partial(\rho E_m)}{\partial t} + \dots = \dots - \bigl(P_k - \beta^\ast\rho\,\omega\,k\bigr),
 $$
+
+with the same source as the $k$ equation (including its
+[point-implicit](#point-implicit-patankar-destruction) factor), so $E_m + k$ is
+conserved.  This is the total-energy form of TMR [11] and Wilcox [4] written for
+$E_m$: subtracting the $k$ equation from the equation for $E = E_m + k$ leaves
+exactly this sink, and the diffusion of $k$ in the two equations cancels.  The
+pressure follows from $e = E_m - \tfrac12 u_iu_i$, MOSE's conserved energy being
+$E_m$ in either case: for an ideal gas this is TMR's
+$p = (\gamma-1)\,\rho\,(E - \tfrac12 u_iu_i - k)$.  TMR notes that the $k$
+terms are sometimes dropped "for non-supersonic speed flows"; they matter where
+$k$ is not small against the kinetic energy of the mean flow.
 
 ---
 
 ## Wilcox 2006 $k$–$\omega$ — Two-Equation Model
+
+The Wilcox (2006) model [4, 12] with the exact production
+$P = \tau_{ij}\,\partial u_i/\partial x_j$ and the optional TMR $k$-equation
+limiter (below): TMR's Wilcox2006-klim, in its "e" form (Wilcox2006-klim-e) unless
+[`k-energy-coupling`](#energy-coupling-k-energy-coupling) is on [8].
 
 ### Model constants
 
@@ -357,10 +486,11 @@ $$
 
 ### Production limiter
 
-More permissive than SST:
+More permissive than SST, and in the $k$ equation only (the $\omega$ production
+uses the unlimited $P$), as in TMR's Wilcox2006-klim:
 
 $$
-P_k = \min\!\bigl(\mu_t\,S^2,\;20\,\beta^\ast\,\rho\,\omega\,k\bigr)
+P_k = \min\!\bigl(\tau_{ij}\,\partial u_i/\partial x_j,\;20\,\beta^\ast\,\rho\,\omega\,k\bigr)
 $$
 
 ---
@@ -434,15 +564,39 @@ $$
 
 Typical verification values are $Tu \approx 0.04\%\!-\!1\%$ and
 $\mu_t/\mu \approx 0.009\!-\!1$ (smaller $\mu_t/\mu$ ⇒ larger $\omega_\infty$
-⇒ more near-wall dissipation and a more robust start-up).  For example, a
-Mach-5 stream at $p=4000$ Pa, $T=68.3$ K ($\rho=0.204$ kg m⁻³,
-$U_\infty=828$ m s⁻¹, $\nu_\infty=5.8\times10^{-5}$ m² s⁻¹) with
-$Tu=0.04\%$, $\mu_t/\mu=0.009$ gives $k_\infty\approx0.16$ m² s⁻²,
-$\omega_\infty\approx3\times10^{5}$ s⁻¹.  Values orders of magnitude below
-this (e.g. $\omega_\infty=100$ s⁻¹) are a frequent cause of $k$ runaway.
+⇒ more near-wall dissipation and a more robust start-up).  The TMR SST
+freestream used in the [SWBLI case](../vv/2D-swbli.md) is
+$k_\infty = 9\times10^{-9}\,a_\infty^2$, $\omega_\infty = 10^{-6}\,a_\infty^2/\nu_\infty$
+($\mu_t/\mu = 0.009$): at $p=4000$ Pa, $T=68.3$ K
+($\rho_\infty=0.2041$ kg m⁻³, $a_\infty=165.7$ m s⁻¹,
+$\nu_\infty=2.257\times10^{-5}$ m² s⁻¹ with Sutherland's law) this is
+$k_\infty = 2.47\times10^{-4}$ m² s⁻², $\omega_\infty = 1216$ s⁻¹.
+Values of $\omega_\infty$ orders of magnitude below the $\mu_t/\mu$ estimate are
+a frequent cause of $k$ runaway.
 
-The same values are set for both the initial condition (`[ICB-Block*]`) and
-the inflow (`[inflow]`) in the input file.
+**Inputs and files.**  The turbulence keys of ATLAS come in pairs, a specific one
+and a density-weighted one, under the names of the
+[NASA Turbulence Modeling Resource](https://tmbwg.github.io/turbmodels/): `nuTilde` $= \tilde\nu$ and `rhoNuTilde` $= \rho\tilde\nu$, `k` and
+`rhoK` $= \rho k$, `omega` and `rhoOmega` $= \rho\omega$.  $\tilde\nu$ is the
+variable the Spalart-Allmaras model transports, not the eddy viscosity
+$\mu_t = \rho\tilde\nu f_{v1}$, which is not an input and is written as `mut`
+(`sol-variables = transport`).  The specific values are those
+TMR and OpenFOAM give, and the same ones serve the initial condition
+(`[ICB-Block*]`) and the inflow (`[inflow]`).  MOSE solves for the
+density-weighted variables $\rho\tilde\nu$, $\rho k$, $\rho\omega$:
+
+- the initial condition: ATLAS ICB multiplies the specific keys `nuTilde`, `k`, `omega`
+  by the density of each cell (it also takes the density-weighted keys `rhoNuTilde`,
+  `rhoK`, `rhoOmega`, written as given);
+- the inlet: the boundary takes the specific `nuTilde`, `k`, `omega` only, and MOSE
+  multiplies the `bc.txt` values by the density of the inlet state;
+- the IC, restart and solution files all carry the density-weighted variables
+  under the names of the density-weighted keys: `rhoNuTilde`, `rhoK`, `rhoOmega` (divide
+  by $\rho$ to read $\tilde\nu$, $k$ and $\omega$).  MOSE reads them by position
+  and, in an ASCII file, checks the names
+  ([Initial Conditions](../user/initial-conditions.md#required-variables)).
+
+For the example above: `k = 2.4699e-4`, `omega = 1215.8`.
 
 ---
 
@@ -540,10 +694,11 @@ fallback when a model's destruction Jacobian is not readily available.
 1. P. R. Spalart, S. R. Allmaras, "A one-equation turbulence model for
    aerodynamic flows," AIAA-92-0439, 1992.
 2. F. R. Menter, "Two-equation eddy-viscosity turbulence models for
-   engineering applications," *AIAA J.*, 32(8), 1994.
+   engineering applications," *AIAA J.*, 32(8), pp. 1598–1605, 1994,
+   doi:10.2514/3.12149.
 3. F. R. Menter, M. Kuntz, R. Langtry, "Ten years of industrial
    experience with the SST turbulence model," in *Turbulence, Heat
-   and Mass Transfer 4*, Begell House, 2003.
+   and Mass Transfer 4*, Begell House, pp. 625–632, 2003.
 4. D. C. Wilcox, *Turbulence Modeling for CFD*, 3rd ed., DCW Industries,
    2006.
 5. P. R. Spalart, M. L. Shur, "On the sensitization of turbulence models
@@ -556,3 +711,17 @@ fallback when a model's destruction Jacobian is not readily available.
    *J. Fluid Mech.*, 227, 1991 (SSG model); B. E. Launder, G. J. Reece,
    W. Rodi, "Progress in the development of a Reynolds-stress turbulence
    closure," *J. Fluid Mech.*, 68(3), 1975 (LRR model).
+8. NASA Langley Turbulence Modeling Resource, "The Menter Shear Stress
+   Transport turbulence model," <https://tmbwg.github.io/turbmodels/sst.html>
+   (formerly turbmodels.larc.nasa.gov/sst.html): definitions and naming of the
+   SST variants (SST-2003, SST-2003m/s/e, SST-RC) and of Wilcox2006-klim.
+9. OpenFOAM Foundation, OpenFOAM-10, `kOmegaSST` model
+   (`src/MomentumTransportModels/momentumTransportModels/Base/kOmegaSST/kOmegaSSTBase.C`).
+10. P. E. Smirnov, F. R. Menter, "Sensitization of the SST turbulence model to
+    rotation and curvature by applying the Spalart–Shur correction term,"
+    *J. Turbomach.*, 131(4), 041010, 2009, doi:10.1115/1.3070573.
+11. NASA Langley Turbulence Modeling Resource, "Implementing turbulence models
+    into the compressible RANS equations,"
+    <https://tmbwg.github.io/turbmodels/implementrans.html>.
+12. D. C. Wilcox, "Formulation of the k-ω turbulence model revisited,"
+    *AIAA J.*, 46(11), pp. 2823–2838, 2008, doi:10.2514/1.36541.

@@ -90,35 +90,6 @@ if [[ $1 == solve ]]; then
   fi
 fi
    
-if [[ $1 == test ]]; then
-  cd INPUT
-  ln -sf ../../../common/Air/phase.txt phase.txt
-  ln -sf ../../../common/Air/thermo.dat thermo.dat
-  cd ..
-  mkdir -p OUTPUT bin
-  ulimit -s unlimited
-  export KMP_STACKSIZE=100M
-  export OMP_NUM_THREADS=$NTHREADS
-  # Check executable
-  if [[ "$MASTER" -nt "$LOCAL" ]]; then
-    cp $MASTER $LOCAL
-  fi
-  mesh=( 1 2 4 8 )
-  for r in "${mesh[@]}"; do
-    cd INPUT/
-    ln -sf ic_x$r.tec ic.tec
-    ln -sf bc_x$r.txt bc.txt
-    cd ..
-    # Run the solver
-    if [[ $BG == 0 ]]; then
-      $LOCAL
-    else
-      $LOCAL 2>errors_file >>logfile
-    fi
-    mv OUTPUT/field.tec OUTPUT/field_x$r.tec
-  done
-fi
-
 if [[ $1 == kill ]]; then
 read PID < .ID && kill $PID
 fi

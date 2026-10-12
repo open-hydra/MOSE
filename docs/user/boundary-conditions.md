@@ -116,7 +116,7 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 | `beta` | Out-of-plane flow angle [rad] or `normal` |
 | `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation) |
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
-| `turb_vars` | Turbulence quantities ($k$, $\omega$ or $k$, $\varepsilon$) |
+| `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |
 
 ### Viscous Walls
 

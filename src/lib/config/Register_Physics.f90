@@ -22,7 +22,7 @@ contains
     !! ------------------------------------------------------
     section = trim(codename)//'-Physics'
     call reg%add(section, 'equations', obj_sim_param%simulation_type, '', 'Gas dynamics equations', 'euler , navier-stokes', .true.)
-    call reg%add(section, 'turbulence', obj_rans%model, 'none', 'RANS turbulence model', 'SA, SA-R, SA-RC, SAcomp, SST, Wilcox2006, none', .false.)
+    call reg%add(section, 'turbulence', obj_rans%model, 'none', 'RANS turbulence model', 'SA, SA-R, SA-RC, SAcomp, SST, SST-RC, Wilcox2006, none', .false.)
     call reg%add(section, 'chemistry', obj_chemistry%model, 'frozen', 'Chemistry model', 'frozen, finite-rate, equilibrium', .false.)
     call reg%add(section, 'soot-generation', obj_soot%model, 'none', 'Soot generation model', 'LL91, LIN, none', .false.)
     call reg%add(section, 'rotational-frame', obj_rot%model, 'none', 'Rotational frame model', 'rigid-body, none', .false.)
@@ -37,7 +37,14 @@ contains
     ! Exclude blocks from chemistry
     call reg%add(section, 'exclude-blocks', obj_chemistry%exclude_blocks_str, 'none', 'Blocks to exclude from chemistry', '', .false.)
     ! ODE solver selection
-    call reg%add(section, 'ode-solver', obj_chemistry%ode_name, 'H-radau5', 'ODE solver for chemistry', 'H-radau5, sdirk4b, ros4', .false.)
+    ! Every integrator OSLO's setup_odesolver knows. cvode needs OSLO built with
+    ! USE_SUNDIALS; H-dopri5 is explicit and only suited to non-stiff mechanisms.
+    call reg%add(section, 'ode-solver', obj_chemistry%ode_name, 'H-radau5', 'ODE solver for chemistry', &
+                 'H-radau5, H-rodas, H-sdirk4, H-dopri5, '// &
+                 'radau2a, lobatto3c, gauss, radau1a, '// &
+                 'ros2, ros3, ros4, rodas3, rodas4, '// &
+                 'sdirk2a, sdirk2b, sdirk3a, sdirk4a, sdirk4b, '// &
+                 'dodesol, cvode', .false.)
     ! ODE solver parameters
     call reg%add(section, 'ode-max-steps', obj_chemistry%max_ode_steps, '100000', 'Maximum ODE integration steps', '> 0', .false.)
     ! Only ONERA-7 and Frolov_nopressure ship an analytical Jacobian, and only
@@ -58,7 +65,8 @@ contains
     call reg%add(section, 'Sct', obj_rans%Sct, '0.90', 'Turbulent Schmidt number', '> 0', .false.)
     call reg%add(section, 'point-implicit', obj_rans%point_implicit, '.true.', 'Point-implicit (Patankar) treatment of turbulence destruction source terms', 'logical', .false.)
     call reg%add(section, 'omega-wall-bc', obj_rans%omega_wall_bc, 'practical', 'Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2)) or asymptotic (6*nu/(beta1*y^2), exact y->0 limit, for wall-resolved meshes)', 'practical, asymptotic', .false.)
-    !call reg%add(section, 'k-coupling', obj_rans%k_energy_coupling, '.false.', 'Turbulent kinetic energy coupling', 'logical', .false.)
+    call reg%add(section, 'sst-production', obj_rans%sst_production, 'incompressible', 'SST production (NASA TMR naming): incompressible (P = mu_t*S^2, SST-2003m) or compressible (P = tau_ij*du_i/dx_j, SST-2003e, as OpenFOAM kOmegaSST: adds -2/3*mu_t*divU^2 - 2/3*rho*k*divU, and -2/3*gamma*rho*omega*divU to the omega equation)', 'incompressible, compressible', .false.)
+    call reg%add(section, 'k-energy-coupling', obj_rans%k_energy_coupling, '.false.', 'Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants', 'logical', .false.)
 
     
     !! ------------------------------------------------------

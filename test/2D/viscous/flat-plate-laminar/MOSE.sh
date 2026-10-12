@@ -73,11 +73,8 @@ if [[ $1 == compile ]]; then
 fi
    
 if [[ $1 == solve ]]; then
-  cd INPUT
-  ln -sfn ../../../../common/Air-viscous/phase.txt phase.txt
-  ln -sfn ../../../../common/Air-viscous/thermo.dat thermo.dat
-  ln -sfn ../../../../common/Air-viscous/transport.dat transport.dat
-  cd ..
+  # INPUT/phase.txt, thermo.dat and transport.dat are the gas of input.ini ([GPB-Phase1]:
+  # mil = 1e-3, Pr = 1), as written by ATLAS GPB: not the shared air of test/common
   mkdir -p OUTPUT bin
   ulimit -s unlimited
   export KMP_STACKSIZE=100M

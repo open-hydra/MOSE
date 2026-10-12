@@ -38,9 +38,14 @@ contains
     ! Check for non-physical states at the interface and correct them if necessary
     call check_gas_state ( Prim1(1:nsc), Prim1(np), error1 )
     call check_gas_state ( Prim4(1:nsc), Prim4(np), error4 )
-    if (error1 /= 0 .or. error4 /= 0) then
-      write(*,*) '[ERROR] Non-physical state detected at the interface.'
-      stop
+    if (error1 == 1 .or. error4 == 1) then
+      write(*,*) '[ERROR] non-physical state detected at the interface.'
+      write(*,*) '        Negative pressure'
+      stop 1
+    elseif (error1 == 2 .or. error4 == 2) then
+      write(*,*) '[ERROR] non-physical state detected at the interface.'
+      write(*,*) '        Out-of-bounds temperature'
+      stop 1
     end if
 
     ! Compute rho and Rtot

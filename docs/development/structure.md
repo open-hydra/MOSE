@@ -181,7 +181,8 @@ and binds the selected implementation to four procedure pointers in `Mod_RANS`:
 | `SAcomp` | `Lib_Spalart` | + compressibility correction |
 | `SAR` | `Lib_Spalart` | + rotation correction |
 | `SA-RC` | `Lib_SpalartShur` | Rotation–curvature (Shur) correction |
-| `SST` | `Lib_SST` | Menter k-ω SST |
+| `SST` | `Lib_SST` | Menter k-ω SST (SST-2003) |
+| `SST-RC` | `Lib_SST`, `Lib_SpalartShur` | SST + rotation–curvature correction (Smirnov–Menter) |
 | `Wilcox2006` | `Lib_Wilcox2006` | Wilcox k-ω (2006 revision) |
 | `SSGLRR` | `Lib_SSGLRR` | Speziale–Sarkar–Gatski RSM |
 | `QCR2000` | `Lib_QCR2000` | Quasi-curvilinear correction |

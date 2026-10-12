@@ -8,3 +8,9 @@ slurm-*.out
 slurm-*.err
 processor*/
 postProcessing/
+dynamicCode/
+kOmegaSSTMOSE/lnInclude/
+kOmegaSSTMOSE/Make/*/
+
+# Your own wall sample (the reference copies live in ../reference/)
+bottomWall.xy

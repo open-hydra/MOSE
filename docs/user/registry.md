@@ -78,7 +78,7 @@
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | equations |  | euler , navier-stokes | yes | Gas dynamics equations |
-| turbulence | none | SA, SA-R, SA-RC, SAcomp, SST, Wilcox2006, none |  no | RANS turbulence model |
+| turbulence | none | SA, SA-R, SA-RC, SAcomp, SST, SST-RC, Wilcox2006, none |  no | RANS turbulence model |
 | chemistry | frozen | frozen, finite-rate, equilibrium |  no | Chemistry model |
 | soot-generation | none | LL91, LIN, none |  no | Soot generation model |
 | rotational-frame | none | rigid-body, none |  no | Rotational frame model |
@@ -90,7 +90,7 @@
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | exclude-blocks | none |  |  no | Blocks to exclude from chemistry |
-| ode-solver | H-radau5 | H-radau5, sdirk4b, ros4 |  no | ODE solver for chemistry |
+| ode-solver | H-radau5 | H-radau5, H-rodas, H-sdirk4, H-dopri5, radau2a, lobatto3c, gauss, radau1a, ros2, ros3, ros4, rodas3, rodas4, sdirk2a, sdirk2b, sdirk3a, sdirk4a, sdirk4b, dodesol, cvode |  no | ODE solver for chemistry |
 | ode-max-steps | 100000 | > 0 |  no | Maximum ODE integration steps |
 | ode-analytical-jacobian | .false. | logical |  no | Use the mechanism analytical Jacobian instead of finite differences |
 | ode-relative-tol-species | 1e-5 | > 0 |  no | ODE relative tolerance for species |
@@ -106,6 +106,8 @@
 | Sct | 0.90 | > 0 |  no | Turbulent Schmidt number |
 | point-implicit | .true. | logical |  no | Point-implicit (Patankar) treatment of turbulence destruction source terms |
 | omega-wall-bc | practical | practical, asymptotic |  no | Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2)) or asymptotic (6*nu/(beta1*y^2), exact y->0 limit, for wall-resolved meshes) |
+| sst-production | incompressible | incompressible, compressible |  no | SST production (NASA TMR naming): incompressible (P = mu_t*S^2, SST-2003m) or compressible (P = tau_ij*du_i/dx_j, SST-2003e, as OpenFOAM kOmegaSST: adds -2/3*mu_t*divU^2 - 2/3*rho*k*divU, and -2/3*gamma*rho*omega*divU to the omega equation) |
+| k-energy-coupling | .false. | logical |  no | Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants |
 
 ## MOSE-Rotating-Frame
 
