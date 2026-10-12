@@ -122,7 +122,8 @@ contains
     real(R8) :: Tij(3,3), Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2), fk, fw
 
     !$omp do collapse (3) private ( rho, Rgas, mil, kap, ome, dist, Gradvel, Divel, Sij, S, Wij, diag, mi_t, F ), &
-    !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj )
+    !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj ), &
+    !$omp private ( vort, O, rstar, D, rtilde, frot, fr1 )
     
     do k = 1, n(3)
     do j = 1, n(2)

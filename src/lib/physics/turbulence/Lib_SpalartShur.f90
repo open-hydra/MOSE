@@ -23,7 +23,7 @@ contains
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
-      !$omp do collapse(3)
+      !$omp do collapse(3) private(vel_diff)
       do k = 1, domain % blk(b) % dim(3)
       do j = 1, domain % blk(b) % dim(2)
       do i = 1, domain % blk(b) % dim(1)
