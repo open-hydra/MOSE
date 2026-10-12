@@ -76,10 +76,10 @@ match the Cantera reference closely:
 
 | Quantity | MOSE | Cantera |
 |---|---:|---:|
-| $S_L$ (unburnt $u$) [m/s] | 0.287 | 0.286 |
-| $T_\text{burnt}$ [K]      | 2193  | 2149  |
+| $S_L$ (unburnt $u$) [m/s] | 0.286 | 0.286 |
+| $T_\text{burnt}$ [K]      | 2190  | 2149  |
 | $u_\text{burnt}$ [m/s]    | 2.04  | 2.06  |
-| $Y_{\mathrm{OH}}$ peak    | $5.16\times10^{-3}$ | $5.15\times10^{-3}$ |
+| $Y_{\mathrm{OH}}$ peak    | $5.17\times10^{-3}$ | $5.15\times10^{-3}$ |
 
 !!! focus "Partially non-reflective boundaries"
     This case uses **partially non-reflective** inlet and outlet
