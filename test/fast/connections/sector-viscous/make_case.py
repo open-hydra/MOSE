@@ -31,14 +31,27 @@ mirror The sector from -45 to 45 degrees in 2 x 8 x 8 cells (uniform radii, node
       faces, r/dt of rho u, rho v and rho w must agree within 0.02 (2/3) mu U A/V, with A/V = 1/(r dtheta) the area of a k
       face over the volume (r the mid radius of the cell), and r/dt of rho E within the same times U r1. (A field with shear
       on the plane is not its own mirror image, and the symmetry condition would not set the same problem.)
+shift  A sector with no angle: a block of 4 x 4 x 8 cubic cells of 1 mm periodic in z, closed in k by type 200 (shift200:
+      its last k node plane is the first one translated by the period T = (0, 0, Lz)) or by periodic pairs 201 (shift201),
+      the i and j faces of type 0 (no flux). u = U0 sin(2 pi z/Lz) along x, rho nu~ = 3 mu uniform, no wall;
+      Navier-Stokes with Spalart-Allmaras, explicit sources (point-implicit = false), the default face metric (stencil).
+      Both conditions put behind each k face the values of the cell of the same column at the other end, and the ghost
+      cell sits where that cell lies translated by the period, -T behind face 5 and +T behind face 6: the two steps must
+      be the same. In every cell r/dt of rho, rho u, rho v, rho w, rho E and rho nu~ must agree within 1e-9 of the largest
+      |r/dt| of that variable over the cells of shift201. A ghost cell left at the cell at the other end, not translated,
+      scales the derivative in z of the cells next to the k faces by 2/(2 - NK) = -1/3: in the cell metric of the source
+      terms (the vorticity of Spalart-Allmaras, so rho nu~ in those cells) and in the k column of the face metric of the
+      i faces (the stress tau_zx = mu du/dz, which the faces of type 0 do not balance in the cells next to them, so rho w).
 
 One explicit Euler step with local time stepping, first-order reconstruction. OUTPUT/diagnostic.tec holds, per cell, the
 increment of each conserved variable over the step, and the step dt.
 
 Usage (from the test directory):
   python3 -B make_case.py case ring45|ring90|mirror200|mirror300   INPUT/ic.tec and INPUT/bc.txt
+  python3 -B make_case.py case shift200|shift201                   INPUT/ic.tec and INPUT/bc.txt
   python3 -B make_case.py ring NS45 EU45 NS90 EU90                 largest difference of the viscous forces over the scale
   python3 -B make_case.py mirror F200 F300                         largest difference over (2/3) mu U A/V
+  python3 -B make_case.py shift F200 F201                          largest difference over the largest value of F201
 """
 import math
 import os
@@ -53,6 +66,9 @@ P0, T0 = 10.0, 300.0
 RHO0 = P0 / (RGAS * T0)
 U, G, C = 50.0, 14.0, 30.0
 TOL_RING, TOL_MIRROR = 1.0e-9, 0.02
+SHIFT_N, SHIFT_H, SHIFT_U = (4, 4, 8), 1.0e-3, 10.0    # shift: cells in i, j and k, cell size (m), U0 (m/s)
+SHIFT_M = 3.0 * MU                                     # shift: rho nu~
+TOL_SHIFT = 1.0e-9
 
 
 def fmt(v):
@@ -121,6 +137,46 @@ def write_case(name):
         out += [rec(i, j, k, face, 300) for k in range(1, nk + 1) for i in range(1, NI + 1)]
     for face, k in ((5, 1), (6, nk)):
         out += [rec(i, j, k, face, tk) for j in range(1, nj + 1) for i in range(1, NI + 1)]
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(out))
+
+
+def write_shift(kind):
+    """INPUT/ic.tec and INPUT/bc.txt of shift200 (kind "200") or shift201 (kind "201")."""
+    ni, nj, nk = SHIFT_N
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p" "rhoNuTilde"\n')
+        f.write(f" ZONE  T = B1-IG, I={ni + 1}, J={nj + 1}, K={nk + 1}, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-9]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for n in range(3):
+            for k in range(nk + 1):
+                for j in range(nj + 1):
+                    for i in range(ni + 1):
+                        f.write(f" {fmt((i * SHIFT_H, j * SHIFT_H, k * SHIFT_H)[n])}\n")
+        nc = ni * nj * nk
+        u = [SHIFT_U * math.sin(2.0 * math.pi * (k + 0.5) / nk) for k in range(nk) for _ in range(nj * ni)]
+        for col in ([RHO0] * nc, u, [0.0] * nc, [0.0] * nc, [P0] * nc, [SHIFT_M] * nc):
+            f.write("".join(f" {fmt(v)}\n" for v in col))
+
+    def rec(i, j, k, face, t):
+        return '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, k, face, t)
+
+    out = []                                            # face by face
+    for face, i in ((1, 1), (2, ni)):
+        out += [rec(i, j, k, face, 0) for k in range(1, nk + 1) for j in range(1, nj + 1)]
+    for face, j in ((3, 1), (4, nj)):
+        out += [rec(i, j, k, face, 0) for k in range(1, nk + 1) for i in range(1, ni + 1)]
+    for face, k, ks, fs in ((5, 1, nk, 6), (6, nk, 1, 5)):
+        for j in range(1, nj + 1):
+            for i in range(1, ni + 1):
+                if kind == "200":
+                    out.append(rec(i, j, k, face, 200))
+                else:                                   # source: the cell of the same column at the other end
+                    out += [rec(i, j, k, face, 201),
+                            '%10d %7d %7d %7d %7d %7d %7d %7d %7d\n' % (1, i, j, ks, fs, 1, 0, 0, 1)]
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(out))
 
@@ -198,14 +254,34 @@ def mirror(f200, f300):
     sys.exit(0 if ok else 1)
 
 
+def shift(f200, f201):
+    (a, n), (b, _) = read_zone(f200), read_zone(f201)
+    ni, nj, _ = n
+    ok = True
+    for q in ("rho", "rhou", "rhov", "rhow", "rhoe", "rhoNuTilde"):
+        fa = [x / t for x, t in zip(a[q], a["dt"])]
+        fb = [x / t for x, t in zip(b[q], b["dt"])]
+        scale = max(abs(x) for x in fb)
+        d, c = max((abs(x - y), c) for c, (x, y) in enumerate(zip(fa, fb)))
+        ratio = d / scale if scale > 0.0 else d
+        ok &= ratio <= TOL_SHIFT
+        where = f"cell ({c % ni + 1}, {c // ni % nj + 1}, {c // (ni * nj) + 1})"
+        print(f"    {q}: largest |f(200) - f(201)| over the largest |f(201)| {ratio:.3e} ({where}); tolerance {TOL_SHIFT:.0e}")
+    sys.exit(0 if ok else 1)
+
+
 def main():
     what = sys.argv[1]
-    if what == "case":
+    if what == "case" and sys.argv[2].startswith("shift"):
+        write_shift(sys.argv[2][len("shift"):])
+    elif what == "case":
         write_case(sys.argv[2])
     elif what == "ring":
         ring(*sys.argv[2:6])
     elif what == "mirror":
         mirror(*sys.argv[2:4])
+    elif what == "shift":
+        shift(*sys.argv[2:4])
     else:
         sys.exit(f"unknown request {what}")
 

@@ -24,8 +24,9 @@
 !> (Ghost_Extrapolate: 408, 502, ...; 2 x1 - x2, or x1, in a block with two cells, or one, across the face; in a RANS run
 !> the turbulence variables of an SRM grain, 502, at 2 x_f - x1, as they take their wall values), the cell itself
 !> behind the zero-gradient faces (0, 401-407, 420), its mirror image across a symmetry face (300; the cell itself on a face
-!> of zero area, an axis, where the ghost value is a copy of the cell), and on a 3-D rotational periodic
-!> face (200) the cell of the other end rotated by the angle of the sector. Chimera (102) and mapped (410) faces take the
+!> of zero area, an axis, where the ghost value is a copy of the cell), and on the k faces of a 3-D sector (200) the cell of
+!> the other end rotated by the angle of the sector, or, on a translated sector, translated from its outer face to this face
+!> as across a periodic pair. Chimera (102) and mapped (410) faces take the
 !> extrapolated position too, an approximation: their values come from donor cells or from a file. Behind a wall the two
 !> positions of a ghost cell give the faces with that ghost cell in their stencil one metric per group of quantities
 !> (species and scalars, temperature, velocity, turbulence variables: dir(d)%Mg, Diffusive_Flux). The centres of every
@@ -277,13 +278,22 @@ contains
         call Face_Centre_Normal ( domain % blk(b) % node, Im, Jm, Km, Fm, xf, nf )
         xc(b) % x(:,Ig,Jg,Kg) = Mirror ( x1, xf, nf )
 
-      case (200)                                ! wedge (one cell in k: unused) or 3-D rotational periodicity
+      case (200)                                ! wedge (one cell in k: unused) or 3-D sector, turned or translated
         if ( ndir == 3 .and. domain % blk(b) % dim(3) > 1 ) then
           Ks = domain % blk(b) % dim(3) - Km + 1
           y = xc(b) % x(:,Im,Jm,Ks)
-          ang = delthe
-          if ( Fm == 5 ) ang = -delthe
-          xc(b) % x(:,Ig,Jg,Kg) = [ y(1), y(2)*cos(ang) - y(3)*sin(ang), y(2)*sin(ang) + y(3)*cos(ang) ]
+          if ( Fm >= 5 .and. delthe >= 0d0 .and. delthe <= 0d0 ) then
+            ! Translated sector (no angle: Check_Mesh_Type found the last k node plane of the block to be the first one
+            ! translated, node by node): the cell of the other end plus the translation from its outer face (11 - Fm) to
+            ! this face, the same operations as for a periodic pair (Connection_Ghost_Position)
+            call Face_Centre_Normal ( domain % blk(b) % node, Im, Jm, Km, Fm, xf, nf )
+            call Face_Centre_Normal ( domain % blk(b) % node, Im, Jm, Ks, 11 - Fm, x2, nf )
+            xc(b) % x(:,Ig,Jg,Kg) = y + ( xf - x2 )
+          else
+            ang = delthe
+            if ( Fm == 5 ) ang = -delthe
+            xc(b) % x(:,Ig,Jg,Kg) = [ y(1), y(2)*cos(ang) - y(3)*sin(ang), y(2)*sin(ang) + y(3)*cos(ang) ]
+          end if
         else
           xc(b) % x(:,Ig,Jg,Kg) = x1
         end if

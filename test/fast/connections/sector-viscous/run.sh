@@ -17,6 +17,13 @@
 #  - mirror: the radial field alone, k faces 200 against 300 (the field is its
 #    own mirror image across the planes); away from the j faces the residuals
 #    must agree within 0.02 of the normal stress (2/3) mu U A/V.
+#  - shift: a sector with no angle, a block periodic in z closed in k by type
+#    200 (its last k node plane is the first one translated) against the same
+#    block closed by periodic pairs (201); a shear flow u(z), Navier-Stokes with
+#    Spalart-Allmaras. Both put the cell at the other end behind each k face,
+#    at the same place (that cell translated by the period), so in every cell
+#    the step of rho, momentum, energy and rho nu~ must agree within 1e-9 of
+#    its largest value.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -41,8 +48,16 @@ ln -sf "../$VISC/phase.txt"     INPUT/phase.txt
 ln -sf "../$VISC/thermo.dat"    INPUT/thermo.dat
 ln -sf "../$VISC/transport.dat" INPUT/transport.dat
 
-# write_ini <equations> [diffusive-metric]: one explicit Euler step with local time stepping, first order
+# write_ini <equations> [diffusive-metric] [turbulence]: one explicit Euler step with local time stepping, first
+# order; a turbulence model with explicit sources
 write_ini() {
+  local turb=""
+  if [[ -n ${3:-} ]]; then
+    turb="turbulence = $3
+
+[MOSE-Turbulence]
+point-implicit = false"
+  fi
   cat > input.ini <<EOF
 [MOSE-Parameters]
 iter-threshold = 1
@@ -52,6 +67,7 @@ res-threshold = 1e-300
 [MOSE-Physics]
 equations = $1
 schmidt = 0.7
+$turb
 
 [MOSE-Numerics]
 cfl = 0.5
@@ -65,9 +81,9 @@ EOF
   if [[ -n ${2:-} ]]; then echo "diffusive-metric = $2" >> input.ini; fi
 }
 
-# step <equations> <tag> [diffusive-metric]: run it, keep OUTPUT/diagnostic.tec as OUTPUT/diagnostic-<tag>.tec
+# step <equations> <tag> [diffusive-metric] [turbulence]: run it, keep OUTPUT/diagnostic.tec as OUTPUT/diagnostic-<tag>.tec
 step() {
-  write_ini "$1" "${3:-}"
+  write_ini "$1" "${3:-}" "${4:-}"
   rm -f OUTPUT/diagnostic.tec
   "$LOCAL" > "OUTPUT/$2.log" 2>&1
   if [[ ! -f OUTPUT/diagnostic.tec ]] || grep -a -qE 'NaN|Integration failed' "OUTPUT/$2.log"; then
@@ -103,6 +119,18 @@ if python3 -B make_case.py mirror OUTPUT/diagnostic-mirror200.tec OUTPUT/diagnos
   echo "  [ok  ] the periodic faces carry the normal viscous stress of the symmetry planes"
 else
   echo "  [FAIL] the periodic faces and the symmetry planes give different viscous forces"
+  status=1
+fi
+
+echo "-- shift: a sector with no angle, k faces 200 against periodic pairs 201 (Spalart-Allmaras) --"
+for t in 200 201; do
+  python3 -B make_case.py case "shift$t" || exit 1
+  step navier-stokes "shift$t" "" SA
+done
+if python3 -B make_case.py shift OUTPUT/diagnostic-shift200.tec OUTPUT/diagnostic-shift201.tec; then
+  echo "  [ok  ] the k faces of a translated sector give the step of the periodic pairs"
+else
+  echo "  [FAIL] the k faces of a translated sector and the periodic pairs give different steps"
   status=1
 fi
 

@@ -374,14 +374,22 @@ value is right for a linear field:
 - symmetry (`300`): the mirror image of the cell across the face; on a face of
   zero area (an axis at $r = 0$) the cell itself, since the ghost value there is
   a copy of the cell, and the viscous flux of that face is zero;
-- 3-D rotational periodicity (`200`): the cell at the other end, rotated by the
-  angle of the sector.
+- the $k$ faces of a 3-D sector (`200`): the cell at the other end, rotated by
+  the angle of the sector; on a translated sector (no angle) the cell at the
+  other end translated by the period, as across a periodic pair: plus the
+  vector from the centre of its outer face to the centre of this face. The
+  mesh check at setup has found every node of the last $k$ plane of the block
+  to be the node of the first plane translated by one vector, within 1 % of
+  the move of the nodes per cell in $k$ and better than turned (the round-off
+  of the coordinates, in a mesh written with enough digits), so that vector is
+  the period of the block to the same tolerance.
 
 Behind a symmetry face, a periodic pair and a rotational periodic face the
 gradient is exact for the linear fields that the condition allows:
 $\mathbf{g}\cdot\mathbf{n} = 0$ for a scalar and $G = RGR$, $R\mathbf{u}_0 =
 \mathbf{u}_0$ for the velocity at a symmetry plane ($R = I - 2\mathbf{n}\mathbf{n}^{T}$),
-$\mathbf{g}\cdot\mathbf{T} = 0$ across a periodic pair of translation $\mathbf{T}$,
+$\mathbf{g}\cdot\mathbf{T} = 0$ across a periodic pair of translation $\mathbf{T}$
+and across the $k$ faces of a translated sector of period $\mathbf{T}$,
 $\mathbf{u}(R_\delta\mathbf{x}) = R_\delta\mathbf{u}(\mathbf{x})$ across a rotational
 periodic face. For a field that breaks the condition the value of the ghost cell
 (reflected, copied or rotated) is not the value of the field at any point, so no
