@@ -20,7 +20,7 @@ Three single-block cases, the wall on the j = 1 face, faces 300 elsewhere (and 2
   lip     the lip of a nozzle on a 1-degree axisymmetric wedge: in the meridional plane the nozzle wall, curved, meets the
           lip face at a convex corner of 90 degrees at x = 0, r = 2; in the jet below the lip the nearest wall point is the
           lip. The distance is the one in the meridional plane, from the wall curve.
-Three more cases have periodic boundaries, across which the wall goes on: the distance is the minimum over the periodic
+Eight more cases have periodic boundaries, across which the wall goes on: the distance is the minimum over the periodic
 images of the wall too.
   periodic  2-D channel periodic in x (connections 201 between the i faces, period 1), wall on the j = 1 face for x in
             [0, 0.5] only, symmetry on the rest; near x = 1 the nearest wall is the image of the wall that starts at x = 1.
@@ -37,6 +37,16 @@ images of the wall too.
   span      3-D slab (1 x 0.5 x 0.6) closed in k by type 200 with the plane k = NK the plane k = 0 translated by 0.6 in z
             (periodic in k), wall on the j = 1 face for z in [0, 0.3] only; near z = 0.6 the nearest wall is the image of
             the wall that starts at z = 0.6.
+  thin      3-D channel periodic in x and in z (connections 201 between the i faces and between the k faces), both periods
+            THIN_P = 0.005, a hundredth of its height THIN_H = 0.5, wall on the whole j = 1 face: the images of the wall are
+            the same plane, so the distance is y of the centre, but the periodic translations are many times shorter than
+            the mesh.
+  far       the channel of periodic with every node moved by FAR = 10 in x, ten periods away from the origin.
+  staggered 2-D staggered row of plane blades: one block of 24 x 10 cells, x in [-0.5, 1.5] and y in [1.7 x, 1.7 x + 1],
+            periodic in y (connections 201 between the j faces, translation (0, 1, 0)) ahead of and behind the blade, wall
+            on the j = 1 face for x in [0, 1]: a blade from (0, 0) to (1, 1.7), 1.7 periods long along y, symmetry on the
+            j = 10 face above it. The wall faces lie in different periods, and the nearest wall of a cell can be the
+            blade or its images above and below.
 The reference is the exact distance from the cell centre (mean of the nodes; in the wedge in the coordinates x and
 r = sqrt(y^2 + z^2)) to the wall of the mesh (straight faces between the wall nodes, plane in every case) and to its
 periodic images, by a scan of all faces. It is checked on the cells that do not touch the wall (in one step the wall
@@ -45,7 +55,7 @@ term): the largest relative difference must be below 1e-9 (1e-6 in the case nois
 
 Usage (from the test directory):
   python3 -B make_case.py case NAME            INPUT/ic.tec and INPUT/bc.txt of corner, arc, lip, periodic, pipe, sector,
-                                               noisy or span
+                                               noisy, span, thin, far or staggered
   python3 -B make_case.py error NAME FILE      prints the largest relative error of d read from FILE (a diagnostic.tec)
   python3 -B make_case.py check N1=E1 ...      exit status 0 when the error of every case is below its tolerance
   python3 -B make_case.py case twist           INPUT/ic.tec and INPUT/bc.txt of the 3-D case with twisted wall faces
@@ -221,7 +231,10 @@ def geometry(name):
 
 
 PERIODIC = {"periodic": (16, 10, 1), "pipe": (16, 10, 1), "sector": (4, 6, 12), "noisy": (16, 10, 1),
-            "span": (4, 6, 12)}
+            "span": (4, 6, 12), "thin": (2, 8, 2), "far": (16, 10, 1), "staggered": (24, 10, 1)}
+THIN_P, THIN_H = 0.005, 0.5         # case thin: periods in x and z, and height
+FAR = 10.0                          # case far: the shift in x of the channel of periodic
+STAGGER, BLADE = 1.7, (7, 18)       # case staggered: slope of the blade, and its cells on the j = 1 face (x in [0, 1])
 SECTOR = math.radians(60.0)
 SPAN = 0.6                          # period in z of the case span
 WALL_LINE = "    0.000000E+00,    0.000000E+00,    0.000000E+00,\n"
@@ -244,6 +257,13 @@ def periodic_nodes(name):
                     xyz = (x, y, (0.0, LZ)[k])
                 elif name == "span":
                     xyz = (0.25 * i, 0.5 * (j / nj) ** 1.5, SPAN * k / nk)
+                elif name == "thin":
+                    xyz = (THIN_P * i / ni, THIN_H * (j / nj) ** 1.5, THIN_P * k / nk)
+                elif name == "far":
+                    xyz = (x + FAR, 0.5 * (j / nj) ** 1.5, (0.0, LZ)[k])
+                elif name == "staggered":
+                    xs = -0.5 + 2.0 * i / ni
+                    xyz = (xs, STAGGER * xs + j / nj, (0.0, LZ)[k])
                 elif name == "pipe":
                     r = 0.5 * (j / nj) ** 0.8 if j > 0 else 1.0e-6 * 0.5 / nj ** 0.8   # axis at j = 0, wall at r = 0.5
                     xyz = (x, r * math.cos(0.5 * DELTA), (-1.0, 1.0)[k] * r * math.sin(0.5 * DELTA))
@@ -284,22 +304,34 @@ def write_periodic_case(name):
     out = []
     for k in range(1, nk + 1):
         for j in range(1, nj + 1):
-            if name in ("sector", "span"):
+            if name in ("sector", "span", "staggered"):
                 out += [rec(1, j, k, 1, 300), rec(ni, j, k, 2, 300)]
             else:
                 out += [rec(1, j, k, 1, 201), con(1, ni, j, k, 2, 1, 0, 0, 1)]
                 out += [rec(ni, j, k, 2, 201), con(1, 1, j, k, 1, 1, 0, 0, 1)]
         for i in range(1, ni + 1):
-            if name in ("periodic", "noisy"):
+            if name in ("periodic", "noisy", "far"):
                 out += [rec(i, 1, k, 3, 301 if i <= ni // 2 else 300), rec(i, nj, k, 4, 300)]
+            elif name == "thin":
+                out += [rec(i, 1, k, 3, 301), rec(i, nj, k, 4, 300)]
+            elif name == "staggered" and BLADE[0] <= i <= BLADE[1]:
+                out += [rec(i, 1, k, 3, 301), rec(i, nj, k, 4, 300)]
+            elif name == "staggered":
+                out += [rec(i, 1, k, 3, 201), con(1, i, nj, k, 4, 1, 0, 0, 1)]
+                out += [rec(i, nj, k, 4, 201), con(1, i, 1, k, 3, 1, 0, 0, 1)]
             elif name == "pipe":
                 out += [rec(i, 1, k, 3, 300), rec(i, nj, k, 4, 301 if i <= ni // 2 else 300)]
             else:
                 out += [rec(i, 1, k, 3, 301 if k <= nk // 2 else 300), rec(i, nj, k, 4, 300)]
-    kface = {"periodic": 0, "pipe": 200, "sector": 200, "noisy": 0, "span": 200}[name]
+    kface = {"periodic": 0, "pipe": 200, "sector": 200, "noisy": 0, "span": 200, "thin": 201, "far": 0,
+             "staggered": 0}[name]
     for j in range(1, nj + 1):
         for i in range(1, ni + 1):
-            out += [rec(i, j, 1, 5, kface), rec(i, j, nk, 6, kface)]
+            if kface == 201:
+                out += [rec(i, j, 1, 5, 201), con(1, i, j, nk, 6, 1, 0, 0, 1)]
+                out += [rec(i, j, nk, 6, 201), con(1, i, j, 1, 5, 1, 0, 0, 1)]
+            else:
+                out += [rec(i, j, 1, 5, kface), rec(i, j, nk, 6, kface)]
     with open("INPUT/bc.txt", "w") as f:
         f.write(sorted_bc("".join(out)))
 
@@ -332,7 +364,27 @@ def periodic_reference(name):
     ni, nj, nk = PERIODIC[name]
     xyz = periodic_nodes(name)
     out = {}
-    if name in ("periodic", "pipe", "noisy"):
+    if name == "thin":
+        # the wall and its images are the plane y = 0: the distance is y of the centre
+        for k in range(1, nk + 1):
+            for j in range(2, nj + 1):
+                for i in range(1, ni + 1):
+                    corners = [xyz[(i - 1 + a, j - 1 + b, k - 1 + c)] for a in (0, 1) for b in (0, 1) for c in (0, 1)]
+                    out[(i, j, k)] = sum(q[1] for q in corners) / 8.0
+        return out
+    if name == "staggered":
+        # the blade and its images shifted by k in y, k = -3 .. 3 (the nearest wall of every cell is among them)
+        wall = [(plane("corner", xyz[(i, 0, 0)]), plane("corner", xyz[(i + 1, 0, 0)]))
+                for i in range(BLADE[0] - 1, BLADE[1])]
+        for j in range(2, nj + 1):
+            for i in range(1, ni + 1):
+                corners = [xyz[(i - 1 + a, j - 1 + b, k)] for a in (0, 1) for b in (0, 1) for k in (0, 1)]
+                pc = [plane("corner", q) for q in corners]
+                p = (sum(q[0] for q in pc) / 8.0, sum(q[1] for q in pc) / 8.0)
+                out[(i, j, 1)] = min(segment_distance((p[0], p[1] - shift), a, b)[0]
+                                     for shift in range(-3, 4) for a, b in wall)
+        return out
+    if name in ("periodic", "pipe", "noisy", "far"):
         jw = nj if name == "pipe" else 0
         wall = [((plane("lip" if name == "pipe" else "corner", xyz[(i, jw, 0)])),
                  (plane("lip" if name == "pipe" else "corner", xyz[(i + 1, jw, 0)]))) for i in range(ni // 2)]

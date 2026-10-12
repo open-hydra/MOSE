@@ -11,17 +11,22 @@
 #  function of nu~/nu alone, and so the distance d of every cell
 #  (make_case.py). Three cases: a convex corner of 90 degrees between two
 #  walls, a curved wall under a leaning mesh, and the lip of a nozzle on an
-#  axisymmetric wedge (distance in the meridional plane); and five cases
+#  axisymmetric wedge (distance in the meridional plane); and eight cases
 #  with periodic boundaries, across which the wall goes on: a 2-D channel and a
 #  pipe on a wedge periodic in x, a 3-D sector closed by the rotational
 #  periodicity, the channel with the two sides of the period matched to 1e-8
 #  only, and a 3-D slab periodic in k by type 200, each with the wall on part
-#  of the period only. On the cells that do not touch the wall, d must equal
-#  the exact distance to the wall of the mesh and its periodic images within
-#  1e-9 (1e-6 for the channel matched to 1e-8). On a 3-D wall of twisted
-#  faces, where the four triangles of a face are not the face, the run must
-#  report at start-up the largest bound of their gap over the distance of the
-#  cell next to the face; on plane faces it must report nothing.
+#  of the period only; a 3-D channel periodic in x and z, its periods a
+#  hundredth of its height, with the wall on the whole period: its images are
+#  one plane, many times over; the 2-D channel ten periods away from the
+#  origin; and a staggered row of plane blades, each 1.7 periods long along
+#  the periodic direction. On the cells that do not touch the wall, d must
+#  equal the exact distance to the wall of the mesh and its periodic images
+#  within 1e-9 (1e-6 for the channel matched to 1e-8). On a 3-D wall of
+#  twisted faces, where the four triangles of a face are not the face, the
+#  run must report at start-up the largest bound of their gap over the
+#  distance of the cell next to the face; on plane faces it must report
+#  nothing.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -73,7 +78,7 @@ EOF
 
 echo "-- distance to the wall read back from the Spalart-Allmaras source --"
 errors=()
-for name in corner arc lip periodic pipe sector noisy span; do
+for name in corner arc lip periodic pipe sector noisy span thin far staggered; do
   python3 -B make_case.py case "$name" || exit 1
   rm -f OUTPUT/diagnostic.tec
   "$LOCAL" > "OUTPUT/$name.log" 2>&1
@@ -105,7 +110,7 @@ else
   echo "  [FAIL] the twist of the wall faces is not reported, or not right (see OUTPUT/twist.log)"
   fail=1
 fi
-for name in corner arc lip periodic pipe sector noisy span; do
+for name in corner arc lip periodic pipe sector noisy span thin far staggered; do
   if grep -a -q 'twisted wall faces' "OUTPUT/$name.log"; then
     echo "  [FAIL] $name: a twist reported on plane wall faces"
     fail=1

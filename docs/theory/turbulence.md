@@ -682,16 +682,46 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   the periodic images of the wall too. A periodic connection (type 201) gives
   the translation from its source face to its own face, and on a 3-D mesh
   without sectors so does a block closed in $k$ by type `200` (its last node
-  plane is the first one translated); the images are the integer combinations
-  of these translations (along $x$ on an axisymmetric wedge). The two sides of
-  a periodic boundary match only to the precision of the mesh file:
-  translations that differ by less than $10^{-6}$ of the size of the
-  coordinates are the same. On a 3-D mesh whose sectors are closed by the
-  rotational periodicity (type `200` on faces 5–6) the images are also the
-  turns by multiples of the sector angle about the $x$ axis. An image is
-  searched only when the box around the wall, seen from the cell moved back
-  by the image, is not farther than the distance found so far, so a mesh
-  without periodic boundaries costs nothing more.
+  plane is the first one translated). The distinct translations are reduced
+  to a basis $B_1 \ldots B_n$ of the lattice they generate, shortest first,
+  and then pairwise (Lagrange: $B_j$ becomes $B_j - m B_i$, $m$ the integer
+  nearest to $B_i\cdot B_j / B_i\cdot B_i$, while that shortens it); the
+  images are the integer combinations $\sum_i k_i B_i$ of the basis (along $x$
+  on an axisymmetric wedge). The two sides of a periodic boundary match only
+  to the precision of the mesh file: translations that differ by less than
+  $10^{-6}$ of the size of the coordinates are the same. On a 3-D mesh whose
+  sectors are closed by the rotational periodicity (type `200` on faces 5–6)
+  the images are also the turns by multiples of the sector angle about the
+  $x$ axis, up to half a turn either way.
+- Only a bounded set of images can hold the nearest wall, whatever the size of
+  the mesh against its periods. Let $B^*_i$ be the dual basis
+  ($B^*_i\cdot B_j = \delta_{ij}$), $G_{ij} = B_i\cdot B_j$ the Gram matrix,
+  and $w_i = B^*_i\cdot w$ the coordinates of a vector $w$. Every wall face
+  is moved, whole, by the lattice vector that brings its centre $m$ to
+  $|(m - a)_i| \le 1/2$, $a$ the centre of the first wall face, and so is the
+  centre $c$ of every cell before its search: the periodic wall is the same
+  set. Let $p$ be the point of a face nearest to $c$ over all the images, and
+  $s$ the image that holds it: $s$ is a lattice vector closest to $v = c - p$
+  (another one would bring a point of the same face nearer), so $u = v - s$ is
+  not farther from 0 than from $\pm B_j$, $|u\cdot B_j| \le G_{jj}/2$, and
+  since $u_i = \sum_j (G^{-1})_{ij}\, u\cdot B_j$,
+  $|u_i| \le \beta_i = \tfrac12 \sum_j |(G^{-1})_{ij}|\, G_{jj}$ ($1/2$ on
+  an orthogonal basis). A face is the four triangles between its centre $m$
+  and its sides, so $|(p - m)_i| \le \rho_i$, $\rho_i$ the largest
+  $|(q - m)_i|$ of a corner $q$ of a face, and
+  $|v_i| \le |(c - a)_i| + |(m - a)_i| + |(p - m)_i| \le 1 + \rho_i$. The
+  coefficients of $s$ are $k_i = v_i - u_i$: the images searched are
+  $|k_i| \le \lfloor 1 + \rho_i + \beta_i \rfloor$, one on each side
+  ($|k_i| \le 1$) when $\rho_i < 1/2$ on an orthogonal lattice. On a sector
+  every translation lies along $x$, and the turns keep the coordinate along
+  $x$, so the same bound holds for each turn. An image is searched only when
+  the box around the moved wall, seen from the cell moved back by the image,
+  is not farther than the distance found so far, so a mesh without periodic
+  boundaries costs nothing more. Translations that do not form a lattice stop
+  the run: one that is not an integer combination of the others, more than
+  three independent ones, or one not along $x$ on a wedge or with sectors; so
+  does a number of images too large for an integer, as three nearly dependent
+  translations can give.
 - Each cell takes the sand-grain roughness $k_s$ of the face that gives the
   minimum distance; between faces at the same distance, the first one in the
   boundary file.
