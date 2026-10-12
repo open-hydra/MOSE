@@ -91,7 +91,7 @@ contains
         Ks = 1
       else
         write(*,*) '[ERROR] Rotational periodic boundary condition is only for face 5-6'
-        stop
+        stop 1
       end if
 
       K1 = modFm*( Ks + guide(Fs,3) ) + modFm1*( Km + guide(Fm,3) )

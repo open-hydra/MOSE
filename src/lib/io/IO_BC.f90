@@ -205,7 +205,7 @@ contains
       read( unitfile,*,iostat=ios ) bc(i)%b, bc(i)%i, bc(i)%j, bc(i)%k, bc(i)%f, bc(i)%type
       if (ios/=0) then
         write(*,'(A,I9)') '[ERROR] reading BC file, bc number:',i
-        stop
+        stop 1
       endif
 
       ! n_bf update

@@ -127,7 +127,7 @@ contains
     elseif ( obj_rot%model == "rigid-body" ) then
       if ( obj_rot%omega < 0.0_R8 ) then
         write(*,'(A)') '[ERROR] Rotational frame model "rigid-body" requires omega >= 0'
-        stop
+        stop 1
       end if
       obj_rot%enabled = .true.
     end if
@@ -140,7 +140,7 @@ contains
     norm = sqrt( sum(obj_rot%axis**2) )
     if ( norm < 1.0e-14_R8 ) then
       write(*,'(A)') '[ERROR] Rotation axis has zero length'
-      stop
+      stop 1
     end if
     obj_rot%axis      = obj_rot%axis / norm
     obj_rot%Omega_vec = obj_rot%omega * obj_rot%axis

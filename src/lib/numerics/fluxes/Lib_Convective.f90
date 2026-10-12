@@ -41,11 +41,11 @@ contains
     if (error1 == 1 .or. error4 == 1) then
       write(*,*) '[ERROR] non-physical state detected at the interface.'
       write(*,*) '        Negative pressure'
-      stop
+      stop 1
     elseif (error1 == 2 .or. error4 == 2) then
       write(*,*) '[ERROR] non-physical state detected at the interface.'
       write(*,*) '        Out-of-bounds temperature'
-      stop
+      stop 1
     end if
 
     ! Compute rho and Rtot

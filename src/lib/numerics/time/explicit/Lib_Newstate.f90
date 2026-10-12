@@ -463,7 +463,8 @@ contains
     if ( any( isnan(prim(1:nprim)) ) .or. prim(np) < 0d0 ) then
       write(*,'(A,4I4)') "Integration failed at b, i, j, k:", b, i, j, k
       write(*,*) prim(1:nprim)
-      stop "NaN or p<0 detected"
+      write(*,'(A)') "NaN or p<0 detected"
+      stop 1
     endif
 
     ! Floor species densities
