@@ -557,11 +557,13 @@ models miss, at the cost of the additional transport equations.
 
 The **Quadratic Constitutive Relation** (Spalart, 2000) is an algebraic,
 non-linear correction to the Boussinesq stress rather than a standalone
-model. It is enabled as a suffix on a base model (e.g.
-`turbulence = SA-QCR2000`) and adds a quadratic dependence on the
-rotation tensor to the modelled stress, improving the prediction of
-anisotropy-driven secondary flows (corner flows, square ducts) while
-reusing the eddy viscosity of the underlying model.
+model. It adds a quadratic dependence on the rotation tensor to the modelled
+stress, improving the prediction of anisotropy-driven secondary flows
+(corner flows, square ducts) while reusing the eddy viscosity of the
+underlying model. The code takes it as a suffix of the model name
+(`-QCR2000`), but `turbulence` does not accept such a name today (its
+allowed values are listed in the [registry](../user/registry.md)), so no run
+uses it; the test `QCR2000Stress` checks the stress against the definition.
 
 ---
 

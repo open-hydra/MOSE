@@ -7,7 +7,7 @@ module MOSE_Lib_QCR2000
 
 contains
 
-  pure function Stress_Vector_QCR2000 ( Gradvel, Normal, mi_t, mi_l, rhok ) result ( Stress )
+  pure function Stress_Vector_QCR2000 ( Gradvel, Normal, mi_l, mi_t, rhok ) result ( Stress )
     implicit none
     real(R8), intent(in) :: Gradvel(3,3), Normal(3), mi_t, mi_l, rhok(:)
     real(R8) :: Stress(3)

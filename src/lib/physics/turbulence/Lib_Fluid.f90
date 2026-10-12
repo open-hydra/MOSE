@@ -10,7 +10,7 @@ module MOSE_Lib_Fluid
 
   ! Abstract interface relative to the "Stress_Vector" procedure
   abstract interface
-    pure function Stress_Vector_if ( Gradvel, Normal, mi_t, mi_l, var ) result ( Stress )
+    pure function Stress_Vector_if ( Gradvel, Normal, mi_l, mi_t, var ) result ( Stress )
       use iso_fortran_env, only: I4 => int32, R8 => real64
       implicit none
       real(R8), intent(in) :: Gradvel(3,3), Normal(3), mi_t, mi_l, var(:)

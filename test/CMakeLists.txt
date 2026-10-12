@@ -182,3 +182,10 @@ mose_add_fast_script(PointImplicitSteady 2D/viscous/point-implicit-steady "valid
 # The melting column also runs without schmidt: the default, 0, needs no
 # diffusion table with a single species.
 mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;physics;2D")
+
+# Quadratic constitutive relation QCR2000: a unit check of the stress as the
+# solver calls it (laminar viscosity, then eddy viscosity), against the
+# definition. QCR2000 is not selectable from the input, so no run passes there.
+add_fortran_executable(qcr2000_check unit/qcr2000_check.f90)
+add_test(NAME QCR2000Stress COMMAND qcr2000_check)
+set_tests_properties(QCR2000Stress PROPERTIES LABELS "fast;physics;unit" TIMEOUT 60)
