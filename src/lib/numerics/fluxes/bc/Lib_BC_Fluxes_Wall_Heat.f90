@@ -18,19 +18,21 @@ contains
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     real(R8), intent(in) :: Heat_Flux
-    type(MOSE_block_type), intent(inout) :: Blk
+    type(MOSE_block_type), intent(inout), target :: Blk
     real(R8), optional, dimension(8), intent(inout) :: Ovar
     real(R8), optional, dimension(3), intent(in) :: w_wall
     real(R8), optional, intent(in) :: k_rough   ! sand-grain roughness of the face (absent = smooth)
-    type(MOSE_bc_type), optional, intent(in) :: rec   ! the record of the face: its wall stencil (diffusive-metric = stencil)
+    ! the record of the face: its wall stencil (diffusive-metric = stencil)
+    type(MOSE_bc_type), optional, intent(in), target :: rec
     real(R8), optional, dimension(3,3), intent(in) :: w_grad   ! with w_wall: its gradient, d w_wall(i) / d x(j)
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, q
-    real(R8) :: Normal(3), Area, Dist, M(3,3), Mi(3,3), Prim(nprim), rho, Rgas, temp, Gradient(nprim,3)
+    real(R8) :: Normal(3), Area, Dist, Mi(3,3), Prim(nprim), rho, Rgas, temp, Gradient(nprim,3)
     real(R8) :: mil, kl, Stress(3), Flux(nprim)
     integer  :: vgrad_i
     real(R8) :: gvec1, gvec2, gvec3, VelGrad(3,3), Prim_Wall(nprim), rho_wall, Twall, dl
-    real(R8) :: kr, mit, Mc(3,3), dT
+    real(R8) :: kr, mit, dT
+    real(R8), pointer, contiguous :: M(:,:), Mc(:,:)   ! metrics of the face and of the cell, read in place
     logical  :: wst
 
 
@@ -44,8 +46,8 @@ contains
     Normal = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     Area = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
     Dist = 1d-20 ! since the flux is computed at the wall
-    M = Blk % M (Im,Jm,Km) % c
-    Mc = M
+    M => Blk % M (Im,Jm,Km) % c
+    Mc => M
     ! diffusive-metric = stencil: velocity and turbulence take the metric of the wall face (Wall_Face_Stencils in
     ! MOSE_Lib_Stencil_Metrics), with no difference of their wall values along the wall but for the velocity of a wall
     ! that moves (below): the velocity of a no-slip wall is uniform along it, while the turbulence values that vary
@@ -54,7 +56,7 @@ contains
     ! the cell, as before
     wst = .false.
     if ( present(rec) ) wst = rec % wstencil
-    if ( wst ) M = rec % wM
+    if ( wst ) M => rec % wM
 
     ! boundary cell variables
     Prim = Blk % P(:,Im,Jm,Km)

@@ -219,9 +219,13 @@ for the face of direction `d` between cell `(i,j,k)` and the next one along
 `blk%M` and `blk%Minv` with the operations `Diffusive_Flux` used before;
 with `stencil` it returns the metric stored at setup in
 `blk%dir(d)%Mf(i,j,k)%c` by `Setup_Stencil_Metrics` (called at the end of
-`Setup_Metrics`, on every multigrid level). A caller that evaluates the
-interior viscous fluxes elsewhere, for example with another time scheme, gets
-the bits of `Fluxes_blk` by calling the two routines the same way.
+`Setup_Metrics`, on every multigrid level). `Fluxes_blk` does not copy a
+stored metric: with `stencil` it passes `blk%dir(d)%Mf(i,j,k)%c` itself
+through a contiguous pointer, and calls `Viscous_Face_Metric` only for
+`mean` and `inverse-mean`; the symmetry and wall faces read their stored
+metrics the same way. A caller that evaluates the interior viscous fluxes
+elsewhere, for example with another time scheme, gets the bits of
+`Fluxes_blk` by calling the two routines the same way.
 
 Boundary faces with `stencil`: a face between blocks (`101`, `201`) takes one
 gradient through `Diffusive_Flux` (`BC_Connection_Visc_Stencil`), with the

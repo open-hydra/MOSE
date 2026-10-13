@@ -245,10 +245,11 @@ contains
     !> face.  Per-thread already — Fluxes_blk runs inside an orphaned parallel
     !> region.
     real(R8) :: dl4(-1:2)
-    !> Face metric handed to Diffusive_Flux (Viscous_Face_Metric); with a wall ghost cell in the stencil, the metrics per
-    !> group of quantities (absent, a disassociated pointer, elsewhere)
-    real(R8) :: Mf(3,3)
-    real(R8), pointer, contiguous :: Mg(:,:,:)
+    !> Face metric handed to Diffusive_Flux, Mfp: with diffusive-metric = stencil the metric stored at setup, read
+    !> where it is (no copy); otherwise the metric computed into Mf (Viscous_Face_Metric). With a wall ghost cell in
+    !> the stencil, the metrics per group of quantities (absent, a disassociated pointer, elsewhere)
+    real(R8), target :: Mf(3,3)
+    real(R8), pointer, contiguous :: Mfp(:,:), Mg(:,:,:)
 
     n = blk % dim
 
@@ -295,10 +296,13 @@ contains
       do k = 1, n(3)
       do j = 1, n(2)
       do i = 1, n(1) - 1
-      Mf = Viscous_Face_Metric ( blk, 1, i, j, k, metric )
       nullify ( Mg )
       if ( metric == METRIC_STENCIL ) then
+        Mfp => blk % dir(1) % Mf(i,j,k) % c
         if ( blk % dir(1) % ig(i,j,k) > 0 ) Mg => blk % dir(1) % Mg(:,:,:,blk % dir(1) % ig(i,j,k))
+      else
+        Mf = Viscous_Face_Metric ( blk, 1, i, j, k, metric )
+        Mfp => Mf
       end if
       call Diffusive_Flux ( blk % dir(1) % f(i,j,k) % N,  &
                             blk % dir(1) % f(i,j,k) % A,  &
@@ -316,7 +320,7 @@ contains
                             blk % P(:,i  ,j,k+1),         &
                             blk % P(:,i+1,j,k-1),         &
                             blk % P(:,i+1,j,k+1),         &
-                            Mf,                           &
+                            Mfp,                          &
                             blk % R(:,i  ,j,k),           &
                             blk % R(:,i+1,j,k),           &
                             1, 2, 3,                &
@@ -346,10 +350,13 @@ contains
       do k = 1, n(3)
       do i = 1, n(1)
       do j = 1, n(2) - 1
-      Mf = Viscous_Face_Metric ( blk, 2, i, j, k, metric )
       nullify ( Mg )
       if ( metric == METRIC_STENCIL ) then
+        Mfp => blk % dir(2) % Mf(i,j,k) % c
         if ( blk % dir(2) % ig(i,j,k) > 0 ) Mg => blk % dir(2) % Mg(:,:,:,blk % dir(2) % ig(i,j,k))
+      else
+        Mf = Viscous_Face_Metric ( blk, 2, i, j, k, metric )
+        Mfp => Mf
       end if
       call Diffusive_Flux ( blk % dir(2) % f(i,j,k) % N,  &
                             blk % dir(2) % f(i,j,k) % A,  &
@@ -367,7 +374,7 @@ contains
                             blk % P(:,i,j  ,k+1),         &
                             blk % P(:,i,j+1,k-1),         &
                             blk % P(:,i,j+1,k+1),         &
-                            Mf,                           &
+                            Mfp,                          &
                             blk % R(:,i,j  ,k),           &
                             blk % R(:,i,j+1,k),           &
                             2, 1, 3,                &
@@ -397,10 +404,13 @@ contains
       do j = 1, n(2)
       do i = 1, n(1)
       do k = 1, n(3) - 1
-      Mf = Viscous_Face_Metric ( blk, 3, i, j, k, metric )
       nullify ( Mg )
       if ( metric == METRIC_STENCIL ) then
+        Mfp => blk % dir(3) % Mf(i,j,k) % c
         if ( blk % dir(3) % ig(i,j,k) > 0 ) Mg => blk % dir(3) % Mg(:,:,:,blk % dir(3) % ig(i,j,k))
+      else
+        Mf = Viscous_Face_Metric ( blk, 3, i, j, k, metric )
+        Mfp => Mf
       end if
       call Diffusive_Flux ( blk % dir(3) % f(i,j,k) % N,  &
                             blk % dir(3) % f(i,j,k) % A,  &
@@ -418,7 +428,7 @@ contains
                             blk % P(:,i,j+1,k  ),         &
                             blk % P(:,i,j-1,k+1),         &
                             blk % P(:,i,j+1,k+1),         &
-                            Mf,                           &
+                            Mfp,                          &
                             blk % R(:,i,j,k  ),           &
                             blk % R(:,i,j,k+1),           &
                             3, 1, 2,                &
