@@ -7,6 +7,12 @@
 #  tube (test/1D/Sod79) and the gas of test/1D/diff1; no new mesh or IC data
 #  is stored here.
 #
+#  Unknown probe variable. A probe that asks for a variable MOSE does not
+#  know must stop the run at set-up with exit status 1 and a message naming
+#  the variable, not crash: the probe pointer stayed undefined and the run
+#  ended on a segmentation fault (exit status 139). The Sod tube of
+#  test/1D/Sod79 in air, one probe with variables "p foo".
+#
 #  Default Schmidt number. schmidt defaults to 0.0, i.e. mixture-averaged
 #  multicomponent diffusion, which needs the binary diffusion table
 #  INPUT/diffusion.dat when the gas has more than one species (one species
@@ -47,6 +53,47 @@ check() {
     fail=1
   fi
 }
+
+echo "-- probe with an unknown variable --"
+rm -f INPUT/*
+ln -sf "../../../../common/Air/phase.txt" INPUT/phase.txt
+ln -sf "../../../../common/Air/thermo.dat" INPUT/thermo.dat
+ln -sf "../$SOD/ic_x1.tec" INPUT/ic.tec
+ln -sf "../$SOD/bc_x1.txt" INPUT/bc.txt
+cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 2
+newrun = true
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.9
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+
+[MOSE-Probes]
+probe1 = pA
+
+[pA]
+variables = p foo
+diter = 1
+position = 0.5 0.0 0.0
+EOI
+rm -f OUTPUT/field.tec OUTPUT/pA.txt
+"$LOCAL" > OUTPUT/probe-variable.log 2>&1
+rc=$?
+[[ $rc -ne 0 && $rc -lt 128 ]]
+check $? "the solver stops with an error, not a crash (exit status $rc)"
+grep -a -qF 'unknown probe variable "foo"' OUTPUT/probe-variable.log
+check $? "it names the unknown variable"
+[[ ! -f OUTPUT/field.tec ]]
+check $? "no solution is written"
 
 echo "-- default schmidt: four species, no diffusion table --"
 rm -f INPUT/*

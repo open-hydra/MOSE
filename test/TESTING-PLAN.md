@@ -123,12 +123,12 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F4 | Single- vs multi-block equivalence | identical field | ☐ | <3 s |
 | F5 | Riemann smoke matrix | no NaN, ρ,p>0 | ☑ `RiemannSmoke` | ~4 s |
 | F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
-| F6 | Restart round-trip | identical to uninterrupted run | ☑ `Restart` | ~1 s |
+| F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart` | ~1 s |
 | I5 | Serial vs OpenMP equivalence | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~1 s |
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
 | F8 | Shu–Osher coarse (N=200) | L1 vs N=1600 ref < 5 %, finite | ☑ `ShuOsher` | ~2 s |
 | P1 | Ablative wall BCs (503/504); the melting column also without `schmidt` (default 0: one species needs no `diffusion.dat`) | wall state vs closed form, both face orientations, inert-surface fallback | ☑ `AblatingWall` | ~11 s |
-| I9 | Exit codes of the error stops: the Sod tube as a viscous mixture of four species without `schmidt` and without `diffusion.dat` ([thermo](../docs/theory/thermo.md)) | non-zero exit code and the diffusion-table error, no solution | ☑ `InputChecks`/`ExitCodes` | ~1 s |
+| I9 | Exit codes of the error stops: the Sod tube as a viscous mixture of four species without `schmidt` and without `diffusion.dat` ([thermo](../docs/theory/thermo.md)); the Sod tube in air with a probe of an unknown variable | non-zero exit code and the diffusion-table error, no solution; exit status 1 and the name of the variable, no solution | ☑ `InputChecks`/`ExitCodes` | ~4 s |
 
 Current `ctest -L fast`: **13 tests, ~43 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation, OpenMPEquiv,

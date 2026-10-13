@@ -120,7 +120,9 @@ mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D"
 # Serial vs OpenMP equivalence (I5): 1 vs 4 threads bit-identical.
 mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D")
 
-# Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run.
+# Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
+# at a restart a missing probe file is written again, an existing one appended,
+# with the probe rows of the uninterrupted run.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
 
 # Input checks (InputChecks): the parts below, each in its folder of
@@ -129,7 +131,8 @@ mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D"
 # Exit codes of the error stops: a run that MOSE stops on an error ends with a
 # non-zero exit code and its message. Default Schmidt number (schmidt = 0,
 # multicomponent diffusion): the Sod tube as a viscous mixture of four species,
-# without a diffusion table, stops at setup.
+# without a diffusion table, stops at setup; so does a probe of an unknown
+# variable.
 mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
 
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
