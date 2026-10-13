@@ -50,3 +50,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A degenerate cell (a zero determinant of the metric) and a rejected interface state stop the run with a message that locates
   them: the corner nodes of the cell; the block, the face, the two states of the interface and its stencil. The degenerate cell
   was announced with a fallback that never ran.
+- The diagnostic output of a steady run names and fills the soot residuals (`rho*Yp`, `rho*Np`) between ρE and the turbulence
+  variables: with a soot model it named fewer variables than it wrote, and with a turbulence model too it stopped on a run-time
+  error in builds with bounds checking.

@@ -21,6 +21,19 @@
 #  test/1D/diff1, with the mass fractions of air), without schmidt and
 #  without a table, must stop at set-up with the diffusion-table error and
 #  write no solution.
+#
+#  Diagnostic output with a soot model. A steady run with the soot model
+#  LL91 must end normally, and its diagnostic output must name every
+#  variable it writes, the residuals of rho, rho u, rho v, rho w, rho E, of
+#  the soot number density and of the turbulence variable, then dt and beta,
+#  with the local time step under dt (the one of the same run without soot,
+#  within 1e-6). Six species with the names the soot model looks for, in a
+#  uniform state on the mesh of the Sod tube (make_case.py soot), with type 0
+#  on its faces 3 and 4, with and without Spalart-Allmaras, two iterations.
+#  With Spalart-Allmaras the output filled the turbulence column from arrays
+#  of different sizes (a run-time error with bounds checking); without it,
+#  it named one variable fewer than it wrote and put the density of C(gr)
+#  under dt.
 #===============================================================================
 set -uo pipefail
 
@@ -128,6 +141,46 @@ grep -a -qF "$ERR" OUTPUT/schmidt-mixture.log
 check $? "it reports the missing diffusion table"
 [[ ! -f OUTPUT/field.tec ]]
 check $? "no solution is written"
+
+echo "-- soot model LL91, steady, two iterations: the diagnostic output --"
+PREMIX=../../../1D/premixed-flame/INPUT
+# soot_run <kind: sa, soot, plain or sa-plain>: the run of make_case.py soot <kind>, its exit status in OUTPUT/soot-<kind>.rc
+soot_run() {
+  rm -f INPUT/*
+  python3 -B make_case.py soot "$PREMIX" "$SOD/ic_x1.tec" INPUT "$1" || exit 1
+  # faces 3 and 4 of the tube, one cell thick in j: a copy (type 0), not the extrapolation 400, which takes
+  # three cells and with one cell reads ghost cells that no record fills
+  awk '$5 == 3 || $5 == 4 { $6 = 0 } { print }' "$SOD/bc_x1.txt" > INPUT/bc.txt
+  local turb=none soot=LL91
+  [[ $1 == sa || $1 == sa-plain ]] && turb=SA
+  [[ $1 == plain || $1 == sa-plain ]] && soot=none
+  {
+    printf '%s\n' '[MOSE-Parameters]' 'iter-threshold = 2' 'newrun = true' ''
+    printf '%s\n' '[MOSE-Physics]' 'equations = navier-stokes' "turbulence = $turb" 'schmidt = 0.7' "soot-generation = $soot" ''
+    printf '%s\n' '[MOSE-Numerics]' 'cfl = 0.5' 'time-accurate = false' 'time-scheme = euler' \
+                  'integration-variables = cons' 'space-reconstruction = first-order' 'riemann-solver = HLLC' ''
+    printf '%s\n' '[MOSE-IO]' 'sol-format = tecplot ascii'
+  } > input.ini
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/soot-$1.log" 2>&1
+  echo $? > "OUTPUT/soot-$1.rc"
+  [[ -f OUTPUT/diagnostic.tec ]] && cp OUTPUT/diagnostic.tec "OUTPUT/diagnostic-$1.tec"
+}
+rm -f OUTPUT/diagnostic-*.tec
+# the references without soot: plain for the soot run, sa-plain (Spalart-Allmaras) for the sa run
+soot_run plain
+soot_run sa-plain
+for kind in sa soot; do
+  soot_run $kind
+  rc=$(cat "OUTPUT/soot-$kind.rc")
+  [[ $rc -eq 0 ]]
+  check $? "$kind: the run ends normally (exit status $rc)"
+  names="rho rhou rhov rhow rhoe rho*Np"
+  ref=OUTPUT/diagnostic-plain.tec
+  [[ $kind == sa ]] && names="$names rhoNuTilde" && ref=OUTPUT/diagnostic-sa-plain.tec
+  python3 -B make_case.py diagnostic-check "OUTPUT/diagnostic-$kind.tec" "$ref" $names dt beta
+  check $? "$kind: the diagnostic output names every variable it writes, dt under dt"
+done
 
 if [[ $fail -ne 0 ]]; then
   echo "ExitCodes: FAILED"

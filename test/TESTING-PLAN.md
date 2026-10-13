@@ -128,7 +128,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
 | F8 | Shu–Osher coarse (N=200) | L1 vs N=1600 ref < 5 %, finite | ☑ `ShuOsher` | ~2 s |
 | P1 | Ablative wall BCs (503/504); the melting column also without `schmidt` (default 0: one species needs no `diffusion.dat`) | wall state vs closed form, both face orientations, inert-surface fallback | ☑ `AblatingWall` | ~11 s |
-| I9 | Exit codes of the error stops: the Sod tube as a viscous mixture of four species without `schmidt` and without `diffusion.dat` ([thermo](../docs/theory/thermo.md)); the Sod tube in air with a probe of an unknown variable | non-zero exit code and the diffusion-table error, no solution; exit status 1 and the name of the variable, no solution | ☑ `InputChecks`/`ExitCodes` | ~4 s |
+| I9 | Exit codes of the error stops: the Sod tube as a viscous mixture of four species without `schmidt` and without `diffusion.dat` ([thermo](../docs/theory/thermo.md)); the Sod tube in air with a probe of an unknown variable; a steady run with the soot model LL91, with and without Spalart–Allmaras (six species with C(gr)) | non-zero exit code and the diffusion-table error, no solution; exit status 1 and the name of the variable, no solution; exit status 0 and a diagnostic output that names every variable it writes, the local time step under dt | ☑ `InputChecks`/`ExitCodes` | ~4 s |
 
 Current `ctest -L fast`: **13 tests, ~43 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation, OpenMPEquiv,
