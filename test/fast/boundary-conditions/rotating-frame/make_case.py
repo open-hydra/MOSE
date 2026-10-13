@@ -11,9 +11,13 @@ of the cell, OMEGA y_c, across half a cell: a shear of the order of mu OMEGA y_c
 faces: slip walls (300), across which the gas does not move (v = OMEGA z = 0 at the cell centre); k faces: null (0), so that
 the swirl -OMEGA y_c along z meets no wall.
 
+Also the boundary file of the first case of the test: the Sod tube of test/1D/Sod79 with its two ends (faces 1 and 2,
+extrapolation 400 there) made adiabatic walls 301, so that they can be listed as stationary faces.
+
 Usage (from the test directory):
   python3 -B make_case.py case          INPUT/ic.tec and INPUT/bc.txt
   python3 -B make_case.py check FILE    largest wall shear on face 1 in FILE (a wall.tec) over mu OMEGA y_c / (dx/2)
+  python3 -B make_case.py sod-walls BC  INPUT/bc.txt: BC (the Sod tube) with walls 301 on faces 1 and 2
 """
 import re
 import sys
@@ -75,10 +79,26 @@ def check(path):
     print(f"{tau / scale:.3e}")
 
 
+def sod_walls(src):
+    import os
+    if os.path.lexists("INPUT/bc.txt"):
+        os.remove("INPUT/bc.txt")
+    with open(src) as f, open("INPUT/bc.txt", "w") as g:
+        for line in f:
+            tok = line.split()
+            if len(tok) == 6 and tok[4] in ("1", "2") and tok[5] == "400":
+                g.write(line.rsplit("400", 1)[0] + "301\n")
+                g.write("    0.000000E+00, 0.000000E+00, 0.000000E+00,\n")
+            else:
+                g.write(line)
+
+
 def main():
     what = sys.argv[1]
     if what == "case":
         write_case()
+    elif what == "sod-walls":
+        sod_walls(sys.argv[2])
     elif what == "check":
         check(sys.argv[2])
     else:

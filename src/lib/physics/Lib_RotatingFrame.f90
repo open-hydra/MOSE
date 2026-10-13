@@ -584,6 +584,47 @@ contains
   end function RF_Is_Stationary_Face
 
 
+  !> At set-up, once bc.txt is read: every stationary-face-<k> = <block> <face> must name a face of the mesh whose records
+  !> are all walls 301 or 302, the only boundary conditions that take the velocity of a wall at rest in the laboratory.
+  !> On any other record the face would be at rest in part only (the inviscid flux of BC_Symmetry_Eul takes the normal
+  !> velocity of the wall at rest; the viscous flux, the ghost cells and the flux of an ablating wall do not), and a face
+  !> with no record of the mesh is not a wall at all: both stop the run.
+  subroutine Check_Stationary_Faces ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Mod_MPI, only: mpi_stop_all
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    ! Local
+    integer :: k, l, b, f, nrec
+    character(len=256) :: msg
+
+    if ( .not. obj_rot%enabled ) return
+    if ( .not. allocated(obj_rot%stationary_face) ) return
+    do k = 1, size(obj_rot%stationary_face, 2)
+      b = obj_rot%stationary_face(1,k)
+      f = obj_rot%stationary_face(2,k)
+      nrec = 0
+      do l = 1, domain % nbound
+        if ( domain % bc(l) % b /= b .or. domain % bc(l) % f /= f ) cycle
+        nrec = nrec + 1
+        if ( domain % bc(l) % type /= 301 .and. domain % bc(l) % type /= 302 ) then
+          write(msg,'(A,I0,A,I0,A,I0,A,I0,A,3(1X,I0),A)') '[ERROR] Rotating frame: stationary-face-', k, &
+            ' covers a record of type ', domain % bc(l) % type, ' (block ', b, ', face ', f, ', cell', &
+            domain % bc(l) % i, domain % bc(l) % j, domain % bc(l) % k, '): only walls 301 and 302 can be at rest'// &
+            ' in the laboratory'
+          call mpi_stop_all ( trim(msg) )
+        end if
+      end do
+      if ( nrec == 0 ) then
+        write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] Rotating frame: stationary-face-', k, ' names block ', b, ', face ', f, &
+          ', which has no record in bc.txt: it is no wall of the mesh'
+        call mpi_stop_all ( trim(msg) )
+      end if
+    end do
+
+  end subroutine Check_Stationary_Faces
+
+
   ! ---------------------------------------------------------------------------
   !> @brief Estimate the pressure torque on the rotating wall surfaces.
   !>

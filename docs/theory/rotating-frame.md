@@ -111,7 +111,7 @@ $$\boldsymbol{w}_{\text{wall}} = \boldsymbol{0}$$
 
 (i.e., zero relative velocity at a wall moving with the frame).
 
-A wall at rest in the laboratory (a casing or a hub that does not turn) is listed in `[MOSE-Rotating-Frame]` as `stationary-face-<n> = <block> <face>`, numbered from 1; the walls `301` and `302` of that block face take it. Such a wall moves in the rotating frame with
+A wall at rest in the laboratory (a casing or a hub that does not turn) is listed in `[MOSE-Rotating-Frame]` as `stationary-face-<n> = <block> <face>`, numbered from 1; the walls `301` and `302` of that block face take it. Every record of that block face must be such a wall: a stationary face that covers another type (a symmetry, an inlet, a wall `503`–`505`, a connection) or names a face with no record in `bc.txt` stops the run at set-up. Such a wall moves in the rotating frame with
 
 $$\boldsymbol{w}_{\text{wall}} = -\boldsymbol{\Omega} \times (\boldsymbol{x} - \boldsymbol{x}_o)$$
 

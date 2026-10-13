@@ -23,6 +23,7 @@ contains
                                          blocks_needing_full_arrays
     use MOSE_Mod_Multigrid,        only: Setup_Multigrid, Restriction
     use MOSE_IO_BC,                only: Setup_BC
+    use MOSE_Lib_RotatingFrame,    only: Check_Stationary_Faces
     use MOSE_Mod_Metrics,          only: Setup_Metrics
     use MOSE_Mod_Fluxes,           only: Setup_Quasi2D_W
     use MOSE_IO_Probes,            only: Setup_Probes, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
@@ -129,6 +130,8 @@ contains
     setup_error = .false.
     if (mpi_is_root) call Check_BC ( setup_error )
     call Stop_Together ( setup_error, 'boundary condition error (see above)' )
+    ! The stationary faces of a rotating frame are walls 301 and 302 of the mesh (every rank, as the records)
+    call Check_Stationary_Faces ( simulation%domain(1) )
 
     ! MPI: partition blocks once on finest-level cell counts (restriction and
     ! prolongation are block-local, so a block must live on the same rank at
