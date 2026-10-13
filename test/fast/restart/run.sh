@@ -17,6 +17,11 @@
 #     message, in a time-accurate and in a steady run: the Tecplot solution of
 #     part 1 without SOLUTIONTIME, and the vtk raw solution of part 2 without
 #     the TIME field data of its block file.
+#  4. Initial condition from a solution written by MOSE, in vtk raw, vtk ascii
+#     and Tecplot ASCII: a new run (newrun = true) from the solution copied into
+#     INPUT/ (field.vtm and its vtk/ folder as ic.vtm and vtk/, field.tec as
+#     ic.tec) must have, after N/2 more steps, the cell values of the restart
+#     from the same solution, bit for bit (check_initial.py).
 #  Reuses the coarse Sod inputs (test/1D/Sod79); no new mesh/IC data is stored
 #  here.
 #     C : probes at a restart. Two probes on cells of the tube, by index (pA on
@@ -196,7 +201,72 @@ EOF
 done
 command grep -h 'ERROR\]' runs/no-time-*/solve.log 2>/dev/null | sort -u | sed 's/^/   /'
 [[ $status -eq 0 ]] || { echo "Restart: FAIL — a restart from a solution without a time does not stop"; exit 1; }
-echo "Restart: ok — Tecplot ASCII to its precision, vtk raw bit for bit, and a solution without a time refused"
+
+# --- 4. Initial condition from a solution written by MOSE ------------------
+# The solution of N/2 steps, written in FORMAT, starts a new run (copied into INPUT/) and a restart; both go on for N/2
+# steps at a constant CFL number, so they must have the same cell values. In vtk the .vtm lists its block files relative
+# to its own folder (vtk/fieldBlock1.vts), and the copy keeps that layout.
+write_ini_ic() {  # <newrun> <ic-format> <sol-format>
+  cat > input.ini <<EOF
+[MOSE-Parameters]
+iter-threshold = $HALF
+newrun = $1
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.9
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+
+[MOSE-IO]
+ic-format = $2
+sol-format = $3
+EOF
+}
+
+# solved <directory> <log file>: like solve, but returns non-zero instead of stopping the test
+solved() {
+  ( cd "$1" && "$SOLVER" > "$2" 2>&1 ) || { tail -3 "$1/$2"; return 1; }
+  ! command grep -q -E 'ERROR|NaN or p<0' "$1/$2"
+}
+
+ic_status=0
+for fmt in "vtk raw" "vtk ascii" "tecplot ascii"; do
+  tag=${fmt// /-}
+  src=runs/ic-$tag-src
+  new=runs/ic-$tag-new
+  prepare "$src"
+  ( cd "$src" && write_ini_ic true "tecplot ascii" "$fmt" ); solve "$src" solve_first.log "$fmt, first half"
+  rm -rf "$new"; mkdir -p "$new/INPUT" "$new/OUTPUT"
+  for f in phase.txt thermo.dat bc.txt; do
+    ln -s "../../../INPUT/$f" "$new/INPUT/$f"
+  done
+  if [[ $fmt == vtk* ]]; then
+    cp "$src/OUTPUT/field.vtm" "$new/INPUT/ic.vtm"
+    cp -r "$src/OUTPUT/vtk" "$new/INPUT/vtk"
+  else
+    cp "$src/OUTPUT/field.tec" "$new/INPUT/ic.tec"
+  fi
+  ( cd "$new" && write_ini_ic true "$fmt" "$fmt" )
+  if ! solved "$new" solve_new.log; then
+    echo "  $fmt: FAIL — the new run from the solution did not complete (see $new/solve_new.log)"
+    ic_status=1
+    continue
+  fi
+  ( cd "$src" && write_ini_ic false "tecplot ascii" "$fmt" ); solve "$src" solve_restart.log "$fmt, restart"
+  python3 -B check_initial.py "${fmt%% *}" "$src/OUTPUT" "$new/OUTPUT" "$fmt" || ic_status=1
+done
+if [[ $ic_status -ne 0 ]]; then
+  echo "Restart: FAIL — a new run from a solution written by MOSE does not read it"
+  exit 1
+fi
+echo "Restart: ok — Tecplot ASCII to its precision, vtk raw bit for bit, a solution without a time refused, and new runs from solutions written by MOSE"
 status=$?
 
 # --- C: probes at a restart, the file of one of them removed ----------------

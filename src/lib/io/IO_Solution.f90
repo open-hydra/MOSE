@@ -162,8 +162,12 @@ contains
     case('vtk')
       IOfield%tec%format = trim(format(2))
       if ( obj_sim_param%newrun ) then
-        ! Initial condition: block files INPUT/vtk/field<name>.vts
-        vtspath = 'INPUT/vtk/field'
+        ! Initial condition: the .vtm lists its block files relative to its own folder, as ORION writes it (a solution
+        ! of MOSE copied into INPUT/ as ic.vtm with its vtk/ folder); the files that put the blocks at
+        ! INPUT/vtk/field<entry>.vts, the place read before, are read there
+        vtspath = obj_io%nameinit(1:index(obj_io%nameinit,'/',back=.true.))
+        if ( .not. Vtm_First_Block_Exists(obj_io%nameinit, vtspath) .and. &
+             Vtm_First_Block_Exists(obj_io%nameinit, 'INPUT/vtk/field') ) vtspath = 'INPUT/vtk/field'
       else
         ! Restart: the .vtm written by MOSE lists its blocks relative to its own folder
         vtspath = obj_io%nameinit(1:index(obj_io%nameinit,'/',back=.true.))
@@ -216,6 +220,49 @@ contains
   end subroutine Read_vtk_tec
 
 
+  !> \brief Entry of the first block file listed by a .vtm (its file attribute without '.vts'), '' when
+  !>        the .vtm cannot be read or lists none.
+  function Vtm_First_Entry ( vtmfile ) result(block)
+    use MOSE_Parameters_m, only: llen
+    implicit none
+    character(*), intent(in) :: vtmfile
+    character(llen)          :: block
+    ! Local
+    integer         :: u, ios, i1, i2
+    character(llen) :: line
+
+    block = ''
+    open(newunit=u, file=trim(vtmfile), action='read', status='old', iostat=ios)
+    if (ios /= 0) return
+    do
+      read(u, '(A)', iostat=ios) line
+      if (ios /= 0) exit
+      i1 = index(line, 'file="')
+      if (i1 == 0) cycle
+      i2 = index(line, '.vts"')
+      if (i2 > i1+6) block = line(i1+6:i2-1)
+      exit
+    enddo
+    close(u)
+
+  end function Vtm_First_Entry
+
+
+  !> \brief Is the first block file of a .vtm at vtspath//<entry>//'.vts', the path the ORION reader opens?
+  logical function Vtm_First_Block_Exists ( vtmfile, vtspath )
+    use MOSE_Parameters_m, only: llen
+    implicit none
+    character(*), intent(in) :: vtmfile, vtspath
+    ! Local
+    character(llen) :: block
+
+    block = Vtm_First_Entry(vtmfile)
+    Vtm_First_Block_Exists = .false.
+    if (len_trim(block) > 0) inquire(file=trim(vtspath)//trim(block)//'.vts', exist=Vtm_First_Block_Exists)
+
+  end function Vtm_First_Block_Exists
+
+
   !> \brief vtk format of the block files of a .vtm: 'ascii', 'binary' (base64) or 'raw'
   !>        (appended), as the first block file declares it, or fallback when it cannot tell.
   !> \details The blocks of a .vtm are written in one call, so they share the format. The
@@ -227,23 +274,11 @@ contains
     character(*), intent(in) :: vtmfile, vtspath, fallback
     character(6)             :: fmt
     ! Local
-    integer         :: u, ios, i1, i2
+    integer         :: u, ios
     character(llen) :: line, block
 
     fmt = fallback
-    open(newunit=u, file=trim(vtmfile), action='read', status='old', iostat=ios)
-    if (ios /= 0) return
-    block = ''
-    do
-      read(u, '(A)', iostat=ios) line
-      if (ios /= 0) exit
-      i1 = index(line, 'file="')
-      if (i1 == 0) cycle
-      i2 = index(line, '.vts"')
-      if (i2 > i1+6) block = line(i1+6:i2-1)
-      exit
-    enddo
-    close(u)
+    block = Vtm_First_Entry(vtmfile)
     if (len_trim(block) == 0) return
 
     open(newunit=u, file=trim(vtspath)//trim(block)//'.vts', action='read', status='old', iostat=ios)

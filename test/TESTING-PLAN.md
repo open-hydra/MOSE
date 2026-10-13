@@ -113,7 +113,8 @@ nightly/local tier.
   ~2e-15. *Done:* `test/fast/restart` (restart = `newrun=false`, reads OUTPUT/field.tec).
   With `sol-format = vtk raw` the same test asks for identical bits, iteration counters
   and output numbering included, and a restart from a solution without a time (Tecplot
-  ASCII without SOLUTIONTIME, vtk raw without TIME) must stop at setup; *MPI variant (needs-mpi tier):* `test/mpi/restart`
+  ASCII without SOLUTIONTIME, vtk raw without TIME) must stop at setup, and a solution of
+  MOSE copied into INPUT/ must start a new run (vtk raw, vtk ascii, Tecplot ASCII); *MPI variant (needs-mpi tier):* `test/mpi/restart`
   (`MPIRestart`, 2 ranks × 2 threads). `test/fast/restart/restart-counters` (`Restart`/`RestartCounters`)
   covers the other counters: steady runs (global iteration count, probes, diagnostic
   output), time-based output, the multigrid level, the global iteration count of a
@@ -197,7 +198,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F25 | Probes given by position (planar 2-D duct, a different pressure in every cell, probes at cell centres in the mid-plane) | each probe holds the values of its cell, never a neighbour or a ghost cell | ☑ `OutputFiles`/`ProbePosition` | <1 s |
 | P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
 
-Current `ctest -L fast`: **20 tests, ~129 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **20 tests, ~130 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, InputChecks,
 TimeIntegration, BoundaryConditions, Conservation, OpenMPEquiv, Connections,
 Restart, OutputFiles, MMSResiduals, AblatingWall, MeshGeometry, QCR2000Stress).
