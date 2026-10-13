@@ -61,7 +61,7 @@ step() {
   cp "input-$tag.ini" input.ini
   cp "INPUT/bc-$tag.txt" INPUT/bc.txt
   rm -f INPUT/transport.dat
-  if [[ $tag == ref && ( $run == ene || $run == enep || $run == momw || $run == momr ) ]]; then
+  if [[ $tag == ref && ( $run == ene || $run == enep || $run == momw || $run == momr || $run == ene10* || $run == mom10* ) ]]; then
     ln -sf transport-ref.dat INPUT/transport.dat
   else
     ln -sf "../$VISC/transport.dat" INPUT/transport.dat
@@ -119,6 +119,17 @@ if [[ $NAME == ViscousWallPatch ]]; then
     step ref "$mesh" enep
     python3 -B "$MC" check "$mesh" enep "OUTPUT/diag-$mesh-enep-ns.tec" "OUTPUT/diag-$mesh-enep-ref.tec" \
       interior,connection,corner,symmetry,wall301,wall302 || status=1
+  done
+  echo "-- walls coupled to another solver (103, 104), whose viscous flux the other solver gives: wall cells with nodes"
+  echo "   moved at random, T linear along the wall (no heat through it: their energy) and a velocity linear and zero on"
+  echo "   it (their momentum, minus the force of the uniform stress on the wall) --"
+  for mesh in rand1 box3d; do
+    for run in ene103 ene104 mom103 mom104; do
+      python3 -B "$MC" case "$mesh" "$run" > /dev/null || exit 1
+      step ns "$mesh" "$run"
+      step ref "$mesh" "$run"
+      python3 -B "$MC" check "$mesh" "$run" "OUTPUT/diag-$mesh-$run-ns.tec" "OUTPUT/diag-$mesh-$run-ref.tec" coupled || status=1
+    done
   done
   echo "-- limits: a 302 wall colder than 2/3 of its first cell, the pressure doubling at the 400 faces: counted --"
   python3 -B "$MC" case paraT hot > /dev/null || exit 1

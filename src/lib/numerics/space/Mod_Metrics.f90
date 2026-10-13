@@ -165,11 +165,11 @@ contains
     ! A degenerate or inverted ghost cell (Compute_Metric_Tensor wrote the first one): every rank stops together
     call Stop_On_Bad_Metric ( )
 
-    ! Walls and 400 faces: ratio of the MUSCL distances behind the face, for the ghost values (Ghost_Wall) and their
-    ! positions (Setup_Stencil_Metrics); every record, on every rank
+    ! Walls (the coupled walls 103 and 104 too) and 400 faces: ratio of the MUSCL distances behind the face, for the
+    ! ghost values (Ghost_Wall) and their positions (Setup_Stencil_Metrics); every record, on every rank
     do i = 1, domain % nbound
       select case ( domain % bc(i) % type )
-        case (301, 302, 400, 503:505)
+        case (103, 104, 301, 302, 400, 503:505)
           Bm = domain % bc(i) % b
           domain % bc(i) % sx = Extrapolation_Ratio ( domain % blk(Bm) % node, domain % bc(i) % i, domain % bc(i) % j, &
                                                       domain % bc(i) % k, domain % bc(i) % f, domain % blk(Bm) % dim )

@@ -347,7 +347,8 @@ value is right for a linear field:
 
 - faces between blocks (`101`, `201`): the centre of the cell across, plus the
   translation of a periodic pair;
-- walls (`301`, `302`, `503`–`505`) and `400` faces: the position of the class
+- walls (`301`, `302`, `503`–`505`, and `103`, `104`, coupled to another
+  solver) and `400` faces: the position of the class
   of each quantity, $2\mathbf{x}_f - \mathbf{x}_1$ for the quantities with a
   wall value and $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$ for the
   extrapolated ones (see *Ghost Cells of Walls and 400 Faces* below); a face
@@ -528,8 +529,8 @@ one cell wide in another direction they are the ghost cell itself.
 
 ## Ghost Cells of Walls and 400 Faces
 
-Behind a viscous wall (`301`, `302`, `503`–`505`) and an extrapolation face
-(`400`) the two layers of ghost cells are filled once per stage, before the
+Behind a viscous wall (`301`, `302`, `503`–`505`, and the walls `103` and `104`
+coupled to another solver) and an extrapolation face (`400`) the two layers of ghost cells are filled once per stage, before the
 fluxes, and the viscous fluxes, the MUSCL reconstruction and the source terms
 of the turbulence models read the same values. Extrapolated are the quantities
 whose differences the viscous fluxes and the sources take, the mass fractions
@@ -541,9 +542,9 @@ wall cell and in the next one across the face:
 
 | Class | Quantities | First ghost cell | Position of its value |
 |---|---|---|---|
-| wall value | velocity at `301` and `302` (zero, or the wall velocity of a stationary face of a rotating frame); the turbulence variables at the walls ($k$, $R_{ij}$, $\tilde\nu$ on a smooth wall: zero; $\omega$, $\tilde\nu$ on a rough wall: the wall value of the model) | $2q_w - q_1$ | $2\mathbf{x}_f - \mathbf{x}_1$ |
+| wall value | velocity at `103`, `104`, `301` and `302` (zero, or the wall velocity of a stationary face of a rotating frame); the turbulence variables at the walls ($k$, $R_{ij}$, $\tilde\nu$ on a smooth wall: zero; $\omega$, $\tilde\nu$ on a rough wall: the wall value of the model) | $2q_w - q_1$ | $2\mathbf{x}_f - \mathbf{x}_1$ |
 | wall temperature | $T$ at `302` | $\max(2T_w - T_1,\ T_w/2)$ | $2\mathbf{x}_f - \mathbf{x}_1$ |
-| extrapolated | $Y_s$, $p$; $T$ at `301`, `400`, `503`–`505`; the velocity at `400` and `503`–`505`; turbulence and scalars at `400`, scalars at the walls | $q_1 + \psi(q_1 - q_2)$ | $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$ |
+| extrapolated | $Y_s$, $p$; $T$ at `103`, `104`, `301`, `400`, `503`–`505`; the velocity at `400` and `503`–`505`; turbulence and scalars at `400`, scalars at the walls | $q_1 + \psi(q_1 - q_2)$ | $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$ |
 
 $\mathbf{x}_f$ is the centre of the face (the mean of its four nodes) and
 $s = l_0/l_1$ the ratio of the distances of the MUSCL reconstruction at the
@@ -556,8 +557,9 @@ each scalar within $[q_1/2,\ 2q_1]$; the species are then normalised to sum
 one; the velocity is not limited ($\psi = s$). The wall values of the turbulence
 variables are those of the wall fluxes, from the same wall state (`302`: $T_w$;
 `301`: the wall temperature estimated from the heat flux;
-`503`–`505`, whose surface model sets the wall state at every call: the state
-of the wall cell, as an adiabatic wall). With one cell across the face the
+`503`–`505`, whose surface model sets the wall state at every call, and the
+coupled walls `103` and `104`, whose viscous flux the other solver gives: the
+state of the wall cell, as an adiabatic wall). With one cell across the face the
 extrapolated quantities are copied (position $\mathbf{x}_1$). In an inviscid
 run the walls carry no wall values and every quantity is extrapolated, as
 behind a `400` face. The second layer takes $2q_w - q_2$,

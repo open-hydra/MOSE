@@ -65,6 +65,14 @@ Runs:
   hot    paraT only, uniform T, p = 10 Pa + 4e4 Pa/m (x - 1 cm), walls 302 at T_w = T/2: the first cell is hotter than
          1.5 T_w and the pressure more than doubles between the first two cells at the 400 faces, so the floor of the
          wall temperature and the cut of the extrapolation act. Checked: the line of the run that counts them.
+  ene103, ene104, mom103, mom104
+         rand1 and box3d, the wall y = 2 cm a wall coupled to another solver (103, or 104 with its donor lines), the
+         other outer faces 400. MOSE gives such a wall no viscous flux (the other solver adds it), and fills its ghost
+         cells as those of an adiabatic wall (Ghost_Wall). ene: as ene, with T linear along the wall, so that no heat
+         crosses it: the energy of the wall cells is zero. mom: as momw: the momentum of the wall cells is minus the
+         force of the uniform stress on the wall face, -tau . A/V (A the outward area vector of the face). Both read the
+         ghost cells of the wall through the faces between the wall cells, at the positions of the extrapolated (T) and
+         of the wall-valued (u) quantities.
 
 Observable: one explicit step from the same state with the Navier-Stokes equations and one reference step (mom: the Euler
 equations; ene, momw, momr: Navier-Stokes with mu = k = 1e-30 and q = 0 on the 301 faces, because the solver refuses
@@ -76,7 +84,7 @@ rk3); threshold 1e-11 (for the energy of momr next to the 302 wall of paraT, plu
 of the cell: see work). The cells are grouped by the faces they have: interior (no boundary face), connection (a face
 between blocks; corner: two of them, the cells at a point shared by 3 or 5 blocks), symmetry (300), wall 301, wall 302.
 
-ViscousLinearPatch checks every group but wall 302, plus the old metrics: on the rand1 mesh, run mom, diffusive-metric =
+ViscousLinearPatch checks every group but wall 302 and coupled, plus the old metrics: on the rand1 mesh, run mom, diffusive-metric =
 inverse-mean and mean must give, cell by cell, the viscous force of an independent replica of their face gradients
 (written here from Lib_Diffusive.f90 and Lib_Metrics.f90 at bff5a51, with the ghost values of the 400 faces of
 Ghost_Wall), within 1e-10 of the scale. ViscousWallPatch checks the cells with a 302 face: walls whose temperature varies
@@ -125,8 +133,9 @@ N_ULP_T = 6                         # momr on paraT: the temperature of a cell n
                                     # to 6 units in the last place of T_w (see work)
 FMT = '{: .17E}'
 MESHES = ('fold2', 'jump', 'jump2', 'fan', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
-RUNS = ('mom', 'ene', 'rk3', 'momw', 'momr', 'enep', 'hot')
+RUNS = ('mom', 'ene', 'rk3', 'momw', 'momr', 'enep', 'hot', 'ene103', 'ene104', 'mom103', 'mom104')
 BC_CONNECT, BC_SYM, BC_Q, BC_T, BC_OPEN = 101, 300, 301, 302, 400
+BC_COUPLED = (103, 104)                    # walls coupled to another solver (104: with the donor cells of a chimera)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -289,8 +298,15 @@ def build(mesh, run):
     return [LREF * (X + OFFSET) for X in blocks]
 
 
+def coupled_type(run):
+    """103 or 104 for the runs on a coupled wall (ene103, mom104, ...), else None."""
+    return int(run[-3:]) if run[-3:] in ('103', '104') else None
+
+
 def outer_type(mesh, run, b, face):
     """Type of the outer face `face` of block b (faces 5, 6 of 2-D meshes are symmetry planes)."""
+    if coupled_type(run):                # one wall, the plane y = 2 cm, coupled to another solver
+        return coupled_type(run) if face == 3 else BC_OPEN
     if run == 'mom':
         if mesh == 'sym' and face == 3:
             return BC_SYM
@@ -482,6 +498,8 @@ g3 = np.array([2000.0, -1500.0, 1000.0])
 gsym = np.array([2000.0, 0.0, 0.0])
 gparaT = np.array([0.0, 2000.0, 0.0])      # normal to the walls y = 2, 3 cm of paraT: T_w uniform along each wall
 gparaQ = np.array([2000.0, 0.0, 0.0])      # along the walls of paraQ: q = k g . n = 0 there
+gwall2 = np.array([2000.0, 0.0, 0.0])      # ene103, ene104: along the wall y = 2 cm (2-D) ...
+gwall3 = np.array([2000.0, 0.0, 1000.0])   # ... and on box3d
 GP_HOT = 4.0e4                             # run hot: pressure gradient along x, Pa/m (50 Pa per cell of paraT)
 OMEGA_R = 100.0                            # run momr: angular speed of the frame, rad/s
 
@@ -499,7 +517,7 @@ def omega_r(mesh):
 
 
 def field(mesh, run):
-    if run in ('momw', 'momr'):
+    if run in ('momw', 'momr', 'mom103', 'mom104'):
         # zero on the wall y = 2 cm, with shear and dilatation: u = (a, b, c) (y - 2 cm)
         G = np.array([[0.0, 120.0, 0.0], [0.0, 60.0, 0.0], [0.0, 40.0 if mesh == 'box3d' else 0.0, 0.0]])
         x0 = X0.copy()
@@ -517,13 +535,15 @@ def field(mesh, run):
         if mesh == 'sym':
             x0[1] = LREF * OFFSET[1]           # u_y odd about the symmetry plane y = 2 cm
         return {'G': G, 'u0': u0, 'x0': x0}
+    if run in ('ene103', 'ene104'):      # along the wall y = 2 cm: no heat crosses it
+        return {'g': gwall3 if mesh == 'box3d' else gwall2, 'x0': X0.copy()}
     g = {'sym': gsym, 'box3d': g3, 'paraT': gparaT, 'paraQ': gparaQ}.get(mesh, g2)
     return {'g': g, 'x0': X0.copy()}
 
 
 def state(mesh, run, x):
     f = field(mesh, run)
-    if run in ('mom', 'momw', 'momr'):
+    if run in ('mom', 'momw', 'momr', 'mom103', 'mom104'):
         u = f['u0'] + f['G'].dot(x - f['x0'])
         p = P_WORK if (run == 'momr' and mesh in ('paraT', 'paraQ')) else P_LOW
         return p / (RGAS * T0), u, p
@@ -531,7 +551,7 @@ def state(mesh, run, x):
         p = P_LOW + GP_HOT * (x[0] - LREF * OFFSET[0])
         return p / (RGAS * T0), np.zeros(3), p
     T = T0 + f['g'].dot(x - f['x0'])
-    if run == 'ene':
+    if run in ('ene', 'ene103', 'ene104'):
         return RHO0, np.zeros(3), RHO0 * RGAS * T
     return P_LOW / (RGAS * T), np.zeros(3), P_LOW
 
@@ -604,6 +624,12 @@ def write_case(mesh, run, metric):
                             into = 1.0 if face % 2 == 0 else -1.0     # q_wall is positive into the fluid
                             q = into * KCOND * f['g'].dot(nrm) if ('g' in f and tag == 'ns') else 0.0
                             rows.append(head + f'{t:8d}\n' + f'    {q:.17E},    0.000000E+00,    0.000000E+00,\n')
+                        elif t == 103:           # the cell of the other solver: here the wall cell (MOSE does not use it)
+                            rows.append(head + f'{t:8d}\n' +
+                                        f'{b + 1:8d}{i:8d}{j:8d}{k:8d}{face:8d}{1:8d}{0:8d}{0:8d}{1:8d}\n')
+                        elif t == 104:           # one donor cell in each of the two lists of a chimera: here the wall cell
+                            rows.append(head + f'{t:8d}\n' + f'{1:8d}{1:8d}\n' +
+                                        2 * f'{b + 1:8d}{i:8d}{j:8d}{k:8d}    1.0\n')
                         else:
                             rows.append(head + f'{t:8d}\n')
         with open(f'INPUT/bc-{tag}.txt', 'w') as out:
@@ -698,6 +724,8 @@ def groups(blocks, mesh, run, conn):
                         kinds.append('conn' if (b, face, i, j, k) in conn else outer_type(mesh, run, b, face))
                     if BC_OPEN in kinds:
                         g.append(None)
+                    elif any(t in kinds for t in BC_COUPLED):
+                        g.append('coupled')
                     elif run == 'rk3':
                         g.append('centre' if (i <= 4 and j <= 4) else None)
                     elif BC_T in kinds:
@@ -718,7 +746,8 @@ def groups(blocks, mesh, run, conn):
 
 def scales(blocks, mesh, run):
     f = field(mesh, run)
-    coef = MU * float(np.linalg.norm(f['G'])) if run in ('mom', 'momw', 'momr') else KCOND * float(np.linalg.norm(f['g']))
+    coef = (MU * float(np.linalg.norm(f['G'])) if run in ('mom', 'momw', 'momr', 'mom103', 'mom104')
+            else KCOND * float(np.linalg.norm(f['g'])))
     out = []
     for X in blocks:
         ni, nj, nk = dims(X)
@@ -736,16 +765,18 @@ def scales(blocks, mesh, run):
 def check(mesh, run, ns_path, eu_path, wanted):
     blocks = build(mesh, run)
     conn = connections(blocks)
-    comps = ['rhou', 'rhov', 'rhow'] if run in ('mom', 'momw', 'momr') else ['rhoe']
+    comps = ['rhou', 'rhov', 'rhow'] if run in ('mom', 'momw', 'momr', 'mom103', 'mom104') else ['rhoe']
     rhs = viscous_rhs(read_zones(ns_path), None if run == 'rk3' else read_zones(eu_path), comps)
     grp = groups(blocks, mesh, run, conn)
     sc = scales(blocks, mesh, run)
+    expected = coupled_wall_rhs(blocks, mesh, run) if run in ('mom103', 'mom104') else None
     worst = {}
     for b in range(len(blocks)):
         for c, gname in enumerate(grp[b]):
             if gname is None:
                 continue
-            e = float(np.max(np.abs(rhs[b][c]))) / sc[b][c]
+            want = expected[b][c] if (expected is not None and gname == 'coupled') else 0.0
+            e = float(np.max(np.abs(rhs[b][c] - want))) / sc[b][c]
             worst[gname] = max(worst.get(gname, 0.0), e)
     ok = True
     for gname in sorted(worst):
@@ -758,6 +789,26 @@ def check(mesh, run, ns_path, eu_path, wanted):
     if missing:
         print(f'    {mesh} {run}: no cells in the groups {missing}')
     return ok
+
+
+def coupled_wall_rhs(blocks, mesh, run):
+    """Runs mom103, mom104: per block and cell (i fastest), the momentum right-hand side per unit volume of a cell whose
+    face 3 is the coupled wall, -tau . A/V: a linear velocity has a uniform stress tau, whose forces on the faces of a
+    cell sum to zero, and MOSE gives the wall face no viscous flux (A, the outward area vector of the wall face)."""
+    G = field(mesh, run)['G']
+    tau = MU * (G + G.T) - 2.0 / 3.0 * MU * np.trace(G) * np.eye(3)
+    out = []
+    for X in blocks:
+        ni, nj, nk = dims(X)
+        sgn = face_signs(X)
+        e = []
+        for k in range(1, nk + 1):
+            for j in range(1, nj + 1):
+                for i in range(1, ni + 1):
+                    a3 = cell_faces(X, sgn, i, j, k)[2]
+                    e.append(-tau.dot(a3) / cell_volume(X, i, j, k) if j == 1 else np.zeros(3))
+        out.append(e)
+    return out
 
 
 def work(mesh, run, ns_path, eu_path, wanted):

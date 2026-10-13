@@ -298,7 +298,7 @@ endif()
 # walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
 # against an independent replica of their formulas. ViscousWallPatch: the
 # cells next to walls of prescribed temperature varying along the wall.
-# Cost: 40 and 45 one-step solver runs, about 9 s and 10 s of CPU time at
+# Cost: 40 and 61 one-step solver runs, about 9 s and 13 s of CPU time at
 # one thread.
 mose_add_fast_script(ViscousPatch fast/viscous-patch "fast;numerics;2D;3D")
 
