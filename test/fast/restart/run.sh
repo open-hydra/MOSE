@@ -31,7 +31,7 @@
 #         The restart must end normally, create pA.txt again with the rows of
 #         the restarted part and append those rows to pB.txt, and the rows of
 #         both files must be those of the run in one go (check_probes.py; the
-#         restarted run numbers its iterations from 1 again). A
+#         restarted run goes on with the iteration count of its solution). A
 #         restart did not open the probes from a missing file on, and the run
 #         ended at its first probe output with a run-time error.
 #===============================================================================
@@ -308,7 +308,7 @@ add_probes
 rc=$?
 mA=$(rows OUTPUT/pA.txt)
 mB=$(rows OUTPUT/pB.txt)
-python3 -B check_probes.py 10 OUTPUT/pA_full.txt OUTPUT/pA.txt 0 OUTPUT/pB_full.txt OUTPUT/pB.txt "$nB"
+python3 -B check_probes.py 0 OUTPUT/pA_full.txt OUTPUT/pA.txt 0 OUTPUT/pB_full.txt OUTPUT/pB.txt "$nB"
 same=$?
 if [[ $rc -eq 0 && $nA -gt 0 && $mA -eq $nA && $mB -eq $((2 * nB)) && $same -eq 0 ]]; then
   echo "  [ok  ] probes at a restart: pA.txt created again ($mA rows), pB.txt appended ($nB + $nB rows), the rows of the run in one go"

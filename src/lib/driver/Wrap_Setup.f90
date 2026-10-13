@@ -243,7 +243,7 @@ contains
           obj_sim_param%iter_from_call = 0
         enddo
 
-        ! The counters stored with a vtk solution: the restart goes on as the uninterrupted run
+        ! The counters stored with a solution, in any format: the restart goes on as the uninterrupted run
         ! would (CFL ramp, output cadence and numbering, residual history, multigrid level), if
         ! that run was of the same kind, steady or time-accurate. Otherwise, or with a solution
         ! that holds no counters, the run starts its counters as a new one, as before.
@@ -274,7 +274,7 @@ contains
           if (obj_rot%enabled .and. mpi_is_root) &
             call Drop_Rows_After ( 'OUTPUT/torque.dat', 4, obj_io%restart%cycle, simulation%domain(1)%time )
         endif
-        ! Without it (Tecplot, a vtk solution written before it was stored, or a time-accurate one), a steady restart
+        ! Without it (a solution written before it was stored, or a time-accurate one), a steady restart
         ! takes the density residual of its own first iteration, as a new run
         if ( .not. ( obj_sim_param%newrun .or. obj_time_scheme%time_accurate .or. obj_sim_param%res_restored ) ) &
           obj_io%warning_message = '[WARNING] The restart solution holds no residual reference of a steady run: '// &

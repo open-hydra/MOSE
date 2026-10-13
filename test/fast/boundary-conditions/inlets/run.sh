@@ -8,7 +8,9 @@
 #     ambient boundary (407) where the gas enters at 50 m/s runs 20 steps twice
 #     (farfield_normal.py): with alpha = beta = normal, and with the angles the
 #     token stands for on that face, alpha = beta = 0. The two runs must give
-#     the same field to the bit, with no transverse velocity.
+#     the same field to the bit, with no transverse velocity: |v| below the
+#     bound of rounding, 64 eps (|u| + c) (the estimate is in
+#     farfield_normal.py).
 #  2. Inlets at total conditions: when the gas enters, and the face state. A
 #     1-D tube of air, one forward Euler step with first-order reconstruction,
 #     so that the density change of a boundary cell gives the mass flux of its
@@ -87,7 +89,12 @@ for dir in normal angle; do
     continue
   fi
   cp OUTPUT/field.tec "OUTPUT/field-$dir.tec"
-  echo "   inlet direction $dir: largest |v| / u = $(python3 -B farfield_normal.py check "OUTPUT/field-$dir.tec")"
+  if vline=$(python3 -B farfield_normal.py check "OUTPUT/field-$dir.tec"); then
+    echo "  [ok  ] inlet direction $dir: $vline"
+  else
+    echo "  [FAIL] inlet direction $dir, a transverse velocity above rounding: $vline"
+    ffn=1
+  fi
 done
 
 if [[ $ffn -eq 0 ]]; then

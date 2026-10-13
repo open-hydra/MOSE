@@ -39,8 +39,8 @@ module MOSE_Config_Types_m
   !! ------------------------------------------------------
   !! Input-Output -----------------------------------------
   !! ------------------------------------------------------
-  !> Counters stored with every vtk solution (field data of its .vts files) and read back by a
-  !> restart, so that the restarted run goes on as the uninterrupted one would: CFL ramp and
+  !> Counters stored with every solution (field data of the vtk files, data set auxiliary data of
+  !> the Tecplot files) and read back by a restart, so that the restarted run goes on as the uninterrupted one would: CFL ramp and
   !> output cadence, output numbering, residual history and probe rows, multigrid level,
   !> convergence test; and what a restart reads of the time of its solution, in every format.
   type :: restart_counters_t

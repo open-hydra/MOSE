@@ -205,7 +205,7 @@ def read_field(path):
         lines = f.read().splitlines()
     names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s,"]+)', lines[0].split('=', 1)[1])]
     ni, nj, nk = (int(re.search(k + r'=(\d+)', lines[1]).group(1)) for k in ('I', 'J', 'K'))
-    values = [float(v) for v in " ".join(lines[2:]).split()]
+    values = [float(v) for v in " ".join(l for l in lines[2:] if not l.startswith("DATASETAUXDATA")).split()]
     nn, nc, out, pos = ni * nj * nk, (ni - 1) * (nj - 1) * max(nk - 1, 1), {}, 0
     for k, name in enumerate(names):
         cnt = nn if k < 3 else nc

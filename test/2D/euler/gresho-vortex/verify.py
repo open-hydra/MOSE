@@ -65,7 +65,7 @@ def read_field(path):
         f.readline(); f.readline()           # VARIABLES, ZONE
         for line in f:
             line = line.strip()
-            if line:
+            if line and not line.startswith('DATASETAUXDATA'):
                 vals.append(float(line))
     v = np.array(vals)
     off = 0

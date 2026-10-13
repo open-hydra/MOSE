@@ -242,9 +242,8 @@ residual. A residual that rises before it falls is still measured
 from the first iteration: the run goes on until the residual is
 `res-threshold` times that of the first iteration, not times its peak, so it
 ends later than a test relative to the peak would, never earlier. A restart
-from a vtk solution keeps the residual of the first iteration of the
-uninterrupted run, with all its bits in `vtk raw` and in `vtk ascii`,
-whose 17 significant digits give back every 64-bit value (see
+from a solution keeps the residual of the first iteration of the
+uninterrupted run, with all its bits in every format (see
 [Restart](initial-conditions.md#restart)). In
 time-accurate runs the residual is reported but does not end the run.
 
@@ -299,7 +298,7 @@ Controlled by `sol-format` in `[MOSE-IO]`:
 | `vtk ascii` | VTK ASCII (`.vts`) |
 | `vtk raw` | VTK binary (`.vts`): the data of the field, wall and diagnostic outputs in raw binary, appended to each file |
 
-With the vtk formats each output is a multi-block file, `OUTPUT/field.vtm` for instance, that lists its blocks relative to its own folder: `vtk/fieldBlock1.vts`, ... With `vtk raw` a restart can reproduce the uninterrupted run exactly (see [Restart](initial-conditions.md#restart)).
+With the vtk formats each output is a multi-block file, `OUTPUT/field.vtm` for instance, that lists its blocks relative to its own folder: `vtk/fieldBlock1.vts`, ... In every format a restart can reproduce the uninterrupted run exactly (see [Restart](initial-conditions.md#restart)): the binary formats store the bits of every value, the text formats write 17 significant digits. A field solution also holds the counters of a restart: field data in vtk, data set auxiliary data in Tecplot, which a Tecplot ASCII file writes as `DATASETAUXDATA` records after its zones; a script that reads every number after a zone header must stop at them.
 
 ### Output Variables
 
@@ -327,6 +326,6 @@ A probe records one cell: the cell that `index-position` gives (block, i, j, k),
 
 Accepted variables: `rho(n)` (density of species `n`), `u`, `v`, `w`, `p`, `T`, `M` (Mach number) and, with a RANS model, `mi_tilde`, the first turbulence variable, which the solution files name `rhoNuTilde` (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model). An unknown name stops the run at set-up.
 
-A new run replaces the probe files; a restart appends to them, and creates any that are missing (for example a probe added before the restart). Time-based rows fall on the multiples of `dtime`, from the first. A restart that goes on in time writes its next time-based row at the first multiple of `dtime` its time has not reached; a restart that goes on from the counters of a `vtk raw` solution first drops the rows written after that solution (see [Restart](initial-conditions.md#restart)).
+A new run replaces the probe files; a restart appends to them, and creates any that are missing (for example a probe added before the restart). Time-based rows fall on the multiples of `dtime`, from the first. A restart that goes on in time writes its next time-based row at the first multiple of `dtime` its time has not reached; a restart that goes on from the counters of a solution, in any format, first drops the rows written after that solution (see [Restart](initial-conditions.md#restart)).
 
 ---

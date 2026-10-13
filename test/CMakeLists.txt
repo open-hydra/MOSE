@@ -20,6 +20,10 @@ set(_MOSE_TEST_ENV
     "OMP_NUM_THREADS=1"
     "KMP_STACKSIZE=100M"
 )
+# The restart tests also write and read the Tecplot binary format (.szplt), which ORION writes with TecIO
+if(USE_TECIO)
+    list(APPEND _MOSE_TEST_ENV "MOSE_TECIO=1")
+endif()
 
 # Helper: register a case that runs "<run-cmd> && python3 -B <verifier>"
 # in a given working directory, with the given labels.

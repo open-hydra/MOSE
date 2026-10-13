@@ -2,12 +2,17 @@
 #===============================================================================
 #  Restart counters (fast tier, I3/F6)
 #
-#  An exact restart from vtk raw must also carry on the counters that decide
-#  what the run does and writes next. Each case below solves the Sod tube of
-#  test/1D/Sod79 (100 cells) twice, in one go ("full") and in two parts with a
-#  restart in between ("split", newrun = false), and the two OUTPUT/ trees
-#  must be identical byte for byte (../check_restart_vtk.py): numbered
-#  solutions, diagnostic files, residual-history.dat, probe files.
+#  An exact restart must also carry on the counters that decide what the run
+#  does and writes next, in every format: the solution stores them, as vtk
+#  field data or as Tecplot data set auxiliary data. Each case below solves the
+#  Sod tube of test/1D/Sod79 (100 cells) twice, in one go ("full") and in two
+#  parts with a restart in between ("split", newrun = false), and the two
+#  OUTPUT/ trees must be identical byte for byte (../check_restart_vtk.py):
+#  numbered solutions, diagnostic files, residual-history.dat, probe files.
+#  The cases run with vtk raw; steady, dtime and multigrid also with vtk ascii,
+#  Tecplot ASCII and, when MOSE is built with TecIO (MOSE_TECIO = 1, which the
+#  CTest definitions set), Tecplot binary (.szplt): the text formats write 17
+#  significant digits, which read back as the 64-bit values written.
 #
 #   steady     local time stepping, CFL ramp over 30 iterations, solutions
 #              every 7 iterations (sol-overwrite = false) with the diagnostic
@@ -22,7 +27,7 @@
 #   multigrid  two grid levels, 10 iterations on the coarse one, then 30 on
 #              the fine one, the restart after 15 of them; solutions every 4
 #              iterations of the level. Carries the level.
-#  and, with Tecplot ASCII (no counters in the file),
+#  and, with Tecplot ASCII,
 #   multigrid-tecplot  the same two levels: the global iteration count of the
 #              restart goes on from the magnitude of the solution time read on
 #              the finest level, minus the count in a steady solution (the
@@ -130,11 +135,12 @@ write_ini() {
       steady)    printf '%s\n' 'cfl = 0.5' 'cfl-rise-threshold = 30' 'time-accurate = false' ;;
       dtime|probes|torque) printf '%s\n' 'cfl = 0.9' 'time-accurate = true' ;;
       multigrid|multigrid-tecplot|time-only) printf '%s\n' 'cfl = 0.5' 'time-accurate = false' ;;
-      transient|transient-tecplot) if [[ $newrun == true ]]; then printf '%s\n' 'cfl = 0.5' 'time-accurate = false'
+      transient|transient-tecplot|transient-szplt) if [[ $newrun == true ]]; then printf '%s\n' 'cfl = 0.5' 'time-accurate = false'
                  else printf '%s\n' 'cfl = 0.9' 'time-accurate = true'; fi ;;
     esac
-    local fmt='vtk raw'
+    local fmt=${FMT:-vtk raw}
     [[ $case == multigrid-tecplot || $case == transient-tecplot ]] && fmt='tecplot ascii'
+    [[ $case == transient-szplt ]] && fmt='tecplot binary'
     [[ $case == time-only ]] && fmt='vtk ascii'
     printf '\n%s\n' '[MOSE-IO]' "sol-format = $fmt" 'sol-overwrite = false' 'shell-diter = 1000000000' \
                      'ini-diter = 1000000000'
@@ -155,17 +161,22 @@ write_ini() {
   } > "$dir/input.ini"
 }
 
-# run_case <case> <total> <first part>: full run against split run + restart
+# run_case <case> <total> <first part> [<sol-format>]: full run against split run + restart, with vtk raw or with
+# the format given (in runs/<case>-<format>/)
 run_case() {
-  local case=$1 total=$2 first=$3
-  prepare "runs/$case/full"
-  write_ini "runs/$case/full" "$case" "$total" true;          solve "runs/$case/full" full
-  prepare "runs/$case/split"
-  write_ini "runs/$case/split" "$case" "$first" true;         solve "runs/$case/split" first
-  write_ini "runs/$case/split" "$case" "$((total - first))" false; solve "runs/$case/split" restart
-  python3 -B "$CHECK" "runs/$case/full/OUTPUT" "runs/$case/split/OUTPUT" > "runs/$case/compare.log" 2>&1
-  local rc=$?
-  sed "s/^Restart (vtk raw)/  $case/" "runs/$case/compare.log"
+  local case=$1 total=$2 first=$3 rc
+  FMT=${4:-vtk raw}
+  local d=runs/$case label=$case
+  [[ $FMT != 'vtk raw' ]] && d=runs/$case-${FMT// /-} && label="$case ($FMT)"
+  prepare "$d/full"
+  write_ini "$d/full" "$case" "$total" true;          solve "$d/full" full
+  prepare "$d/split"
+  write_ini "$d/split" "$case" "$first" true;         solve "$d/split" first
+  write_ini "$d/split" "$case" "$((total - first))" false; solve "$d/split" restart
+  python3 -B "$CHECK" "$d/full/OUTPUT" "$d/split/OUTPUT" > "$d/compare.log" 2>&1
+  rc=$?
+  sed "s/^Restart (vtk raw)/  $label/" "$d/compare.log"
+  FMT='vtk raw'
   return $rc
 }
 
@@ -192,10 +203,23 @@ EOF
 
 run_case multigrid 30 15 || status=1   # with levels, level1-iter counts the iterations on the fine level
 
-# multigrid-tecplot: the same two levels with Tecplot ASCII, whose solutions hold no counters. The
-# restart solves the coarse level again, but the global iteration count goes on from the solution
-# time of the file, read on the finest level: the iteration column of residual-history.dat must
-# keep increasing (10 + 15 iterations, then the restart)
+# The same three cases in the other formats
+formats=('vtk ascii' 'tecplot ascii')
+if [[ ${MOSE_TECIO:-0} == 1 ]]; then
+  formats+=('tecplot binary')
+else
+  echo "  (Tecplot binary not run: MOSE_TECIO is not 1, MOSE built without TecIO)"
+fi
+for fmt in "${formats[@]}"; do
+  run_case steady 40 20 "$fmt" || status=1
+  run_case dtime 50 25 "$fmt" || status=1
+  run_case multigrid 30 15 "$fmt" || status=1
+done
+
+# multigrid-tecplot: the same two levels with Tecplot ASCII and the final solution only. The solution of
+# the coarse level, written when the run moves to the fine one, has the time of its iteration, and the
+# iteration column of residual-history.dat keeps increasing across the restart (10 + 15 iterations, then
+# the restart)
 prepare runs/multigrid-tecplot/split
 write_ini runs/multigrid-tecplot/split multigrid-tecplot 15 true;   solve runs/multigrid-tecplot/split first
 python3 -B - runs/multigrid-tecplot/split/OUTPUT <<'EOF' || status=1
@@ -229,16 +253,24 @@ print('  multigrid-tecplot: residual history rows %d to %d around the restart: %
 sys.exit(0 if ok else 1)
 EOF
 
-# transient: 10 steady iterations, then a time-accurate restart for 5 steps, from vtk raw and from Tecplot ASCII
-for case in transient transient-tecplot; do
+# transient: 10 steady iterations, then a time-accurate restart for 5 steps, from vtk raw, from Tecplot ASCII and,
+# with TecIO, from Tecplot binary (whose time is read from the last row of residual-history.dat)
+cases=(transient transient-tecplot)
+[[ ${MOSE_TECIO:-0} == 1 ]] && cases+=(transient-szplt)
+for case in "${cases[@]}"; do
   prepare runs/$case/split
   write_ini runs/$case/split $case 10 true;  solve runs/$case/split steady
   write_ini runs/$case/split $case 5 false;  solve runs/$case/split transient
-  sol=runs/$case/split/OUTPUT/field.vtm; [[ $case == transient-tecplot ]] && sol=runs/$case/split/OUTPUT/field.tec
+  sol=runs/$case/split/OUTPUT/field.vtm
+  [[ $case == transient-tecplot ]] && sol=runs/$case/split/OUTPUT/field.tec
+  [[ $case == transient-szplt ]] && sol=runs/$case/split/OUTPUT/residual-history.dat
   python3 -B - "$sol" "$case" <<'EOF' || status=1
 import sys
 from vtk_time import time_of
-t = time_of(sys.argv[1])
+if sys.argv[1].endswith('.dat'):
+    t = float([l.split() for l in open(sys.argv[1]) if l.strip()][-1][1])
+else:
+    t = time_of(sys.argv[1])
 ok = 0.0 < t < 0.1
 print('  %s: solution time after 5 steps from the steady solution = %.17g (%s)'
       % (sys.argv[2], t, 'ok' if ok else 'should be in (0, 0.1)'))

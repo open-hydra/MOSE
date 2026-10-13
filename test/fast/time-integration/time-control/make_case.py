@@ -128,7 +128,7 @@ def read_field(path):
         lines = f.read().splitlines()
     names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s,"]+)', lines[0].split('=', 1)[1])]  # quoted or not
     time = float(lines[1].split("SOLUTIONTIME=")[1].split(",")[0])
-    values = [float(v) for v in " ".join(lines[2:]).split()]
+    values = [float(v) for v in " ".join(l for l in lines[2:] if not l.startswith("DATASETAUXDATA")).split()]
     nn, out, pos = (N + 1) * 4, {}, 0
     for k, name in enumerate(names):
         cnt = nn if k < 3 else N

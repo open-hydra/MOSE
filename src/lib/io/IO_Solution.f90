@@ -2,8 +2,9 @@ module MOSE_IO_Solution
 
   implicit none
 
-  !> Names of the counters stored as field data with every vtk solution, next to TIME and to
-  !> CYCLE (the iteration count over all grid levels): see restart_counters_t in Config_Types_m
+  !> Names of the counters stored with every solution, next to its time and to CYCLE (the iteration
+  !> count over all grid levels): field data of the vtk files, data set auxiliary data of the
+  !> Tecplot files; see restart_counters_t in Config_Types_m
   character(len=21), parameter, public :: restart_counter_names(5) = [character(len=21) :: &
     'MOSE_ITERATION', 'MOSE_OUTPUT_NUMBER', 'MOSE_GRID_LEVEL', 'MOSE_LAST_OUTPUT_TIME', 'MOSE_RES_REFERENCE']
 
@@ -143,8 +144,17 @@ contains
     select case(trim(format(1)))
     case('tecplot')
       IOfield%tec%format = trim(format(2))
-      error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit), &
-                                             zone_mask=zone_mask,dims_only=dims_only)
+      if ( obj_sim_param%newrun .or. present(zone_mask) ) then
+        error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit), &
+                                               zone_mask=zone_mask,dims_only=dims_only)
+      else
+        ! Restart: also the counters stored with the solution, as data set auxiliary data (the pass with
+        ! zone_mask keeps those of the first pass)
+        nc = size(restart_counter_names)
+        error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit),dims_only=dims_only, &
+                                               cycle=cycle,fldnames=restart_counter_names, &
+                                               fldvalues=counters(1:nc),fldfound=found(1:nc))
+      endif
       ! Restart: does the solution hold a time? The ORION reader gives -huge(1._R8P) when no zone of a Tecplot
       ! ASCII file holds SOLUTIONTIME, and every valid time lies far above half of it; a zone of a binary file
       ! always holds its solution time. A steady run writes its solutions at minus the global iteration count, a
@@ -183,8 +193,7 @@ contains
         ! The solution time of the file, where the Tecplot reader stores it
         IOfield%solutiontime = obj_io%IOtime
       else
-        ! Restart: also the counters stored with the solution, when it holds them all (the last one, the residual
-        ! reference, is not in the solutions written before it was stored), and whether it holds a time (the
+        ! Restart: also the counters stored with the solution, as field data, and whether it holds a time (the
         ! reader gives TIME = 0 when the files hold none)
         nc = size(restart_counter_names)
         fldnames(1:nc) = restart_counter_names
@@ -192,20 +201,10 @@ contains
         error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4), &
                                                vtspath=trim(vtspath),time=obj_io%IOtime,cycle=cycle, &
                                                fldnames=fldnames,fldvalues=counters,fldfound=found)
-        obj_io%restart%found      = all(found(1:4))
         obj_io%restart%time_found = found(nc+1)
         ! A steady run writes its solutions at time minus the global iteration count (before, -1), a
         ! time-accurate one at t >= 0
         obj_io%restart%steady = ( obj_io%IOtime < 0.d0 )
-        if ( obj_io%restart%found ) then
-          obj_io%restart%cycle            = cycle
-          obj_io%restart%iteration        = nint(counters(1))
-          obj_io%restart%output_number    = nint(counters(2))
-          obj_io%restart%grid_level       = nint(counters(3))
-          obj_io%restart%last_output_time = counters(4)
-          obj_io%restart%res_found        = found(5)
-          obj_io%restart%res_reference    = counters(5)
-        endif
         ! The solution time where the Tecplot reader stores it, with its convention for a steady
         ! solution: the global iteration count, CYCLE when the file holds it (the reader gives 0
         ! otherwise), else |TIME|
@@ -220,6 +219,21 @@ contains
         endif
       endif
     end select
+
+    ! Restart: the counters stored with the solution, the same in every format, when it holds them all (the last
+    ! one, the residual reference, is not in the solutions written before it was stored)
+    if ( .not. obj_sim_param%newrun .and. .not. present(zone_mask) ) then
+      obj_io%restart%found = all(found(1:4))
+      if ( obj_io%restart%found ) then
+        obj_io%restart%cycle            = cycle
+        obj_io%restart%iteration        = nint(counters(1))
+        obj_io%restart%output_number    = nint(counters(2))
+        obj_io%restart%grid_level       = nint(counters(3))
+        obj_io%restart%last_output_time = counters(4)
+        obj_io%restart%res_found        = found(5)
+        obj_io%restart%res_reference    = counters(5)
+      endif
+    endif
 
     if (error/=0) obj_io%error_message = "[ERROR] reading input file "//trim(obj_io%nameinit)
 
@@ -473,6 +487,7 @@ contains
     character(len=llen) :: name
     character(len=len(obj_io%Ovarnames)) :: vtknames
     integer             :: E_IO, b, c
+    real(R8P)           :: counters(size(restart_counter_names))
 
     ! Gather P from all ranks to root (collective — all ranks must call)
     call gather_P_to_root(domain)
@@ -536,6 +551,10 @@ contains
 
     if (mpi_is_root) then
       path = 'OUTPUT/'
+      ! The counters a restart needs to go on as the uninterrupted run, the same in every format (Read_vtk_tec
+      ! reads them)
+      counters = [real(domain%iter,R8P), real(obj_io%output_number,R8P), real(obj_multigrid%MG_level,R8P), &
+                  obj_sim_param%time_from_call, obj_sim_param%res_reference]
 
       ! Write the IOfield accordingly to the solution format
       if (index(obj_io%sol_format,'vtk')>0) then
@@ -551,17 +570,18 @@ contains
         if ( name(1:1) == '/' ) name = name(2:)
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
-        ! The counters a restart needs to go on as the uninterrupted run (Read_vtk_tec reads them). The time is
-        ! the solution time of the Tecplot outputs: minus the global iteration count in a steady run
+        ! The counters as field data, next to TIME and CYCLE. The time is the solution time of the Tecplot
+        ! outputs: minus the global iteration count in a steady run
         E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(name), &
                                                vtmpath=trim(path)//trim(name),varnames=vtknames,time=IOfield%solutiontime, &
                                                cycle=int(obj_sim_param%iter_general,I4P), &
-                                               fldnames=restart_counter_names, &
-                                               fldvalues=[real(domain%iter,R8P), real(obj_io%output_number,R8P), &
-                                                          real(obj_multigrid%MG_level,R8P), obj_sim_param%time_from_call, &
-                                                          obj_sim_param%res_reference])
+                                               fldnames=restart_counter_names,fldvalues=counters)
       else
-        E_IO = tec_write_structured_multiblock(orion=IOfield,varnames=obj_io%Ovarnames,filename=trim(path)//trim(file)//trim(IOfield%tec%extension))
+        ! The counters as data set auxiliary data, next to CYCLE
+        E_IO = tec_write_structured_multiblock(orion=IOfield,varnames=obj_io%Ovarnames, &
+                                               filename=trim(path)//trim(file)//trim(IOfield%tec%extension), &
+                                               cycle=int(obj_sim_param%iter_general,I4P), &
+                                               fldnames=restart_counter_names,fldvalues=counters)
       end if
     end if
 
