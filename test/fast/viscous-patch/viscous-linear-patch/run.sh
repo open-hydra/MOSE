@@ -21,14 +21,15 @@
 #  symmetry planes and next to walls with a prescribed heat flux (301); also
 #  at every stage of a three-stage step at the points shared by 3 and 5 blocks.
 #  The cells next to walls of prescribed temperature (302) are the test
-#  ViscousWallPatch, with a T linear at uniform pressure (the density not
-#  uniform) next to walls 301 and 302 and 400 faces, whose ghost cells must
-#  extrapolate T itself, and a run where the limits of those ghost cells act
-#  (counted at the end of the run). Controls that every face metric passes:
-#  walls 301 with q = 0 (here) and 302 with T_w uniform along the wall
-#  (ViscousWallPatch) on parallelogram cells. Plus the face metrics
-#  inverse-mean and mean: they must give the viscous force of an
-#  independent replica of their formulas.
+#  ViscousWallPatch, also on a wall that does not turn with a rotating frame,
+#  whose velocity in the frame varies along it (with every face metric), with
+#  a T linear at uniform pressure (the density not uniform) next to walls 301
+#  and 302 and 400 faces, whose ghost cells must extrapolate T itself, and a
+#  run where the limits of those ghost cells act (counted at the end of the
+#  run). Controls that every face metric passes: walls 301 with q = 0 (here)
+#  and 302 with T_w uniform along the wall (ViscousWallPatch) on parallelogram
+#  cells. Plus the face metrics inverse-mean and mean: they must give the
+#  viscous force of an independent replica of their formulas.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -60,7 +61,7 @@ step() {
   cp "input-$tag.ini" input.ini
   cp "INPUT/bc-$tag.txt" INPUT/bc.txt
   rm -f INPUT/transport.dat
-  if [[ $tag == ref && ( $run == ene || $run == enep || $run == momw ) ]]; then
+  if [[ $tag == ref && ( $run == ene || $run == enep || $run == momw || $run == momr ) ]]; then
     ln -sf transport-ref.dat INPUT/transport.dat
   else
     ln -sf "../$VISC/transport.dat" INPUT/transport.dat
@@ -91,6 +92,23 @@ if [[ $NAME == ViscousWallPatch ]]; then
     step ns "$mesh" momw
     step ref "$mesh" momw
     python3 -B "$MC" check "$mesh" momw "OUTPUT/diag-$mesh-momw-ns.tec" "OUTPUT/diag-$mesh-momw-ref.tec" wall302 || status=1
+  done
+  echo "-- the same on a wall that does not turn with a rotating frame: its velocity there, -Omega x r, varies along it --"
+  for mesh in rand1 box3d; do
+    python3 -B "$MC" case "$mesh" momr > /dev/null || exit 1
+    step ns "$mesh" momr
+    step ref "$mesh" momr
+    python3 -B "$MC" check "$mesh" momr "OUTPUT/diag-$mesh-momr-ns.tec" "OUTPUT/diag-$mesh-momr-ref.tec" wall302 || status=1
+  done
+  echo "-- the same on parallelograms with inverse-mean (wall 302) and mean (adiabatic wall 301), the cell metric --"
+  for case in paraT:inverse-mean:wall302 paraQ:mean:wall301; do
+    IFS=: read -r mesh metric group <<< "$case"
+    echo "    $mesh, diffusive-metric = $metric:"
+    python3 -B "$MC" case "$mesh" momr "$metric" > /dev/null || exit 1
+    step ns "$mesh" momr "$metric"
+    step ref "$mesh" momr "$metric"
+    python3 -B "$MC" check "$mesh" momr "OUTPUT/diag-$mesh-momr-ns-$metric.tec" "OUTPUT/diag-$mesh-momr-ref-$metric.tec" \
+      "$group" || status=1
   done
   echo "-- T linear at uniform pressure (density not uniform): walls 301, 302 and 400 faces extrapolate T itself --"
   for mesh in fold2 jump jump2 star3 star5 box3d sym paraT; do

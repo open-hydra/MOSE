@@ -111,6 +111,12 @@ $$\boldsymbol{w}_{\text{wall}} = \boldsymbol{0}$$
 
 (i.e., zero relative velocity at a wall moving with the frame).
 
+A wall at rest in the laboratory (a casing or a hub that does not turn) is listed in `[MOSE-Rotating-Frame]` as `stationary-face-<n> = <block> <face>`, numbered from 1; the walls `301` and `302` of that block face take it. Such a wall moves in the rotating frame with
+
+$$\boldsymbol{w}_{\text{wall}} = -\boldsymbol{\Omega} \times (\boldsymbol{x} - \boldsymbol{x}_o)$$
+
+($\boldsymbol{x}_o$ the `origin` of the frame), a velocity linear in $\boldsymbol{x}$: its no-slip condition and its ghost cells take this velocity, and its wall gradient also the differences of this velocity along the wall, from its gradient $-[\boldsymbol{\Omega}\times]$ (see [Gradient Computation for Diffusive Fluxes](numerics.md#gradient-computation-for-diffusive-fluxes)).
+
 ## Physical Interpretation
 
 The rotating-frame formulation is equivalent to solving the full inertial-frame problem but with fictitious body forces representing:

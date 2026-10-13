@@ -46,6 +46,12 @@ Runs:
          Checked: the energy of the cells without a 400 face.
   momw   uniform p = 10 Pa and T, u = (a, b, c) (y - 2 cm), zero on the wall y = 2 cm (302, T_w = T) of rand1 and box3d,
          whose wall cells have nodes moved at random; the other outer faces 400. Checked: the momentum of the wall cells.
+  momr   as momw in a frame turning at OMEGA_R about an axis through the origin (z on the 2-D meshes, (1, 2, 2)/3 on
+         box3d), with the wall y = 2 cm a stationary face of the frame (stationary-face): there the wall moves with
+         -Omega x x, which varies along it, and u = -Omega x x + (a, b, c) (y - 2 cm) takes that velocity on the
+         wall. The sources of the frame are the same in the reference step. On rand1 and box3d with the default face
+         metric; on parallelogram cells, where the metric of the wall cell is exact too, with inverse-mean on paraT and
+         with mean on paraQ, whose wall is an adiabatic 301. Checked: the momentum of the wall cells.
   rk3    u = 0, uniform p = 10 Pa, T linear (rho = p/(R T)): steady for the Euler equations and, with a face gradient
          exact for linear fields, for the Navier-Stokes equations, at every stage (the low pressure: see P_LOW).
          Three-stage Runge-Kutta step, 12 x 12 cells per block (star3, star5 only). Checked are the cells within 4 cells
@@ -59,21 +65,22 @@ Runs:
          wall temperature and the cut of the extrapolation act. Checked: the line of the run that counts them.
 
 Observable: one explicit step from the same state with the Navier-Stokes equations and one reference step (mom: the Euler
-equations; ene, momw: Navier-Stokes with mu = k = 1e-30 and q = 0 on the 301 faces, because the solver refuses walls 301 and
-302 with the Euler equations and the ghost cells must stay those of the walls; rk3: the Navier-Stokes step only, whose
-inviscid part is zero for this state). The diagnostic output holds, per cell, the residual over the step, r, and the
-step dt; r/dt of Navier-Stokes minus r/dt of the reference is the viscous right-hand side per unit volume. It is
-compared with the scale mu |G| (sum of face areas)/volume (mom, momw) or k |g| (sum of face areas)/volume (ene, rk3);
-threshold 1e-11. The cells are grouped by the faces they have: interior (no boundary face), connection (a face between
-blocks; corner: two of them, the cells at a point shared by 3 or 5 blocks), symmetry (300), wall 301, wall 302.
+equations; ene, momw, momr: Navier-Stokes with mu = k = 1e-30 and q = 0 on the 301 faces, because the solver refuses
+walls 301 and 302 with the Euler equations and the ghost cells must stay those of the walls; rk3: the Navier-Stokes step
+only, whose inviscid part is zero for this state). The diagnostic output holds, per cell, the residual over the step, r,
+and the step dt; r/dt of Navier-Stokes minus r/dt of the reference is the viscous right-hand side per unit volume. It is
+compared with the scale mu |G| (sum of face areas)/volume (mom, momw, momr) or k |g| (sum of face areas)/volume (ene,
+rk3); threshold 1e-11. The cells are grouped by the faces they have: interior (no boundary face), connection (a face
+between blocks; corner: two of them, the cells at a point shared by 3 or 5 blocks), symmetry (300), wall 301, wall 302.
 
 ViscousLinearPatch checks every group but wall 302, plus the old metrics: on the rand1 mesh, run mom, diffusive-metric =
 inverse-mean and mean must give, cell by cell, the viscous force of an independent replica of their face gradients
 (written here from Lib_Diffusive.f90 and Lib_Metrics.f90 at bff5a51, with the ghost values of the 400 faces of
 Ghost_Wall), within 1e-10 of the scale. ViscousWallPatch checks the cells with a 302 face: walls whose temperature varies
-along the wall, on skewed cells (ene), and the velocity at a no-slip wall whose cells have nodes moved at random (momw); and
-the cells next to walls 301 and 302 with T linear at uniform pressure (enep), and the count of the limits of the wall ghost
-cells (hot).
+along the wall, on skewed cells (ene), and the velocity at a no-slip wall whose cells have nodes moved at random (momw),
+also at a wall that does not turn with a rotating frame, whose velocity in the frame varies along it, with every face
+metric (momr; on paraQ the cells with a 301 face); and the cells next to walls 301 and 302 with T linear at uniform
+pressure (enep), and the count of the limits of the wall ghost cells (hot).
 
 Usage (from a test directory):
   python3 -B make_case.py case MESH RUN [METRIC]     INPUT/ic.tec; INPUT/bc-ns.txt, input-ns.ini for the Navier-Stokes
@@ -108,7 +115,7 @@ TOL = 1.0e-11
 TOL_REPLICA = 1.0e-10
 FMT = '{: .17E}'
 MESHES = ('fold2', 'jump', 'jump2', 'fan', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
-RUNS = ('mom', 'ene', 'rk3', 'momw', 'enep', 'hot')
+RUNS = ('mom', 'ene', 'rk3', 'momw', 'momr', 'enep', 'hot')
 BC_CONNECT, BC_SYM, BC_Q, BC_T, BC_OPEN = 101, 300, 301, 302, 400
 
 
@@ -278,8 +285,10 @@ def outer_type(mesh, run, b, face):
         if mesh == 'sym' and face == 3:
             return BC_SYM
         return BC_OPEN
-    if run == 'momw':                    # one wall, the plane y = 2 cm of rand1 and box3d
-        return BC_T if face == 3 else BC_OPEN
+    if run in ('momw', 'momr'):          # one wall, the plane y = 2 cm: 302, or 301 (q = 0) on paraQ
+        if face != 3:
+            return BC_OPEN
+        return BC_Q if mesh == 'paraQ' else BC_T
     if run == 'rk3':
         mix = {0: (BC_T, BC_T), 1: (BC_Q, BC_T), 2: (BC_OPEN, BC_Q), 3: (BC_T, BC_OPEN), 4: (BC_Q, BC_Q)}
         return mix[b][0 if face == 2 else 1]
@@ -464,14 +473,32 @@ gsym = np.array([2000.0, 0.0, 0.0])
 gparaT = np.array([0.0, 2000.0, 0.0])      # normal to the walls y = 2, 3 cm of paraT: T_w uniform along each wall
 gparaQ = np.array([2000.0, 0.0, 0.0])      # along the walls of paraQ: q = k g . n = 0 there
 GP_HOT = 4.0e4                             # run hot: pressure gradient along x, Pa/m (50 Pa per cell of paraT)
+OMEGA_R = 100.0                            # run momr: angular speed of the frame, rad/s
+
+
+def axis_r(mesh):
+    """Run momr: the axis of the frame as input.ini gives it, (1, 2, 2) on box3d, z on the 2-D meshes (no velocity along
+    z, which their symmetry planes k would reflect)."""
+    return np.array([1.0, 2.0, 2.0]) if mesh == 'box3d' else np.array([0.0, 0.0, 1.0])
+
+
+def omega_r(mesh):
+    """Run momr: the angular velocity of the frame, OMEGA_R times the unit axis, with the operations of the solver."""
+    a = axis_r(mesh)
+    return OMEGA_R * (a / math.sqrt(float(a.dot(a))))
 
 
 def field(mesh, run):
-    if run == 'momw':
+    if run in ('momw', 'momr'):
         # zero on the wall y = 2 cm, with shear and dilatation: u = (a, b, c) (y - 2 cm)
         G = np.array([[0.0, 120.0, 0.0], [0.0, 60.0, 0.0], [0.0, 40.0 if mesh == 'box3d' else 0.0, 0.0]])
         x0 = X0.copy()
         x0[1] = LREF * OFFSET[1]
+        if run == 'momr':
+            # plus W x = -Omega x x, the velocity in the frame of a point at rest (the origin of the frame at 0)
+            om = omega_r(mesh)
+            W = np.array([[0.0, om[2], -om[1]], [-om[2], 0.0, om[0]], [om[1], -om[0], 0.0]])
+            return {'G': G + W, 'u0': W.dot(x0), 'x0': x0}
         return {'G': G, 'u0': np.zeros(3), 'x0': x0}
     if run == 'mom':
         G = GSYM if mesh == 'sym' else (G3 if mesh == 'box3d' else G2)
@@ -486,7 +513,7 @@ def field(mesh, run):
 
 def state(mesh, run, x):
     f = field(mesh, run)
-    if run in ('mom', 'momw'):
+    if run in ('mom', 'momw', 'momr'):
         u = f['u0'] + f['G'].dot(x - f['x0'])
         return P_LOW / (RGAS * T0), u, P_LOW
     if run == 'hot':
@@ -549,7 +576,7 @@ def write_case(mesh, run, metric):
                         t = outer_type(mesh, run, b, face)
                         if t == BC_T:
                             xf = 0.25 * sum(face_nodes(X, face, i, j, k))
-                            tw = T0 if run == 'momw' else T0 + f['g'].dot(xf - f['x0'])
+                            tw = T0 if run in ('momw', 'momr') else T0 + f['g'].dot(xf - f['x0'])
                             if run == 'hot':
                                 tw = 0.5 * T0
                             rows.append(head + f'{t:8d}\n' + f'    {tw:.17E},    0.000000E+00,    0.000000E+00,\n')
@@ -564,7 +591,7 @@ def write_case(mesh, run, metric):
                                 fk = k - 1
                             nrm, _ = face_normal_area(X, sgn, d, fi, fj, fk)
                             into = 1.0 if face % 2 == 0 else -1.0     # q_wall is positive into the fluid
-                            q = into * KCOND * f['g'].dot(nrm) if (run != 'mom' and tag == 'ns') else 0.0
+                            q = into * KCOND * f['g'].dot(nrm) if ('g' in f and tag == 'ns') else 0.0
                             rows.append(head + f'{t:8d}\n' + f'    {q:.17E},    0.000000E+00,    0.000000E+00,\n')
                         else:
                             rows.append(head + f'{t:8d}\n')
@@ -584,13 +611,20 @@ def write_case(mesh, run, metric):
         out.write(''.join(tiny))
     key = '' if metric is None else f'diffusive-metric = {metric}\n'
     scheme = 'RK3' if run == 'rk3' else 'euler'
+    rot, frame = '', ''
+    if run == 'momr':                    # the frame of momr; the wall y = 2 cm (face 3 of every block) does not turn
+        ax = axis_r(mesh)
+        rot = 'rotational-frame = rigid-body\n'
+        frame = ('\n[MOSE-Rotating-Frame]\n'
+                 f'omega = {OMEGA_R}\naxis = {ax[0]} {ax[1]} {ax[2]}\n'
+                 'origin = 0.0 0.0 0.0\n' + ''.join(f'stationary-face-{b + 1} = {b + 1} 3\n' for b in range(len(blocks))))
     for tag, eq in (('ns', 'navier-stokes'), ('ref', 'euler' if run == 'mom' else 'navier-stokes')):
         with open(f'input-{tag}.ini', 'w') as out:
             out.write('[MOSE-Parameters]\niter-threshold = 1\nnewrun = true\nres-threshold = 1e-300\n\n'
-                      f'[MOSE-Physics]\nequations = {eq}\nschmidt = 0.7\n\n'
+                      f'[MOSE-Physics]\nequations = {eq}\nschmidt = 0.7\n' + rot + '\n'
                       '[MOSE-Numerics]\ncfl = 0.5\nvnn = 0.3\ntime-accurate = false\n'
                       f'time-scheme = {scheme}\nintegration-variables = cons\nspace-reconstruction = MUSCL\n'
-                      'flux-limiter = vanleer\nriemann-solver = HLLC\n' + key)
+                      'flux-limiter = vanleer\nriemann-solver = HLLC\n' + key + frame)
     print(f'{mesh}/{run}: {len(blocks)} blocks, {sum(np.prod(dims(X)) for X in blocks)} cells, {len(rows)} records')
 
 
@@ -673,7 +707,7 @@ def groups(blocks, mesh, run, conn):
 
 def scales(blocks, mesh, run):
     f = field(mesh, run)
-    coef = MU * float(np.linalg.norm(f['G'])) if run in ('mom', 'momw') else KCOND * float(np.linalg.norm(f['g']))
+    coef = MU * float(np.linalg.norm(f['G'])) if run in ('mom', 'momw', 'momr') else KCOND * float(np.linalg.norm(f['g']))
     out = []
     for X in blocks:
         ni, nj, nk = dims(X)
@@ -691,7 +725,7 @@ def scales(blocks, mesh, run):
 def check(mesh, run, ns_path, eu_path, wanted):
     blocks = build(mesh, run)
     conn = connections(blocks)
-    comps = ['rhou', 'rhov', 'rhow'] if run in ('mom', 'momw') else ['rhoe']
+    comps = ['rhou', 'rhov', 'rhow'] if run in ('mom', 'momw', 'momr') else ['rhoe']
     rhs = viscous_rhs(read_zones(ns_path), None if run == 'rk3' else read_zones(eu_path), comps)
     grp = groups(blocks, mesh, run, conn)
     sc = scales(blocks, mesh, run)

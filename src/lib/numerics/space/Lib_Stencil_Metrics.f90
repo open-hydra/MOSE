@@ -783,9 +783,10 @@ contains
   !> the wall values at the centres (mean of the four nodes) of the neighbouring faces of the same block face and of the
   !> same type, central, or one-sided where the wall ends; along an index direction with one cell, or with no such
   !> neighbour, the edge of the cell and no difference of the field, as before. Exact for a linear field whose wall values
-  !> are its values at the face centres: T_w of the 302 records, and the velocity, zero on the wall. Not here: the wall
-  !> velocity of the stationary faces of a rotating frame, which varies along the wall (its tangential differences stay
-  !> zero, as before), and the temperature of the 503-505 faces, which the surface model sets at every call.
+  !> are its values at the face centres: T_w of the 302 records, and the velocity, zero on the wall. The velocity of the
+  !> stationary faces of a rotating frame, linear in x, is not stored here: the wall routines take its differences along
+  !> the columns of this metric from its gradient. Not here: the temperature of the 503-505 faces, which the surface
+  !> model sets at every call.
   subroutine Wall_Face_Stencils ( domain, xc )
     use MOSE_Advanced_Types_m
     use MOSE_Lib_Diffusive, only: Inverse3

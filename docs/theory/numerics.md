@@ -468,10 +468,25 @@ as in [13] (Eq. 3.57–3.59) and in OpenFOAM (OpenFOAM-dev, commit dfa6c7e,
 `fvPatch.C`), has the error of `inverse-mean` and `mean` given below.
 With `inverse-mean` and `mean`, and for the quantities whose wall value is not
 known along the wall (the temperature of 301 walls and of the surface models
-of 503–505, the velocity of the stationary walls of a rotating frame), the
-derivatives along the wall are zero and the metric is that of the wall cell:
-on a cell skewed by θ the normal gradient is then wrong by
+of 503–505), the derivatives along the wall are zero and the metric is that of
+the wall cell: on a cell skewed by θ the normal gradient is then wrong by
 $(\partial\phi_w/\partial s)\tan\theta$, which refinement does not reduce.
+
+A 301 or 302 wall of a stationary face of a rotating frame moves in the frame
+with $\mathbf{u}_w = -\boldsymbol{\Omega}\times(\mathbf{x}-\mathbf{x}_o)$
+($\mathbf{x}_o$ the origin of the frame), a velocity linear in $\mathbf{x}$
+with the constant gradient $-[\boldsymbol{\Omega}\times]$. With every option
+the wall gradient takes the differences of $\mathbf{u}_w$ along the position
+differences of its metric, the columns of $M^{-1}$: those of the wall stencil
+above with `stencil`, the edges of the wall cell with `inverse-mean` and
+`mean`. The part of $\mathbf{u}_w$ in the wall gradient is then exact with
+`stencil` on cells of any shape, and with `inverse-mean` and `mean` on
+parallelepiped cells, where the metric of the wall cell is exact; the rest is
+that of a wall at rest. Without these differences the wall stress would be
+wrong by the order of $\mu\,|\boldsymbol{\Omega}|$ with every metric and on
+any mesh, orthogonal cells included, because the stress takes the derivatives
+of the velocity along the wall: a gas at rest in the absolute frame, a rigid
+rotation in the rotating frame, would feel a shear on the wall.
 
 The viscous flux of a chimera face is the mean of two fluxes: one with the
 central differences along the face of the row of the cell, one with those of

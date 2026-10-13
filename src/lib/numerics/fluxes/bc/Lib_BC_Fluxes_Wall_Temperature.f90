@@ -13,8 +13,9 @@ contains
   !> Wall of prescribed temperature T_wall: the viscous flux of the face. Its ghost values, turbulence variables included,
   !> are those of Fill_Ghost_Cell (Ghost_Wall in MOSE_Lib_Ghost), the one set of ghost cells of the fluxes and of the source
   !> terms (an SRM grain, 502, falls back on this wall when it does not burn: Ghost_SRM_Turbulence takes its wall values).
-  subroutine BC_Wall_Temperature ( Im, Jm, Km, Fm, Blk, T_wall, Ovar, w_wall, k_rough, rec )
+  subroutine BC_Wall_Temperature ( Im, Jm, Km, Fm, Blk, T_wall, Ovar, w_wall, k_rough, rec, w_grad )
     use MOSE_Config_Types_m, only: obj_rans
+    use MOSE_Lib_Diffusive, only: Inverse3
     use MOSE_Lib_Fluid
     use MOSE_Lib_RANS
     use FLINT_Lib_Thermodynamic
@@ -26,9 +27,10 @@ contains
     real(R8), optional, dimension(3), intent(in) :: w_wall
     real(R8), optional, intent(in) :: k_rough   ! sand-grain roughness of the face (absent = smooth)
     type(MOSE_bc_type), optional, intent(in) :: rec   ! the record of the face: its wall stencil (diffusive-metric = stencil)
+    real(R8), optional, dimension(3,3), intent(in) :: w_grad   ! with w_wall: its gradient, d w_wall(i) / d x(j)
     ! Local
-    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k
-    real(R8) :: Normal(3), Area, Dist, M(3,3), Prim(nprim), rho, Rgas, T, rho_wall, dl
+    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, q
+    real(R8) :: Normal(3), Area, Dist, M(3,3), Mi(3,3), Prim(nprim), rho, Rgas, T, rho_wall, dl
     real(R8) :: Prim_wall(nprim), mil, kl, Gradient(nprim,3), Stress(3), Flux(nprim)
     integer  :: vgrad_i
     real(R8) :: gvec1, gvec2, gvec3, VelGrad(3,3)
@@ -49,6 +51,7 @@ contains
     M = Blk % M (Im,Jm,Km) % c
     ! diffusive-metric = stencil: the metric of the wall face, with the differences of the wall values along the wall
     ! below (Wall_Face_Stencils in MOSE_Lib_Stencil_Metrics); otherwise the metric of the cell and no tangential difference
+    ! but those of the velocity of a wall that moves (below)
     wst = .false.
     if ( present(rec) ) wst = rec % wstencil
     if ( wst ) M = rec % wM
@@ -66,8 +69,8 @@ contains
     ! (Ghost_Wall in MOSE_Lib_Ghost).
     call Wall_State_Temperature ( Prim, rho, Rgas, T_wall, rho_wall, Prim_wall(1:nsc), mil, kl )
 
-    ! Difference in Across-face direction: symmetry; tangential direction: null (with the wall stencil, below: the
-    ! differences of the wall values)
+    ! Difference in Across-face direction: symmetry; tangential direction: null (below: with the wall stencil the
+    ! differences of the wall temperature, on a wall that moves those of its velocity)
     Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3                  ! Velocity
     if ( present(w_wall) ) then
       Gradient(nu:nw,Dir) = ( Prim(nu:nw) - w_wall ) * modfm3  ! Velocity relative to wall
@@ -82,6 +85,15 @@ contains
         case default ; tb = [1, 2]
       end select
       Gradient(np,tb(1)) = rec % wdT(1) ; Gradient(np,tb(2)) = rec % wdT(2)
+    end if
+    ! A wall that moves with a velocity linear in x (a stationary face of a rotating frame): the differences of the wall
+    ! velocity along the position differences of the metric, the columns of M^-1 (the stencil of the wall face, or the
+    ! edges of the cell), from its gradient
+    if ( present(w_grad) ) then
+      Mi = Inverse3 ( M )                                       ! columns: the position differences of M
+      do q = 1, 3
+        if ( q /= Dir ) Gradient(nu:nw,q) = matmul ( w_grad, Mi(:,q) )
+      enddo
     end if
 
     if (model==2)  then

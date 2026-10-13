@@ -10,7 +10,8 @@ module MOSE_Lib_BC_Fluxes_Wall_Heat
 
 contains
 
-  subroutine BC_Wall_Heat ( Im, Jm, Km, Fm, Blk, Heat_Flux, Ovar, w_wall, k_rough, rec )
+  subroutine BC_Wall_Heat ( Im, Jm, Km, Fm, Blk, Heat_Flux, Ovar, w_wall, k_rough, rec, w_grad )
+    use MOSE_Lib_Diffusive, only: Inverse3
     use MOSE_Lib_Fluid
     use MOSE_Lib_RANS
     use FLINT_Lib_Thermodynamic
@@ -22,9 +23,10 @@ contains
     real(R8), optional, dimension(3), intent(in) :: w_wall
     real(R8), optional, intent(in) :: k_rough   ! sand-grain roughness of the face (absent = smooth)
     type(MOSE_bc_type), optional, intent(in) :: rec   ! the record of the face: its wall stencil (diffusive-metric = stencil)
+    real(R8), optional, dimension(3,3), intent(in) :: w_grad   ! with w_wall: its gradient, d w_wall(i) / d x(j)
     ! Local
-    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k
-    real(R8) :: Normal(3), Area, Dist, M(3,3), Prim(nprim), rho, Rgas, temp, Gradient(nprim,3)
+    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, q
+    real(R8) :: Normal(3), Area, Dist, M(3,3), Mi(3,3), Prim(nprim), rho, Rgas, temp, Gradient(nprim,3)
     real(R8) :: mil, kl, Stress(3), Flux(nprim)
     integer  :: vgrad_i
     real(R8) :: gvec1, gvec2, gvec3, VelGrad(3,3), Prim_Wall(nprim), rho_wall, Twall, dl
@@ -45,8 +47,8 @@ contains
     M = Blk % M (Im,Jm,Km) % c
     Mc = M
     ! diffusive-metric = stencil: velocity and turbulence take the metric of the wall face (Wall_Face_Stencils in
-    ! MOSE_Lib_Stencil_Metrics; their wall values do not vary along the wall); the wall temperature below is estimated
-    ! with the metric of the cell, as before
+    ! MOSE_Lib_Stencil_Metrics; their wall values do not vary along the wall, but the velocity of a wall that moves,
+    ! below); the wall temperature below is estimated with the metric of the cell, as before
     wst = .false.
     if ( present(rec) ) wst = rec % wstencil
     if ( wst ) M = rec % wM
@@ -64,12 +66,22 @@ contains
     ! Initialization
     Gradient = 0d0
 
-    ! Difference in Across-face direction: symmetry; tangential direction: null
+    ! Difference in Across-face direction: symmetry; tangential direction: null (below: on a wall that moves, the
+    ! differences of its velocity)
     Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3                 ! Velocity
     if ( present(w_wall) ) then
       Gradient(nu:nw,Dir) = ( Prim(nu:nw) - w_wall ) * modfm3  ! Velocity relative to wall
     else
       Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3               ! Standard no-slip (w_wall=0)
+    end if
+    ! A wall that moves with a velocity linear in x (a stationary face of a rotating frame): the differences of the wall
+    ! velocity along the position differences of the metric, the columns of M^-1 (the stencil of the wall face, or the
+    ! edges of the cell), from its gradient
+    if ( present(w_grad) ) then
+      Mi = Inverse3 ( M )                                       ! columns: the position differences of M
+      do q = 1, 3
+        if ( q /= Dir ) Gradient(nu:nw,q) = matmul ( w_grad, Mi(:,q) )
+      enddo
     end if
     Gradient(np,Dir) = dT
 

@@ -387,6 +387,26 @@ contains
 
 
   ! ---------------------------------------------------------------------------
+  !> @brief Return the gradient of the velocity of a lab-stationary wall in the
+  !>        rotating frame, G(i,j) = d w_wall(i) / d x(j).
+  !>
+  !> w_wall = -(Omega x (r - origin)) is linear in r (RF_Wall_Velocity), so its
+  !> gradient is the constant matrix -[Omega x]. The wall routines take from it
+  !> the differences of the wall velocity along the wall.
+  !>
+  !> @return     G        Gradient of the relative velocity of the stationary wall [1/s]
+  function RF_Wall_Velocity_Gradient() result(G)
+    implicit none
+    real(R8) :: G(3,3)
+
+    G(1,:) = [  0.0_R8,                obj_rot%Omega_vec(3), -obj_rot%Omega_vec(2) ]
+    G(2,:) = [ -obj_rot%Omega_vec(3),  0.0_R8,                obj_rot%Omega_vec(1) ]
+    G(3,:) = [  obj_rot%Omega_vec(2), -obj_rot%Omega_vec(1),  0.0_R8               ]
+
+  end function RF_Wall_Velocity_Gradient
+
+
+  ! ---------------------------------------------------------------------------
   !> @brief Compute the centre of a block face as the average of its 4 corner nodes.
   !>
 

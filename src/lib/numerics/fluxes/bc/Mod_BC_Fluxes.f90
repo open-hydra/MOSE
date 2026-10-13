@@ -110,7 +110,7 @@ contains
                 call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
                 call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, &
                                     w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
-                                    rec = domain % bc(i) )
+                                    rec = domain % bc(i), w_grad = RF_Wall_Velocity_Gradient() )
               elseif (model>0) then
                 call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, &
                                     k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
@@ -122,7 +122,7 @@ contains
                 call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
                 call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, &
                                            w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
-                                    rec = domain % bc(i) )
+                                           rec = domain % bc(i), w_grad = RF_Wall_Velocity_Gradient() )
               elseif (model>0) then
                 call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, &
                                            k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
