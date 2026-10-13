@@ -225,9 +225,8 @@ path is faster per step but less conservative.
 ### Local time step
 
 Each cell $i$ gets a local time step that combines convection and diffusion in one additive rule
-(W. Hundsdorfer, *Numerical Solution of Advection–Diffusion–Reaction Equations*, lecture notes,
-Thomas Stieltjes Institute, 2000, §6 and §9.3; A. Arnone, M.-S. Liou, L. A. Povinelli, *Multigrid
-Time-Accurate Integration of Navier–Stokes Equations*, NASA TM-106373, 1993, eq. 26–28):
+([6], §6 and §9.3; A. Arnone, M.-S. Liou, L. A. Povinelli, *Multigrid Time-Accurate Integration of
+Navier–Stokes Equations*, NASA TM-106373, 1993, eq. 26–28):
 
 $$
 \frac{1}{\Delta t_i} =
@@ -266,29 +265,50 @@ is.
 
 Without dimensional splitting the convective limits of the directions add up: an explicit scheme
 on square 2-D cells needs a condition of the type $\tau(|a_x|/\Delta x + |a_y|/\Delta y) \le C_0$, not
-the largest of the two terms (Hundsdorfer, §9.3, which states the form without a proof). For forward
+the largest of the two terms ([6], §9.3, which states the form without a proof). For forward
 Euler the form follows, with the diffusive rates added as well, from the positivity condition (6.1)
-of Hundsdorfer: with first-order upwind convection and central diffusion on a Cartesian mesh the
+of [6]: with first-order upwind convection and central diffusion on a Cartesian mesh the
 diagonal entry of a row is $-\sum_d \bigl(|a_d|/h_d + 2D/h_d^2\bigr)$ and the others are not negative, so
 $\tau \sum_d \bigl(|a_d|/h_d + 2D/h_d^2\bigr) \le 1$: the rule above with CFL = 1 and VNN = 1/2. The
-constants of Heun and RK3 in the table do not come from that source: they are a von Neumann analysis
-of the linearised MUSCL–upwind advection with central diffusion, made for MOSE, and at the worst
-cell Péclet number the additive law is exact. The source warns that such an eigenvalue criterion can
-mislead for the non-normal operators that boundaries give, as an inflow boundary with upwind
-differences (Hundsdorfer, §3.3, pp. 26–27): the limits are those of the interior.
+constants of Heun and RK3 in the table do not come from that source: they are the von Neumann limits
+of the linearised MUSCL–upwind advection with central diffusion, proven here for MOSE's stencil. The
+van Leer slope (the default; van Albada and MC linearise the same way) linearised in smooth flow is
+the mean of the two one-sided slopes (Fromm's scheme), with the symbol
+$g(\theta) = \tfrac12[(1-\cos\theta)^2 + i\sin\theta(3-\cos\theta)]$, $z = -\nu g$; the constants
+hold for these three limiters, not for minmod and superbee, which take the smaller or the larger of
+the two slopes and have no linearisation where they are equal. Heun is stable if and only if
+$\nu \le 1$: $|R(z)|^2 - 1 = \tfrac{\nu}{16}(1-c)^2[\nu(\nu a - 2b)^2 + 4\nu b^2 - 16]$ with
+$c = \cos\theta$, $a = 5 - c^2$, $b = 1 - c$, increasing in $\nu$ and equal to
+$\tfrac{\nu}{16}(1-c)^4(1+c)(c-3)$ at $\nu = 1$. RK3 is stable if and only if
+$\nu \le \nu^\ast = 1.1757678815978$, a root of a polynomial of degree 24 (a cylindrical
+decomposition in exact arithmetic), and with the first-order flux if and only if
+$\nu \le 1.2563726633$, half the real stability interval $2.5127453$; diffusion gives VNN $\le 1/2$
+and $0.6282$ (the table rounds them down). The curve of $-g$ bounds a convex set $K$
+($x'y'' - y'x'' = -\tfrac12(1-\cos\theta)(\cos^2\theta + \cos\theta + 4) \le 0$ along it), so a sum
+over directions is a point of $\nu K$, inside the stability region by the maximum principle: the
+limits of 1-D hold in 2-D and 3-D for any split of the Courant number, with no need for a convex
+stability region. With diffusion the additive rule is stable for Heun with CFL = 1 and VNN = 1/2,
+and exact at every Péclet number (the checkerboard mode reaches $z = -2$); for RK3 the region is not
+convex, and the convex hull of $1.17K$ and $[-2.48, 0]$ (and of $1.1757K$ and $[-2.512, 0]$) is
+shown inside it with a certificate in exact rational arithmetic.
+The source warns that such an eigenvalue criterion can mislead for the non-normal
+operators that boundaries give, as an inflow boundary with upwind differences ([6], §3.3,
+pp. 26–27): the limits are those of the interior.
 
-| Scheme | CFL ≤ | VNN ≤ |
-|---|---|---|
-| Heun (`RK2`) | 1 | 1/2 |
-| `RK3` | 1.17 | 0.62 |
-| explicit Euler (`euler`) | 1 with first-order reconstruction; unstable with MUSCL | 1/2 |
+| Scheme | real stability interval | CFL ≤, MUSCL, smooth flow | CFL ≤, first order (limiter at extrema and shocks) | VNN ≤ | CFL and VNN ≤ for positivity with the limiter |
+|---|---|---|---|---|---|
+| Heun (`RK2`) | $[-2, 0]$ | 1 | 1 | 1/2 | 1/2 |
+| `RK3` | $[-2.5127, 0]$ | 1.17 | 1.25 | 0.62 | 1/2 |
+| explicit Euler (`euler`) | $[-2, 0]$ | unstable | 1 | 1/2 | 1/2 |
 
-These limits are linear (von Neumann, smooth solutions). With the limiter, positivity and the TVD property
-are guaranteed only for smaller steps: the van Leer slope of MOSE is the flux limiter $\psi(\theta) =
+These limits are linear (von Neumann, smooth solutions). With the limiter, positivity (a maximum principle:
+in more than one dimension a second-order scheme is not TVD, Goodman et al. 1985 as cited in [7], p. 15 of the
+report) is guaranteed only for smaller steps, for the
+scalar advection of each direction with the limited flux: the van Leer slope of MOSE is the flux limiter $\psi(\theta) =
 \theta/(1+\theta)$, which satisfies $0 \le \psi \le 1$ and $0 \le \psi/\theta \le \mu$ with $\mu = 1$, and with
 Heun and RK3 (SSP coefficient 1) positivity holds for $(1+\mu)\,\nu \le 1$, that is
 $\sum_d \nu_d \le 1/2$; central diffusion is positive for $\text{VNN} \le 1/2$; with the additive rule
-both hold for CFL ≤ 1/2 and VNN ≤ 1/2 (Hundsdorfer, §5.2, §6.2 and §6.4; experiments reported there give
+both hold for CFL ≤ 1/2 and VNN ≤ 1/2 ([6], §5.2, §6.2 and §6.4; experiments reported there give
 positive results up to $\nu = 1$ in 1D and about $2/3$ in 2D). With moving shocks and Heun keep `cfl` at
 0.5–0.7. With preconditioning,
 $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$ is replaced by the preconditioned eigenvalue
@@ -310,6 +330,19 @@ with the HLLC flux, guaranteed by CFL ≤ 1/2 in smooth flow, also holds at shoc
 is at most 1.90 times the cell's own rate), but not on stretched cells crossed obliquely by a strong shock, which need
 CFL ≤ 0.41 at Mach 10; with MUSCL it is observed, not proven. The local step changes the path of a steady run, not the steady
 solution it converges to.
+
+**Recommended values.** For time-accurate runs with moving shocks and RANS models: with RK3, `cfl = 0.8` (the face Courant
+numbers of the HLLC flux above stay within the first-order limit of the scheme, which applies at the shock: 1.47 × 0.8 =
+1.18 < 1.256) and `vnn = 0.5`, 20 % below the limit 0.628 of the scheme (up to that limit, for example at `vnn = 0.6`,
+4.5 % below it, the linearised scheme is stable); with Heun, `cfl` from 0.5 to 0.7 and `vnn = 0.4`, below its limit 0.5. These are
+values of the scheme, not of a case: a case that runs stable beyond them owes it to its mesh (a non-uniform spacing around the
+cell that sets the step lowers the spectral radius of its diffusion), and its threshold is not a limit to carry elsewhere. The
+viscous rate takes the largest diffusivity, that of the energy, and adds up the directions: a `vnn` tuned on a rule that took
+the momentum diffusivity and the largest direction alone gives here a smaller step (by $\gamma/\text{Pr}_t$, 1.65 with the
+default $\text{Pr}_t = 0.85$, in a
+stretched cell where the turbulent viscosity sets it), and can be raised within the limits of the table. The CFL number of a
+run with local time steps, as a steady run, is a parameter of the pseudo-time, not a Courant number of the physical time: it is
+not a value to carry to a time-accurate run.
 
 ### Global time step
 
@@ -509,3 +542,10 @@ fine cell's position within the coarse cell.
    accuracy of Runge–Kutta time discretizations for the initial boundary
    value problem: a study of the boundary error," *SIAM J. Sci. Comput.*,
    16(6), 1241–1252, 1995, doi:10.1137/0916072 (ICASE Report 93-83, 1993).
+6. W. Hundsdorfer, *Numerical Solution of Advection–Diffusion–Reaction
+   Equations*, lecture notes, Thomas Stieltjes Institute, CWI, Amsterdam,
+   2000.
+7. E. M. Constantinescu, A. Sandu, "Multirate timestepping methods for
+   hyperbolic conservation laws," *J. Sci. Comput.*, 33(3), 239–278, 2007,
+   doi:10.1007/s10915-007-9151-y; the page cited is that of the authors'
+   report, Virginia Tech, https://hdl.handle.net/10919/19488.
