@@ -13,8 +13,11 @@
 #           of the rotation-curvature correction must both be printed;
 #    pos    near-wall turbulence far above its equilibrium decays faster than
 #           the transport acts: no stage may make nu~, k or omega negative
-#           (count printed by the solver at the end of the run), and the step
-#           must have been limited by the turbulence sources.
+#           (count printed by the solver at the end of the run), the step
+#           must have been limited by the turbulence sources, and the first
+#           step must be the rule with the bound of the stiffness that the
+#           state of each cell gives alone (SA 2 cw1 (1 + cw3^6)^(1/6) nu~/y^2,
+#           SST max(beta*, 2 max(beta_1, beta_2)) omega).
 #  and, on its own case,
 #    wilcox the vortex-stretching function of Wilcox 2006: a cube of 6^3
 #           cells, one block, a velocity whose every component varies

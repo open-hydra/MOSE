@@ -99,7 +99,6 @@ contains
                      domain % blk(b) % rc_term1,     &
                      domain % blk(b) % rc_term2,     &
                      domain % blk(b) % dtlocal,      &
-                     domain % blk(b) % stiff,        &
                      domain % blk(b) % dim,          &
                      SpalartShur, k_energy_coupling, &
                      point_implicit, obj_rans%sst_compressible )
@@ -109,7 +108,7 @@ contains
   end subroutine SST_Source_Terms
 
 
-  subroutine SST_Blk ( Prim, Res, M, Mt, Volume, WDist, gradv, rc1, rc2, dt, stiff, n, SpalartShur, k_energy_coupling, &
+  subroutine SST_Blk ( Prim, Res, M, Mt, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, &
                        point_implicit, compressible )
     use MOSE_Base_Types_m
     use MOSE_Global_m
@@ -128,7 +127,6 @@ contains
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
-    real(R8), dimension(n(1), n(2), n(3)), intent(out) :: stiff  ! largest destruction rate: max(beta* omega, 2 beta omega)
     ! Local
     integer :: i, j, k, ii, jj
     real(R8) :: rho, Rgas, mil, kap, ome, dist, Gradvel(3,3), Divel, Sij(3,3), S, Wij(3,3), diag, mi_t, F(2)
@@ -229,9 +227,6 @@ contains
       Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
 
-      ! Stiffness of the destruction terms (derivatives with respect to k and omega)
-      stiff(i,j,k) = max ( beta_star * ome, 2d0 * beta * ome )
-
       ! Point-implicit factors of steady runs. Each multiplies the whole increment of its row: the fluxes already in
       ! Res (Internal_Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not depend
       ! on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1;
@@ -278,6 +273,22 @@ contains
     mi_t = rho*kap*alpha_1 / Max ( alpha_1*ome, S*F2 )
 
   end subroutine SST_Eddy_Viscosity
+
+
+  !> Bound of the stiffness of the destruction terms, beta* rho k omega and beta rho omega^2: their derivatives with
+  !> respect to k and omega are beta* omega and 2 beta omega, and beta = F1 beta_1 + (1 - F1) beta_2 <=
+  !> max(beta_1, beta_2), so d <= max(beta*, 2 max(beta_1, beta_2)) omega: from the cell alone, without F1, which takes
+  !> gradients.
+  pure function SST_Stiffness_Bound ( rans_variables, rho, walldist, k_rough ) result ( stiff )
+    use MOSE_Global_m
+    implicit none
+    real(R8), intent(in), dimension(nRANS) :: rans_variables  ! : rho k, rho omega
+    real(R8), intent(in)                   :: rho, walldist, k_rough
+    real(R8)                               :: stiff
+
+    stiff = max ( beta_star, 2d0 * max ( beta_1, beta_2 ) ) * max ( rans_variables(2) / rho, 0d0 )
+
+  end function SST_Stiffness_Bound
 
 
   subroutine SST_RANS_Diffusive_Flux ( Flux, rkw, mi_l, Gradvel, Gradkw, rho, Area, Normal, Dist )

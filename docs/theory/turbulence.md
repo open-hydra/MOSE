@@ -660,7 +660,7 @@ are applied at ghost cells» (S. L. Krist, R. T. Biedron, C. L. Rumsey, *CFL3D U
 values once per stage, from the wall values of the wall flux routines (the same wall state), with
 the other ghost values of the wall ([Numerics](numerics.md), *Ghost Cells of Walls and 400 Faces*):
 the fluxes through the first interior faces and the source terms read the same ghost cells, at every
-stage and in the stiffness pass of time-accurate runs (`Turbulence_Stiffness`). The source terms read
+stage. The source terms read
 them in the gradients of the wall cells: the $c_{b2}$ term of SA and its term
 $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST, the
 cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of the wall
@@ -947,16 +947,24 @@ the first cell $\omega \approx 6\nu/(\beta_1 y^2)$ gives $\Delta t\,d \approx 24
 $\Delta t\,d \approx 1.64\,f_w\,y_1^+$ at `vnn = 0.3` ($y_1^+$ the height of the first cell in wall units): it
 vanishes as the mesh is refined, but is of order one at the usual heights.
 The sources are explicit, like the fluxes, and the local time step of each cell
-([Time Integration](time-integration.md#local-time-step)) includes their stiffness:
+([Time Integration](time-integration.md#local-time-step)) includes a bound of their stiffness:
 
 $$
-\frac{1}{\Delta t_i} = \bigl(\text{convective and diffusive rates}\bigr) + d_i ,
-\qquad d_i = \max_q \frac{\partial D_q}{\partial q} ,
+\frac{1}{\Delta t_i} = \bigl(\text{convective and diffusive rates}\bigr) + \hat d_i ,
+\qquad \hat d_i \ge d_i = \max_q \frac{\partial D_q}{\partial q} ,
 $$
 
-with the rates $d$ of the table, evaluated on the state at the start of the step (one evaluation
-of the sources before the first stage, with the wall ghost cells of the turbulence variables set
-from the wall values as in the stages). Then $\Delta t\,d \le 1$: a forward-Euler stage cannot make
+with $\hat d$ a bound of the rates $d$ of the table that the state of the cell at the start of the step gives
+alone, without gradients or ghost cells:
+
+| Model | $\hat d$ | $\hat d / d$ |
+|-------|----------|--------------|
+| SST | $\max(\beta^\ast, 2\max(\beta_1, \beta_2))\,\omega$ | $\beta = F_1\beta_1 + (1 - F_1)\beta_2$, and $F_1$ takes gradients: $\beta_2/\beta_1 = 1.10$ where $F_1 = 1$ (next to walls), 1 where $F_1 = 0$ |
+| Wilcox 2006 | $\max(\beta^\ast, 2\beta_0)\,\omega$ | $\beta = \beta_0 f_\beta$, and $f_\beta \le 1$ takes the velocity gradient: $1/f_\beta$, 1 in 2-D ($\chi_\omega = 0$), at most $1/0.85$ |
+| SA | $2\,c_{w1}\,(1 + c_{w3}^6)^{1/6}\,\tilde\nu/y^2$ | $f_w = g\,[(1 + c_{w3}^6)/(g^6 + c_{w3}^6)]^{1/6}$ grows with $g \ge 0$ towards $(1 + c_{w3}^6)^{1/6} = 2.005$: $2.005/f_w$, 1 where $r$ reaches its cap of 10, about 2 where $r \approx 1$ (an equilibrium boundary layer, where the destruction is slow against the diffusion) |
+
+($y$ the wall distance of the source, moved below a rough wall.) Then
+$\Delta t\,d \le \Delta t\,\hat d \le 1$: a forward-Euler stage cannot make
 $\tilde\nu$, $k$ or $\omega$ negative through their destruction, and neither can Heun and RK3, whose
 stages are convex combinations of forward-Euler stages (W. Hundsdorfer, *Numerical Solution of
 Advection–Diffusion–Reaction Equations*, lecture notes, 2000, §6.2, Theorem 6.4; C.-W. Shu,
@@ -980,9 +988,10 @@ under one step restriction, for every state it is applied to (ICASE Report 87-33
 Proposition 2.1), while here the restriction depends on the state through $d$, and the rates are
 those of the state at the start of the step. A stage from a state where the rate is $d_s$ takes
 $q_s - \Delta t\,(d_s/2)\,q_s$ through a quadratic destruction, positive while $\Delta t\,d_s < 2$; with
-$\Delta t\,d \le 1$ this holds as long as $d_s < 2\,d$. The margin of 2 of $\tilde\nu$ and $\omega$ therefore
-covers a rate that grows within the step up to twice its value at the start, and no more; $k$, whose
-destruction is linear, keeps only the margin by which its rate $\beta^\ast\omega$ lies below $d$. An
+$\Delta t\,\hat d \le 1$ this holds as long as $d_s < 2\,\hat d$. The margin of 2 of $\tilde\nu$ and $\omega$
+therefore covers a rate that grows within the step up to twice the bound at the start (at least twice the rate),
+and no more; $k$, whose destruction is linear, keeps only the margin by which its rate $\beta^\ast\omega$ lies below
+$\hat d$. An
 impulsive start of a $k$–$\omega$ model from a state far from the wall value of $\omega$ goes beyond
 that: during the first step the wall condition raises $\omega$ in the wall cells by orders of
 magnitude, and with the full step the explicit destruction overshoots ($\omega < 0$, then the floor

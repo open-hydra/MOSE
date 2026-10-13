@@ -291,11 +291,6 @@ contains
       allocate( blk % rc_term2(ni, nj, nk) )
     end if
 
-    ! Stiffness of the turbulence sources, for the time step of time-accurate runs
-    if ( model > 1 ) then
-      allocate( blk % stiff(ni, nj, nk) )
-    end if
-
     ! Temp storage for residuals in IRS
     if ( obj_irs%enabled ) then
       allocate( blk % RS1, blk % RS2, mold = blk % R )
@@ -409,7 +404,6 @@ contains
         do j = lbound(blk%rc_term1,2), ubound(blk%rc_term1,2)
           blk % rc_term1(:,j,k) = 0.0d0
           blk % rc_term2(:,j,k) = 0.0d0
-          blk % stiff   (:,j,k) = 0.0d0
         end do
       end do
     end if
@@ -496,7 +490,6 @@ contains
       if (allocated(domain%blk(b)%vel_gradient)) deallocate(domain%blk(b)%vel_gradient)
       if (allocated(domain%blk(b)%rc_term1))     deallocate(domain%blk(b)%rc_term1)
       if (allocated(domain%blk(b)%rc_term2))     deallocate(domain%blk(b)%rc_term2)
-      if (allocated(domain%blk(b)%stiff))        deallocate(domain%blk(b)%stiff)
       if (allocated(domain%blk(b)%Minv))         deallocate(domain%blk(b)%Minv)
 
       ! P — free unless this remote block is a chimera donor

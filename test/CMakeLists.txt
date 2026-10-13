@@ -136,8 +136,9 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # the reference velocity of the step takes the eddy viscosity of the model at
 # the strain rate of the cell.
 # Turbulence sources in time-accurate runs: nu~, k and omega converge with the
-# order of Heun and RK3, and no stage makes them negative near a wall; SST-RC
-# prints the start-up warnings of k-omega models and of -RC; the
+# order of Heun and RK3, and no stage makes them negative near a wall, where
+# the step takes the bound of the stiffness of each cell; SST-RC prints the
+# start-up warnings of k-omega models and of -RC; the
 # vortex-stretching function of Wilcox 2006 on a 3-D flow; the asymptotic omega
 # wall value of Wilcox 2006 and SST.
 # Quasi-2D case with symmetry k faces: round-off in w must not grow.

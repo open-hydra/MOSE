@@ -120,10 +120,12 @@ a little beyond them blows up. Suggested values:
 - `RK2` (Heun): `cfl = 0.5` with moving shocks, up to `cfl = 0.7` where the flow is smooth, and
   `vnn = 0.4`; never `cfl` ≥ 0.95 or `vnn` ≥ 0.5.
 
-To recover the old step of a viscous time-accurate run, raise `vnn` rather than `cfl`: in the
-nozzle case above, `cfl = 0.8` with `vnn = 0.5` gives 0.96 of the old global step with RK3
-(the whole old step needs `vnn = 0.52`, beyond the positivity limit). With Heun, `cfl = 0.5`
-and `vnn = 0.4` give 0.76 of it. The defaults stay `cfl = 0.5` and `vnn = 0.3`.
+To recover part of the old step of a viscous time-accurate run, raise `vnn` rather than
+`cfl`: in the nozzle case above, `cfl = 0.8` with `vnn = 0.5` gives 0.84 of the old global
+step with RK3, and `vnn = 0.52`, beyond the positivity limit, hardly more (0.84): the step of
+a time-accurate RANS run also holds the bound of the stiffness of the turbulence sources,
+which `vnn` does not scale. With Heun, `cfl = 0.5` and `vnn = 0.4` give 0.67 of it. The
+defaults stay `cfl = 0.5` and `vnn = 0.3`.
 
 ---
 

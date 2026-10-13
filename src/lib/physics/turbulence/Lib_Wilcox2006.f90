@@ -55,7 +55,6 @@ contains
                         Mi, Mt,                   &
                         domain % blk(b) % vol,     &
                         domain % blk(b) % dtlocal, &
-                        domain % blk(b) % stiff,   &
                         domain % blk(b) % dim,     &
                         k_energy_coupling,         &
                         point_implicit )
@@ -65,7 +64,7 @@ contains
   end subroutine Wilcox2006_Source_Terms
 
 
-  subroutine Wilcox_Blk ( Prim, Res, M, Mt, Volume, dt, stiff, n, k_energy_coupling, point_implicit )
+  subroutine Wilcox_Blk ( Prim, Res, M, Mt, Volume, dt, n, k_energy_coupling, point_implicit )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -80,7 +79,6 @@ contains
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variables
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
-    real(R8), dimension(n(1), n(2), n(3)), intent(out) :: stiff  ! largest destruction rate: max(beta* omega, 2 beta omega)
     ! Local
     integer :: i, j, k, ii, jj, kk
     real(R8) :: rho, kap, ome, Gradvel(3,3), Divel, Sij(3,3), Sij_bar(3,3), diag, ome_hat, mi_t, Tij(3,3), Prod(2)
@@ -182,9 +180,6 @@ contains
       Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
 
-      ! Stiffness of the destruction terms (derivatives with respect to k and omega)
-      stiff(i,j,k) = max ( beta_star * ome, 2d0 * beta * ome )
-
       ! Point-implicit factors of steady runs. Each multiplies the whole increment of its row: the fluxes already in
       ! Res (Internal_Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not depend
       ! on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1;
@@ -231,6 +226,22 @@ contains
     mi_t = rkw(1) / w_hat
 
   end subroutine Wilcox2006_Eddy_Viscosity
+
+
+  !> Bound of the stiffness of the destruction terms, beta* rho k omega and beta rho omega^2: their derivatives with
+  !> respect to k and omega are beta* omega and 2 beta omega, and beta = beta_0 f_beta with f_beta = (1 + 85 chi)/
+  !> (1 + 100 chi) <= 1, so d <= max(beta*, 2 beta_0) omega: from the cell alone, without f_beta, which takes the
+  !> velocity gradient; exact in 2-D, where chi_omega = 0.
+  pure function Wilcox2006_Stiffness_Bound ( rans_variables, rho, walldist, k_rough ) result ( stiff )
+    use MOSE_Global_m
+    implicit none
+    real(R8), intent(in), dimension(nRANS) :: rans_variables  ! : rho k, rho omega
+    real(R8), intent(in)                   :: rho, walldist, k_rough
+    real(R8)                               :: stiff
+
+    stiff = max ( beta_star, 2d0 * beta_0 ) * max ( rans_variables(2) / rho, 0d0 )
+
+  end function Wilcox2006_Stiffness_Bound
 
 
   subroutine Wilcox2006_RANS_Diffusive_Flux ( Flux, rkw, mi_l, vGrad, Gradkw, rho, Area, Normal, Dist )

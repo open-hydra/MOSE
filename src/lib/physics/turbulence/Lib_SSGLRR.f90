@@ -290,6 +290,19 @@ contains
   end subroutine SSGLRR_Eddy_Viscosity
 
 
+  !> The time step takes no stiffness of the sources of SSG/LRR (none was derived for them): 0.
+  pure function SSGLRR_Stiffness_Bound ( rans_variables, rho, walldist, k_rough ) result ( stiff )
+    use MOSE_Global_m
+    implicit none
+    real(R8), intent(in), dimension(nRANS) :: rans_variables
+    real(R8), intent(in)                   :: rho, walldist, k_rough
+    real(R8)                               :: stiff
+
+    stiff = 0d0
+
+  end function SSGLRR_Stiffness_Bound
+
+
   subroutine SSGLRR_RANS_Diffusive_Flux ( Flux, var, mi_l, vGrad, Grad, rho, Area, Normal, Dist )
     use MOSE_Global_m
     implicit none

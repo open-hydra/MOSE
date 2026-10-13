@@ -16,9 +16,9 @@
 #   3. wall output: with the reversed file the wall output is the one of the
 #      ordered file (1x1, 2x1, 1x4), written in Tecplot ASCII;
 #   4. the same with the Spalart-Allmaras model in a time-accurate run, whose
-#      time step also fills the ghost cells behind the walls on its own
-#      (Turbulence_Stiffness): ordered file on 1x1, 1x4 and 2x2, reversed file on
-#      1x1, 1x4 and 2x2, solution and wall output in Tecplot;
+#      time step includes the bound of the stiffness of the turbulence sources
+#      that each cell gives alone: ordered file on 1x1, 1x4 and 2x2, reversed
+#      file on 1x1, 1x4 and 2x2, solution and wall output in Tecplot;
 #   5. SA-RC, whose strain-rate gradient next to a face between blocks takes
 #      the velocity gradient of the cell across, sent between ranks: 2x1, 4x1
 #      and 2x2 give the solution of 1x1 (vtk raw).

@@ -441,9 +441,10 @@ $$
 $$
 
 In time-accurate RANS runs the turbulence sources are explicit, and each local step also includes
-their stiffness, the derivative $d_i$ of the destruction terms evaluated at the start of the step:
-$1/\Delta t_i$ gains the term $d_i$, so that $\Delta t\,d_i \le 1$ and no stage makes $\tilde\nu$, $k$ or
-$\omega$ negative through their destruction
+a bound $\hat d_i$ of their stiffness, the derivative $d_i$ of the destruction terms, from the state of the cell at
+the start of the step alone: $1/\Delta t_i$ gains the term $\hat d_i$, so that
+$\Delta t\,d_i \le \Delta t\,\hat d_i \le 1$ and no stage makes $\tilde\nu$, $k$ or $\omega$ negative through their
+destruction
 ([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)).
 
 !!! tip "CFL ramp-up"

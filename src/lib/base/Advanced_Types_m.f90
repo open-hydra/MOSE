@@ -60,7 +60,6 @@ module MOSE_Advanced_Types_m
     type(MOSE_tensor_3D_type), allocatable    :: vel_gradient(:,:,:)   ! Gradient of velocity
     real(R8), allocatable                     :: rc_term1(:,:,:)       ! Spalart-Shur rotation/curvature correction terms
     real(R8), allocatable                     :: rc_term2(:,:,:)       ! Spalart-Shur rotation/curvature correction terms
-    real(R8), allocatable                     :: stiff(:,:,:)          ! Stiffness of the turbulence sources [1/s]
     logical                                   :: no_chem = .false.     ! Per disattivare la chimica su un unico blocco
   end type MOSE_block_type
 
