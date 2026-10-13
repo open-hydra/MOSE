@@ -7,8 +7,10 @@
 #  gradient exact for linear fields gives zero to round-off on any mesh
 #  (make_case.py). Meshes with nodes moved at random, two blocks joined along
 #  a fold, jumps of cell size with shear (1.5, and 2 next to the faces with
-#  dyadic coordinates, where the ghost cells must not degenerate), points
-#  shared by 3 and by 5 blocks,
+#  dyadic coordinates, where the ghost cells must not degenerate), a fan of
+#  index lines at a face (the edges along it growing 7/4 times across the
+#  first cell: the second layer of extrapolated ghost cells, which no flux
+#  reads, turned over), points shared by 3 and by 5 blocks,
 #  a 3-D pair of blocks, a symmetry plane under skewed cells. One explicit
 #  step with the Navier-Stokes equations and one reference step (Euler, or
 #  Navier-Stokes with mu = k = 1e-30 next to walls) from the same state: the
@@ -104,7 +106,7 @@ if [[ $NAME == ViscousWallPatch ]]; then
   python3 -B "$MC" limits OUTPUT/paraT-hot-ns.log || status=1
 else
   echo "-- viscous patch test: linear velocity (mom) and linear temperature (ene) --"
-  for mesh in fold2 jump jump2 star3 star5 box3d sym; do
+  for mesh in fold2 jump jump2 fan star3 star5 box3d sym; do
     for run in mom ene; do
       python3 -B "$MC" case "$mesh" "$run" > /dev/null || exit 1
       step ns "$mesh" "$run"

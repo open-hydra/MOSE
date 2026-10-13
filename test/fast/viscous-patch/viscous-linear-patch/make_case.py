@@ -21,6 +21,10 @@ paraQ):
          and 3 half as wide as the second ones, unit 2^-7 m instead of 1 cm: every coordinate is a dyadic fraction, so
          that the ghost nodes extrapolated from the first three node planes are exact with any compiler (as
          3 N0 - 3 N1 + N2 they would fall on the face, a ghost cell of zero width);
+  fan    one block of 8 x 8 cells whose j lines spread away from the face 1: the j spacing grows 7/4 times across the
+         first cell (from 1/16 at x = 0 to 7/64 at x = 1/8, then uniform), unit 2^-7 m (dyadic coordinates, as jump2):
+         the ghost cells extrapolated behind the face 1 have edges along it of 1/4 and -1/2 of those of the face, the
+         first layer narrower than the first cell, the second turned over (no flux reads its metric);
   star3  a triangle cut into 3 blocks of 8 x 8 cells that meet at its centre (a point shared by 3 blocks);
   star5  a pentagon cut into 5 blocks of 8 x 8 cells that meet at its centre (a point shared by 5 blocks);
   box3d  two blocks of 6 x 6 x 6 cells joined at x = 0.5, the j lines of block 2 rising as y = t + 0.2 s t;
@@ -98,12 +102,12 @@ P_LOW = 10.0                        # mom, rk3: a low pressure. The round-off of
                                     # the velocity it gives at the first stage carries an energy flux (rho e + p) u, of
                                     # order p, into the later stages (rk3: 3e-10 of the scale at 1e5 Pa, 1e-13 at 10 Pa)
 LREF = 1.0e-2                       # m
-LREF2 = 2.0**-7                     # m, jump2: dyadic coordinates
+LREF2 = 2.0**-7                     # m, jump2 and fan: dyadic coordinates
 OFFSET = np.array([1.0, 2.0, 0.0])  # unit coordinates: keep y > 0 away from the axis
 TOL = 1.0e-11
 TOL_REPLICA = 1.0e-10
 FMT = '{: .17E}'
-MESHES = ('fold2', 'jump', 'jump2', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
+MESHES = ('fold2', 'jump', 'jump2', 'fan', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
 RUNS = ('mom', 'ene', 'rk3', 'momw', 'enep', 'hot')
 BC_CONNECT, BC_SYM, BC_Q, BC_T, BC_OPEN = 101, 300, 301, 302, 400
 
@@ -170,6 +174,15 @@ def mesh_jump2(n=8):
     a = np.concatenate([[0.0], np.cumsum([1.0 if k % 2 == 0 else 2.0 for k in range(n)])]) / 16.0
     S, T = np.meshgrid(a, a, indexing='ij')
     return [extrude(np.stack([S + 0.5 * T, T], axis=-1), 1.0 / n)]
+
+
+def mesh_fan(n=8):
+    """The j spacing 1/16 on the face x = 0 and 7/64 from the next node plane on: a fan across the first cell."""
+    XY = np.zeros((n + 1, n + 1, 2))
+    for i in range(n + 1):
+        XY[i, :, 0] = i / n
+        XY[i, :, 1] = np.arange(n + 1) * (1.0 / 16.0 if i == 0 else 7.0 / 64.0)
+    return [extrude(XY, 1.0 / n)]
 
 
 def mesh_star(m, n):
@@ -240,6 +253,8 @@ def build(mesh, run):
         blocks = mesh_jump()
     elif mesh == 'jump2':
         return [LREF2 * (X + OFFSET) for X in mesh_jump2()]
+    elif mesh == 'fan':
+        return [LREF2 * (X + OFFSET) for X in mesh_fan()]
     elif mesh == 'star3':
         blocks = mesh_star(3, n2)
     elif mesh == 'star5':
@@ -271,7 +286,7 @@ def outer_type(mesh, run, b, face):
     # ene
     if mesh == 'fold2':
         return {(0, 1): BC_T, (0, 3): BC_Q, (0, 4): BC_T, (1, 2): BC_OPEN, (1, 3): BC_T, (1, 4): BC_Q}[(b, face)]
-    if mesh in ('jump', 'jump2', 'rand1'):
+    if mesh in ('jump', 'jump2', 'fan', 'rand1'):
         return {1: BC_T, 2: BC_Q, 3: BC_T, 4: BC_OPEN}[face]
     if mesh == 'paraT':
         return {1: BC_OPEN, 2: BC_OPEN, 3: BC_T, 4: BC_T}[face]

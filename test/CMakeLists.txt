@@ -290,11 +290,12 @@ endif()
 # Patch test of the viscous fluxes: a linear velocity and a linear temperature
 # have zero viscous force and heat conduction in every cell, so the face
 # gradients must give zero to round-off on meshes with nodes moved at random,
-# folds between blocks, points shared by 3 and 5 blocks, symmetry planes and
+# folds between blocks, a fan of index lines at a wall (the second layer of
+# extrapolated ghost cells turned over), points shared by 3 and 5 blocks, symmetry planes and
 # walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
 # against an independent replica of their formulas. ViscousWallPatch: the
 # cells next to walls of prescribed temperature varying along the wall.
-# Cost: 36 and 37 one-step solver runs, about 8 s and 8 s of CPU time at
+# Cost: 40 and 37 one-step solver runs, about 9 s and 8 s of CPU time at
 # one thread.
 mose_add_fast_script(ViscousPatch fast/viscous-patch "fast;numerics;2D;3D")
 
