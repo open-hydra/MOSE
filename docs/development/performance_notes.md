@@ -147,7 +147,17 @@ it cost 3.5% on premixed-flame.
 
 `USE_IPO` defaults to `ON` and **self-disables** rather than producing a broken
 build: the flag is probed with a link step, and if either the probe or the
-archiver lookup fails, the build falls back to a plain `RELEASE` with a warning.
+archiver lookup fails, the build falls back to a plain `RELEASE` with a warning:
+`-ipo` leaves the compile and the link flags, and every other `RELEASE` flag
+stays. The macro that does this changes the flags in the CMake cache only: a
+plain variable of the same name would hide the cache entry (policy `CMP0126`,
+`NEW` here), and the flags added after it would be lost: each one would rewrite
+the cache entry from the plain variable, so the targets would be compiled without
+`-ffast-math`, and without `-fomit-frame-pointer` until a second configure, which
+is what an earlier version did with oneAPI 2023. Every configure gives the same
+flags: `-ipo` enters the link flags once. A build directory configured with an
+earlier version keeps what it cached then, as `-ipo` twice in the link flags:
+configure a new one.
 
 Three things were needed to make `-ipo` work at all, all now handled in
 `cmake/SetFortranFlags.cmake`:
@@ -156,7 +166,11 @@ Three things were needed to make `-ipo` work at all, all now handled in
   generation happens at link time.
 - **An IPO-aware archiver.** GNU `ar`/`ranlib` cannot index IR objects
   (*"archive has no index"*), and `xiar` merely forwards to `ar`. oneAPI ships
-  `llvm-ar`/`llvm-ranlib` beside the compiler. Note that setting only the *cache*
+  `llvm-ar`/`llvm-ranlib` with the compiler: in `<bin>/compiler` from oneAPI
+  2024 on, in `<bin>/../bin-llvm` (`linux/bin-llvm`) up to oneAPI 2023, `<bin>`
+  being the directory of `ifx` with its symbolic links resolved; both are
+  searched, and `-DIPO_AR=... -DIPO_RANLIB=...` give the tools of any other
+  layout. Note that setting only the *cache*
   variables `CMAKE_AR`/`CMAKE_RANLIB` is not enough — `CMakeFindBinUtils` leaves
   plain variables of the same name in scope, and those shadow the cache when
   CMake expands the archive rules.
