@@ -4,6 +4,7 @@ module MOSE_Mod_Fluxes
   implicit none
   private :: Fluxes_blk
   public  :: Zero_Residuals, Internal_Fluxes, Setup_Quasi2D_W, Zero_W_Residual, Zero_V_Residual
+  public  :: Viscous_Variables
 
 contains
 
@@ -191,6 +192,36 @@ contains
   end subroutine Zero_V_Residual
 
 
+  !> Viscous variables (Visc_State) of every cell of the blocks of this rank and of the first layer of ghost cells
+  !> across the faces of each block (not the edges and corners, which no viscous flux reads), into blk%Visc: once per
+  !> stage, after the ghost cells are filled, so that a viscous flux reads them instead of computing them again for each
+  !> face that the cell touches.
+  subroutine Viscous_Variables ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Lib_Diffusive, only: Visc_State
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    ! Local
+    integer :: b, i, j, k, n(3)
+
+    do b = 1, domain % nb
+      if (.not. is_local_block(b)) cycle
+      n = domain % blk(b) % dim
+      !$omp do collapse (3)
+      do k = 0, n(3) + 1
+      do j = 0, n(2) + 1
+      do i = 0, n(1) + 1
+        ! the cells and the ghost cells across one face, not across two or three (edges, corners)
+        if ( merge(1,0, i < 1 .or. i > n(1)) + merge(1,0, j < 1 .or. j > n(2)) &
+           + merge(1,0, k < 1 .or. k > n(3)) > 1 ) cycle
+        call Visc_State ( domain % blk(b) % P(:,i,j,k), domain % blk(b) % Visc(:,i,j,k) )
+      enddo; enddo; enddo
+    enddo
+
+  end subroutine Viscous_Variables
+
+
   subroutine Internal_Fluxes ( domain )
     !> Compute internal face fluxes only (no residual zeroing).
     !> Assumes R(:) and beta(:) have been initialized via Zero_Residuals.
@@ -312,14 +343,16 @@ contains
                             blk % k_rough(i+1,j,k),       &
                             blk % P(:,i  ,j,k),           &
                             blk % P(:,i+1,j,k),           &
-                            blk % P(:,i  ,j-1,k),         &
-                            blk % P(:,i  ,j+1,k),         &
-                            blk % P(:,i+1,j-1,k),         &
-                            blk % P(:,i+1,j+1,k),         &
-                            blk % P(:,i  ,j,k-1),         &
-                            blk % P(:,i  ,j,k+1),         &
-                            blk % P(:,i+1,j,k-1),         &
-                            blk % P(:,i+1,j,k+1),         &
+                            blk % Visc(:,i  ,j,k),        &
+                            blk % Visc(:,i+1,j,k),        &
+                            blk % Visc(:,i  ,j-1,k),      &
+                            blk % Visc(:,i  ,j+1,k),      &
+                            blk % Visc(:,i+1,j-1,k),      &
+                            blk % Visc(:,i+1,j+1,k),      &
+                            blk % Visc(:,i  ,j,k-1),      &
+                            blk % Visc(:,i  ,j,k+1),      &
+                            blk % Visc(:,i+1,j,k-1),      &
+                            blk % Visc(:,i+1,j,k+1),      &
                             Mfp,                          &
                             blk % R(:,i  ,j,k),           &
                             blk % R(:,i+1,j,k),           &
@@ -366,14 +399,16 @@ contains
                             blk % k_rough(i,j+1,k),       &
                             blk % P(:,i,j  ,k),           &
                             blk % P(:,i,j+1,k),           &
-                            blk % P(:,i-1,j  ,k),         &
-                            blk % P(:,i+1,j  ,k),         &
-                            blk % P(:,i-1,j+1,k),         &
-                            blk % P(:,i+1,j+1,k),         &
-                            blk % P(:,i,j  ,k-1),         &
-                            blk % P(:,i,j  ,k+1),         &
-                            blk % P(:,i,j+1,k-1),         &
-                            blk % P(:,i,j+1,k+1),         &
+                            blk % Visc(:,i,j  ,k),        &
+                            blk % Visc(:,i,j+1,k),        &
+                            blk % Visc(:,i-1,j  ,k),      &
+                            blk % Visc(:,i+1,j  ,k),      &
+                            blk % Visc(:,i-1,j+1,k),      &
+                            blk % Visc(:,i+1,j+1,k),      &
+                            blk % Visc(:,i,j  ,k-1),      &
+                            blk % Visc(:,i,j  ,k+1),      &
+                            blk % Visc(:,i,j+1,k-1),      &
+                            blk % Visc(:,i,j+1,k+1),      &
                             Mfp,                          &
                             blk % R(:,i,j  ,k),           &
                             blk % R(:,i,j+1,k),           &
@@ -420,14 +455,16 @@ contains
                             blk % k_rough(i,j,k+1),       &
                             blk % P(:,i,j,k  ),           &
                             blk % P(:,i,j,k+1),           &
-                            blk % P(:,i-1,j,k  ),         &
-                            blk % P(:,i+1,j,k  ),         &
-                            blk % P(:,i-1,j,k+1),         &
-                            blk % P(:,i+1,j,k+1),         &
-                            blk % P(:,i,j-1,k  ),         &
-                            blk % P(:,i,j+1,k  ),         &
-                            blk % P(:,i,j-1,k+1),         &
-                            blk % P(:,i,j+1,k+1),         &
+                            blk % Visc(:,i,j,k  ),        &
+                            blk % Visc(:,i,j,k+1),        &
+                            blk % Visc(:,i-1,j,k  ),      &
+                            blk % Visc(:,i+1,j,k  ),      &
+                            blk % Visc(:,i-1,j,k+1),      &
+                            blk % Visc(:,i+1,j,k+1),      &
+                            blk % Visc(:,i,j-1,k  ),      &
+                            blk % Visc(:,i,j+1,k  ),      &
+                            blk % Visc(:,i,j-1,k+1),      &
+                            blk % Visc(:,i,j+1,k+1),      &
                             Mfp,                          &
                             blk % R(:,i,j,k  ),           &
                             blk % R(:,i,j,k+1),           &

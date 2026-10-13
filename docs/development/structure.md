@@ -193,15 +193,25 @@ metric as one argument:
 
 ```fortran
 call Diffusive_Flux ( normal, area, waldis1, waldis2, kr1, kr2,          &
-                      Prim1, Prim2, Prim3, Prim4, Prim5, Prim6,          &
-                      Prim7, Prim8, Prim9, Prim10, Mf, Res1, Res2,       &
-                      a, b, c, Sc, Sct, Prt, Prl, soot_enabled )
+                      Prim1, Prim2, Visc1, Visc2, Visc3, Visc4, Visc5,   &
+                      Visc6, Visc7, Visc8, Visc9, Visc10, Mf, Res1,      &
+                      Res2, a, b, c, Sc, Sct, Prt, Prl, soot_enabled )
 ```
 
-`Prim1` and `Prim2` are the two cells, from 1 to 2 along the normal;
-`Prim3`–`Prim6` and `Prim7`–`Prim10` their neighbours along the two tangential
-index directions `b` and `c` (cell 1 at -1 and +1, then cell 2 at -1 and +1);
-`a` is the direction across the face. `Mf(3,3)` is the face metric: the
+`Prim1` and `Prim2` are the primitive variables of the two cells, from 1 to 2
+along the normal (the state of the face is their mean); `Visc1` and `Visc2`
+their viscous variables, `Visc3`–`Visc6` and `Visc7`–`Visc10` those of their
+neighbours along the two tangential index directions `b` and `c` (cell 1 at -1
+and +1, then cell 2 at -1 and +1); `a` is the direction across the face. The
+viscous variables of a cell are its mass fractions, velocity, temperature and
+turbulence variables per unit mass (`Visc_State`, `Lib_Diffusive.f90`), the
+quantities whose differences make the gradients. `Viscous_Variables`
+(`numerics/fluxes/Mod_Fluxes.f90`) computes them once per stage, after the
+ghost cells are filled, for every cell of the blocks of the rank and for the
+first layer of ghost cells across the faces of each block, into `blk%Visc`;
+the viscous fluxes of the interior faces and of the faces of types `101`,
+`201` and `200` read them there (the cells of the other block of a face
+between blocks, `bc%Pg`, are computed on the face). `Mf(3,3)` is the face metric: the
 gradient is `Gradient(v,:) = matmul(D(v,:), Mf)`, with `D` the difference
 across the face and the two tangential differences. `Res1` takes -flux and
 `Res2` +flux.
@@ -225,7 +235,8 @@ through a contiguous pointer, and calls `Viscous_Face_Metric` only for
 `mean` and `inverse-mean`; the symmetry and wall faces read their stored
 metrics the same way. A caller that evaluates the interior viscous fluxes
 elsewhere, for example with another time scheme, gets the bits of
-`Fluxes_blk` by calling the two routines the same way.
+`Fluxes_blk` by calling `Viscous_Variables` after its own fill of the ghost
+cells and the two routines above the same way.
 
 Boundary faces with `stencil`: a face between blocks (`101`, `201`) takes one
 gradient through `Diffusive_Flux` (`BC_Connection_Visc_Stencil`), with the

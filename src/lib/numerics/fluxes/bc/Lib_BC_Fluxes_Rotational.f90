@@ -215,7 +215,6 @@ contains
   subroutine BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, Blk, Mf, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Lib_Metrics, only : delthe, cos_delthe, sin_delthe
     use MOSE_Lib_Diffusive, only : Compute_Diffusive_Flux
-    use FLINT_Lib_Thermodynamic, only : co_rotot_Rtot
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout) :: Blk
@@ -225,7 +224,6 @@ contains
     ! Local
     integer :: Dir, Face_i, Face_j, Face_k, Kg, Ks, modfm2, v
     real(R8) :: Normal(3), Area, Prim(nprim), Flux(nprim), Gradient(nprim,3), g1, g2, g3
-    real(R8), dimension(nprim) :: Visc_c, Visc_g, Visc_im, Visc_ip, Visc_jm, Visc_jp
     real(R8), dimension(nprim) :: Rot_im, Rot_ip, Rot_jm, Rot_jp
 
     ! No wedge on a 2-D mesh: delthe exactly zero, written as two ordered comparisons (same result, also for -0 and NaN)
@@ -242,25 +240,16 @@ contains
     Normal = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     Area   = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
 
-    call Visc_Variables ( Blk % P(:,Im,Jm,Km), Visc_c )
-    call Visc_Variables ( Blk % P(:,Im,Jm,Kg), Visc_g )
-    call Visc_Variables ( Blk % P(:,Im-1,Jm,Ks), Rot_im )
-    call Visc_Variables ( Blk % P(:,Im+1,Jm,Ks), Rot_ip )
-    call Visc_Variables ( Blk % P(:,Im,Jm-1,Ks), Rot_jm )
-    call Visc_Variables ( Blk % P(:,Im,Jm+1,Ks), Rot_jp )
-    Rot_im = Rotated ( Rot_im )
-    Rot_ip = Rotated ( Rot_ip )
-    Rot_jm = Rotated ( Rot_jm )
-    Rot_jp = Rotated ( Rot_jp )
-    call Visc_Variables ( Blk % P(:,Im-1,Jm,Km), Visc_im )
-    call Visc_Variables ( Blk % P(:,Im+1,Jm,Km), Visc_ip )
-    call Visc_Variables ( Blk % P(:,Im,Jm-1,Km), Visc_jm )
-    call Visc_Variables ( Blk % P(:,Im,Jm+1,Km), Visc_jp )
+    ! The viscous variables of the cells (Viscous_Variables); those of the image row, turned
+    Rot_im = Rotated ( Blk % Visc(:,Im-1,Jm,Ks) )
+    Rot_ip = Rotated ( Blk % Visc(:,Im+1,Jm,Ks) )
+    Rot_jm = Rotated ( Blk % Visc(:,Im,Jm-1,Ks) )
+    Rot_jp = Rotated ( Blk % Visc(:,Im,Jm+1,Ks) )
 
     ! Gradients in computational space: k across the face, i and j along it
-    Gradient(:,3) = ( Visc_g - Visc_c ) * modfm2
-    Gradient(:,1) = ( Visc_ip - Visc_im + Rot_ip - Rot_im ) * 0.25d0
-    Gradient(:,2) = ( Visc_jp - Visc_jm + Rot_jp - Rot_jm ) * 0.25d0
+    Gradient(:,3) = ( Blk % Visc(:,Im,Jm,Kg) - Blk % Visc(:,Im,Jm,Km) ) * modfm2
+    Gradient(:,1) = ( Blk % Visc(:,Im+1,Jm,Km) - Blk % Visc(:,Im-1,Jm,Km) + Rot_ip - Rot_im ) * 0.25d0
+    Gradient(:,2) = ( Blk % Visc(:,Im,Jm+1,Km) - Blk % Visc(:,Im,Jm-1,Km) + Rot_jp - Rot_jm ) * 0.25d0
 
     ! ... and in physical space
     do v = 1, nprim
@@ -292,21 +281,6 @@ contains
     end if
 
     contains
-
-      !> Mass fractions, velocity, temperature and RANS variables per unit mass
-      subroutine Visc_Variables ( P, Visc )
-        implicit none
-        real(R8), intent(in)  :: P(nprim)
-        real(R8), intent(out) :: Visc(nprim)
-        real(R8) :: rho, Rgas
-
-        call co_rotot_Rtot ( P(1:nsc), rho, Rgas )
-        Visc(1:nsc) = P(1:nsc) / rho
-        Visc(nu:nw) = P(nu:nw)
-        Visc(np) = P(np) / ( rho * Rgas )
-        if (nprim>np) Visc(np+1:nprim) = P(np+1:nprim) / rho
-
-      end subroutine Visc_Variables
 
       !> The same values in the image row: v and w rotated as in Ghost_Axysimmetry
       function Rotated ( Visc ) result ( Rot )

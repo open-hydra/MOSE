@@ -19,7 +19,8 @@ contains
     use MOSE_Global_m
     use MOSE_Mod_dt,              only: Set_Global_dt, Compute_dt
     use MOSE_Lib_Ghost,           only: Fill_Ghost_Cell
-    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes, Zero_W_Residual, Zero_V_Residual
+    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes, Zero_W_Residual, Zero_V_Residual, &
+                                        Viscous_Variables
     use MOSE_Mod_BC_Fluxes,       only: BC_Fluxes
     use MOSE_Lib_RANS,            only: RANS_Source_Terms
     use MOSE_Mod_Soot,            only: Soot_Source_Terms
@@ -92,6 +93,7 @@ contains
 
         call Zero_Residuals ( domain(level) )                ! Zero residuals
         call Fill_Ghost_Cell ( domain(level) )               ! Fill ghost cells
+        if (model>0) call Viscous_Variables ( domain(level) ) ! Viscous variables of the cells, for the viscous fluxes
         call Internal_Fluxes ( domain(level) )               ! Convective and Diffusive fluxes
         call BC_Fluxes ( domain(level) )                     ! Boundary fluxes
 
