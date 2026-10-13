@@ -368,6 +368,26 @@ The viscous flux of a face between blocks uses its own stencil (the two
 tangential gradients of the two cells, averaged) and the inverse-mean face
 metric, not those of an interior face.
 
+The ghost cells and the neighbours along the face of those of the faces
+between blocks (`bc%Pg`) are filled at every Runge–Kutta stage, before the
+fluxes, from the state of that stage, in an order such that every value the
+fluxes read is that of the stage, with any number of threads and ranks, under
+five conditions:
+
+1. the source block of every face between blocks has at least two cells across
+   that face;
+2. every block with a face whose ghost values are extrapolated
+   ($3u_1 - 3u_2 + u_3$) has at least three cells across it;
+3. `bc.txt` has one record for every cell face of the boundary;
+4. there is no chimera (`102`) nor mapped (`410`) face;
+5. the tangential steps $(d_{11}, d_{12})$ and $(d_{21}, d_{22})$ of every
+   `101` and `201` record are unit steps along one index.
+
+The first is checked at setup: a connection whose source block has one cell
+across its face stops the run. The others are not checked: where one does not
+hold, a ghost value can be that of the previous stage, or depend on the order
+of the records or of the threads.
+
 ---
 
 ## References
