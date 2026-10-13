@@ -763,6 +763,10 @@ $\omega$ negative before the realizability floor:
  Turbulence variables below zero after a stage (set to the floor): 0
 ```
 
+In a steady run the count covers the whole run: the start, and the fronts of $k$ that the fluxes
+push below zero where $k$ is about zero, which can last to the last iteration; it is a total, which
+convergence does not bring back to zero.
+
 ### Relation to under-relaxation
 
 Point-implicit damping is a *physically weighted, automatic* form of
