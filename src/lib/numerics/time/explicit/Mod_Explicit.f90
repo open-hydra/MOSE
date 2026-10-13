@@ -25,6 +25,7 @@ contains
     use MOSE_Mod_Soot,            only: Soot_Source_Terms
     use MOSE_Mod_Newstate,        only: RK_Newstate
     use MOSE_Lib_Preconditioning, only: update_derived_variables
+    use MOSE_Lib_SpalartShur,     only: Cell_Velocity_Gradient
     use MOSE_Lib_Chemistry,       only: Chemistry_Newstate, Chemistry_Equilibrium
     use MOSE_Mod_Diagnostic,      only: Compute_Residual
     use MOSE_Lib_RotatingFrame,   only: RotatingFrame_Source_Terms
@@ -100,6 +101,10 @@ contains
            call RotatingFrame_Source_Terms ( domain(level) ) ! Coriolis and centrifugal source terms
 
         if (model==2) then
+          ! The eddy viscosity of the reference velocity of the preconditioner (Update_Derived_Variables, below)
+          ! takes the velocity gradient of the cells of this state, with the ghost cells of this stage; the -RC models
+          ! compute it with their sources
+          if ( obj_prec%enabled .and. .not. obj_rans%SpalartShur ) call Cell_Velocity_Gradient ( domain(level) )
           call RANS_Source_Terms ( domain(level) )           ! RHS of turbulence equations (the ghost cells of the fluxes)
         endif
 

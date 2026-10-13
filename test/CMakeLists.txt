@@ -131,7 +131,10 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # level of density and across a restart.
 # Local time step: stable on square and skewed 2-D cells, on cubic 3-D cells
 # and in diffusion-dominated cells (heat conduction, species), with Heun and RK3;
-# heat conduction on 3-D rhombohedra at 115 degrees with Heun at vnn 0.5.
+# heat conduction on 3-D rhombohedra at 115 degrees with Heun at vnn 0.5;
+# with integration-variables = prec, next to a wall with SST and Wilcox 2006,
+# the reference velocity of the step takes the eddy viscosity of the model at
+# the strain rate of the cell.
 # Turbulence sources in time-accurate runs: nu~, k and omega converge with the
 # order of Heun and RK3, and no stage makes them negative near a wall; SST-RC
 # prints the start-up warnings of k-omega models and of -RC; the

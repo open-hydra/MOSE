@@ -20,6 +20,14 @@
 #          600 steps: the temperature wave of 135 degrees per cell along the
 #          three indices must decay (with the step of the rate
 #          4 D sum_d |grad xi_d|^2 alone it grows by 1.076 per step).
+#  With integration-variables = prec the reference velocity U_r of the
+#  preconditioning enters the step. In
+#    prec  a 2-D column in simple shear over a wall, with SST and with
+#          Wilcox 2006, U_r is set by its viscous floor, which takes the
+#          eddy viscosity of the model at the strain rate of the cell, here a
+#          third of rho k/omega: the step of every cell (but the row next to
+#          the symmetry plane) must be the rule with that U_r, within 1e-10,
+#          after one and after two steps of a steady run (forward Euler).
 #  Cases and checks: make_case.py; gases of test/common/Air and Air-viscous
 #  and the four-species gas of test/1D/diff1.
 #===============================================================================
@@ -136,6 +144,65 @@ rm -f INPUT/ic.tec INPUT/bc.txt   # never write through the links of the sod cas
 python3 -B make_case.py species || exit 1
 solve species navier-stokes RK2 0.5 0.3 300 0.2
 solve species navier-stokes RK3 0.5 0.3 300 0.2
+
+# prec_run <model> <steps>: steady run of the prec case with integration-variables = prec; field and diagnostic kept as
+# OUTPUT/prec-<model>-<steps>.tec and OUTPUT/prec-<model>-<steps>-diag.tec, the solver output as OUTPUT/prec-<model>-<steps>.log
+prec_run() {
+  local tag="prec-$1-$2"
+  cat > input.ini <<EOF
+[MOSE-Parameters]
+iter-threshold = $2
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = navier-stokes
+turbulence = $1
+schmidt = 0.7
+
+[MOSE-Numerics]
+cfl = 0.5
+vnn = 0.3
+time-accurate = false
+time-scheme = euler
+integration-variables = prec
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC-PC
+EOF
+  rm -f OUTPUT/field.tec OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  if [[ ! -f OUTPUT/field.tec || ! -f OUTPUT/diagnostic.tec ]] || grep -a -qE 'NaN|Integration failed' "OUTPUT/$tag.log"; then
+    echo "  [FAIL] the run $tag did not complete (see OUTPUT/$tag.log)"
+    fail=1
+    return 1
+  fi
+  local done_steps
+  done_steps=$(grep -a -oE 'Iter = +[0-9]+' "OUTPUT/$tag.log" | tail -1 | grep -a -oE '[0-9]+$')
+  if [[ "$done_steps" != "$2" ]]; then
+    echo "  [FAIL] the run $tag stopped after ${done_steps:-0} of $2 steps (see OUTPUT/$tag.log)"
+    fail=1
+    return 1
+  fi
+  cp OUTPUT/field.tec "OUTPUT/$tag.tec"
+  cp OUTPUT/diagnostic.tec "OUTPUT/$tag-diag.tec"
+}
+
+gas "$VISC"
+rm -f INPUT/ic.tec INPUT/bc.txt   # never write through the links of the sod case
+python3 -B make_case.py prec || exit 1
+for model in SST Wilcox2006; do
+  echo "-- prec, $model: preconditioned step next to a wall, one and two steps --"
+  prec_run "$model" 1 || continue
+  prec_run "$model" 2 || continue
+  if python3 -B make_case.py check-prec "$model" "OUTPUT/prec-$model-1-diag.tec" "OUTPUT/prec-$model-1.tec" \
+       "OUTPUT/prec-$model-2-diag.tec"; then
+    echo "  [ok  ] U_r takes the eddy viscosity of the model at the strain rate of the cell"
+  else
+    echo "  [FAIL] the step does not take U_r with the eddy viscosity of the model at the strain rate of the cell"
+    fail=1
+  fi
+done
 
 gas "$AIR"
 rm -f INPUT/ic.tec INPUT/bc.txt

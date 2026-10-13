@@ -16,31 +16,17 @@ contains
   !> across (Ghost_Velocity_Gradient), behind the other faces a copy of the cell.
   subroutine Compute_Velocity_Gradient ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Global_m
     use MOSE_Mod_MPI, only: is_local_block
-    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
-    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
 
     implicit none
     type(MOSE_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b, i, j, k, n
-    real(R8), dimension(3,3) :: vel_diff
-    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:)   ! cell metric of the sources (Source_Metrics)
+
+    call Cell_Velocity_Gradient ( domain )
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
-      call Source_Metrics ( domain % blk(b), Mi )
-      !$omp do collapse(3) private(vel_diff)
-      do k = 1, domain % blk(b) % dim(3)
-      do j = 1, domain % blk(b) % dim(2)
-      do i = 1, domain % blk(b) % dim(1)
-        ! Cell-centered velocity gradient
-        vel_diff(:,1) = ( domain%blk(b)%P(nu:nw,i+1,j,k) - domain%blk(b)%P(nu:nw,i-1,j,k) )/2d0
-        vel_diff(:,2) = ( domain%blk(b)%P(nu:nw,i,j+1,k) - domain%blk(b)%P(nu:nw,i,j-1,k) )/2d0
-        vel_diff(:,3) = ( domain%blk(b)%P(nu:nw,i,j,k+1) - domain%blk(b)%P(nu:nw,i,j,k-1) )/2d0
-        domain%blk(b)%vel_gradient(i,j,k)%c = matmul ( vel_diff + 1d-40, Mi(i,j,k)%c )
-      end do ; end do ; end do
 
       ! Ghost cells, as second derivatives must be computed: a copy of the cell (replaced below behind the faces between
       ! blocks and of rotational periodicity)
@@ -76,6 +62,43 @@ contains
     call Ghost_Velocity_Gradient ( domain )
 
   end subroutine Compute_Velocity_Gradient
+
+
+  !> Velocity gradient of every cell of the blocks of the rank, blk%vel_gradient(1:n1,1:n2,1:n3), from the central
+  !> differences of the velocity along the index directions and the cell metric of the source terms (Source_Metrics).
+  !> The ghost cells of the state must be filled; the ghost layers of the gradient are not touched, and no message is
+  !> sent. Compute_Velocity_Gradient adds them for the rotation-curvature correction; the reference velocity of the
+  !> preconditioner (Update_Derived_Variables) takes the cells alone.
+  subroutine Cell_Velocity_Gradient ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m
+    use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
+    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
+
+    implicit none
+    type(MOSE_domain_type), intent(inout), target :: domain
+    ! Local
+    integer :: b, i, j, k
+    real(R8), dimension(3,3) :: vel_diff
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:)   ! cell metric of the sources (Source_Metrics)
+
+    do b = 1, domain % nb
+      if (.not. is_local_block(b)) cycle
+      call Source_Metrics ( domain % blk(b), Mi )
+      !$omp do collapse(3) private(vel_diff)
+      do k = 1, domain % blk(b) % dim(3)
+      do j = 1, domain % blk(b) % dim(2)
+      do i = 1, domain % blk(b) % dim(1)
+        ! Cell-centered velocity gradient
+        vel_diff(:,1) = ( domain%blk(b)%P(nu:nw,i+1,j,k) - domain%blk(b)%P(nu:nw,i-1,j,k) )/2d0
+        vel_diff(:,2) = ( domain%blk(b)%P(nu:nw,i,j+1,k) - domain%blk(b)%P(nu:nw,i,j-1,k) )/2d0
+        vel_diff(:,3) = ( domain%blk(b)%P(nu:nw,i,j,k+1) - domain%blk(b)%P(nu:nw,i,j,k-1) )/2d0
+        domain%blk(b)%vel_gradient(i,j,k)%c = matmul ( vel_diff + 1d-40, Mi(i,j,k)%c )
+      end do ; end do ; end do
+    end do
+
+  end subroutine Cell_Velocity_Gradient
 
 
   !> First layer of ghost cells of the velocity gradient behind the faces between blocks (101), of a periodic pair (201)

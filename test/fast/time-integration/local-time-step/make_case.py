@@ -25,12 +25,25 @@ Small cases, written into INPUT/ (one at a time) by `python3 -B make_case.py CAS
   species  1-D periodic Navier-Stokes, 40 cells of 1 nm, the four-species gas of test/1D/diff1 (CH4, H2O, N2, O2) as
          air (N2 and O2) at rest, 300 K, 1 bar, with a wave of amplitude 1e-3 in the O2 mass fraction; run with
          schmidt = 0.2, so the species diffusivity mu/(rho Sc) = 5 nu is the largest one and sets the step.
-Calorically perfect air of test/common/Air (box, skew, sod, box3d) or test/common/Air-viscous (visc): cp = 1004.5
+  prec   2-D column of 4 x 16 cells of 40 um x 10 um, periodic in x (201 on itself), an adiabatic wall (301) at y = 0
+         and a symmetry plane (300) at the top; air of test/common/Air-viscous at 300 K and 1 bar in simple shear,
+         u = G y with G = 1e5 1/s, and uniform k = 100 m2/s2, omega = 1e5 1/s. With SST (a_1 omega < S F_2) and with
+         Wilcox 2006 (omega < C_lim sqrt(2 S:S/beta*)) the strain rate limits the eddy viscosity of every cell to about
+         a third of rho k/omega. Steady runs with integration-variables = prec and HLLC-PC, forward Euler: the
+         reference velocity U_r of every cell is the viscous floor (k + mu_t cp/Pr_t)/(rho cp dy), above the cut-off
+         0.05 a of Weiss and Smith, and the local time step takes it in the preconditioned eigenvalue. The step of
+         every cell but those next to the symmetry plane must be the rule of Compute_dt with that U_r, within 1e-10:
+         after one step, from the initial state; after two steps, from the state after the first one with the
+         velocity gradient of the initial state, the state its stage started from (the gradient is computed after the
+         ghost cells of the stage are filled).
+Calorically perfect air of test/common/Air (box, skew, sod, box3d) or test/common/Air-viscous (visc, prec): cp = 1004.5
 J/kg/K, M = 28.970418 kg/kmol, gamma = 1.4; the gas constant of FLINT.
 
 Usage (from the test directory):
-  python3 -B make_case.py box|skew|visc|box3d|species|rhombo   INPUT/ic.tec and INPUT/bc.txt
+  python3 -B make_case.py box|skew|visc|box3d|species|rhombo|prec   INPUT/ic.tec and INPUT/bc.txt
   python3 -B make_case.py check CASE FILE               compare a solution file with what the case must keep
+  python3 -B make_case.py check-prec MODEL DIAG1 FIELD1 DIAG2   the local time steps of the prec case (MODEL SST or
+                                                        Wilcox2006) after one step (DIAG1, FIELD1) and after two (DIAG2)
 """
 import math
 import os
@@ -55,9 +68,9 @@ def fresh(path):
     return open(path, "w")
 
 
-def write_ic(ni, nj, x, y, z, cells, path="INPUT/ic.tec", nk=1, species=("rho1",)):
+def write_ic(ni, nj, x, y, z, cells, path="INPUT/ic.tec", nk=1, species=("rho1",), rans=()):
     """x, y, z(i, j, k) node functions; cells: dict of name -> list of ni*nj*nk cell values (i fastest)."""
-    names = list(species) + ["u", "v", "w", "p"]
+    names = list(species) + ["u", "v", "w", "p"] + list(rans)
     with fresh(path) as f:
         f.write(' VARIABLES ="x" "y" "z"  ' + " ".join(f'"{n}"' for n in names) + "\n")
         f.write(f" ZONE  T = B1-IG, I={ni + 1}, J={nj + 1}, K={nk + 1}, DATAPACKING=BLOCK, "
@@ -199,6 +212,89 @@ def rhombo():
     fresh("INPUT/bc.txt").write("".join(out))
 
 
+# prec: mesh, simple shear and turbulence; gas of test/common/Air-viscous (constant viscosity and conductivity); defaults
+# of Prt and preconditioning-eps-min; cfl and vnn of the runs (run.sh); constants of SST and Wilcox 2006
+NIP, NJP, DXP, DYP, DZP = 4, 16, 4.0e-5, 1.0e-5, 4.0e-5
+GP, KP, OMP = 1.0e5, 100.0, 1.0e5
+MU, LAM, CP = 1.1858686e-5, 0.016544513989, 1004.5
+PRT, EPS_MIN = 0.85, 0.05
+CFL, VNN = 0.5, 0.3
+A1, BETA_STAR, CLIM = 0.31, 0.09, 7.0 / 8.0
+
+
+def prec():
+    rho = P0 / (RGAS * T0)
+    n = NIP * NJP
+    zero = [0.0] * n
+    write_ic(NIP, NJP, lambda i, j, k: i * DXP, lambda i, j, k: j * DYP, lambda i, j, k: k * DZP,
+             {"rho1": [rho] * n, "u": [GP * (j + 0.5) * DYP for j in range(NJP) for i in range(NIP)], "v": zero,
+              "w": zero, "p": [P0] * n, "rhoK": [rho * KP] * n, "rhoOmega": [rho * OMP] * n}, rans=("rhoK", "rhoOmega"))
+    out = [rec(1, 1, j, 1, 1, 201, (1, NIP, j, 1, 2, 1, 0, 0, 1)) for j in range(1, NJP + 1)]
+    out += [rec(1, NIP, j, 1, 2, 201, (1, 1, j, 1, 1, 1, 0, 0, 1)) for j in range(1, NJP + 1)]
+    out += [rec(1, i, 1, 1, 3, 301) + "    0.000000E+00,    0.000000E+00,    0.000000E+00,\n" for i in range(1, NIP + 1)]
+    out += [rec(1, i, NJP, 1, 4, 300) for i in range(1, NIP + 1)]
+    for face in (5, 6):
+        out += [rec(1, i, j, 1, face, 0) for j in range(1, NJP + 1) for i in range(1, NIP + 1)]
+    fresh("INPUT/bc.txt").write("".join(out))
+
+
+def eddy_viscosity(model, rho, rk, rw, y, dudy):
+    """mu_t of SST or Wilcox 2006 in a simple shear du/dy (2 S_ij S_ij = (du/dy)^2), at wall distance y."""
+    k, w = rk / rho, rw / rho
+    if model == "SST":
+        arg2 = max(2.0 * math.sqrt(k) / (BETA_STAR * w * y), 500.0 * MU / (rho * w * y * y))
+        return rho * k * A1 / max(A1 * w, abs(dudy) * math.tanh(arg2 * arg2))
+    return rk / max(w, CLIM * abs(dudy) / math.sqrt(BETA_STAR))
+
+
+def dt_rule(model, rho, vel, p, rk, rw, y, dudy):
+    """Local time step of a cell of the prec case and its U_r: the rule of Compute_dt with the preconditioned eigenvalue,
+    U_r of comp_Ur (Weiss-Smith with the defaults) raised to the viscous floor with the eddy viscosity of the model at
+    du/dy; the diffusive part takes, as Compute_dt does, the eddy viscosity at zero strain."""
+    c = (CP / (CP - RGAS) * RGAS * p / (RGAS * rho)) ** 0.5
+    mut = eddy_viscosity(model, rho, rk, rw, y, dudy)
+    dmin = min(DXP, DYP)
+    floor = max((MU + mut) / (rho * dmin), (LAM + mut * CP / PRT) / (rho * CP * dmin))
+    speed = math.sqrt(sum(v * v for v in vel))
+    ur = max(EPS_MIN * c if speed < EPS_MIN * c else min(speed, c), floor)
+    alpha = 0.5 * (1.0 - ur * ur / (c * c))
+    rate_c = sum((un * (1.0 - alpha) + math.sqrt(alpha * alpha * un * un + ur * ur)) * gn
+                 for un, gn in ((abs(vel[0]), 1.0 / DXP), (abs(vel[1]), 1.0 / DYP)))
+    mie = eddy_viscosity(model, rho, rk, rw, 1.0e-6, 0.0)
+    dmax = max(4.0 / 3.0 * (MU + mie) / rho, (LAM + mie * CP / PRT) / (rho * (CP - RGAS)))
+    return 1.0 / (rate_c / CFL + dmax * (1.0 / DXP ** 2 + 1.0 / DYP ** 2) / VNN), ur
+
+
+def check_prec(model, diag1, field1, diag2):
+    """Exit status 0 when the local time steps of the prec case are the rule with the eddy viscosity of the model at the
+    strain rate of the cell: after one step from the initial state, after two from the state after the first with the
+    velocity gradient of the initial state. The row next to the symmetry plane is not checked."""
+    rho0 = P0 / (RGAS * T0)
+    d1, f1, d2 = read_field(diag1), read_field(field1), read_field(diag2)
+    ok = True
+    for step, d in ((1, d1), (2, d2)):
+        worst, urs, ratio = 0.0, [], []
+        for j in range(NJP - 1):
+            y = (j + 0.5) * DYP
+            for i in range(NIP):
+                c = j * NIP + i
+                if step == 1:
+                    s = (rho0, (GP * y, 0.0, 0.0), P0, rho0 * KP, rho0 * OMP)
+                else:
+                    s = (f1["rho(1)"][c], (f1["u"][c], f1["v"][c], f1["w"][c]), f1["p"][c], f1["rhoK"][c],
+                         f1["rhoOmega"][c])
+                want, ur = dt_rule(model, *s, y, GP)
+                zero, _ = dt_rule(model, *s, y, 0.0)
+                worst = max(worst, abs(d["dt"][c] / want - 1.0))
+                urs.append(ur)
+                ratio.append(zero / want)
+        print(f"    step {step}: largest |dt/dt_rule - 1| = {worst:.2e} in the {(NJP - 1) * NIP} cells; U_r of the floor "
+              f"{min(urs):.2f} to {max(urs):.2f} m/s (with the eddy viscosity at zero strain the step would be "
+              f"{min(ratio):.3f} to {max(ratio):.3f} times the rule)")
+        ok = ok and worst < 1.0e-10
+    sys.exit(0 if ok else 1)
+
+
 def read_field(path):
     """Cell values of a one-zone MOSE ASCII field (BLOCK packing), variable names quoted or not."""
     with open(path) as f:
@@ -253,7 +349,9 @@ def main():
     what = sys.argv[1]
     if what == "check":
         check(sys.argv[2], sys.argv[3])
-    elif what in ("box", "skew", "visc", "box3d", "species", "rhombo"):
+    elif what == "check-prec":
+        check_prec(*sys.argv[2:6])
+    elif what in ("box", "skew", "visc", "box3d", "species", "rhombo", "prec"):
         globals()[what]()
     else:
         sys.exit(f"unknown request {what}")
