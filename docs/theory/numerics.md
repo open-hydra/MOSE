@@ -330,10 +330,15 @@ value is right for a linear field:
   opposite face, so value and position agree only with three cells or more);
   chimera (`102`) and mapped (`410`) faces take the same position, an
   approximation, since their values come from donor cells or from a file; the
-  MUSCL reconstruction of the first interior face takes the distance
-  $l_0 = \Delta l_1$ of the ghost cell instead, so on cells stretched across
-  these faces the slope behind the face is scaled by a factor of order one,
-  which the limiter bounds;
+  tangential differences of their faces take as neighbours of a ghost cell
+  along the face the ghost cells of the neighbouring faces; beyond the edges
+  of the block face a chimera face extrapolates the row of its ghost cells
+  linearly (in the k direction of a 2-D mesh, the ghost cell turned by the
+  wedge angle), a mapped face takes the ghost cell itself (no difference on
+  that side), an approximation; the MUSCL reconstruction of the first interior face
+  takes the distance $l_0 = \Delta l_1$ of the ghost cell instead, so on cells
+  stretched across these faces the slope behind the face is scaled by a factor
+  of order one, which the limiter bounds;
 - zero-gradient faces (`0`, `401`–`407`, `420`): the cell itself;
 - symmetry (`300`): the mirror image of the cell across the face; on a face of
   zero area (an axis at $r = 0$) the cell itself, since the ghost value there is
