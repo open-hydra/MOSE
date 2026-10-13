@@ -1,4 +1,5 @@
-"""TIME field data of a MOSE .vtm: read from its first block file, in any vtk format (ascii, base64 or raw appended)."""
+"""Solution time of a MOSE solution: the TIME field data of a .vtm, read from its first block file, in any vtk format
+(ascii, base64 or raw appended), or the SOLUTIONTIME of the first zone header of a Tecplot ASCII .tec file."""
 import base64
 import re
 import struct
@@ -7,6 +8,9 @@ from pathlib import Path
 
 def time_of(vtm):
     vtm = Path(vtm)
+    if vtm.suffix == ".tec":
+        zone = next(l for l in vtm.read_text().splitlines() if l.lstrip().upper().startswith("ZONE"))
+        return float(re.search(r"SOLUTIONTIME\s*=\s*([-+0-9.EeDd]+)", zone).group(1).replace("D", "E"))
     entry = re.search(r'file="([^"]+)"', vtm.read_text()).group(1)
     vts = vtm.parent / entry
     if not vts.is_file():

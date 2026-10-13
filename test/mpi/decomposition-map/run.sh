@@ -18,7 +18,7 @@
 #      blocks together (0 1 1 0); 4 ranks in reverse order.
 #   3. 110 blocks (11 x 10 of 4 x 4 cells): 2 ranks cyclic (0 1 0 1 ...) and
 #      4 ranks with MOSE's own assignment. Output in Tecplot ASCII, so this
-#      comparison holds to its 15 significant digits.
+#      comparison holds to its 17 significant digits.
 #   4. Fewer blocks than ranks, 3 x 1 blocks on 4 ranks (0 1 2): a rank must
 #      stay idle, so the run goes on with a warning, as without a map.
 #  A map for other ranks stops the run on every rank with the same message:

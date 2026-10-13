@@ -45,7 +45,7 @@ module MOSE_Config_Types_m
   !> convergence test.
   type :: restart_counters_t
     logical   :: found = .false.            ! The restart solution holds the counters
-    logical   :: steady = .false.           ! The restart solution is a steady one (vtk: negative TIME)
+    logical   :: steady = .false.           ! The restart solution is a steady one: negative time (vtk TIME, Tecplot SOLUTIONTIME)
     integer   :: cycle = 0                  ! Iteration count over all grid levels (CYCLE)
     integer   :: iteration = 0              ! Iteration count of the grid level of the solution
     integer   :: output_number = 0          ! Number of the last numbered solution

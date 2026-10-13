@@ -142,6 +142,14 @@ contains
       IOfield%tec%format = trim(format(2))
       error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit), &
                                              zone_mask=zone_mask,dims_only=dims_only)
+      ! Restart: a steady run writes its solutions at minus the global iteration count, a time-accurate one at
+      ! t >= 0, so a negative solution time marks a steady solution, as a negative TIME does in vtk. Its global
+      ! iteration count, |time|, goes where the vtk branch stores it. The time comes with the zone headers: the
+      ! pass with zone_mask, which reads the variable data of some blocks only, keeps what the first pass found
+      if ( .not. obj_sim_param%newrun ) then
+        if ( .not. present(zone_mask) ) obj_io%restart%steady = ( IOfield%solutiontime < 0._R8P )
+        if ( obj_io%restart%steady ) IOfield%solutiontime = abs(IOfield%solutiontime)
+      endif
     case('vtk')
       IOfield%tec%format = trim(format(2))
       if ( obj_sim_param%newrun ) then

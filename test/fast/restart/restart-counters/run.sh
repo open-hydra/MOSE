@@ -22,10 +22,17 @@
 #   multigrid  two grid levels, 10 iterations on the coarse one, then 30 on
 #              the fine one, the restart after 15 of them; solutions every 4
 #              iterations of the level. Carries the level.
+#  and, with Tecplot ASCII (no counters in the file),
+#   multigrid-tecplot  the same two levels: the global iteration count of the
+#              restart goes on from the magnitude of the solution time read on
+#              the finest level, minus the count in a steady solution (the
+#              coarse levels hold none)
 #  and
 #   transient  a time-accurate restart from a steady solution starts the
 #              transient at t = 0: after 5 steps the solution time of the
-#              last output is the sum of their time steps, in (0, 0.1).
+#              last output is the sum of their time steps, in (0, 0.1); from
+#              vtk raw and from Tecplot ASCII (transient-tecplot), where the
+#              steady solution is the one with a negative SOLUTIONTIME.
 #  and
 #   probes     time-accurate, a solution every 10 iterations and three probes:
 #              p1 every 0.01 s of physical time, p2 every 4 iterations, p3
@@ -116,11 +123,11 @@ write_ini() {
       steady)    printf '%s\n' 'cfl = 0.5' 'cfl-rise-threshold = 30' 'time-accurate = false' ;;
       dtime|probes|torque) printf '%s\n' 'cfl = 0.9' 'time-accurate = true' ;;
       multigrid|multigrid-tecplot) printf '%s\n' 'cfl = 0.5' 'time-accurate = false' ;;
-      transient) if [[ $newrun == true ]]; then printf '%s\n' 'cfl = 0.5' 'time-accurate = false'
+      transient|transient-tecplot) if [[ $newrun == true ]]; then printf '%s\n' 'cfl = 0.5' 'time-accurate = false'
                  else printf '%s\n' 'cfl = 0.9' 'time-accurate = true'; fi ;;
     esac
     local fmt='vtk raw'
-    [[ $case == multigrid-tecplot ]] && fmt='tecplot ascii'
+    [[ $case == multigrid-tecplot || $case == transient-tecplot ]] && fmt='tecplot ascii'
     printf '\n%s\n' '[MOSE-IO]' "sol-format = $fmt" 'sol-overwrite = false' 'shell-diter = 1000000000' \
                      'ini-diter = 1000000000'
     case $case in
@@ -177,18 +184,38 @@ EOF
 
 run_case multigrid 30 15 || status=1   # with levels, level1-iter counts the iterations on the fine level
 
-# transient: 10 steady iterations, then a time-accurate restart for 5 steps
-prepare runs/transient/split
-write_ini runs/transient/split transient 10 true;  solve runs/transient/split steady
-write_ini runs/transient/split transient 5 false;  solve runs/transient/split transient
-python3 -B - runs/transient/split/OUTPUT/field.vtm <<'EOF' || status=1
+# multigrid-tecplot: the same two levels with Tecplot ASCII, whose solutions hold no counters. The
+# restart solves the coarse level again, but the global iteration count goes on from the solution
+# time of the file, read on the finest level: the iteration column of residual-history.dat must
+# keep increasing (10 + 15 iterations, then the restart)
+prepare runs/multigrid-tecplot/split
+write_ini runs/multigrid-tecplot/split multigrid-tecplot 15 true;   solve runs/multigrid-tecplot/split first
+write_ini runs/multigrid-tecplot/split multigrid-tecplot 15 false;  solve runs/multigrid-tecplot/split restart
+python3 -B - runs/multigrid-tecplot/split/OUTPUT/residual-history.dat <<'EOF' || status=1
+import sys
+its = [int(l.split()[0]) for l in open(sys.argv[1]) if l.strip()]
+ok = len(its) > 25 and all(b > a for a, b in zip(its, its[1:]))
+print('  multigrid-tecplot: residual history rows %d to %d around the restart: %s (%s)'
+      % (25, 26, its[24:26], 'ok' if ok else 'the iteration count starts again'))
+sys.exit(0 if ok else 1)
+EOF
+
+# transient: 10 steady iterations, then a time-accurate restart for 5 steps, from vtk raw and from Tecplot ASCII
+for case in transient transient-tecplot; do
+  prepare runs/$case/split
+  write_ini runs/$case/split $case 10 true;  solve runs/$case/split steady
+  write_ini runs/$case/split $case 5 false;  solve runs/$case/split transient
+  sol=runs/$case/split/OUTPUT/field.vtm; [[ $case == transient-tecplot ]] && sol=runs/$case/split/OUTPUT/field.tec
+  python3 -B - "$sol" "$case" <<'EOF' || status=1
 import sys
 from vtk_time import time_of
 t = time_of(sys.argv[1])
 ok = 0.0 < t < 0.1
-print('  transient: solution time after 5 steps from the steady solution = %.17g (%s)' % (t, 'ok' if ok else 'should be in (0, 0.1)'))
+print('  %s: solution time after 5 steps from the steady solution = %.17g (%s)'
+      % (sys.argv[2], t, 'ok' if ok else 'should be in (0, 0.1)'))
 sys.exit(0 if ok else 1)
 EOF
+done
 
 # probes: 25 iterations, then the restart from the solution of iteration 20 (the final solution of the first
 # part removed, as after a run that stopped before writing it); residual-history.dat and the probe files

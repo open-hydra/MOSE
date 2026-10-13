@@ -7,7 +7,7 @@
 #     A : N iterations in one go
 #     B : N/2 iterations -> restart -> N/2 more
 #  1. Tecplot ASCII (OUTPUT/field.tec): A and B must match to the round-trip
-#     precision of the file (15 significant digits).
+#     precision of the file (17 significant digits).
 #  2. vtk raw: A and B must be identical bit for bit, counters included: the
 #     runs write numbered solutions every 10 iterations (sol-overwrite = false)
 #     and ramp the CFL number over the first 40 iterations, so the restart must

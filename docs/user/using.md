@@ -243,8 +243,9 @@ from the first iteration: the run goes on until the residual is
 `res-threshold` times that of the first iteration, not times its peak, so it
 ends later than a test relative to the peak would, never earlier. A restart
 from a vtk solution keeps the residual of the first iteration of the
-uninterrupted run, with all its bits in `vtk raw` and to 15 significant
-digits in `vtk ascii` (see [Restart](initial-conditions.md#restart)). In
+uninterrupted run, with all its bits in `vtk raw` and in `vtk ascii`,
+whose 17 significant digits give back every 64-bit value (see
+[Restart](initial-conditions.md#restart)). In
 time-accurate runs the residual is reported but does not end the run.
 
 ### Timing

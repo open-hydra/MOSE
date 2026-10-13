@@ -26,7 +26,7 @@ except ModuleNotFoundError:
         "ORION package not found. Run 'conda activate base' or install ORION."
     )
 
-TOL = 1.0e-10  # relative tolerance (Tecplot ASCII keeps ~15 significant digits)
+TOL = 1.0e-10  # relative tolerance (Tecplot ASCII keeps 17 significant digits)
 
 full = read_TEC(sys.argv[1])[3][0]
 rest = read_TEC(sys.argv[2])[3][0]
