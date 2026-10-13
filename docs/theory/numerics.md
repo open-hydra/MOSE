@@ -658,7 +658,8 @@ from the state of the cell:
 - viscous: the flux of a face between the cell and its rotated image, with the
   stencil of an interior face (the $i$ and $j$ neighbours of the image rotated
   in the same way) and the inverse-mean face metric of the cell and its image,
-  with every `diffusive-metric`.
+  with every `diffusive-metric`, computed once at setup (it depends on the
+  mesh only).
 
 For an axisymmetric field the mass, energy and scalar fluxes of the two faces
 are equal and opposite, and only the momentum fluxes are applied. Without swirl

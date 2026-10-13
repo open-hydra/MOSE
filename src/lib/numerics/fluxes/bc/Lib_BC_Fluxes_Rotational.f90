@@ -189,9 +189,9 @@ contains
   !> the k difference across the face, the i and j differences averaged over
   !> the row of the cell and its rotated image. The image row is rotated here
   !> with the same formula, because the k ghosts of the i and j ghost cells (the
-  !> corners) are not filled. Face metric: the inverse of the mean of the two
-  !> inverse metrics, as on the connections (Face_Metric); the ghost metric is
-  !> the exact rotation of the cell (BC_Extrapolate_Metrics).
+  !> corners) are not filled. Face metric: Mf, the inverse of the mean of the two
+  !> inverse metrics of the cell and its image, as on the connections, computed
+  !> once at setup (Rotational_Periodic_Face_Metric, stored in the record: bc%rM).
   !>
   !> On the wedge only the momentum is updated. The flow there is axisymmetric by
   !> construction, so, as for the inviscid flux above, the mass, energy and
@@ -212,18 +212,19 @@ contains
   !> (delthe = 0) is the same without the turn. Not handled: a planar 2-D mesh
   !> with type 200 on k (delthe = 0), where the image is the cell itself and the
   !> fluxes of faces 5 and 6 are the same and cancel.
-  subroutine BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, Blk, Sc, Sct, Prt, Prl, soot_enabled )
+  subroutine BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, Blk, Mf, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Lib_Metrics, only : delthe
-    use MOSE_Lib_Diffusive, only : Compute_Diffusive_Flux, Face_Metric
+    use MOSE_Lib_Diffusive, only : Compute_Diffusive_Flux
     use FLINT_Lib_Thermodynamic, only : co_rotot_Rtot
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout) :: Blk
+    real(R8), intent(in) :: Mf(3,3)      ! face metric (Rotational_Periodic_Face_Metric)
     real(R8), intent(in) :: Sc, Sct, Prt, Prl
     logical, intent(in) :: soot_enabled
     ! Local
-    integer :: Dir, Face_i, Face_j, Face_k, Kg, Ks, modfm2, v, d
-    real(R8) :: Normal(3), Area, M(3,3), Mg(3,3), Prim(nprim), Flux(nprim), Gradient(nprim,3), g1, g2, g3
+    integer :: Dir, Face_i, Face_j, Face_k, Kg, Ks, modfm2, v
+    real(R8) :: Normal(3), Area, Prim(nprim), Flux(nprim), Gradient(nprim,3), g1, g2, g3
     real(R8), dimension(nprim) :: Visc_c, Visc_g, Visc_im, Visc_ip, Visc_jm, Visc_jp
     real(R8), dimension(nprim) :: Rot_im, Rot_ip, Rot_jm, Rot_jp
 
@@ -240,18 +241,6 @@ contains
 
     Normal = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     Area   = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
-    if (ndir == 3) then
-      ! Metric of the image, the source turned: x' = R x gives grad xi' = R grad xi, each row turned as a vector
-      Mg = Blk % M(Im,Jm,Ks) % c
-      do d = 1, 3
-        g2 = Mg(d,2) ; g3 = Mg(d,3)
-        Mg(d,2) = g2 * cos(delthe) + guide(Fm,3) * g3 * sin(delthe)
-        Mg(d,3) = g2 * sin(delthe) * (-guide(Fm,3)) + g3 * cos(delthe)
-      end do
-    else
-      Mg = Blk % M(Im,Jm,Kg) % c
-    end if
-    M = Face_Metric ( Blk % M(Im,Jm,Km) % c, Mg )
 
     call Visc_Variables ( Blk % P(:,Im,Jm,Km), Visc_c )
     call Visc_Variables ( Blk % P(:,Im,Jm,Kg), Visc_g )
@@ -276,9 +265,9 @@ contains
     ! ... and in physical space
     do v = 1, nprim
       g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
-      Gradient(v,1) = g1*M(1,1) + g2*M(2,1) + g3*M(3,1)
-      Gradient(v,2) = g1*M(1,2) + g2*M(2,2) + g3*M(3,2)
-      Gradient(v,3) = g1*M(1,3) + g2*M(2,3) + g3*M(3,3)
+      Gradient(v,1) = g1*Mf(1,1) + g2*Mf(2,1) + g3*Mf(3,1)
+      Gradient(v,2) = g1*Mf(1,2) + g2*Mf(2,2) + g3*Mf(3,2)
+      Gradient(v,3) = g1*Mf(1,3) + g2*Mf(2,3) + g3*Mf(3,3)
     end do
 
     ! The image has the wall distance and roughness of its source: the face takes their mean with the cell, as an
@@ -332,5 +321,48 @@ contains
       end function Rotated
 
   end subroutine BC_Rotational_Periodic_Visc
+
+
+  !> Face metric of the viscous flux of a face of type 200 (BC_Rotational_Periodic_Visc): the inverse of the mean of
+  !> the two inverse metrics (Face_Metric) of the cell and of its image. It depends on the metrics only, so
+  !> Setup_Metrics computes it once, for the records of type 200 of the blocks of the rank, and stores it in the record
+  !> (bc%rM). On a wedge the metric of the image is that of the ghost cell, the exact rotation of the cell
+  !> (BC_Extrapolate_Metrics); on a 3-D sector it is the metric of the source (the cell next to the opposite k face)
+  !> turned. Zero where the flux is not computed: a planar 2-D mesh, and face 5 of a sector (the record of face 6
+  !> computes the face).
+  function Rotational_Periodic_Face_Metric ( Im, Jm, Km, Fm, Blk ) result ( M )
+    use MOSE_Lib_Metrics, only : delthe
+    use MOSE_Lib_Diffusive, only : Face_Metric
+    implicit none
+    integer, intent(in) :: Im, Jm, Km, Fm
+    type(MOSE_block_type), intent(in) :: Blk
+    real(R8) :: M(3,3)
+    ! Local
+    integer :: Kg, Ks, d
+    real(R8) :: Mg(3,3), g2, g3
+
+    M = 0d0
+    ! The faces whose flux BC_Rotational_Periodic_Visc computes (the same two tests)
+    if (ndir < 3 .and. (delthe >= 0d0 .and. delthe <= 0d0)) return
+    if (ndir == 3 .and. Fm /= 6) return
+
+    Kg = Km - guide(Fm,3)          ! k of the image of the cell (its ghost)
+    Ks = Km                        ! k of the source of the image: the cell itself on a wedge,
+    if (ndir == 3) Ks = Blk % dim(3) - Km + 1   ! the cell next to the opposite k face on a sector
+
+    if (ndir == 3) then
+      ! Metric of the image, the source turned: x' = R x gives grad xi' = R grad xi, each row turned as a vector
+      Mg = Blk % M(Im,Jm,Ks) % c
+      do d = 1, 3
+        g2 = Mg(d,2) ; g3 = Mg(d,3)
+        Mg(d,2) = g2 * cos(delthe) + guide(Fm,3) * g3 * sin(delthe)
+        Mg(d,3) = g2 * sin(delthe) * (-guide(Fm,3)) + g3 * cos(delthe)
+      end do
+    else
+      Mg = Blk % M(Im,Jm,Kg) % c
+    end if
+    M = Face_Metric ( Blk % M(Im,Jm,Km) % c, Mg )
+
+  end function Rotational_Periodic_Face_Metric
 
 end module MOSE_Lib_BC_Fluxes_Rotational

@@ -90,6 +90,8 @@ module MOSE_Advanced_Types_m
     logical                             :: wstencil = .false.                ! wM, wdT set for this wall face
     real(R8)                            :: wM(3,3) = 0.0_R8                  ! face metric of the wall gradient
     real(R8)                            :: wdT(2) = 0.0_R8                   ! tangential differences of T_w (302)
+    ! Faces of type 200 (MOSE_Lib_BC_Fluxes_Rotational): face metric of the viscous flux, set once (Setup_Metrics)
+    real(R8)                            :: rM(3,3) = 0.0_R8                  ! Rotational_Periodic_Face_Metric
   end type MOSE_bc_type
   !! ------------------------------------------------------
   !! ------------------------------------------------------

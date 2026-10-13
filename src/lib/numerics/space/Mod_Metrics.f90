@@ -12,6 +12,7 @@ contains
     use MOSE_Lib_Metrics
     use MOSE_Lib_Diffusive, only: Inverse3
     use MOSE_Lib_Stencil_Metrics, only: Setup_Stencil_Metrics
+    use MOSE_Lib_BC_Fluxes_Rotational, only: Rotational_Periodic_Face_Metric
     use MOSE_Config_Types_m, only: obj_space_scheme
     use MOSE_Mod_MPI, only: is_local_block, mpi_is_root
     implicit none
@@ -164,6 +165,18 @@ contains
     !$omp end parallel
     ! A degenerate or inverted ghost cell (Compute_Metric_Tensor wrote the first one): every rank stops together
     call Stop_On_Bad_Metric ( )
+
+    ! Type 200: the face metric of the viscous flux depends on the metrics of the cell and of its image (above) only:
+    ! once here, into the record, for the faces of the blocks of this rank (Rotational_Periodic_Face_Metric)
+    if ( model > 0 ) then
+      do i = 1, domain % nbound
+        if ( domain % bc(i) % type /= 200 ) cycle
+        Bm = domain % bc(i) % b
+        if (.not. is_local_block(Bm)) cycle
+        domain % bc(i) % rM = Rotational_Periodic_Face_Metric ( domain % bc(i) % i, domain % bc(i) % j, &
+                                domain % bc(i) % k, domain % bc(i) % f, domain % blk(Bm) )
+      enddo
+    end if
 
     ! Walls (the coupled walls 103 and 104 too) and 400 faces: ratio of the MUSCL distances behind the face, for the
     ! ghost values (Ghost_Wall) and their positions (Setup_Stencil_Metrics); every record, on every rank

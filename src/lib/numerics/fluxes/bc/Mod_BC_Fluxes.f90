@@ -97,7 +97,8 @@ contains
             case (200) ! periodic
               call BC_Rotational_Periodic_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
               if (model>0) &
-                call BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, domain % blk(Bm), Sc, Sct, Prt, Prl, soot_enabled )
+                call BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % rM, &
+                                                   Sc, Sct, Prt, Prl, soot_enabled )
 
             case (300) ! symmetry
               call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
