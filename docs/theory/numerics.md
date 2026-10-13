@@ -494,7 +494,11 @@ that of a wall at rest. Without these differences the wall stress would be
 wrong by the order of $\mu\,|\boldsymbol{\Omega}|$ with every metric and on
 any mesh, orthogonal cells included, because the stress takes the derivatives
 of the velocity along the wall: a gas at rest in the absolute frame, a rigid
-rotation in the rotating frame, would feel a shear on the wall.
+rotation in the rotating frame, would feel a shear on the wall. The part of
+$\mathbf{u}_w$ is exact because the values sit where the metric places them:
+the value of a cell at the centre of the cell (the mean of its eight nodes),
+the wall velocity at the centre of the wall face (the mean of its four nodes).
+A change of either position has to be made in the metric too.
 
 The viscous flux of a chimera face is the mean of two fluxes: one with the
 central differences along the face of the row of the cell, one with those of
