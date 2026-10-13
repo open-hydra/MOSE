@@ -46,6 +46,15 @@ In MOSE the source is:
    a build variant of the standard solver whose external per-stage callback adds
    $-\mathbf{S}\,V$ to the residual of every cell.
 
+The driver carries three more fields for the verification on general meshes,
+chosen with the environment variable `MOSE_MMS_FIELD`: `periodic2d` (the
+default, the field of this page), `periodic3d` (the same field extended in $z$,
+periodic on $[0,1]^3$) and `wall2d`, `wall3d` (periodic in $x$, and in $z$ in
+3D, with no-slip walls of prescribed temperature $T_w(x,z)$ at $y=0$ and
+$y=1$). Their sources are
+derived and checked in the same way by `test/2D/viscous/mms/mms_gen_fields.py`;
+an unknown value stops the driver at start.
+
 ## Manufactured field
 
 A smooth, periodic field is prescribed on the unit square $[0,1]^2$ with
