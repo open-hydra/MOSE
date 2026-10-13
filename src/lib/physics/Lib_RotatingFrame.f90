@@ -123,6 +123,9 @@ contains
     integer  :: k
     real(R8) :: norm
 
+    ! The model of the set-up, against which input.ini read again during the run is checked (Reload_RotatingFrame)
+    obj_rot%model_setup = obj_rot%model
+
     ! Off unless the model is rigid-body: none (the registry default) or empty. enabled has no
     ! default initialization, so every model must set it
     if ( obj_rot%model /= "rigid-body" ) then
@@ -165,6 +168,70 @@ contains
     end if
 
   end subroutine Setup_RotatingFrame
+
+
+  !> input.ini read again during the run (Read_Inifile_Runtime, every ini-diter iterations): the omega, axis and origin
+  !> read again enter every term of the frame together, as at set-up: the unit axis, the origin and Omega_vec, which the
+  !> Coriolis and centrifugal sources, the velocity of the stationary walls and of the inlets and far field, and the power
+  !> of the torque file read at each use. The same arithmetic as Setup_RotatingFrame, so values read again unchanged leave
+  !> every bit as it was. The model and the stationary faces change the equations and the boundary conditions: a change
+  !> of rotational-frame, or of the number or the faces of the stationary-face-<k> keys (n_file of them in the file read
+  !> again), stops the run. Every rank reads input.ini again on its own, and a file rewritten while the ranks read it can
+  !> give them different contents: the ranks take the decision to stop together (the largest of a flag), so that every
+  !> rank stops, or none (a rank that stopped alone would wait for the others in mpi_stop_all).
+  subroutine Reload_RotatingFrame ( n_file )
+    use MOSE_Mod_MPI, only: mpi_is_root, mpi_allreduce_max_r8, mpi_stop_all
+    implicit none
+    integer, intent(in) :: n_file
+    ! Local
+    integer  :: k, face(2)
+    real(R8) :: axis(3), origin(3), norm, omega_vec(3), flag, flag_all
+    character(len=256) :: reason   ! The error this rank finds, blank if none
+
+    reason = ''
+    if ( obj_rot%model /= obj_rot%model_setup ) then
+      reason = '[ERROR] Rotating frame: rotational-frame in input.ini read again is "'//trim(obj_rot%model)// &
+               '", "'//trim(obj_rot%model_setup)//'" at set-up: the model cannot change during the run'
+    else if ( obj_rot%enabled ) then
+      if ( n_file /= obj_rot%n_stationary ) &
+        reason = '[ERROR] Rotating frame: input.ini read again does not list the stationary-face keys of the'// &
+                 ' set-up: the stationary faces cannot change during the run'
+      do k = 1, obj_rot%n_stationary
+        if ( len_trim(reason) > 0 ) exit
+        read(obj_rot%stationary_face_str(k), *) face(1), face(2)
+        if ( any ( face /= obj_rot%stationary_face(:,k) ) ) &
+          reason = '[ERROR] Rotating frame: input.ini read again does not list the stationary-face keys of'// &
+                   ' the set-up: the stationary faces cannot change during the run'
+      end do
+      if ( len_trim(reason) == 0 ) then
+        read(obj_rot%axis_str, *)   axis
+        read(obj_rot%origin_str, *) origin
+        norm = sqrt( sum(axis**2) )
+        if ( norm < 1.0e-14_R8 ) reason = '[ERROR] Rotation axis has zero length (input.ini read again)'
+      end if
+    end if
+    flag = 0.0_R8
+    if ( len_trim(reason) > 0 ) flag = 1.0_R8
+    call mpi_allreduce_max_r8 ( flag, flag_all )
+    if ( flag_all > 0.0_R8 ) then
+      if ( len_trim(reason) > 0 ) call mpi_stop_all ( trim(reason) )
+      call mpi_stop_all ( 'stopped with the ranks that found an error in input.ini read again (rotating frame)' )
+    end if
+    if ( .not. obj_rot%enabled ) return
+
+    axis      = axis / norm
+    omega_vec = obj_rot%omega * axis
+    ! A value changed (two ordered comparisons: an exact test with no warning on real equality)
+    if ( mpi_is_root .and. ( any ( omega_vec < obj_rot%Omega_vec .or. omega_vec > obj_rot%Omega_vec ) .or. &
+                             any ( axis < obj_rot%axis .or. axis > obj_rot%axis ) .or.                 &
+                             any ( origin < obj_rot%origin .or. origin > obj_rot%origin ) ) )          &
+      write(*,'(A,ES14.7,A,3(1X,ES14.7),A,3(1X,ES14.7))') '   Rotating frame, input.ini read again: omega = ', &
+        obj_rot%omega, ' rad/s, axis', axis, ', origin', origin
+    obj_rot%axis      = axis
+    obj_rot%origin    = origin
+    obj_rot%Omega_vec = omega_vec
+
+  end subroutine Reload_RotatingFrame
 
 
   ! ---------------------------------------------------------------------------

@@ -86,7 +86,8 @@ contains
 
   subroutine Read_Inifile_Runtime()
     use Finer,               only: file_ini
-    use MOSE_Backend_INI,    only: Load_Ini
+    use MOSE_Backend_INI,    only: Load_Ini, Count_Stationary_Faces
+    use MOSE_Lib_RotatingFrame, only: Reload_RotatingFrame
     use MOSE_Input_Registry
     use MOSE_Mod_MPI,        only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8, mpi_stop_all
     use iso_fortran_env,     only: R8 => real64
@@ -121,6 +122,10 @@ contains
       if (flag > 0.0_R8) call mpi_stop_all('input file error, input.ini read again during the run (see above)')
       call mpi_stop_all('stopped with the ranks that found an error in input.ini read again')
     end if
+
+    ! The rotating frame: omega, axis and origin read again enter every term of the frame together; its model and its
+    ! stationary faces cannot change during the run
+    call Reload_RotatingFrame ( Count_Stationary_Faces(fini) )
 
   end subroutine Read_Inifile_Runtime
 

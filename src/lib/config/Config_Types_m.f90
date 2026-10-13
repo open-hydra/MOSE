@@ -335,6 +335,7 @@ module MOSE_Config_Types_m
     !> Each stationary_face_str(k) = 'block_index face_direction', parsed in setup.
     ! Useful variables
     logical               :: enabled
+    character(len=llen)   :: model_setup = ''   !> The model read at set-up: input.ini read again may not change it
     integer :: n_stationary = 0
     character(len=32), allocatable :: stationary_face_str(:)
     !> Stationary wall patches in the lab frame, stored as (2, N) pairs:
