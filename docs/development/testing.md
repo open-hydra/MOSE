@@ -86,7 +86,8 @@ test/
 │   ├── thread-funnel/         # MPI calls only from the main thread (MPI_THREAD_FUNNELED)
 │   ├── decomposition-map/     # Block-to-rank maps on 2 and 4 ranks: the one-rank field
 │   ├── exit-codes/            # An input error on rank 0, or read again by rank 1 alone, stops both ranks of a 2-rank run
-│   └── restart/               # Exact restart from vtk raw on 2 ranks x 2 threads
+│   ├── restart/               # Exact restart from vtk raw on 2 ranks x 2 threads
+│   └── bit-identity/          # The same output bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads
 ├── 3D/                        # 3-D validation cases
 │   ├── coriolis-channel/
 │   └── viscous/
@@ -313,7 +314,8 @@ Run them with `ctest -L validation`.
 Builds with `USE_MPI=ON` also register a `needs-mpi` tier. Each test generates
 its own small multi-block case, with
 [`test/mpi/make_case.py`](https://github.com/open-hydra/MOSE/blob/main/test/mpi/make_case.py) or, for
-`MPIConnectionFlux` and `MPIConnectionOrder`, with the generator of their fast tests,
+`MPIConnectionFlux` and `MPIConnectionOrder`, with the generator of their fast tests (and
+`MPIBitIdentity` with its own generator and that of `ViscousPatch`/`ViscousLinearPatch`),
 launches the solver itself through the MPI launcher CMake found
 (`MPIEXEC_EXECUTABLE`, at most 4 ranks) and checks an invariant of the parallel
 run; all but `MPIThreadFunnel` compare output files byte by byte (`vtk raw`, and Tecplot ASCII
@@ -324,6 +326,7 @@ for the 110 blocks of `MPIDecompositionMap`).
 | `MPIRestart` | on 2×2 (MPI ranks × OpenMP threads), 24 steps (the last an output step) + restart + 16 steps of a 2×2 box of viscous blocks give the same output files, byte for byte, as 40 steps in one go: solutions, numbering, `residual-history.dat` | `test/mpi/restart` |
 | `MPIBoundaryRecords` | a strip of four viscous blocks (inlet, outlet, wall, symmetry and block-cut records) gives the same solution on 1×1, 2×1, 4×1 and 2×2 (MPI ranks × OpenMP threads); the same case with the `bc.txt` records in reverse order gives the same solution and the same wall output (Tecplot) as the ordered file, on 1 and 2 ranks, with and without threads; and so does a Spalart–Allmaras run, ordered and reversed (1×1, 1×4, 2×2), and an SA-RC run, whose velocity gradients cross the faces between ranks (2×1, 4×1, 2×2 against 1×1) | `test/mpi/boundary-records` |
 | `MPIVertexStencil` | a 2×2 box of viscous blocks with a vortex on the vertex the four blocks share gives the same solution on 1×1, 1×4, 2×1, 4×1 and 2×2 (MPI ranks × OpenMP threads); with chemistry = equilibrium, the same on 1×1 and 2×1 | `test/mpi/vertex-stencil` |
+| `MPIBitIdentity` | every file a run writes in `OUTPUT/` (field, diagnostic and wall solutions in `vtk raw`, `residual-history.dat`, a probe) is the same, byte for byte, on 1×1, 1×4, 2×1, 4×1 and 2×2 (MPI ranks × OpenMP threads), for five cases: a 3-D box of 2×2 blocks around a common vertex with inlets 404 and 407, outlets 406 and 400, walls 301 and 302 and symmetry planes, steady with Spalart–Allmaras and with SST (local time step, implicit residual smoothing) and time-accurate with Spalart–Allmaras (RK3); and the meshes of `ViscousPatch`/`ViscousLinearPatch` with a point shared by 3 and by 5 blocks, 40 time-accurate RK3 steps of a field that changes at every stage | `test/mpi/bit-identity` |
 | `MPIThreadFunnel` | with `MPI_THREAD_FUNNELED`, every MPI call comes from the thread that initialised MPI: a probe library preloaded into the solver (`mpi_thread_probe.c`, built with the tests) counts no MPI call from other threads on any rank, on 2×2, 2×4 and 2×2 with implicit residual smoothing in a steady run (MPI ranks × OpenMP threads), checks that every run uses the requested threads, and sees the halo exchange on every rank; the largest tag of the point-to-point calls is at most 32767, the least `MPI_TAG_UB` the MPI standard allows | `test/mpi/thread-funnel` |
 | `MPIConnectionFlux` | the two-block cases of `Connections`/`ConnectionFlux` with one block per rank (block cut and periodic connection between ranks) give the one-rank and the one-block solutions bit for bit, and conserve | `test/mpi/connection-flux` |
 | `MPIConnectionOrder` | the 2-D case of `Connections`/`ConnectionOrder` with one block per rank (the cut, inviscid and viscous shares, between ranks): 2 ranks with the records of `bc.txt` sorted and reversed give the one-rank solution bit for bit | `test/mpi/connection-order` |

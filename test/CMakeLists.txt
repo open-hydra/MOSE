@@ -392,6 +392,12 @@ if(USE_MPI)
     # chemistry, the same bits on 1x1 and 2x1.
     mose_add_mpi_script(MPIVertexStencil mpi/vertex-stencil "needs-mpi;implementation;2D")
 
+    # The same output bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads: a
+    # 2x2-block box with walls, inlets and outlets, Spalart-Allmaras and SST
+    # steady with implicit residual smoothing, Spalart-Allmaras time-accurate,
+    # and the points shared by 3 and by 5 blocks of ViscousLinearPatch.
+    mose_add_mpi_script(MPIBitIdentity mpi/bit-identity "needs-mpi;implementation;2D;3D")
+
     # MPI calls only from the main thread (MPI_THREAD_FUNNELED): a probe
     # library preloaded into the solver counts the MPI calls made by any
     # other thread; it must count none on 2x2, 2x4 and 2x2 with IRS (steady).

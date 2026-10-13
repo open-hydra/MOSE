@@ -163,7 +163,14 @@ nightly/local tier.
   `test/mpi/vertex-stencil` (`MPIVertexStencil`) — a
   2×2 box of viscous blocks with a vortex on the common vertex, bit-identical on 1×1,
   1×4, 2×1, 4×1 and 2×2 ranks × threads; with chemistry = equilibrium, bit-identical
-  on 1×1 and 2×1.
+  on 1×1 and 2×1; `test/mpi/bit-identity` (`MPIBitIdentity`) — every file a run writes
+  in `OUTPUT/` (solutions, residual history, probe) bit-identical on 1×1, 1×4, 2×1, 4×1
+  and 2×2 ranks × threads for five cases: a 2×2-block box with inlets, outlets, walls
+  301 and 302 and symmetry planes, Spalart–Allmaras and SST steady (local time step,
+  implicit residual smoothing) and Spalart–Allmaras time-accurate, and the points
+  shared by 3 and by 5 blocks of `ViscousPatch`/`ViscousLinearPatch` with a field that changes at every
+  stage. Its 25 solver runs take ~40 s of CPU time (67 s of wall time, load average ~178
+  on 192 logical CPUs); main has no needs-mpi tier to compare with.
 - ☑ **I6 — MPI thread level**: MOSE requests `MPI_THREAD_FUNNELED`, so only the thread
   that initialised MPI may call it. *Done (needs-mpi tier):* `test/mpi/thread-funnel`
   (`MPIThreadFunnel`) — a probe library preloaded into the solver counts no MPI call
