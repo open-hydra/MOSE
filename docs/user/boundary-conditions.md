@@ -270,7 +270,8 @@ the surface reactions alone.
     With a RANS model (`turbulence` set) the gas a `502` grain injects carries
     the turbulence values of a smooth wall: $\tilde\nu = 0$ (Spalart–Allmaras),
     $k = 0$ and the wall value of $\omega$ (SST, Wilcox 2006), whose distance is
-    the wall distance of the cell (the grain is not a wall for it). The ghost
+    the wall distance of the cell. The grain is a wall for the wall distance of
+    the turbulence models, as the walls `301`, `302` and `503`–`505`. The ghost
     cells behind the grain take these wall values, as behind a wall; a grain that
     does not burn is a wall at the flame temperature.
 

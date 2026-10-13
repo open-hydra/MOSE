@@ -14,11 +14,12 @@
 #  naming the line of bc.txt, the record, its type and the value; so must a
 #  line short of a value, or with a word for a number, and a flow direction
 #  that is neither a number nor normal. An SRM grain boundary (502) with the
-#  Spalart-Allmaras model runs (40 steps), and so with SST, and its ghost
-#  cells hold the wall value nu~ = 0: one explicit step at rest from a uniform
-#  rho nu~ changes it in the cell next to the grain by the flux through the
-#  grain and the cb2 term of the gradient to the wall value (make_case.py
-#  srmcheck).
+#  Spalart-Allmaras model runs (40 steps), and so with SST, its ghost cells
+#  hold the wall value nu~ = 0 and it is a wall for the wall distance: one
+#  explicit step at rest from a uniform rho nu~ changes it in the cell next to
+#  the grain by the flux through the grain and the cb2 term of the gradient to
+#  the wall value, plus the source terms with the distance to the grain, and
+#  in the other cells by those source terms alone (make_case.py srmcheck).
 #  Gas: test/common/Air (test/common/Air-viscous for the grain).
 #===============================================================================
 set -uo pipefail
@@ -176,10 +177,10 @@ sed -e 's/^iter-threshold = 40$/iter-threshold = 1/' -e 's/^time-accurate = true
     input.ini > input-rest.ini && mv input-rest.ini input.ini
 rm -f OUTPUT/field.tec OUTPUT/diagnostic.tec
 "$LOCAL" > OUTPUT/srm-rest.log 2>&1
-if [[ -f OUTPUT/field.tec && -f OUTPUT/diagnostic.tec ]] && python3 -B make_case.py srmcheck OUTPUT/field.tec OUTPUT/diagnostic.tec; then
-  echo "  [ok  ] srm-rest: the ghost cells of the grain hold the wall value nu~ = 0"
+if [[ -f OUTPUT/diagnostic.tec ]] && python3 -B make_case.py srmcheck OUTPUT/diagnostic.tec; then
+  echo "  [ok  ] srm-rest: the ghost cells of the grain hold the wall value nu~ = 0, and the grain is a wall for d"
 else
-  echo "  [FAIL] srm-rest: the source terms next to the grain do not see the wall value nu~ = 0 (see OUTPUT/srm-rest.log)"
+  echo "  [FAIL] srm-rest: the wall value nu~ = 0 or the distance to the grain missing (see OUTPUT/srm-rest.log)"
   fail=1
 fi
 

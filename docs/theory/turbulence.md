@@ -109,11 +109,12 @@ $$
 \tilde\nu_\text{wall} = 0
 $$
 
-on the viscous walls (types `301`, `302`, `503`–`505`); the wall distance $y$ is measured from
-them and from the walls coupled to another solver (`103`, `104`). A slip wall (type `300`, which
-is also the symmetry plane) follows the standard model: the ghost cell copies the cell, a zero
-normal derivative of $\tilde\nu$, and the slip wall is not a wall for the distance («the free-slip
-wall points are not included in the search when $d$ is computed», P. R. Spalart, S. R. Allmaras,
+on the viscous walls and on the grain of a solid rocket motor (types `301`, `302`, `502`,
+`503`–`505`); the wall distance $y$ is measured from them and from the walls coupled to another
+solver (`103`, `104`). A slip wall (type `300`, which is also the symmetry plane) follows the
+standard model: the ghost cell copies the cell, a zero normal derivative of $\tilde\nu$, and the
+slip wall is not a wall for the distance («the free-slip wall points are not included in the search
+when $d$ is computed», P. R. Spalart, S. R. Allmaras,
 *La Recherche Aérospatiale* 1994(1), p. 21). Allmaras, Johnson and Spalart (ICCFD7-1902, §3.3)
 propose instead $\tilde\nu = 0$ on slip walls and their inclusion in the distance, as distinct
 from symmetry planes; MOSE, whose type `300` serves both, does not make that change.
@@ -727,7 +728,7 @@ $c_{w1} f_w (\tilde\nu/d)^2$ (a factor $\cos^2\theta$: 0.97, 0.88, 0.75,
 $\omega_w = 60\nu/(\beta_1 d_1^2)$ of SST. That distance is exact only on
 meshes orthogonal to the wall, with the cell centres above the face centres.
 
-- Each face of a wall boundary (types 301, 302, 503–505) is taken as the four
+- Each face of a wall boundary (types 301, 302, 502, 503–505) is taken as the four
   triangles between its centre and its sides, which are the face itself when
   the face is plane and convex, as on every 2-D and axisymmetric mesh (on a
   plane face that is not convex, a pathological cell, the centre can fall

@@ -2194,13 +2194,15 @@ contains
   end subroutine BC_Connect_Metrics
 
 
+  !> The walls of the wall distance: heat flux (301), temperature (302), the SRM grain (502: a wall that blows gas in, with
+  !> the wall values of a smooth wall for the turbulence variables), gas-surface interaction (503-505).
   function Is_Wall(type) result (ans)
       implicit none
       integer, intent(in) :: type
       logical :: ans
 
       select case (type)
-        case (103, 104, 301, 302, 503, 504, 505)  ! wall BCs (multi-solver coupling, heat flux, T, GSI)
+        case (103, 104, 301, 302, 502, 503, 504, 505)  ! wall BCs (multi-solver coupling, heat flux, T, SRM grain, GSI)
           ans = .true.
         case default
           ans = .false.

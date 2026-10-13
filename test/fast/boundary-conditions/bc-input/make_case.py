@@ -20,15 +20,19 @@ Usage (from the test directory):
   python3 -B make_case.py bad KIND       the case of p0.dat with the line of bc.txt that BAD[KIND] gives
   python3 -B make_case.py srm [rest] [sst]   the duct with a viscous gas and nu~, its inlet an SRM grain boundary (502);
                                          rest: the gas at rest at T0 and PB; sst: k and omega instead of nu~
-  python3 -B make_case.py srmcheck FIELD DIAG   exit status 0 when the change of rho nu~ over one step in the cell next to
-                                         the grain is that of the wall value nu~ = 0 (below)
+  python3 -B make_case.py srmcheck DIAG   exit status 0 when the change of rho nu~ over one step is that of the wall value
+                                         nu~ = 0 in the cell next to the grain, and that of the distance to the grain in
+                                         the other cells (below)
 
 SRM grain with Spalart-Allmaras. Its turbulence values are those of a smooth wall, nu~_w = 0, and the ghost cells behind it
-hold -nu~ of the cell (2 nu~_w - nu~_1) at the reflection of the cell centre, as behind a wall. With the gas at rest, rho nu~
-= m uniform, and no wall for the wall distance (production and destruction vanish with it), one explicit step changes rho
-nu~ in the cell next to the grain by the flux through the grain, -(mu/sigma) (2 nu~/h)/h per unit volume, and the cb2 term
-of the gradient nu~/h that the ghost cell gives, (cb2/sigma) rho (nu~/h)^2: (m/(sigma rho h^2)) (cb2 m - 2 mu). A ghost
-cell that extrapolates nu~ (3 q1 - 3 q2 + q3, uniform) gives no gradient there: (m/(sigma rho h^2)) (-2 mu).
+hold -nu~ of the cell (2 nu~_w - nu~_1) at the reflection of the cell centre, as behind a wall; the grain is a wall for the
+wall distance d, the only one of the duct. With the gas at rest and rho nu~ = m uniform, nu~ = nu (chi = 1: fv2 > 0), the
+right-hand side of rho nu~ in a cell is its source rho nu~^2 F / d^2 (F = cb1 fv2/kappa^2 - cw1 fw(r), r = min(1/fv2, 10):
+Spalart-Allmaras at rest, as in the WallDistance test), d = (i - 1/2) h in cell i, and in the cell next to the grain also
+the flux through the grain, -(mu/sigma) (2 nu~/h)/h per unit volume, and the cb2 term of the gradient nu~/h that the ghost
+cell gives, (cb2/sigma) rho (nu~/h)^2. Times sigma rho h^2 / m: cb2 m - 2 mu + sigma m F/(i - 1/2)^2 in the first cell,
+sigma m F/(i - 1/2)^2 in the others. A ghost cell that extrapolates nu~ (3 q1 - 3 q2 + q3, uniform) gives no gradient there
+(-2 mu instead of cb2 m - 2 mu), and a grain left out of the wall distance no source (d is then 1e8, with no wall).
 """
 import math
 import os
@@ -105,12 +109,25 @@ def write_bad(kind):
 MU = 1.8467e-5                                       # a viscosity of air, Pa s: nu~ = 3 MU / rho needs only to be positive
 MU_GAS = 1.1858686e-5                                # the viscosity of test/common/Air-viscous (constant), Pa s
 SIGMA, CB2 = 2.0 / 3.0, 0.622                        # Spalart-Allmaras
+CB1, KAPPA, CW2, CW3, CV1 = 0.1355, 0.41, 0.3, 2.0, 7.1
+CW1 = CB1 / KAPPA ** 2 + (1.0 + CB2) / SIGMA
+
+
+def sa_factor(chi):
+    """F = cb1 fv2/kappa^2 - cw1 fw: the right-hand side of rho nu~ at rest is rho nu~^2 F / d^2 (fv2 > 0)."""
+    fv1 = chi ** 3 / (chi ** 3 + CV1 ** 3)
+    fv2 = 1.0 - chi / (1.0 + chi * fv1)
+    r = min(1.0 / fv2, 10.0)
+    g = r + CW2 * (r ** 6 - r)
+    fw = g * ((1.0 + CW3 ** 6) / (g ** 6 + CW3 ** 6)) ** (1.0 / 6.0)
+    return CB1 * fv2 / KAPPA ** 2 - CW1 * fw
 
 
 def write_srm(rest=False, sst=False):
     """The duct of p0.dat with rho nu~ = 3 MU (mi_tilde) for the Spalart-Allmaras model, and record 1 (the inlet) an SRM
     grain boundary (502): T_af, a, n, p_ref, rho_grain, SF_geo and the mass fraction of the single species. rest: the gas
-    at rest at T0 and PB; sst: k = 1 m2/s2 and omega = 1e3 1/s (kappa = rho k, omega = rho omega) for SST instead."""
+    at rest at T0 and PB, with rho nu~ = MU_GAS (nu~ = nu); sst: k = 1 m2/s2 and omega = 1e3 1/s (kappa = rho k, omega =
+    rho omega) for SST instead."""
     rho, u, p = (PB / (RGAS * T0), 0.0, PB) if rest else uniform_state()
     write_case("p0.dat", (rho, u, p))
     with open("INPUT/ic.tec") as f:
@@ -122,7 +139,7 @@ def write_srm(rest=False, sst=False):
     else:
         lines[0] = lines[0].replace('"p"\n', '"p" "rhoNuTilde"\n')
         lines[1] = lines[1].replace("[4-8]=CELLCENTERED", "[4-9]=CELLCENTERED")
-        turb = f" {3.0 * MU:.15E}\n" * N
+        turb = f" {(MU_GAS if rest else 3.0 * MU):.15E}\n" * N
     with open("INPUT/ic.tec", "w") as f:
         f.write("".join(lines) + turb)
     with open("INPUT/bc.txt") as f:
@@ -140,7 +157,7 @@ def read_zone(path):
     names = lines[0].split('=', 1)[1].replace('"', ' ').split()
     head = lines[1].replace(',', ' ').split()
     ni, nj, nk = (int(next(w for w in head if w.startswith(k + '=')).split('=')[1]) for k in ('I', 'J', 'K'))
-    values = [float(v) for v in " ".join(l for l in lines[2:] if not l.startswith("DATASETAUXDATA")).split()]
+    values = [float(v) for v in " ".join(lines[2:]).split()]
     nn, nc, out, pos = ni * nj * nk, (ni - 1) * max(nj - 1, 1) * max(nk - 1, 1), {}, 0
     for k, name in enumerate(names):
         cnt = nn if k < 3 else nc
@@ -149,19 +166,24 @@ def read_zone(path):
     return out
 
 
-def srm_check(field, diag):
-    """The change of rho nu~ over the step in the cell next to the grain, times sigma rho h^2 / m over dt, against
-    cb2 m - 2 mu (the wall value nu~_w = 0 in the ghost cell); the cell next to it, where everything is uniform, changes
-    by round-off."""
-    f, d = read_zone(field), read_zone(diag)
-    rho, m, h = PB / (RGAS * T0), 3.0 * MU, LX / N
-    r = [(new - m) / t * SIGMA * rho * h * h / m for new, t in zip(f["rhoNuTilde"], d["dt"])]
-    expect = CB2 * m - 2.0 * MU_GAS
+def srm_check(diag):
+    """The right-hand side of rho nu~ of every cell, its increment in the diagnostic output over the step dt, times
+    sigma rho h^2 / m: in the cell next to the grain cb2 m - 2 mu (the wall value nu~_w = 0 in the ghost cell) plus
+    the source with the distance to the grain, d = h/2; in the other cells the source alone, d = (i - 1/2) h, but in the
+    last one, next to the outlet."""
+    d = read_zone(diag)
+    rho, m, h = PB / (RGAS * T0), MU_GAS, LX / N
+    r = [inc / t * SIGMA * rho * h * h / m for inc, t in zip(d["rhoNuTilde"], d["dt"])]
+    src = [SIGMA * m * sa_factor(m / MU_GAS) / (i + 0.5) ** 2 for i in range(N)]
+    expect = CB2 * m - 2.0 * MU_GAS + src[0]
     err = abs(r[0] - expect) / (2.0 * MU_GAS)
-    print(f"    change of rho nu~ next to the grain, times sigma rho h^2/(m dt): {r[0]:.6e}, from the wall value nu~ = 0 "
-          f"{expect:.6e} (an extrapolated ghost cell: {-2.0 * MU_GAS:.6e}); difference {err:.1e} of 2 mu; second cell "
-          f"{r[1]:.1e}")
-    sys.exit(0 if err < 1e-6 and abs(r[1]) < 1e-6 * 2.0 * MU_GAS else 1)
+    errd = max(abs(r[i] / src[i] - 1.0) for i in range(1, N - 1))
+    print(f"    rho nu~ next to the grain, times sigma rho h^2/(m dt): {r[0]:.6e}, from the wall value nu~ = 0 and the "
+          f"distance h/2 {expect:.6e} (an extrapolated ghost cell: {expect - CB2 * m:.6e}; no distance to the grain: "
+          f"{CB2 * m - 2.0 * MU_GAS:.6e}); difference {err:.1e} of 2 mu")
+    print(f"    the other cells, the source with the distance to the grain: largest relative difference {errd:.1e} "
+          f"(second cell {r[1]:.6e} against {src[1]:.6e})")
+    sys.exit(0 if err < 1e-6 and errd < 1e-9 else 1)
 
 
 def cell_values(path):
@@ -180,7 +202,7 @@ def main():
     elif what == "srm":
         write_srm("rest" in sys.argv[2:], "sst" in sys.argv[2:])
     elif what == "srmcheck":
-        srm_check(sys.argv[2], sys.argv[3])
+        srm_check(sys.argv[2])
     elif what == "same":
         a, b = cell_values(sys.argv[2]), cell_values(sys.argv[3])
         sys.exit(0 if a == b and len(a) > 0 else 1)
