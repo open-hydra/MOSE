@@ -343,13 +343,18 @@ contains
   ! Validation
   !========================================================
 
+  !> Every rule of the column Allowed is checked: a bound (> x, >= x, < x, <= x) or an interval (in (a, b), with [ or ]
+  !> for an end that belongs to it) for a number, on each value of a list of numbers; a list of names for a string;
+  !> logical (or the list true, false) for a logical, which the reader of input.ini takes only as a logical. A rule of
+  !> another form stops the run as well, so that no rule is skipped in silence.
   function Validate_Registry() result(out)
 
     implicit none
 
     character(len=1024) :: out
-    integer :: i
+    integer :: i, k
     real(R8) :: val
+    character(len=16) :: nth
 
     out=""
 
@@ -362,8 +367,28 @@ contains
 
       if (reg%params(i)%allowed == "") cycle
 
-      ! Arrays are parsed/validated by FiNeR, skip scalar rule checks here.
-      if (associated(reg%params(i)%value%iarr) .or. associated(reg%params(i)%value%rarr)) cycle
+      ! A list of numbers: the rule holds for each of its values
+      if (associated(reg%params(i)%value%iarr)) then
+        do k = 1, size(reg%params(i)%value%iarr)
+          val = real(reg%params(i)%value%iarr(k), R8)
+          call validate_numeric(reg%params(i)%name, val, reg%params(i)%allowed, out)
+          if (out /= "") exit
+        end do
+      else if (associated(reg%params(i)%value%rarr)) then
+        do k = 1, size(reg%params(i)%value%rarr)
+          val = reg%params(i)%value%rarr(k)
+          call validate_numeric(reg%params(i)%name, val, reg%params(i)%allowed, out)
+          if (out /= "") exit
+        end do
+      end if
+      if (associated(reg%params(i)%value%iarr) .or. associated(reg%params(i)%value%rarr)) then
+        if (out /= "") then
+          write(nth,'(I0)') k
+          out = trim(out)//" (value "//trim(nth)//" of the list)"
+          return
+        end if
+        cycle
+      end if
 
       select case(reg%params(i)%type_id)
 
@@ -390,6 +415,15 @@ contains
         call validate_string(reg%params(i)%name, reg%params(i)%value%s, reg%params(i)%allowed, out)
         if (out /= "") return
 
+      case(TYPE_LOG)
+
+        ! The reader takes a logical value only (a list-directed read: T or F, after an optional period, starts the value,
+        ! and any other value stops the run): nothing is left to check, if the rule says no more than that
+        if (.not. logical_rule(reg%params(i)%allowed)) then
+          out = "[ERROR] "//trim(reg%params(i)%name)//": the registry does not check its rule "//trim(reg%params(i)%allowed)
+          return
+        end if
+
       case default
         cycle
 
@@ -400,6 +434,28 @@ contains
   end function Validate_Registry
 
 
+  !> The rule of a logical: logical, or the list of its two values (true, false; with or without the periods)
+  logical function logical_rule(rule)
+
+  implicit none
+
+  character(*), intent(in) :: rule
+  character(len=len(rule)) :: low
+  character(len=:), allocatable :: r
+  integer :: k
+
+  low = lowercase(rule)
+  r = ""
+  do k = 1, len(low)
+    if (low(k:k) /= " " .and. low(k:k) /= ".") r = r//low(k:k)
+  end do
+  logical_rule = r == "logical" .or. r == "true,false" .or. r == "false,true"
+
+  end function logical_rule
+
+
+  !> The rule of a number: a bound (> x, >= x, < x, <= x) or an interval, in (a, b), where ( and ) leave the end out and
+  !> [ and ] take it in. A rule of another form, or whose numbers do not read, is an error of the registry itself.
   subroutine validate_numeric(name,val,rule,out)
 
   implicit none
@@ -409,36 +465,64 @@ contains
   character(*), intent(in) :: rule
   character(len=*), intent(inout) :: out
 
-  real(R8) :: limit
+  real(R8) :: limit, lo, hi
+  character(len=:), allocatable :: r
+  integer :: c, n, ios1, ios2
+  logical :: ok, known
 
-  if (index(rule,">=") > 0) then
+  r = trim(adjustl(rule))
+  n = len(r)
+  known = .true.
+  ok = .true.
+  ios1 = 0
+  ios2 = 0
 
-    read(rule(index(rule,">=")+2:),*) limit
-    if (val < limit) then
-      out = "[ERROR] "//trim(name)//" must be "//trim(rule)
+  if (index(r,"in") == 1) then
+
+    ! in (a, b) and the like: the first and last characters after "in" open and close the interval
+    r = trim(adjustl(r(3:)))
+    n = len(r)
+    c = index(r,",")
+    known = n >= 5 .and. c > 2 .and. c < n - 1
+    if (known) known = scan(r(1:1),"([") == 1 .and. scan(r(n:n),")]") == 1
+    if (known) then
+      read(r(2:c-1),*,iostat=ios1) lo
+      read(r(c+1:n-1),*,iostat=ios2) hi
+      known = ios1 == 0 .and. ios2 == 0
     end if
+    if (known) ok = merge(val >= lo, val > lo, r(1:1) == "[") .and. merge(val <= hi, val < hi, r(n:n) == "]")
+    r = "in "//r
 
-  else if (index(rule,"<=") > 0) then
+  else if (index(r,">=") == 1) then
 
-    read(rule(index(rule,"<=")+2:),*) limit
-    if (val > limit) then
-      out = "[ERROR] "//trim(name)//" must be "//trim(rule)
-    end if
+    read(r(3:),*,iostat=ios1) limit
+    ok = val >= limit
 
-  else if (index(rule,">") > 0) then
+  else if (index(r,"<=") == 1) then
 
-    read(rule(index(rule,">")+1:),*) limit
-    if (val <= limit) then
-      out = "[ERROR] "//trim(name)//" must be "//trim(rule)
-    end if
+    read(r(3:),*,iostat=ios1) limit
+    ok = val <= limit
 
-  else if (index(rule,"<") > 0) then
+  else if (index(r,">") == 1) then
 
-    read(rule(index(rule,"<")+1:),*) limit
-    if (val >= limit) then
-      out = "[ERROR] "//trim(name)//" must be "//trim(rule)
-    end if
+    read(r(2:),*,iostat=ios1) limit
+    ok = val > limit
 
+  else if (index(r,"<") == 1) then
+
+    read(r(2:),*,iostat=ios1) limit
+    ok = val < limit
+
+  else
+
+    known = .false.
+
+  end if
+
+  if (.not. known .or. ios1 /= 0) then
+    out = "[ERROR] "//trim(name)//": the registry does not check its rule "//trim(rule)
+  else if (.not. ok) then
+    out = "[ERROR] "//trim(name)//" must be "//r
   end if
 
   end subroutine validate_numeric

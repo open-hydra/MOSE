@@ -59,9 +59,13 @@
 #  needs (set-up), a rotating frame with an axis of zero length (set-up),
 #  chemistry = equilibrium without the elements of the species,
 #  INPUT/composition.txt (set-up; the run used to start and go on with an
-#  equilibrium of no element). The exit code must be between 1 and 128 (128
-#  is what ifx gives to ERROR STOP; above 128 the shell reports a signal)
-#  and the log must hold the message.
+#  equilibrium of no element), and a value outside the rule of the registry
+#  of each form not checked before: preconditioning-eps-min = 1 (the
+#  interval in (0, 1)), ode-relative-tol-species = 0 (a list of reals, > 0)
+#  and index-position = 1 -1 1 1 of a probe (a list of integers, >= 0); the
+#  three used to run with no message (set-up). The exit code must be
+#  between 1 and 128 (128 is what ifx gives to ERROR STOP; above 128 the
+#  shell reports a signal) and the log must hold the message.
 #
 #  And a valid run must end with exit code 0: with finite-rate chemistry and
 #  exclude-blocks = 1 the same tube must run, its set-up summary listing
@@ -339,6 +343,17 @@ omega = 1.0
 axis = 0.0 0.0 0.0"
 run_case chem-elements "chemistry = equilibrium needs the elements of the species" "equations = euler
 chemistry = equilibrium"
+run_case rule-interval "preconditioning-eps-min must be in (0, 1)" "equations = euler" "preconditioning-eps-min = 1"
+run_case rule-reals "ode-relative-tol-species must be > 0 (value 1 of the list)" "equations = euler" "
+[MOSE-Chemistry]
+ode-relative-tol-species = 0"
+run_case rule-integers "index-position must be >= 0 (value 2 of the list)" "equations = euler" "
+[MOSE-Probes]
+probe1 = middle
+
+[middle]
+variables = p
+index-position = 1 -1 1 1"
 
 echo "-- a valid run ends with exit code 0 --"
 write_case chem-excl "equations = euler

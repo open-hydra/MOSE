@@ -195,12 +195,13 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # species without a diffusion table, a run that diverges, a NaN in the initial
 # condition, an initial condition with too few variables, a rotating frame
 # with a zero axis, chemistry = equilibrium without the elements of the species,
-# a probe of an unknown variable; a valid run with chemistry and exclude-blocks
-# ends with 0, and a block excluded from chemistry = equilibrium keeps the bits
-# of the run without chemistry, also with multigrid. A steady run with a soot
-# model ends normally and its diagnostic output names every variable it writes;
-# a steady single-species run without thermo or transport output stops with a
-# message that says so.
+# a value outside the rule of the registry (an interval, a list of reals, a list
+# of integers), a probe of an unknown variable; a valid run with chemistry and
+# exclude-blocks ends with 0, and a block excluded from chemistry = equilibrium
+# keeps the bits of the run without chemistry, also with multigrid. A steady run
+# with a soot model ends normally and its diagnostic output names every variable
+# it writes; a steady single-species run without thermo or transport output
+# stops with a message that says so.
 # Limiter defaults: the reconstruction that runs is the declared one (MUSCL
 # without flux-limiter = van Leer; first-order ignores a given limiter), and
 # the set-up warnings say so.
