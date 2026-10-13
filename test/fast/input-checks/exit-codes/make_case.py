@@ -8,6 +8,12 @@ Usage (from test/fast/input-checks/exit-codes):
       writes INPUT/ic.tec and INPUT/bc.txt, copies of the Sod ones.
   python3 -B make_case.py nan SOD_INPUT_DIR
       the same, with the velocity u of cell 50 written as NaN in INPUT/ic.tec.
+  python3 -B make_case.py steam SOD_INPUT_DIR PHASE
+      the same, the tube holding instead the gas of the phase file PHASE (the 13 C-H-O species of
+      test/2D/euler/rocket-nozzle/equilibrium): steam with 0.2 % of hydrogen, 1.6 % of oxygen and 0.2 % of
+      carbon dioxide by mass, at rest, at 1e5 Pa and 1500 K in the left half and 1e4 Pa and 1200 K in the right
+      half. It is far from chemical equilibrium (the equilibrium burns the hydrogen), so chemistry = equilibrium
+      changes it.
   python3 -B make_case.py mixture SOD_IC OUT
       writes OUT: the 100-cell Sod tube of SOD_IC (one species, rho1) as a
       mixture of the four species of test/1D/diff1 (order of its
@@ -39,6 +45,9 @@ SOOT_SPECIES = (("C2H2", 26.038, "C2H4"), ("O2", 31.998, "O2"), ("N2", 28.014, "
 Y_SOOT = (0.05, 0.233, 0.716999, 0.0, 0.0, 1.0e-6)
 RHO_S, U_S, P_S, NP_S, MU_S = 1.16, 10.0, 1.0e5, 1.0e14, 1.8e-5
 NAN_CELL = 50
+RU = 8314.46261815324                                          # J/(kmol K), universal gas constant of FLINT
+STEAM = {"H2O": 0.98, "H2": 0.002, "O2": 0.016, "CO2": 0.002}   # mass fractions
+LEFT, RIGHT = (1e5, 1500.0), (1e4, 1200.0)                     # (p [Pa], T [K]) of the two halves
 
 
 def read_tube(src):
@@ -72,6 +81,38 @@ def nan(sod_dir):
         f.write(header + '\n' + zone + '\n')
         for v in vals:
             f.write(' %s\n' % v)
+
+
+def steam(sod_dir, phase):
+    """INPUT/ic.tec: the mesh of the Sod tube (its nodal coordinates, as written), the partial densities of the
+    species of PHASE, the velocity (zero) and the pressure of the steam."""
+    sod(sod_dir)
+    rows = [line.split() for line in open(phase).read().splitlines()[1:] if line.strip()]
+    species = [row[0] for row in rows]
+    weight = {row[0]: float(row[1]) for row in rows}
+    unknown = sorted(set(STEAM) - set(species))
+    if unknown:
+        sys.exit("make_case.py: species not in %s: %s" % (phase, " ".join(unknown)))
+    head, zone, body = open(os.path.join(sod_dir, "ic_x1.tec")).read().split("\n", 2)
+    ni, nj, nk = (int(re.search(r"\b%s=(\d+)" % key, zone).group(1)) for key in ("I", "J", "K"))
+    nodes = ni * nj * nk
+    cells = (ni - 1) * max(nj - 1, 1) * max(nk - 1, 1)
+    coords = body.split()[:3 * nodes]
+    rgas = RU * sum(y / weight[s] for s, y in STEAM.items())
+    state = [LEFT if c < cells // 2 else RIGHT for c in range(cells)]
+    rho = [p / (rgas * t) for p, t in state]
+    nvar = 3 + len(species) + 4
+    names = " ".join('"rho%d"' % (s + 1) for s in range(len(species)))
+    zone = re.sub(r"\[4-\d+\]=CELLCENTERED", "[4-%d]=CELLCENTERED" % nvar, zone)
+    with open(os.path.join("INPUT", "ic.tec"), "w") as out:
+        out.write(' VARIABLES ="x" "y" "z"  %s "u" "v" "w" "p"\n' % names)
+        out.write(zone + "\n")
+        out.write("\n".join(" " + v for v in coords) + "\n")
+        for s in species:
+            out.write("".join(" %.15E\n" % (STEAM.get(s, 0.0) * r) for r in rho))
+        for _ in range(3):
+            out.write("".join(" %.15E\n" % 0.0 for _ in range(cells)))
+        out.write("".join(" %.15E\n" % p for p, _ in state))
 
 
 def mixture(src, out):
@@ -172,6 +213,8 @@ if __name__ == '__main__':
         sod(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == 'nan':
         nan(sys.argv[2])
+    elif len(sys.argv) == 4 and sys.argv[1] == 'steam':
+        steam(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 4 and sys.argv[1] == 'mixture':
         mixture(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 6 and sys.argv[1] == 'soot':

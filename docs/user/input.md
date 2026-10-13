@@ -115,6 +115,18 @@ and `vnn = 0.4` give 0.76 of it. The defaults stay `cfl = 0.5` and `vnn = 0.3`.
 
 ---
 
+## Blocks without chemistry: `exclude-blocks`
+
+`exclude-blocks` in `[MOSE-Chemistry]` lists the blocks that take no chemistry. With
+`chemistry = finite-rate` or `chemistry = equilibrium` the chemistry step skips them, on every grid
+level of a multigrid sequence, so their composition changes by transport only; the set-up summary
+lists them as inactive blocks. The value is `none`, the default, or the numbers of the blocks
+separated by blanks, for example `exclude-blocks = 2 5`, the blocks numbered from 1 in the order of
+the mesh. MOSE reads the first 128 characters of the value and the first three digits of each
+number, so the numbers go from 1 to 999.
+
+---
+
 ## Parameter Registry
 
 The complete list of all parameters, defaults, and allowed values is in the **[Parameter Registry](registry.md)**. It is generated automatically from the source code at every release — do not edit it manually.

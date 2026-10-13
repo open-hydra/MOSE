@@ -69,6 +69,13 @@
 #  was ever allocated: exit code 153 with ifx, "allocatable array or pointer
 #  is not allocated"). The air has no reaction (no mechanism file): the
 #  chemistry leaves the state as it is.
+#  exclude-blocks holds for chemistry = equilibrium too, on every multigrid
+#  level: the tube filled with steam far from equilibrium (0.2 % of hydrogen
+#  and 1.6 % of oxygen, at 1500 and 1200 K; the 13 C-H-O species of
+#  test/2D/euler/rocket-nozzle/equilibrium; make_case.py steam), its one
+#  block excluded, must give the bits of the run without chemistry, on one
+#  grid (time-accurate) and on two multigrid levels (steady); with the block
+#  not excluded the equilibrium changes the state.
 #===============================================================================
 set -uo pipefail
 
@@ -81,6 +88,7 @@ SOD=../../../1D/Sod79/INPUT
 MIX=../../../1D/diff1/INPUT
 COMMON=../../../common/Air
 VISC=../../../common/Air-viscous
+CHO=../../../2D/euler/rocket-nozzle/equilibrium/INPUT
 ERR='Sc<=0 (multicomponent diffusion) requires a binary diffusion table'
 
 ulimit -s unlimited 2>/dev/null || true
@@ -346,6 +354,75 @@ else
   echo "  [FAIL] chem-excl: exit code $rc (required 0), block 1 $(grep -a -q -E 'Inactive blocks +1 *$' OUTPUT/chem-excl.log && echo listed || echo not listed) under Inactive blocks (see OUTPUT/chem-excl.log)"
   fail=1
 fi
+
+echo "-- exclude-blocks with chemistry = equilibrium: the excluded block keeps the bits of the run without chemistry --"
+# write_steam <chemistry line> <numerics lines> [other sections]: the tube of write_case holding steam far
+# from equilibrium (make_case.py steam), with INPUT/bc2.txt for a coarse multigrid level of 50 cells
+write_steam() {
+  local chemistry="$1" numerics="$2" extra="${3:-}"
+  rm -f INPUT/composition.txt INPUT/phase.txt INPUT/thermo.dat INPUT/transport.dat INPUT/bc2.txt
+  ln -sf "../$CHO/phase.txt" INPUT/phase.txt; ln -sf "../$CHO/thermo.dat" INPUT/thermo.dat
+  ln -sf "../$CHO/composition.txt" INPUT/composition.txt
+  python3 -B make_case.py steam "$SOD" INPUT/phase.txt || exit 1
+  awk '{ if ($5 == 2) $2 = 50; if ($5 >= 3 && $2 > 50) next; print }' INPUT/bc.txt > INPUT/bc2.txt
+  cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 10
+newrun = true
+
+[MOSE-Physics]
+equations = euler
+$chemistry
+
+[MOSE-Numerics]
+$numerics
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+$extra
+EOI
+}
+for grid in one multigrid; do
+  if [[ $grid == one ]]; then
+    label='one grid'
+    numerics=$'cfl = 0.9\ntime-accurate = true\ntime-scheme = RK3'; levels=''
+  else
+    label='two multigrid levels'
+    numerics=$'cfl = 0.5\ntime-accurate = false\ntime-scheme = RK3'
+    levels=$'\n[MOSE-Multigrid]\nlevels = 2\nlevel2-iter = 5\nlevel1-iter = 10'
+  fi
+  for chem in none excl all; do
+    case $chem in
+      none) write_steam "" "$numerics" "$levels" ;;
+      excl) write_steam "chemistry = equilibrium" "$numerics" "$levels"$'\n\n[MOSE-Chemistry]\nexclude-blocks = 1' ;;
+      all)  write_steam "chemistry = equilibrium" "$numerics" "$levels" ;;
+    esac
+    rm -f OUTPUT/field.tec "OUTPUT/steam-$grid-$chem.tec"
+    "$LOCAL" > "OUTPUT/steam-$grid-$chem.log" 2>&1
+    rc=$?
+    if [[ $rc -eq 0 && -f OUTPUT/field.tec ]]; then
+      mv OUTPUT/field.tec "OUTPUT/steam-$grid-$chem.tec"
+    else
+      echo "  [FAIL] steam, $label, chemistry $chem: exit code $rc, no field (see OUTPUT/steam-$grid-$chem.log)"
+      fail=1
+    fi
+  done
+  if [[ -f OUTPUT/steam-$grid-excl.tec && -f OUTPUT/steam-$grid-none.tec ]] && \
+     cmp -s "OUTPUT/steam-$grid-excl.tec" "OUTPUT/steam-$grid-none.tec"; then
+    echo "  [ok  ] steam, $label: the block excluded from the equilibrium has the bits of the run without chemistry"
+  else
+    echo "  [FAIL] steam, $label: with the block excluded the field is not that of the run without chemistry"
+    fail=1
+  fi
+  if [[ -f OUTPUT/steam-$grid-all.tec && -f OUTPUT/steam-$grid-none.tec ]] && \
+     ! cmp -s "OUTPUT/steam-$grid-all.tec" "OUTPUT/steam-$grid-none.tec"; then
+    echo "  [ok  ] steam, $label: with the block not excluded the equilibrium changes the state"
+  else
+    echo "  [FAIL] steam, $label: with the block not excluded the field is that of the run without chemistry"
+    fail=1
+  fi
+done
 
 if [[ $fail -ne 0 ]]; then
   echo "ExitCodes: FAILED"

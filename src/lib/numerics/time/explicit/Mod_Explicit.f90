@@ -70,6 +70,7 @@ contains
       if (obj_chemistry%imodel == 2) then
         do b = 1, domain(level) % nb
           if (.not. is_local_block(b)) cycle                 ! the state of a block lives on the rank that owns it
+          if (domain(level)%blk(b)%no_chem) cycle            ! exclude-blocks, as for the finite-rate chemistry below
           call Chemistry_Equilibrium ( domain(level) % blk(b) % P, domain(level) % blk(b) % dim )
         enddo
       end if

@@ -90,7 +90,7 @@
 
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
-| exclude-blocks | none |  |  no | Blocks to exclude from chemistry |
+| exclude-blocks | none |  |  no | Blocks to exclude from chemistry (finite-rate and equilibrium, on every multigrid level) |
 | ode-solver | H-radau5 | H-radau5, H-rodas, H-sdirk4, H-dopri5, radau2a, lobatto3c, gauss, radau1a, ros2, ros3, ros4, rodas3, rodas4, sdirk2a, sdirk2b, sdirk3a, sdirk4a, sdirk4b, dodesol, cvode |  no | ODE solver for chemistry |
 | ode-max-steps | 100000 | > 0 |  no | Maximum ODE integration steps |
 | ode-analytical-jacobian | .false. | logical |  no | Use the mechanism analytical Jacobian instead of finite differences |
