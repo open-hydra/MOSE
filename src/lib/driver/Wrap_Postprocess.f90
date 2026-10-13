@@ -36,12 +36,18 @@ contains
 
     level = obj_multigrid%MG_level
 
-    ! Update IOfield solutiontime
+    ! Update IOfield solutiontime, on every grid level: a coarse level writes its own solutions
+    ! (field-level<L>) with its IOfield
+    do m = 1, obj_multigrid%MGL
+      if ( obj_time_scheme%time_accurate ) then
+        simulation%IOfield(m)%solutiontime = simulation%domain(m)%time
+      else
+        simulation%IOfield(m)%solutiontime = -real(obj_sim_param%iter_general,8)
+      endif
+    enddo
     if ( obj_time_scheme%time_accurate ) then
-      simulation%IOfield(1)%solutiontime = simulation%domain(1)%time
       IOwall%solutiontime = simulation%domain(1)%time
     else
-      simulation%IOfield(1)%solutiontime = -real(obj_sim_param%iter_general,8)
       IOwall%solutiontime = -real(obj_sim_param%iter_general,8)
     endif
 

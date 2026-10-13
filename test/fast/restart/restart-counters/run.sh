@@ -26,7 +26,10 @@
 #   multigrid-tecplot  the same two levels: the global iteration count of the
 #              restart goes on from the magnitude of the solution time read on
 #              the finest level, minus the count in a steady solution (the
-#              coarse levels hold none)
+#              coarse levels hold none); the solution of the coarse level
+#              (field-level2), written when the run moves to the fine one, has
+#              the solution time of the prolongated solution written at the
+#              same iteration, minus the count, and no STRANDID (static zones)
 #  and
 #   transient  a time-accurate restart from a steady solution starts the
 #              transient at t = 0: after 5 steps the solution time of the
@@ -190,6 +193,27 @@ run_case multigrid 30 15 || status=1   # with levels, level1-iter counts the ite
 # keep increasing (10 + 15 iterations, then the restart)
 prepare runs/multigrid-tecplot/split
 write_ini runs/multigrid-tecplot/split multigrid-tecplot 15 true;   solve runs/multigrid-tecplot/split first
+python3 -B - runs/multigrid-tecplot/split/OUTPUT <<'EOF' || status=1
+import re
+import sys
+from pathlib import Path
+out = Path(sys.argv[1])
+
+
+def stamp(name):
+    """SOLUTIONTIME and STRANDID of the first zone of a Tecplot ASCII file (None when absent)."""
+    zone = next(l for l in (out / name).read_text().splitlines() if l.lstrip().upper().startswith('ZONE'))
+    t = re.search(r'SOLUTIONTIME\s*=\s*([-+0-9.EeDd]+)', zone)
+    s = re.search(r'STRANDID\s*=\s*(-?\d+)', zone)
+    return (float(t.group(1).replace('D', 'E')) if t else None, int(s.group(1)) if s else None)
+
+
+coarse, fine = stamp('field-level2.tec'), stamp('field-prolongated.tec')
+ok = coarse == fine and fine[0] is not None and fine[0] < 0 and fine[1] is None
+print('  multigrid-tecplot: field-level2 SOLUTIONTIME, STRANDID %s, field-prolongated %s (%s)'
+      % (coarse, fine, 'ok' if ok else 'the coarse level does not have the time of its iteration'))
+sys.exit(0 if ok else 1)
+EOF
 write_ini runs/multigrid-tecplot/split multigrid-tecplot 15 false;  solve runs/multigrid-tecplot/split restart
 python3 -B - runs/multigrid-tecplot/split/OUTPUT/residual-history.dat <<'EOF' || status=1
 import sys
