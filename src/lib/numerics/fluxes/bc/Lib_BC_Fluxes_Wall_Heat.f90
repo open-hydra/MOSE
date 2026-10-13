@@ -147,10 +147,10 @@ contains
     ! Residual update
     Blk % r (:,Im,Jm,Km) = Blk % r (:,Im,Jm,Km) - modfm2 * Flux
 
-    ! qw written as k grad T . n along the face normal, as the other walls: -Heat_Flux on faces 1, 3, 5, and +0 on an
-    ! adiabatic wall as before (no negative zero in the binary outputs)
-    if (present(Ovar)) call Compute_Wall_Properties(stress=Stress, pw=prim(np), &
-                                                    qw=merge(-Heat_Flux, Heat_Flux, modfm2 < 0 .and. Heat_Flux /= 0d0), &
+    ! qw given as k grad T . n along the face normal of the solver, as the other walls (Heat_Flux is positive into the
+    ! gas): the wall output writes Heat_Flux itself on every face
+    if (present(Ovar)) call Compute_Wall_Properties(stress=Stress, pw=prim(np), into=-modfm2, &
+                                                    qw=modfm2 * Heat_Flux,                    &
                                                     y=blk%dl(im,jm,km)%c(dir)*0.5d0,          &
                                                     Tw=Twall, rhow=rho_wall, mu=mil, exit_array=Ovar)
 

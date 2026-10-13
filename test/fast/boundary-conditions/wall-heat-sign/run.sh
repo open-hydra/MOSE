@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Sign of the wall heat flux (fast tier)
+#  Sign of the wall heat flux and of the wall stress (fast tier)
 #
 #  q_wall of a wall 301 is positive into the fluid (docs/user/boundary-
-#  conditions.md), whatever face the wall is on; the heat flux qw written in
-#  OUTPUT/wall.tec is k grad T . n along the face normal n toward growing
-#  index: into the fluid on faces 2, 4, 6, into the wall on faces 1, 3, 5.
-#  A planar 2-D channel of air at rest with the same wall on both j faces,
-#  which mirror each other (make_case.py), runs one step:
-#    1. type 301 with q_wall = 1e4 W/m2 on both walls: the cells next to the
-#       two walls must warm up alike, and qw must be -1e4 W/m2 on face 3 and
-#       1e4 W/m2 on face 4;
-#    2. type 302 at 400 K on both walls: qw must be opposite on the two walls,
-#       positive on face 4 (the walls heat the gas).
+#  conditions.md), whatever face the wall is on, and so are the heat flux qw
+#  of OUTPUT/wall.tec and its stress tauX, tauY, tauZ, the traction of the gas
+#  on the wall (tau . n, n the normal into the gas): the same on every face.
+#  A channel with the same wall on the two faces of one index direction, one
+#  face of each parity, which mirror each other (make_case.py): a planar 2-D
+#  channel with the walls on the j faces (3 and 4), and a 3-D channel with the
+#  walls on the i faces (1 and 2) and on the k faces (5 and 6). Each runs one
+#  step:
+#    1. type 301 with q_wall = 1e4 W/m2 on both walls, air at rest: the cells
+#       next to the two walls must warm up alike, and qw must be 1e4 W/m2 on
+#       both walls;
+#    2. type 302 at 400 K on both walls, air at rest: qw must be the same on
+#       the two walls and positive (the walls heat the gas);
+#    3. type 302 at the temperature of the air, which slides along x at
+#       10 m/s: tauX must be the same on the two walls and positive (the gas
+#       drags the walls along), tauY opposite and tauZ the same (the traction
+#       of mirror walls).
 #  Gas: test/common/Air-viscous with the transport of test/common/Air-sutherland.
 #===============================================================================
 set -uo pipefail
@@ -59,39 +66,49 @@ sol-format = tecplot ascii
 INI
 
 fail=0
-for kind in flux temp; do
-  echo "-- the same wall (type $([[ $kind == flux ]] && echo 301 || echo 302)) on both j faces, one step --"
-  python3 -B make_case.py case "$kind" || exit 1
-  rm -f OUTPUT/field.tec OUTPUT/wall.tec
-  "$LOCAL" > "OUTPUT/$kind.log" 2>&1
-  if [[ $? -ne 0 || ! -f OUTPUT/field.tec || ! -f OUTPUT/wall.tec ]]; then
-    echo "  [FAIL] the run did not complete (see OUTPUT/$kind.log)"
-    fail=1
-    continue
-  fi
-  cp OUTPUT/field.tec "OUTPUT/field-$kind.tec"
-  cp OUTPUT/wall.tec "OUTPUT/wall-$kind.tec"
-  if [[ $kind == flux ]]; then
-    if python3 -B make_case.py check-flux "OUTPUT/field-$kind.tec"; then
-      echo "  [ok  ] both walls heat the gas alike"
-    else
-      echo "  [FAIL] the walls do not heat the gas alike"
+for dir in j i k; do
+  for kind in flux temp shear; do
+    tag=$kind-$dir
+    echo "-- the same wall (type $([[ $kind == flux ]] && echo 301 || echo 302)) on both $dir faces, one step ($kind) --"
+    python3 -B make_case.py case "$kind" "$dir" || exit 1
+    rm -f OUTPUT/field.tec OUTPUT/wall.tec
+    "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+    if [[ $? -ne 0 || ! -f OUTPUT/field.tec || ! -f OUTPUT/wall.tec ]]; then
+      echo "  [FAIL] the run did not complete (see OUTPUT/$tag.log)"
       fail=1
+      continue
     fi
-    if python3 -B make_case.py check-qw-flux "OUTPUT/wall-$kind.tec"; then
-      echo "  [ok  ] qw is k grad T . n along the face normal: -q_wall on face 3, q_wall on face 4"
+    cp OUTPUT/field.tec "OUTPUT/field-$tag.tec"
+    cp OUTPUT/wall.tec "OUTPUT/wall-$tag.tec"
+    if [[ $kind == flux ]]; then
+      if python3 -B make_case.py check-flux "$dir" "OUTPUT/field-$tag.tec"; then
+        echo "  [ok  ] both walls heat the gas alike"
+      else
+        echo "  [FAIL] the walls do not heat the gas alike"
+        fail=1
+      fi
+      if python3 -B make_case.py check-qw-flux "$dir" "OUTPUT/wall-$tag.tec"; then
+        echo "  [ok  ] qw is q_wall on both walls: the heat flux into the gas"
+      else
+        echo "  [FAIL] qw is not q_wall on both walls"
+        fail=1
+      fi
+    elif [[ $kind == temp ]]; then
+      if python3 -B make_case.py check-qw-temp "$dir" "OUTPUT/wall-$tag.tec"; then
+        echo "  [ok  ] qw is the same on the two walls and positive: the walls heat the gas"
+      else
+        echo "  [FAIL] qw is not the same positive heat flux into the gas on the two walls"
+        fail=1
+      fi
     else
-      echo "  [FAIL] qw is not -q_wall on face 3 and q_wall on face 4"
-      fail=1
+      if python3 -B make_case.py check-tau "$dir" "OUTPUT/wall-$tag.tec"; then
+        echo "  [ok  ] tauX is the same on the two walls and positive (the gas drags them along), tauY opposite, tauZ the same"
+      else
+        echo "  [FAIL] the traction of the gas is not the same positive tauX on the two walls, or not mirrored in tauY, tauZ"
+        fail=1
+      fi
     fi
-  else
-    if python3 -B make_case.py check-qw-temp "OUTPUT/wall-$kind.tec"; then
-      echo "  [ok  ] qw is opposite on the two walls, positive on face 4: the walls heat the gas"
-    else
-      echo "  [FAIL] qw is not opposite on the two walls with the sign of k grad T . n"
-      fail=1
-    fi
-  fi
+  done
 done
 
 if [[ $fail -ne 0 ]]; then

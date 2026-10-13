@@ -212,9 +212,12 @@ with fewer values than listed above or with an empty one.
 | `k_rough` | Sand-grain roughness height $k_s$ [m] (`0.0` for smooth wall). Modelled with SA only ([SA-rough](../theory/turbulence.md#rough-walls-sa-rough)) |
 | `eps_wall` | Wall emissivity (0–1) |
 
-The heat flux `qw` written in `OUTPUT/wall.tec` is $k\,\nabla T\cdot\mathbf{n}$ along the face normal $\mathbf{n}$ toward
-growing index, for every wall: positive into the fluid on faces 2, 4, 6 and into the wall on faces 1, 3, 5 (a `301` wall
-writes `q_wall` on faces 2, 4, 6 and `-q_wall` on 1, 3, 5).
+The wall output, `OUTPUT/wall.tec`, writes the same quantities on every face of every wall, oriented into the gas: the
+stress `tauX`, `tauY`, `tauZ` is the traction of the gas on the wall, $\boldsymbol{\tau}\cdot\mathbf{n}$ with
+$\mathbf{n}$ the unit normal into the gas (along the flow under an attached boundary layer); the heat flux `qw` is
+positive into the gas, as `q_wall` (a `301` wall writes its `q_wall`, a `503` wall that melts minus the heat its surface
+absorbs, conducted and radiated, the other walls the heat they conduct into the gas); the mass flux `mdot` of the walls
+`503`–`505` is positive into the gas, the mass the surface blows in.
 
 ### Physical Models
 
