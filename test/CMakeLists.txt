@@ -188,7 +188,8 @@ mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;
 # restarts reproduce the uninterrupted runs bit for bit; a multigrid restart from
 # Tecplot goes on with the global iteration count; a time-accurate restart from a
 # steady solution starts at t = 0; a restart from an older solution keeps no
-# residual-history or probe row twice.
+# residual-history or probe row twice; a first part that ends on an output
+# iteration writes the solution and the probe row due there.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
 
 # Output files (OutputFiles): the parts below, each in its folder of
@@ -322,8 +323,9 @@ if(USE_MPI)
         endif()
     endfunction()
 
-    # Exact restart from vtk raw on 2 ranks x 2 threads: 20 + 20 steps give
-    # the bits of 40 steps in one go, output numbering and counters included.
+    # Exact restart from vtk raw on 2 ranks x 2 threads: 24 + 16 steps, the
+    # first part ending on an output step, give the bits of 40 steps in one
+    # go, output numbering and counters included.
     mose_add_mpi_script(MPIRestart mpi/restart "needs-mpi;implementation;2D")
 
     # Boundary records: the boundary-flux loop gives the same bits on any

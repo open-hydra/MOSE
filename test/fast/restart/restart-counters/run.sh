@@ -72,6 +72,23 @@
 #              and go on as the run in one go. The Sod tube has no wall
 #              faces, so the torque and power columns are 0: the rows differ
 #              by their iteration and time.
+#  and, with the first part ending on an output iteration, where its last
+#  iteration must write the numbered solution and the probe row due there
+#  before its final solution, which then holds that output number:
+#   steady-on-output  the run of steady split after 21 iterations, a
+#              multiple of 7 and of 3: field3 (MOSE_ITERATION 21,
+#              MOSE_OUTPUT_NUMBER 3) and the row of iteration 21 of p1; the
+#              restart in the same folder gives the files of the run in one
+#              go of steady.
+#   overwrite-on-output  the same with sol-overwrite = true: the solution
+#              due there is the final one, field, which holds output 3.
+#   multigrid-on-output  the run of multigrid split after 16 iterations of
+#              the fine level: field4 (MOSE_ITERATION 16, MOSE_OUTPUT_NUMBER 4).
+#   dtime-on-output  time-accurate, a solution and a probe row every 0.0083 s,
+#              50 iterations, split at the first time-based output of the run
+#              in one go (both fall due at the first step past 0.0083 s):
+#              field1 and its row of p1, and the final solution of the first
+#              part holds its time as the time of the last output.
 #
 #  Reuses the Sod inputs (test/1D/Sod79); nothing else is stored here.
 #===============================================================================
@@ -132,22 +149,25 @@ write_ini() {
     printf '%s\n' '[MOSE-Numerics]' 'time-scheme = RK3' 'integration-variables = cons' \
                   'space-reconstruction = MUSCL' 'flux-limiter = vanleer' 'riemann-solver = HLLC'
     case $case in
-      steady)    printf '%s\n' 'cfl = 0.5' 'cfl-rise-threshold = 30' 'time-accurate = false' ;;
-      dtime|probes|torque) printf '%s\n' 'cfl = 0.9' 'time-accurate = true' ;;
+      steady|steady-overwrite)    printf '%s\n' 'cfl = 0.5' 'cfl-rise-threshold = 30' 'time-accurate = false' ;;
+      dtime|dtime-on-output|probes|torque) printf '%s\n' 'cfl = 0.9' 'time-accurate = true' ;;
       multigrid|multigrid-tecplot|time-only) printf '%s\n' 'cfl = 0.5' 'time-accurate = false' ;;
       transient|transient-tecplot|transient-szplt) if [[ $newrun == true ]]; then printf '%s\n' 'cfl = 0.5' 'time-accurate = false'
                  else printf '%s\n' 'cfl = 0.9' 'time-accurate = true'; fi ;;
     esac
-    local fmt=${FMT:-vtk raw}
+    local fmt=${FMT:-vtk raw} overwrite=false
     [[ $case == multigrid-tecplot || $case == transient-tecplot ]] && fmt='tecplot ascii'
     [[ $case == transient-szplt ]] && fmt='tecplot binary'
     [[ $case == time-only ]] && fmt='vtk ascii'
-    printf '\n%s\n' '[MOSE-IO]' "sol-format = $fmt" 'sol-overwrite = false' 'shell-diter = 1000000000' \
+    [[ $case == steady-overwrite ]] && overwrite=true
+    printf '\n%s\n' '[MOSE-IO]' "sol-format = $fmt" "sol-overwrite = $overwrite" 'shell-diter = 1000000000' \
                      'ini-diter = 1000000000'
     case $case in
-      steady)    printf '%s\n' 'sol-diter = 7' '' '[MOSE-Probes]' 'probe1 = p1' '' '[p1]' \
+      steady|steady-overwrite) printf '%s\n' 'sol-diter = 7' '' '[MOSE-Probes]' 'probe1 = p1' '' '[p1]' \
                                'variables = rho(1) u p' 'diter = 3' 'index-position = 1 50 1 1' ;;
       dtime)     printf '%s\n' 'sol-dtime = 0.0083' ;;
+      dtime-on-output) printf '%s\n' 'sol-dtime = 0.0083' '' '[MOSE-Probes]' 'probe1 = p1' '' '[p1]' \
+                               'variables = rho(1) u p' 'dtime = 0.0083' 'index-position = 1 50 1 1' ;;
       probes)    printf '%s\n' 'sol-diter = 10' '' '[MOSE-Probes]' 'probe1 = p1' 'probe2 = p2' 'probe3 = p3' '' \
                                '[p1]' 'variables = rho(1) u p' 'dtime = 0.01' 'index-position = 1 50 1 1' '' \
                                '[p2]' 'variables = rho(1) u p' 'diter = 4' 'index-position = 1 30 1 1' '' \
@@ -180,9 +200,57 @@ run_case() {
   return $rc
 }
 
+# on_output <name> <case> <total> <first part> <number> [overwrite]: the run of <case> split, in runs/<name>/split, after
+# <first part> iterations of the finest level, the last of them an output iteration. The first part must write there
+# field<number>, or with overwrite (sol-overwrite = true) field itself, with MOSE_ITERATION <first part> and
+# MOSE_OUTPUT_NUMBER <number>, and the row of its probe p1 due there (a case with one level); its final solution must hold
+# that output number (and, for an output by time, its time as the time of the last output). The restart in the same folder
+# must then give the files of the run in one go of <case>, runs/<case>/full
+on_output() {
+  local name=$1 case=$2 total=$3 first=$4 num=$5 over=${6:-} dir=runs/$1/split rc=0
+  prepare "$dir"
+  write_ini "$dir" "$case" "$first" true;                 solve "$dir" first
+  python3 -B - "$dir/OUTPUT" "$first" "$num" "$name" "$over" <<'EOF' || rc=1
+import sys
+from pathlib import Path
+from vtk_time import field_of, time_of
+out, first, num, name, over = Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5] == 'overwrite'
+fin = out / 'field.vtm'
+sol = fin if over else out / ('field%d.vtm' % num)
+# a probe row is the iteration or the time and its three variables, written list-directed (maybe over two lines)
+v = (out / 'p1.txt').read_text().split() if (out / 'p1.txt').is_file() else None
+last = None if v is None else v[-4] if len(v) >= 4 else '-'
+if sol.is_file():
+    it, n, t = field_of(sol, 'MOSE_ITERATION'), field_of(sol, 'MOSE_OUTPUT_NUMBER'), time_of(sol)
+    by_time = last is not None and any(c in last for c in '.eEdD')
+    row = last is None or (abs(float(last.replace('D', 'E')) - t) <= 1e-12 * abs(t) if by_time else last == str(first))
+    n_fin = field_of(fin, 'MOSE_OUTPUT_NUMBER')
+    ok = it == first and n == num and n_fin == num and row \
+        and (not by_time or field_of(fin, 'MOSE_LAST_OUTPUT_TIME') == t) \
+        and not (over and any(out.glob('field[0-9]*.vtm')))
+    what = '%s (iteration %d, output %d), %s, field.vtm with output %d' \
+        % (sol.stem, it, n, 'no probe' if last is None else 'the p1 row of %s %s'
+           % ('time' if by_time else 'iteration', last), n_fin)
+else:
+    ok, what = False, 'no %s%s' % (sol.stem, '' if last is None else ', the last p1 row at %s' % last)
+print('  %s: at iteration %d, the last of the first part: %s (%s)'
+      % (name, first, what, 'ok' if ok else 'the outputs due there expected'))
+sys.exit(0 if ok else 1)
+EOF
+  write_ini "$dir" "$case" "$((total - first))" false;    solve "$dir" restart
+  python3 -B "$CHECK" "runs/$case/full/OUTPUT" "$dir/OUTPUT" > "runs/$name/compare.log" 2>&1 || rc=1
+  sed "s/^Restart (vtk raw)/  $name/" "runs/$name/compare.log"
+  return $rc
+}
+
 mkdir -p runs
 status=0
 run_case steady 40 20 || status=1
+on_output steady-on-output steady 40 21 3 || status=1
+# overwrite-on-output: the same with sol-overwrite = true, against its own run in one go
+prepare runs/steady-overwrite/full
+write_ini runs/steady-overwrite/full steady-overwrite 40 true;  solve runs/steady-overwrite/full full
+on_output overwrite-on-output steady-overwrite 40 21 3 overwrite || status=1
 
 # dtime: the premise is that the first part ends strictly between two outputs of
 # the full run, with outputs before and after it (checked on the full run)
@@ -201,7 +269,19 @@ print('  dtime: %d time-based outputs in the full run, the first part ends at t 
 sys.exit(0 if ok else 1)
 EOF
 
+# dtime-on-output: the run in one go, then the run split at the iteration of its first time-based output, field1
+prepare runs/dtime-on-output/full
+write_ini runs/dtime-on-output/full dtime-on-output 50 true;  solve runs/dtime-on-output/full full
+first=$(python3 -B -c 'import sys; from vtk_time import field_of; print(int(field_of(sys.argv[1], "MOSE_ITERATION")))' \
+        runs/dtime-on-output/full/OUTPUT/field1.vtm 2>/dev/null)
+if [[ -n $first && $first -gt 1 && $first -lt 50 ]]; then
+  on_output dtime-on-output dtime-on-output 50 "$first" 1 || status=1
+else
+  echo "  dtime-on-output: no time-based output inside the run in one go (premise not met)"; status=1
+fi
+
 run_case multigrid 30 15 || status=1   # with levels, level1-iter counts the iterations on the fine level
+on_output multigrid-on-output multigrid 30 16 4 || status=1   # fine iterations 4, 8, 12 and 16 write field1 to field4
 
 # The same three cases in the other formats
 formats=('vtk ascii' 'tecplot ascii')
@@ -391,5 +471,5 @@ EOF
 if [[ $status -ne 0 ]]; then
   fail "a restart does not carry on the counters"
 fi
-echo "RestartCounters: ok — steady, dtime, multigrid, probes and rotating-frame (torque.dat) restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline, a transient from a steady solution starts at t = 0 and a steady restart from a solution with TIME only goes on from |TIME|"
+echo "RestartCounters: ok — steady, dtime, multigrid, probes and rotating-frame (torque.dat) restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline and from a first part that ends on an output iteration (by iteration and by time), a transient from a steady solution starts at t = 0 and a steady restart from a solution with TIME only goes on from |TIME|"
 exit 0

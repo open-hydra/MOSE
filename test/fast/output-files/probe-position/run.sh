@@ -5,9 +5,9 @@
 #  A probe given by position records the cell whose centre is the nearest.
 #  A planar 2-D duct with a different pressure in every cell (make_case.py)
 #  runs two steps with three probes, each at the centre of a cell in the
-#  mid-plane of the one-cell layer, and a solution after the first step (the
-#  last step writes no probe row): the probe rows of the first step must hold
-#  the values of their cells in that solution, never those of a ghost cell.
+#  mid-plane of the one-cell layer, and a solution at each step: the probe
+#  rows of the last step must hold the values of their cells in the solution
+#  of that step (field2), never those of a ghost cell.
 #  Gas: test/common/Air.
 #===============================================================================
 set -uo pipefail
@@ -57,12 +57,12 @@ python3 -B make_case.py case || exit 1
 rm -f OUTPUT/field*.tec OUTPUT/c*.txt
 echo "-- three probes at cell centres of the mid-plane, two steps --"
 "$LOCAL" > OUTPUT/run.log 2>&1
-if [[ $? -ne 0 || ! -f OUTPUT/field1.tec ]]; then
-  echo "  [FAIL] the run did not complete (see OUTPUT/run.log)"
+if [[ $? -ne 0 || ! -f OUTPUT/field2.tec ]]; then
+  echo "  [FAIL] the run did not complete, or wrote no solution at its last step (see OUTPUT/run.log)"
   echo "ProbePosition: FAILED"
   exit 1
 fi
-if python3 -B make_case.py check OUTPUT/field1.tec; then
+if python3 -B make_case.py check OUTPUT/field2.tec; then
   echo "  [ok  ] each probe holds the values of its cell"
   echo "ProbePosition: all checks passed"
   exit 0

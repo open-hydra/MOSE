@@ -32,7 +32,9 @@ contains
     type(MOSE_simulation_type), intent(inout) :: simulation
     ! Local
     character(len=llen) :: solfile, dgsfile, wallfile, mgsol, mgwall
+    character(len=llen) :: numsol, numwall, numdgs
     integer  :: m, level
+    logical  :: iter_based
 
     level = obj_multigrid%MG_level
 
@@ -73,6 +75,9 @@ contains
         endif
       end if
 
+      ! Probes: the rows due at the last iteration, as at any other
+      if (level == 1) call Write_Probes_Data( obj_sim_param%iter_general, simulation%domain(1)%time )
+
       if (obj_rot%enabled .and. level == 1 .and. mod(simulation%domain(1)%iter, obj_io%res_diter) == 0d0) &
         call RF_Torque_Walls( simulation%domain(1), obj_sim_param%iter_general, simulation%domain(1)%time )
 
@@ -92,6 +97,33 @@ contains
           endif
         endif
       end if
+
+      ! The solution due at the last iteration (sol-diter, else sol-dtime), as at any other output iteration (TODO == 2):
+      ! it takes the next output number and, when due by time only, sets the time of the last output, which the final
+      ! solution below then holds for a restart. With sol-overwrite = true the final solution is that output, written
+      ! once. Collective: every rank evaluates the same condition. A run ends on the finest level only (Explicit_Step
+      ! sets TODO = 3 at level 1), whose domain and file names the block takes: the guard keeps it there
+      iter_based = ( mod (simulation%domain(1) % iter, obj_io%sol_diter) == 0 )
+      if ( level == 1 .and. ( iter_based .or. &
+           simulation%domain(1) % time >= obj_sim_param%time_from_call + obj_io%sol_dtime ) ) then
+        obj_io%output_number = obj_io%output_number + 1
+        if ( .not. iter_based ) obj_sim_param%time_from_call = simulation%domain(1) % time
+        if ( .not. obj_io%sol_overwrite ) then
+          if (mpi_is_root) then
+            if ( iter_based ) then
+              write(*,*) ' ... writing iter-based solution'
+            else
+              write(*,*) ' ... writing time-based solution'
+            endif
+          endif
+          numsol  = trim(solfile)//trim(str(.true.,obj_io%output_number))
+          numwall = trim(wallfile)//trim(str(.true.,obj_io%output_number))
+          numdgs  = trim(dgsfile)//trim(str(.true.,obj_io%output_number))
+          call Write_Solution ( simulation%domain(1), simulation%IOfield(1), numsol )
+          if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(1), numwall )
+          if (.not. obj_time_scheme%time_accurate) call Write_Diagnostic ( simulation%domain(1), simulation%IOfield(1), numdgs )
+        endif
+      endif
 
       ! Timing summary (collective — every rank contributes its accumulators)
       call timer_summary()
