@@ -112,7 +112,7 @@ contains
     use MOSE_Advanced_Types_m
     use MOSE_Global_m, only: ndir
     use MOSE_Parameters_m, only: guide
-    use MOSE_Lib_Metrics, only: delthe
+    use MOSE_Lib_Metrics, only: delthe, cos_delthe, sin_delthe
     use MOSE_Mod_MPI, only: is_local_block, mpi_size_
     use MOSE_Mod_GhostExchange, only: exchange_velocity_gradient
 
@@ -124,8 +124,8 @@ contains
     logical  :: turned
 
     turned = .not. ( delthe >= 0d0 .and. delthe <= 0d0 )   ! a wedge or a sector turned about x
-    cs = cos ( delthe )
-    sn = sin ( delthe )
+    cs = cos_delthe                                         ! computed once with delthe (Check_Mesh_Type)
+    sn = sin_delthe
 
     !$omp do schedule (dynamic, 64) private(ii, r, b, bs, f, g, s, Rot)
     do ii = 1, domain % n_local_bc
