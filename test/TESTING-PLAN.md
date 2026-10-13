@@ -75,12 +75,31 @@ nightly/local tier.
   order ~2.2). CTest runs the fast 32/64 subset (single-threaded); the full
   32/64/128 study makes the V&V figure. Periodic meshes/ICs pre-generated
   (GRIB + `build_ic.py`); the periodic `bc.txt` (topology-only) is shared with N1.
+  *On general grids:* `test/2D/viscous/mms/skewed` (`MMSViscousSkewed`) and
+  `test/3D/viscous/mms` (`MMSViscous3D`), validation tier: the fields periodic2d,
+  wall2d and periodic3d of the driver (`MOSE_MMS_FIELD`) on two-block grid families
+  whose blocks meet with permuted indices, zigzag (every cell skewed, its
+  neighbours the other way) and iface (a cell-size jump of 1.5 and kinked grid
+  lines). CTest runs the short forms (2-D on N = 10, 20; 3-D zigzag on N = 8, 12):
+  L2 errors decreasing on the finest pair, an observed L2 order of at least 0.7 on
+  zigzag and 1.4 on iface (70 % of the order each family should show), with walls
+  the same order for the heat flux integrated over the wall, and the totals of the
+  equations with zero boundary flux within the smallest L2 error of each grid.
 - ☑ **N3 — Riemann-solver smoke matrix**: coarse Sod, few steps, once per solver;
   assert positivity (ρ,p>0) and no NaN. *Done:* `test/fast/riemann-smoke` (11
   shock-capturing solvers; low-Mach family deferred to a Gresho smoke).
 - ☑ **N4 — Limiter / scheme sweep**: all 5 limiters + 3 time schemes + recon +
   integration-variables; assert positivity. *Done:* `test/fast/numerics-smoke`.
   (Monotonicity assertion is a possible future tightening.)
+- ☑ **N8 — Planar nozzle on grid families (RANS)**: a turbulent planar
+  converging-diverging nozzle, Spalart–Allmaras and SST, on grid families that
+  differ only in the direction of their grid lines (O, H, ZZ, SB2). *Done:*
+  `test/2D/viscous/planar-nozzle` (`PlanarNozzleGrids`, validation tier). The short
+  form runs 300 iterations on the coarse level from a quasi-1D field: on O and H,
+  mirror images of themselves whose four blocks have different index
+  orientations, the largest mirror asymmetry of every variable below 1e-10 of its
+  largest magnitude; on ZZ (Spalart–Allmaras) a finite flow with positive density
+  and pressure. The full form runs every family on three levels to convergence.
 
 ### Physics
 - ☑ **Turbulent flat plate, SA / SST / Wilcox2006** — already covered, one case per
@@ -242,6 +261,12 @@ at RK3 vnn 0.62 and Heun vnn 0.5 with no NaN; and, on cells four times as long i
 the Prandtl number of air and with 0.9, 2000 steps at the recommended vnn (RK3 0.5, Heun
 0.4). Its eight runs of 2000 iterations (~155 s of CPU, TIMEOUT 600 s) put it in the
 **validation** tier too.
+
+`MMSViscousSkewed` ([`2D/viscous/mms/skewed`](2D/viscous/mms/skewed)), `MMSViscous3D`
+([`3D/viscous/mms`](3D/viscous/mms)) and `PlanarNozzleGrids`
+([`2D/viscous/planar-nozzle`](2D/viscous/planar-nozzle)), the short forms of N2 on general
+grids and of N8, take ~76 s, ~20 s and ~72 s of CPU time at one thread: they are in the
+**validation** tier, with a TIMEOUT of 900 s as `MMSViscous`.
 
 ---
 

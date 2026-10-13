@@ -73,9 +73,10 @@ test/
 │       ├── flat-plate-laminar/
 │       ├── flat-plate-turbulent/
 │       ├── Flat_Plate_SGGLRR/
-│       ├── mms/                   # residuals/: right-hand sides on manufactured fields (RANS, wedge)
+│       ├── mms/                   # residuals/: right-hand sides on manufactured fields (RANS, wedge); skewed/: order on skewed grids (validation tier)
 │       ├── wedge-axis-step/       # Local time step next to the axis of the wedge (validation tier)
 │       ├── point-implicit-steady/ # Steady state with the point-implicit factor independent of the time step
+│       ├── planar-nozzle/         # RANS nozzle on grid families: mirror symmetry whatever the index orientation (validation tier)
 │       └── swbli/
 ├── mpi/                       # MPI tier (needs-mpi): make_case.py, write_map.py
 │   ├── boundary-records/      # Boundary records
@@ -87,7 +88,9 @@ test/
 │   ├── exit-codes/            # An input error on rank 0, or read again by rank 1 alone, stops both ranks of a 2-rank run
 │   └── restart/               # Exact restart from vtk raw on 2 ranks x 2 threads
 ├── 3D/                        # 3-D validation cases
-│   └── coriolis-channel/
+│   ├── coriolis-channel/
+│   └── viscous/
+│       └── mms/               # Manufactured solution on skewed 3-D grids (validation tier)
 ├── Pressure_Centrifugal_eq/   # Rotating-frame equilibrium case
 └── common/                    # Shared thermodynamic databases
     ├── Air/                   # 5-species air (dimensional)
@@ -296,6 +299,13 @@ declares, RK3 0.62 and Heun 0.5, on square cells, on cells twice as long in x
 and with the axis on the last j face, and at the recommended vnn, RK3 0.5 and
 Heun 0.4, on cells four times as long in x with the Prandtl number of air and
 with 0.9.
+`MMSViscousSkewed` (`test/2D/viscous/mms/skewed`) and `MMSViscous3D`
+(`test/3D/viscous/mms`) check the order of the viscous operator with
+manufactured solutions on grids whose cells are all skewed or whose cell size
+jumps, made of blocks that meet with permuted indices, and `PlanarNozzleGrids`
+(`test/2D/viscous/planar-nozzle`) that a turbulent nozzle stays mirror-symmetric
+on grids whose blocks have different index orientations; they are there for
+their cost, 15 to 80 s of CPU time each.
 Run them with `ctest -L validation`.
 
 ### MPI tier contents

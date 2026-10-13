@@ -94,6 +94,31 @@ mose_add_test(NAME MMSViscous DIR 2D/viscous/mms
               LABELS "validation;numerics;2D"
               TIMEOUT 900)
 
+# Manufactured solutions on general grids (validation tier): the fields of the
+# MOSE_mms driver (MOSE_MMS_FIELD) on two-block grid families whose blocks meet
+# with permuted indices, zigzag (every cell skewed, its neighbours the other
+# way) and iface (a cell-size jump of 1.5 and kinked grid lines): 2-D periodic
+# and with walls on N = 10, 20, 3-D zigzag on N = 8, 12 ("testfast"; the full
+# studies, "test", make the V&V figures).
+mose_add_test(NAME MMSViscousSkewed DIR 2D/viscous/mms/skewed
+              RUN "./MOSE.sh testfast" VERIFY verify.py
+              LABELS "validation;numerics;2D"
+              TIMEOUT 900)
+mose_add_test(NAME MMSViscous3D DIR 3D/viscous/mms
+              RUN "./MOSE.sh testfast" VERIFY verify.py
+              LABELS "validation;numerics;3D"
+              TIMEOUT 900)
+
+# Planar nozzle on grid families (validation tier): a turbulent converging-
+# diverging nozzle (Spalart-Allmaras, SST) on O and H grids whose four blocks
+# have different index orientations stays mirror-symmetric about its centre
+# line, and the zig-zag grid gives a finite flow ("testfast": 300 iterations on
+# the coarse level; the full study, "test", runs every family to convergence).
+mose_add_test(NAME PlanarNozzleGrids DIR 2D/viscous/planar-nozzle
+              RUN "./MOSE.sh testfast" VERIFY verify.py
+              LABELS "validation;numerics;2D"
+              TIMEOUT 900)
+
 # ===========================================================================
 #  Additional fast tests defined in their own directories
 #  (added incrementally — see test/TESTING-PLAN.md, section 4)
