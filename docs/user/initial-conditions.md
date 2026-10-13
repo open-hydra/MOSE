@@ -135,6 +135,18 @@ The counters are taken only from a solution written by a run of the same kind, s
 
 Time-based probe rows (`dtime`) fall on the multiples of `dtime`. A restart that goes on in time writes next the row of the first multiple its time has not reached, whatever the format of the solution; a transient started from a steady solution starts again from the first one.
 
+### What each format keeps
+
+| `sol-format`, `ic-format` | Files | Written | Read | Steady solution | Restart | Counters |
+|---|---|---|---|---|---|---|
+| `tecplot ascii` | `.tec` | yes | yes | negative `SOLUTIONTIME`, zones without `STRANDID` | exact: 17 significant digits | `DATASETAUXDATA` records after the zones |
+| `tecplot binary` | `.szplt` (needs TecIO) | yes | yes | negative solution time of the zones, static zones | exact: the bits | data set auxiliary data |
+| `vtk ascii` | `.vtm` and its `.vts` block files, ascii data | yes | yes | negative `TIME` | exact: 17 significant digits | field data |
+| `vtk raw` | `.vtm` and its `.vts` block files, raw appended data | yes | yes | negative `TIME` | exact: the bits | field data |
+| (vtk binary) | `.vtm` and its `.vts` block files, base64 data | no | yes, with `vtk ascii` or `vtk raw`: the reader takes the format that each block file declares | negative `TIME` | exact: the bits | field data |
+
+The time of a solution is its physical time in a time-accurate run, with the zone of block *b* in strand *b* in Tecplot, and minus the global iteration count in a steady run; the wall and diagnostic outputs carry the time of the field. A restart reads the time, the steady marker and the counters in every format; an initial condition (`INPUT/ic.*`, `newrun = true`) takes the field only and starts at time 0 (or iteration 0). The older binary format of Tecplot (`.plt`) is neither written nor read. The tests `Restart`/`RestartCounters` (restart and counters in `vtk raw`, `vtk ascii`, `tecplot ascii` and, when MOSE is built with TecIO, `tecplot binary`), `Restart` (initial condition from `vtk raw`, `vtk ascii` and `tecplot ascii`; a solution without a time refused) and `OutputFiles`/`VtkNames` (the time of the field, wall and diagnostic outputs) check it.
+
 ### Limits
 
 - **Solutions written by earlier versions of MOSE.** A Tecplot solution held no counters, and a vtk solution may lack some (`MOSE_RES_REFERENCE`, below): from a solution without the counters the restart restores the field, the time or the global iteration count, and starts the other counters as a new run does. The CFL ramp starts again, `sol-diter` counts from the restart, the numbered solutions start again from `field1` (replacing those of the first part) and a multigrid sequence starts again from the coarsest level. Text files written with 15 significant digits do not give back every 64-bit value either: the restarted run is then close to the uninterrupted one, not identical.
