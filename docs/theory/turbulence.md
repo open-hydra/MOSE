@@ -685,7 +685,18 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   plane is the first one translated). The distinct translations are reduced
   to a basis $B_1 \ldots B_n$ of the lattice they generate, shortest first,
   and then pairwise (Lagrange: $B_j$ becomes $B_j - m B_i$, $m$ the integer
-  nearest to $B_i\cdot B_j / B_i\cdot B_i$, while that shortens it); the
+  nearest to $B_i\cdot B_j / B_i\cdot B_i$, while that shortens it) and, with
+  three translations, by threes ($B_l$ becomes $B_l - m_i B_i - m_j B_j$, with
+  $m_i, m_j$ the integers nearest to the least-squares coefficients of $B_l$ on
+  $B_i, B_j$ or next to them, while that shortens it). Three nearly dependent
+  translations can be reduced pair by pair (no pairwise step shortens them)
+  and still have a short sum: $B_1 = (1, 0, 0)$,
+  $B_2 = (-\tfrac12, \tfrac{\sqrt3}{2}, 0)$,
+  $B_3 = (-\tfrac12, -\tfrac{\sqrt3}{2}, \varepsilon)$ give
+  $B_1 + B_2 + B_3 = (0, 0, \varepsilon)$, which only the step by threes finds.
+  Each step adds to a vector an integer combination of the others, so the
+  lattice is the same, and the bound below holds for any basis of it: the
+  reduction only keeps the number of images small. The
   images are the integer combinations $\sum_i k_i B_i$ of the basis (along $x$
   on an axisymmetric wedge). The two sides of a periodic boundary match only
   to the precision of the mesh file: translations that differ by less than
@@ -720,8 +731,7 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   boundaries costs nothing more. Translations that do not form a lattice stop
   the run: one that is not an integer combination of the others, more than
   three independent ones, or one not along $x$ on a wedge or with sectors; so
-  does a number of images too large for an integer, as three nearly dependent
-  translations can give.
+  does a number of images too large for an integer.
 - Each cell takes the sand-grain roughness $k_s$ of the face that gives the
   minimum distance; between faces at the same distance, the first one in the
   boundary file.

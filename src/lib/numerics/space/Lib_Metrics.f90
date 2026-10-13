@@ -817,8 +817,8 @@ contains
       !>    file, so vectors that differ by less than MATCH times the size of the coordinates are the same (the tolerance
       !>    of Check_Mesh_Type). The distinct vectors, shortest first, are reduced to a basis of the lattice they
       !>    generate; a vector that is not an integer combination of the basis, within that tolerance times the number
-      !>    of vectors combined, stops the run. The basis is then reduced pairwise (Lagrange): the same lattice, with
-      !>    shorter vectors.
+      !>    of vectors combined, stops the run. The basis is then reduced pairwise (Lagrange) and, with three
+      !>    translations, by threes (Reduce_By_Two): the same lattice, with shorter vectors.
       !>  - Every wall face is moved, whole, by the vector of the lattice that brings its centre into the cell of the
       !>    lattice around anchor, the centre of the first wall face, where |B*_i . (x - anchor)| <= 1/2 (B* the dual
       !>    basis); Reduced_Point moves each cell centre the same way. The periodic wall is the same set.
@@ -831,8 +831,7 @@ contains
       !>  - Rotations: on a 3-D mesh whose sectors are closed by type 200 on faces 5-6 (delthe /= 0), the turns by
       !>    m delthe, |m delthe| <= pi; then every translation must lie along x, the axis of the turns, which keep the
       !>    coordinates along x.
-      !>  - A number of images that a default integer cannot hold stops the run: three translations nearly dependent,
-      !>    which the pairwise reduction leaves oblique.
+      !>  - A number of images that a default integer cannot hold stops the run.
       subroutine Wall_Images ( )
         implicit none
         ! Local
@@ -968,7 +967,10 @@ contains
         end if
 
         ! Pairwise (Lagrange) reduction of the basis: B_j <- B_j - m B_i, m the integer nearest to B_i.B_j / B_i.B_i,
-        ! while that shortens B_j by a factor below 1 - 1e-12 (so it ends); unimodular steps: the same lattice
+        ! while that shortens B_j by a factor below 1 - 1e-12 (so it ends). With three translations, when no pair
+        ! shortens, also by threes: B_l <- B_l - m_i B_i - m_j B_j (Reduce_By_Two), which finds a short combination
+        ! of all three that no pair gives, as B_1 + B_2 + B_3 of three nearly dependent translations. Unimodular
+        ! steps: the same lattice
         changed = nv > 1
         do while ( changed )
           changed = .false.
@@ -984,6 +986,15 @@ contains
               end if
             enddo
           enddo
+          if ( nv == 3 .and. .not. changed ) then
+            do l = 1, 3
+              t = Reduce_By_Two ( basis(:,l), basis(:,mod(l,3)+1), basis(:,mod(l+1,3)+1) )
+              if ( norm2 ( t ) < ( 1d0 - 1d-12 ) * norm2 ( basis(:,l) ) ) then
+                basis(:,l) = t
+                changed = .true.
+              end if
+            enddo
+          end if
         enddo
 
         ! Dual basis, B*_i = sum_j (G^-1)_ij B_j, and beta_i = (1/2) sum_j |(G^-1)_ij| G_jj, bound on the coordinates
@@ -1040,7 +1051,7 @@ contains
         if ( sector ) images = images * ( 2d0 * aint ( PI / abs ( delthe ) + 1d0 ) + 1d0 )
         if ( .not. ( images - 1d0 < real ( huge(nimg), R8 ) ) ) then
           write(msg,'(A,ES10.3,A)') '[ERROR] Wall distance: ', images - 1d0, ' periodic images of the wall, more'// &
-            ' than an integer holds: the periodic translations are nearly dependent'
+            ' than an integer holds'
           call mpi_abort_all ( trim(msg) )
         end if
         kmax = 0
@@ -1116,6 +1127,36 @@ contains
         end select
 
       end subroutine Invert_Gram
+
+
+      !> One step of the reduction by threes of Wall_Images: the shortest of bk - m_i bi - m_j bj over the integers
+      !> m_i, m_j nearest to the least-squares coefficients of bk on bi, bj and next to them (bk itself when none is
+      !> shorter).
+      pure function Reduce_By_Two ( bk, bi, bj ) result ( best )
+        implicit none
+        real(R8), intent(in) :: bk(3), bi(3), bj(3)
+        real(R8)             :: best(3)
+        ! Local
+        real(R8) :: gii, gij, gjj, ri, rj, det, ci, cj, t(3)
+        integer  :: a, b
+
+        gii = dot_product ( bi, bi )
+        gij = dot_product ( bi, bj )
+        gjj = dot_product ( bj, bj )
+        ri  = dot_product ( bi, bk )
+        rj  = dot_product ( bj, bk )
+        det = gii * gjj - gij * gij
+        ci  = anint ( ( gjj * ri - gij * rj ) / det )
+        cj  = anint ( ( gii * rj - gij * ri ) / det )
+        best = bk
+        do a = -1, 1
+          do b = -1, 1
+            t = bk - ( ci + a ) * bi - ( cj + b ) * bj
+            if ( norm2 ( t ) < norm2 ( best ) ) best = t
+          enddo
+        enddo
+
+      end function Reduce_By_Two
 
 
       !> Distance from p to the box wall_box (0 inside).

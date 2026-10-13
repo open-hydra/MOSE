@@ -227,7 +227,8 @@ mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;phys
 # Wall distance: the distance to the wall of the turbulence models is the
 # minimum distance to the wall surface (convex corner, curved wall, nozzle lip
 # on an axisymmetric wedge), and to its periodic images, also when the periods
-# are much shorter than the mesh, read back from the Spalart-Allmaras source.
+# are much shorter than the mesh or nearly dependent, read back from the
+# Spalart-Allmaras source.
 # Mesh type: a plane 2-D mesh, an axisymmetric wedge and a 3-D slab periodic in
 # k are told apart by every node of every block; blocks that disagree stop.
 mose_add_fast_script(MeshGeometry fast/mesh-geometry "fast;implementation;physics;2D")

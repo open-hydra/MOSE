@@ -20,7 +20,7 @@ Three single-block cases, the wall on the j = 1 face, faces 300 elsewhere (and 2
   lip     the lip of a nozzle on a 1-degree axisymmetric wedge: in the meridional plane the nozzle wall, curved, meets the
           lip face at a convex corner of 90 degrees at x = 0, r = 2; in the jet below the lip the nearest wall point is the
           lip. The distance is the one in the meridional plane, from the wall curve.
-Eight more cases have periodic boundaries, across which the wall goes on: the distance is the minimum over the periodic
+Nine more cases have periodic boundaries, across which the wall goes on: the distance is the minimum over the periodic
 images of the wall too.
   periodic  2-D channel periodic in x (connections 201 between the i faces, period 1), wall on the j = 1 face for x in
             [0, 0.5] only, symmetry on the rest; near x = 1 the nearest wall is the image of the wall that starts at x = 1.
@@ -47,6 +47,13 @@ images of the wall too.
             on the j = 1 face for x in [0, 1]: a blade from (0, 0) to (1, 1.7), 1.7 periods long along y, symmetry on the
             j = 10 face above it. The wall faces lie in different periods, and the nearest wall of a cell can be the
             blade or its images above and below.
+  oblique   3-D block of 4 x 4 x 2 cells, the parallelepiped on the edges E1 = (1, 0, 0), E2 = (-1/2, sqrt(3)/2, 0)
+            and E3 = (-1/2, -sqrt(3)/2, OBLIQUE_EPS = 0.02), periodic along the three (connections 201 between the i
+            faces, between the k faces, and between the j faces for the second half of the cells along i), wall on the
+            j = 1 face for the first half, symmetry on the j = 4 face above it. The three translations are nearly
+            dependent: no pairwise step shortens them, but E1 + E2 + E3 = (0, 0, 0.02) is fifty times shorter, and the
+            images of the wall are planes 0.02 apart. The reference takes the images along the reduced basis
+            (0, 0, 0.02), E1, -E2.
 The reference is the exact distance from the cell centre (mean of the nodes; in the wedge in the coordinates x and
 r = sqrt(y^2 + z^2)) to the wall of the mesh (straight faces between the wall nodes, plane in every case) and to its
 periodic images, by a scan of all faces. It is checked on the cells that do not touch the wall (in one step the wall
@@ -55,7 +62,7 @@ term): the largest relative difference must be below 1e-9 (1e-6 in the case nois
 
 Usage (from the test directory):
   python3 -B make_case.py case NAME            INPUT/ic.tec and INPUT/bc.txt of corner, arc, lip, periodic, pipe, sector,
-                                               noisy, span, thin, far or staggered
+                                               noisy, span, thin, far, staggered or oblique
   python3 -B make_case.py error NAME FILE      prints the largest relative error of d read from FILE (a diagnostic.tec)
   python3 -B make_case.py check N1=E1 ...      exit status 0 when the error of every case is below its tolerance
   python3 -B make_case.py case twist           INPUT/ic.tec and INPUT/bc.txt of the 3-D case with twisted wall faces
@@ -231,7 +238,9 @@ def geometry(name):
 
 
 PERIODIC = {"periodic": (16, 10, 1), "pipe": (16, 10, 1), "sector": (4, 6, 12), "noisy": (16, 10, 1),
-            "span": (4, 6, 12), "thin": (2, 8, 2), "far": (16, 10, 1), "staggered": (24, 10, 1)}
+            "span": (4, 6, 12), "thin": (2, 8, 2), "far": (16, 10, 1), "staggered": (24, 10, 1), "oblique": (4, 4, 2)}
+OBLIQUE_EPS = 0.02                  # case oblique: the edges E1, E2, E3 of the block, E1 + E2 + E3 = (0, 0, eps)
+OBLIQUE = ((1.0, 0.0, 0.0), (-0.5, 0.5 * math.sqrt(3.0), 0.0), (-0.5, -0.5 * math.sqrt(3.0), OBLIQUE_EPS))
 THIN_P, THIN_H = 0.005, 0.5         # case thin: periods in x and z, and height
 FAR = 10.0                          # case far: the shift in x of the channel of periodic
 STAGGER, BLADE = 1.7, (7, 18)       # case staggered: slope of the blade, and its cells on the j = 1 face (x in [0, 1])
@@ -264,6 +273,9 @@ def periodic_nodes(name):
                 elif name == "staggered":
                     xs = -0.5 + 2.0 * i / ni
                     xyz = (xs, STAGGER * xs + j / nj, (0.0, LZ)[k])
+                elif name == "oblique":
+                    xyz = tuple(i / ni * OBLIQUE[0][c] + j / nj * OBLIQUE[1][c] + k / nk * OBLIQUE[2][c]
+                                for c in range(3))
                 elif name == "pipe":
                     r = 0.5 * (j / nj) ** 0.8 if j > 0 else 1.0e-6 * 0.5 / nj ** 0.8   # axis at j = 0, wall at r = 0.5
                     xyz = (x, r * math.cos(0.5 * DELTA), (-1.0, 1.0)[k] * r * math.sin(0.5 * DELTA))
@@ -319,12 +331,17 @@ def write_periodic_case(name):
             elif name == "staggered":
                 out += [rec(i, 1, k, 3, 201), con(1, i, nj, k, 4, 1, 0, 0, 1)]
                 out += [rec(i, nj, k, 4, 201), con(1, i, 1, k, 3, 1, 0, 0, 1)]
+            elif name == "oblique" and i <= ni // 2:
+                out += [rec(i, 1, k, 3, 301), rec(i, nj, k, 4, 300)]
+            elif name == "oblique":
+                out += [rec(i, 1, k, 3, 201), con(1, i, nj, k, 4, 1, 0, 0, 1)]
+                out += [rec(i, nj, k, 4, 201), con(1, i, 1, k, 3, 1, 0, 0, 1)]
             elif name == "pipe":
                 out += [rec(i, 1, k, 3, 300), rec(i, nj, k, 4, 301 if i <= ni // 2 else 300)]
             else:
                 out += [rec(i, 1, k, 3, 301 if k <= nk // 2 else 300), rec(i, nj, k, 4, 300)]
     kface = {"periodic": 0, "pipe": 200, "sector": 200, "noisy": 0, "span": 200, "thin": 201, "far": 0,
-             "staggered": 0}[name]
+             "staggered": 0, "oblique": 201}[name]
     for j in range(1, nj + 1):
         for i in range(1, ni + 1):
             if kface == 201:
@@ -383,6 +400,25 @@ def periodic_reference(name):
                 p = (sum(q[0] for q in pc) / 8.0, sum(q[1] for q in pc) / 8.0)
                 out[(i, j, 1)] = min(segment_distance((p[0], p[1] - shift), a, b)[0]
                                      for shift in range(-3, 4) for a, b in wall)
+        return out
+    if name == "oblique":
+        # the wall faces (j = 0, the first half along i) and their images by sum n_l R_l, |n_l| <= 3, R the reduced
+        # basis (0, 0, eps) = E1 + E2 + E3, E1, -E2: the coordinates of p - q (p a cell centre, q a wall point) along R
+        # are at most 1, 2, 2, and those of a nearest lattice vector differ from them by at most beta = 1/2, 1, 1
+        faces = [[xyz[(i, 0, k)], xyz[(i + 1, 0, k)], xyz[(i + 1, 0, k + 1)], xyz[(i, 0, k + 1)]]
+                 for k in range(nk) for i in range(ni // 2)]
+        e1, e2, e3 = OBLIQUE
+        red = [[e1[c] + e2[c] + e3[c] for c in range(3)], list(e1), [-v for v in e2]]
+        shifts = [[a * red[0][c] + b * red[1][c] + g * red[2][c] for c in range(3)]
+                  for a in range(-3, 4) for b in range(-3, 4) for g in range(-3, 4)]
+        for k in range(1, nk + 1):
+            for j in range(2, nj + 1):
+                for i in range(1, ni + 1):
+                    corners = [xyz[(i - 1 + a, j - 1 + b, k - 1 + c)] for a in (0, 1) for b in (0, 1) for c in (0, 1)]
+                    p = [sum(q[c] for q in corners) / 8.0 for c in range(3)]
+                    out[(i, j, k)] = min(min(triangle_distance([p[c] - s[c] for c in range(3)], f[0], f[1], f[2]),
+                                             triangle_distance([p[c] - s[c] for c in range(3)], f[0], f[2], f[3]))
+                                         for s in shifts for f in faces)
         return out
     if name in ("periodic", "pipe", "noisy", "far"):
         jw = nj if name == "pipe" else 0
