@@ -34,8 +34,8 @@ space-reconstruction = MUSCL
 !!! warning "Parameter names are case-sensitive"
     Incorrect names are ignored and the default is used instead. Check the [Parameter Registry](registry.md) for the exact spelling.
 
-!!! warning "A comment line that holds `=` ends the reading of its section"
-    The reader of `input.ini` stops reading a section at a line it cannot parse, such as a comment line (a line that starts with `!`, `;` or `#`) that holds `=`: the keys after it in that section are not read and keep their defaults. MOSE warns at the start for every such key, with its line. A key lost this way is an error in the input: the run goes on with the default in place of the value written. Keep `=` out of comment lines.
+!!! warning "Keys that are not read"
+    MOSE warns at the start for every line `key = value` of `input.ini` whose key the reader does not give in its section, with its line: such a key is an error in the input, and the run goes on with the default of its parameter in place of the value written. Comment lines (lines that start with `!`, `;` or `#`) are skipped, also when they hold `=`.
 
 !!! warning "Values outside their rules stop the run"
     A value outside the rule of its parameter (column Allowed of the [Parameter Registry](registry.md): a bound such as `> 0`, an interval such as `in (0, 1)`, where `(` and `)` leave the end out and `[` and `]` take it in, each held by every value of a list of numbers; a list of names; `logical`) stops the run with a message: at the start, and when MOSE reads `input.ini` again during the run, every `ini-diter` iterations (10000 by default), to take the values changed meanwhile. The parameters that `input.ini` leaves out keep their values.

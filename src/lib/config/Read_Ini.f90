@@ -44,9 +44,9 @@ contains
   end subroutine Read_Inifile
 
 
-  !> The INI reader (FiNeR) stops reading a section at the first line it cannot parse, such as a comment line (one that starts
-  !> with !, ; or #) that holds "=": the keys after it are not read, and their parameters keep their defaults. Prints a
-  !> warning for every line "key = value" of input.ini whose key the reader does not give in its section.
+  !> Prints a warning for every line "key = value" of input.ini whose key the INI reader (FiNeR) does not give in its
+  !> section: that key is not read, and its parameter keeps its default. Comment lines (they start with !, ; or #) are
+  !> skipped, as the reader skips them since FiNeR 2.1.0, also when they hold "=" or a bracket.
   subroutine Warn_Unread_Keys(fini)
     use Finer,        only: file_ini
     use MOSE_Mod_MPI, only: mpi_is_root
@@ -77,7 +77,7 @@ contains
       key = adjustl(line(1:eq-1))
       call fini%get(section_name=trim(section), option_name=trim(key), val=val, error=error)
       if (error /= 0) write(*,'(A,I0,A)') '[WARNING] input.ini, line ', n, ': '//trim(key)//' of ['//trim(section)// &
-        '] is not read (the reader stops a section at a line it cannot parse, such as a comment line that holds "=")'
+        '] is not read (the INI reader does not give it): its parameter keeps its default'
     end do
     close(unit)
 

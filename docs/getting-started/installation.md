@@ -45,6 +45,9 @@ cd MOSE
 git submodule update --init --recursive
 ```
 
+!!! note "An existing clone"
+    After pulling new commits into an existing clone, run `git submodule update --init --recursive`: CMake initializes a submodule that is missing, but does not update one that is checked out at an older commit. If FiNeR is older than v2.1.0, the first version that reads a comment line holding `=` as a comment (CMake reads the version from its `VERSION` file, which FiNeR has since v2.0.7; MOSE used v2.0.6 before v2.3.0), CMake stops and gives this command.
+
 To fully install MOSE, you may either use the bundled install script or invoke CMake manually. The script is convenient and is the preferred route for most users.
 
 ### Build with `install.sh` (recommended)
