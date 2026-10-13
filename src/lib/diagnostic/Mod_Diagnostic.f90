@@ -88,9 +88,12 @@ contains
 
       call parse(obj_io%sol_format,' ', format)
 
-      ! The diagnostic reuses the solution-output buffer (nprim+1 slots at least)
+      ! The diagnostic reuses the solution-output buffer: nprim+1 slots, two more with thermo, two or three more with
+      ! transport. It needs nres+2 = nprim-nsc+3 slots, which are missing only with a single species and neither
+      ! thermo nor transport in sol-variables.
       if (size(IOfield%block(1)%vars,1) < ndiag) &
-        call mpi_abort_all('diagnostic output needs more variables than the solution buffer holds')
+        call mpi_abort_all('the diagnostic output of a steady run with a single species needs sol-variables to '// &
+                           'include thermo (the default) or transport')
 
       ! Update IOfield variables with domain residuals
       do b = 1, size(IOfield%block)

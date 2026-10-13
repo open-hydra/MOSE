@@ -200,7 +200,7 @@ seconds on a CI runner.
 | `Conservation` | closed slip-wall box conserves total mass to round-off | `test/fast/conservation` |
 | `OpenMPEquiv` | 1 vs 4 threads bit-identical | `test/fast/openmp-equiv` |
 | `Restart` | split + restart reproduces the uninterrupted run; at a restart a missing probe file is written again and an existing one is appended to, with the rows of the uninterrupted run | `test/fast/restart` |
-| `InputChecks`/`ExitCodes` | a run stopped on an error ends with a non-zero exit code and its message and writes no solution: the Sod tube as a viscous mixture of four species, without `schmidt` and `diffusion.dat`, stops at setup; so does a run with a probe of an unknown variable, with exit status 1 and the name of the variable; a steady run with a soot model, with and without Spalart–Allmaras, ends normally and its diagnostic output names every variable it writes | `test/fast/input-checks/exit-codes` |
+| `InputChecks`/`ExitCodes` | a run stopped on an error ends with a non-zero exit code and its message and writes no solution: the Sod tube as a viscous mixture of four species, without `schmidt` and `diffusion.dat`, stops at setup; so does a run with a probe of an unknown variable, with exit status 1 and the name of the variable; a steady run with a soot model, with and without Spalart–Allmaras, ends normally and its diagnostic output names every variable it writes; a steady single-species run with sol-variables = none stops with a message that names thermo or transport | `test/fast/input-checks/exit-codes` |
 
 A few heavier checks carry the `validation` (not `fast`) label because they
 need reference data or plotting — for example `ShuOsherConvergence`, a 4-grid

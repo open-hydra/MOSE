@@ -133,7 +133,8 @@ mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D"
 # multicomponent diffusion): the Sod tube as a viscous mixture of four species,
 # without a diffusion table, stops at setup; so does a probe of an unknown
 # variable. A steady run with a soot model ends normally and its diagnostic
-# output names every variable it writes.
+# output names every variable it writes; a steady single-species run without
+# thermo or transport output stops with a message that says so.
 mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
 
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,

@@ -22,6 +22,13 @@
 #  without a table, must stop at set-up with the diffusion-table error and
 #  write no solution.
 #
+#  Diagnostic output of a single species without thermo or transport. The
+#  diagnostic output of a steady run reuses the buffer of the solution
+#  output, which with a single species and sol-variables naming neither
+#  thermo nor transport is one variable short: the Sod tube in air, steady,
+#  with sol-variables = none, must stop at its first output with exit status
+#  1 and a message that says to name thermo or transport.
+#
 #  Diagnostic output with a soot model. A steady run with the soot model
 #  LL91 must end normally, and its diagnostic output must name every
 #  variable it writes, the residuals of rho, rho u, rho v, rho w, rho E, of
@@ -141,6 +148,39 @@ grep -a -qF "$ERR" OUTPUT/schmidt-mixture.log
 check $? "it reports the missing diffusion table"
 [[ ! -f OUTPUT/field.tec ]]
 check $? "no solution is written"
+
+echo "-- single species, steady, sol-variables = none: the diagnostic output --"
+rm -f INPUT/*
+ln -sf "../../../../common/Air/phase.txt" INPUT/phase.txt
+ln -sf "../../../../common/Air/thermo.dat" INPUT/thermo.dat
+ln -sf "../$SOD/ic_x1.tec" INPUT/ic.tec
+ln -sf "../$SOD/bc_x1.txt" INPUT/bc.txt
+cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 2
+newrun = true
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.5
+time-accurate = false
+time-scheme = euler
+integration-variables = cons
+space-reconstruction = first-order
+riemann-solver = HLLC
+
+[MOSE-IO]
+sol-format = tecplot ascii
+sol-variables = none
+EOI
+"$LOCAL" > OUTPUT/diagnostic-single.log 2>&1
+rc=$?
+[[ $rc -ne 0 && $rc -lt 128 ]]
+check $? "the solver stops with an error, not a crash (exit status $rc)"
+grep -a -qF 'needs sol-variables to include thermo (the default) or transport' OUTPUT/diagnostic-single.log
+check $? "it says which sol-variables to set"
 
 echo "-- soot model LL91, steady, two iterations: the diagnostic output --"
 PREMIX=../../../1D/premixed-flame/INPUT

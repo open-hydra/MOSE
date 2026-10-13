@@ -29,6 +29,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A restart appends to the probe files, and creates those that are missing; it stopped when one was missing.
 - Each rank keeps the state of the remote chimera donors of its own receivers only, and none of the remote sources of manifold
   faces (`501`), which it never reads; the chimera exchange sends each donor cell once per rank.
+- The diagnostic output of a steady run with a single species needs `sol-variables` to name `thermo` (the default) or
+  `transport`; otherwise the run stops at its first solution output with a message that says so, where it named only the
+  size of a buffer.
 
 ### Fixed
 
