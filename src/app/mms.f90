@@ -1,3 +1,14 @@
+!> @brief State of the manufactured-solution driver read by its source callback, kept in a module rather
+!>        than in the program: the callback is an internal procedure passed to the solver as an argument,
+!>        and reading an allocatable array of the program made ifx build a trampoline on the stack (an
+!>        executable stack in the binary); a module variable needs no access to the frame of the program.
+module MOSE_MMS_Driver_State
+  use MOSE_Base_Types_m, only: R8
+  implicit none
+  real(R8), allocatable :: smean(:,:)   ! mean of S removed from the source (equation, grid level)
+end module MOSE_MMS_Driver_State
+
+
 !> @brief MOSE driver for the Method of Manufactured Solutions (MMS) viscous
 !>        order-of-accuracy verification (test N2).
 !>
@@ -34,6 +45,18 @@
 !> Their sources come from test/2D/viscous/mms/mms_gen_fields.py (sympy, checked
 !> against a finite-difference divergence at 20 random points to 1e-6).
 !>
+!> Mean of the discrete source.  The face fluxes of a conservative scheme cancel in
+!> pairs, so for an equation whose total boundary flux is zero for any state the sum
+!> of the residuals over the cells is minus the sum of the source, S(c_i)*V_i: the
+!> discrete steady problem is solvable only if that sum is zero.  The source at the
+!> cell centres sums to zero only to the accuracy of the midpoint rule, so for those
+!> equations its mean over the domain is removed, once at setup: all of them with
+!> periodic2d and periodic3d (periodic in every direction; the symmetry k faces of a
+!> quasi-2D run carry no flux of these equations but the z-momentum, whose residual
+!> is zeroed), the mass alone with wall2d and wall3d (wall stress, pressure and heat
+!> flux balance the other ones).  The mean and its ratio to the mean of |S| are
+!> written to the log.
+!>
 !> Residual sign convention (as in Lib_RotatingFrame): V dU/dt = -R, with
 !> R = CONV - DIFF - SOURCE, so a physical source S is added by  R -= S * vol.
 program MOSE_mms_program
@@ -43,6 +66,8 @@ program MOSE_mms_program
   use MOSE_Advanced_Types_m, only: MOSE_simulation_type, MOSE_domain_type
   use MOSE_Config_Types_m,   only: obj_sim_param
   use MOSE_Procedures_m,     only: MOSE_type
+  use MOSE_Base_Types_m,     only: R8
+  use MOSE_MMS_Driver_State, only: smean
   use MOSE_Mod_MPI
 #ifdef USE_MPI
   use MOSE_Mod_GhostExchange, only: cleanup_ghost_schedule
@@ -100,6 +125,7 @@ program MOSE_mms_program
 
   ! Solving with MOSE, injecting the manufactured source each RK stage
   call MOSE%setup( simulation )
+  call MMS_Source_Mean ( simulation )
 
   obj_sim_param%TODO = 1
   do while ( obj_sim_param%TODO <= 2 )
@@ -129,19 +155,133 @@ contains
 
     do b = 1, domain%nb
       if (.not. is_local_block(b)) cycle
-      if (trim(mms_field) == 'periodic2d') then
-        call MMS_Source_Blk( domain%blk(b)%R,    &
-                             domain%blk(b)%node, &
-                             domain%blk(b)%vol,  &
-                             domain%blk(b)%dim   )
-      else
-        call MMS_Source_Blk_Field( domain%blk(b)%R,    &
-                                   domain%blk(b)%node, &
-                                   domain%blk(b)%vol,  &
-                                   domain%blk(b)%dim   )
-      endif
+      call MMS_Field_Blk( domain%blk(b)%R,    &
+                          domain%blk(b)%node, &
+                          domain%blk(b)%vol,  &
+                          domain%blk(b)%dim   )
+      call MMS_Remove_Mean_Blk( domain%blk(b)%R,   &
+                                domain%blk(b)%vol, &
+                                domain%blk(b)%dim, &
+                                smean(:, domain%mg_level) )
     end do
   end subroutine MMS_Source
+
+  !> @brief Source of the chosen field on one block: R -= S*vol (MMS_Source_Blk for periodic2d,
+  !>        MMS_Source_Blk_Field for the others).
+  subroutine MMS_Field_Blk ( Res, node, vol, n )
+    use MOSE_Base_Types_m, only: R8, MOSE_vector_3D_type
+    use MOSE_Global_m,     only: gc, nprim
+    implicit none
+    integer,  intent(in) :: n(3)
+    real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
+    type(MOSE_vector_3D_type), dimension(0:n(1), 0:n(2), 0:n(3)), intent(in) :: node
+    real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: vol
+
+    if (trim(mms_field) == 'periodic2d') then
+      call MMS_Source_Blk ( Res, node, vol, n )
+    else
+      call MMS_Source_Blk_Field ( Res, node, vol, n )
+    endif
+  end subroutine MMS_Field_Blk
+
+  !> @brief Removes the mean of the discrete source (MMS_Source_Mean) on one block: R += sm*vol, so that the
+  !>        two calls add -(S - sm)*vol; sm is zero for the equations whose mean is kept.
+  subroutine MMS_Remove_Mean_Blk ( Res, vol, n, sm )
+    use MOSE_Base_Types_m, only: R8
+    use MOSE_Global_m,     only: nu, nv, nw, np, gc, nprim
+    implicit none
+    integer,  intent(in) :: n(3)
+    real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
+    real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: vol
+    real(R8), intent(in) :: sm(5)
+    ! Local
+    integer :: i, j, k
+
+    !$omp do collapse(3) private( i, j, k )
+    do k = 1, n(3)
+    do j = 1, n(2)
+    do i = 1, n(1)
+      Res(1,  i, j, k) = Res(1,  i, j, k) + sm(1) * vol(i,j,k)   ! continuity
+      Res(nu, i, j, k) = Res(nu, i, j, k) + sm(2) * vol(i,j,k)   ! x-momentum
+      Res(nv, i, j, k) = Res(nv, i, j, k) + sm(3) * vol(i,j,k)   ! y-momentum
+      Res(nw, i, j, k) = Res(nw, i, j, k) + sm(4) * vol(i,j,k)   ! z-momentum
+      Res(np, i, j, k) = Res(np, i, j, k) + sm(5) * vol(i,j,k)   ! energy
+    end do ; end do ; end do
+    !$omp end do
+
+  end subroutine MMS_Remove_Mean_Blk
+
+  !> @brief Mean of the discrete source, sum_i S(c_i)*V_i / sum_i V_i, on every grid level, kept in smean
+  !>        for the equations whose total boundary flux is zero (see the head of this file): all of them with
+  !>        periodic2d and periodic3d, the mass alone with wall2d and wall3d.  The source of a block is that of
+  !>        the kernel of the run (MMS_Field_Blk on a zeroed residual); the cells of a block are summed in a
+  !>        fixed order, the blocks reduced over the ranks one by one and summed in their order, so the mean
+  !>        does not depend on the decomposition or on the threads.  Called once, after setup, outside any
+  !>        parallel region (the kernels then run on one thread).
+  subroutine MMS_Source_Mean ( simulation )
+    use MOSE_Global_m, only: nu, nv, nw, np
+    implicit none
+    type(MOSE_simulation_type), intent(in) :: simulation
+    ! Local
+    integer  :: l, b, i, j, k, q, nb, iq(5)
+    logical  :: keep(5)
+    real(R8) :: vsum, ssum(5), asum(5)
+    real(R8), allocatable :: bs(:,:), ba(:,:), bv(:), work(:,:,:,:)
+    character(len=*), parameter :: eq(5) = [ 'mass      ', 'x-momentum', 'y-momentum', 'z-momentum', 'energy    ' ]
+
+    iq = [ 1, nu, nv, nw, np ]
+    select case (trim(mms_field))
+      case ('wall2d', 'wall3d'); keep = [ .true., .false., .false., .false., .false. ]
+      case default;              keep = .true.        ! periodic2d, periodic3d
+    end select
+    allocate ( smean(5, size(simulation%domain)) )
+    smean = 0.0_R8
+
+    do l = 1, size(simulation%domain)
+      associate ( domain => simulation%domain(l) )
+        nb = domain%nb
+        allocate ( bs(5, nb), ba(5, nb), bv(nb) )
+        bs = 0.0_R8 ; ba = 0.0_R8 ; bv = 0.0_R8
+        do b = 1, nb
+          if (.not. is_local_block(b)) cycle
+          associate ( blk => domain%blk(b) )
+            allocate ( work, mold = blk%R )
+            work = 0.0_R8
+            call MMS_Field_Blk ( work, blk%node, blk%vol, blk%dim )
+            do k = 1, blk%dim(3)
+            do j = 1, blk%dim(2)
+            do i = 1, blk%dim(1)
+              do q = 1, 5
+                bs(q, b) = bs(q, b) - work(iq(q), i, j, k)
+                ba(q, b) = ba(q, b) + abs(work(iq(q), i, j, k))
+              end do
+              bv(b) = bv(b) + blk%vol(i,j,k)
+            end do ; end do ; end do
+            deallocate ( work )
+          end associate
+        end do
+        call mpi_allreduce_sum_r8_array ( bs, 5*nb )
+        call mpi_allreduce_sum_r8_array ( ba, 5*nb )
+        call mpi_allreduce_sum_r8_array ( bv, nb )
+        ssum = 0.0_R8 ; asum = 0.0_R8 ; vsum = 0.0_R8
+        do b = 1, nb
+          ssum = ssum + bs(:, b)
+          asum = asum + ba(:, b)
+          vsum = vsum + bv(b)
+        end do
+        where (keep) smean(:, l) = ssum / vsum
+        if (mpi_is_root) then
+          do q = 1, 5
+            if (asum(q) == 0.0_R8) cycle
+            write(*,'(A,I0,A,A,A,ES12.4,A,ES10.2,A)') ' MMS driver: level ', l, ', ', eq(q), &
+              ': mean of the source ', ssum(q) / vsum, ', ratio to the mean of |S| ', ssum(q) / asum(q), &
+              merge(', removed', ', kept   ', keep(q))
+          end do
+        end if
+        deallocate ( bs, ba, bv )
+      end associate
+    end do
+  end subroutine MMS_Source_Mean
 
   !> @brief Block kernel: accumulate the analytic source into R (R -= S*vol).
   !>        Uses !$omp do because the caller (Explicit_Step) is already inside an
