@@ -8,7 +8,9 @@
 #  that does not turn with a rotating frame, where the velocity in the frame
 #  is -Omega x r, varying along the wall (momr; also with the face metrics
 #  inverse-mean and mean on parallelogram cells, at a wall 302 and at an
-#  adiabatic wall 301); and a control that
+#  adiabatic wall 301, where the energy of every cell must be the work of
+#  the uniform stress, the work of the wall stress included); and a
+#  control that
 #  every face metric passes: parallelogram cells, T_w uniform along the
 #  walls (paraT). T linear at uniform pressure, the density not uniform, next
 #  to walls 301, 302 and 400 faces: their ghost cells extrapolate T itself

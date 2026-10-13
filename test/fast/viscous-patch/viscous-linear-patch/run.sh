@@ -100,7 +100,7 @@ if [[ $NAME == ViscousWallPatch ]]; then
     step ref "$mesh" momr
     python3 -B "$MC" check "$mesh" momr "OUTPUT/diag-$mesh-momr-ns.tec" "OUTPUT/diag-$mesh-momr-ref.tec" wall302 || status=1
   done
-  echo "-- the same on parallelograms with inverse-mean (wall 302) and mean (adiabatic wall 301), the cell metric --"
+  echo "-- the same on parallelograms, inverse-mean (wall 302) and mean (adiabatic 301); also the work of the stress --"
   for case in paraT:inverse-mean:wall302 paraQ:mean:wall301; do
     IFS=: read -r mesh metric group <<< "$case"
     echo "    $mesh, diffusive-metric = $metric:"
@@ -109,6 +109,8 @@ if [[ $NAME == ViscousWallPatch ]]; then
     step ref "$mesh" momr "$metric"
     python3 -B "$MC" check "$mesh" momr "OUTPUT/diag-$mesh-momr-ns-$metric.tec" "OUTPUT/diag-$mesh-momr-ref-$metric.tec" \
       "$group" || status=1
+    python3 -B "$MC" work "$mesh" momr "OUTPUT/diag-$mesh-momr-ns-$metric.tec" "OUTPUT/diag-$mesh-momr-ref-$metric.tec" \
+      "interior,$group" || status=1
   done
   echo "-- T linear at uniform pressure (density not uniform): walls 301, 302 and 400 faces extrapolate T itself --"
   for mesh in fold2 jump jump2 star3 star5 box3d sym paraT; do

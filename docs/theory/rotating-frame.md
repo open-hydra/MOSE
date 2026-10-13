@@ -115,7 +115,7 @@ A wall at rest in the laboratory (a casing or a hub that does not turn) is liste
 
 $$\boldsymbol{w}_{\text{wall}} = -\boldsymbol{\Omega} \times (\boldsymbol{x} - \boldsymbol{x}_o)$$
 
-($\boldsymbol{x}_o$ the `origin` of the frame), a velocity linear in $\boldsymbol{x}$: its no-slip condition and its ghost cells take this velocity, and its wall gradient also the differences of this velocity along the wall, from its gradient $-[\boldsymbol{\Omega}\times]$ (see [Gradient Computation for Diffusive Fluxes](numerics.md#gradient-computation-for-diffusive-fluxes)).
+($\boldsymbol{x}_o$ the `origin` of the frame), a velocity linear in $\boldsymbol{x}$: its no-slip condition and its ghost cells take this velocity, and its wall gradient also the differences of this velocity along the wall, from its gradient $-[\boldsymbol{\Omega}\times]$ (see [Gradient Computation for Diffusive Fluxes](numerics.md#gradient-computation-for-diffusive-fluxes)). The energy flux through such a wall is the heat flux plus the work of the wall stress on the wall velocity, $(\boldsymbol{\tau}\cdot\mathbf{n})\cdot\boldsymbol{w}_{\text{wall}}$, as a face between cells carries $(\boldsymbol{\tau}\cdot\mathbf{n})\cdot\boldsymbol{w}$ ([Viscous Fluxes](#viscous-fluxes)); on a wall that turns with the frame $\boldsymbol{w}_{\text{wall}} = \boldsymbol{0}$ and the energy flux is the heat flux alone.
 
 ## Physical Interpretation
 

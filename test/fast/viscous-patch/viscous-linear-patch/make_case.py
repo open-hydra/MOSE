@@ -51,7 +51,9 @@ Runs:
          -Omega x x, which varies along it, and u = -Omega x x + (a, b, c) (y - 2 cm) takes that velocity on the
          wall. The sources of the frame are the same in the reference step. On rand1 and box3d with the default face
          metric; on parallelogram cells, where the metric of the wall cell is exact too, with inverse-mean on paraT and
-         with mean on paraQ, whose wall is an adiabatic 301. Checked: the momentum of the wall cells.
+         with mean on paraQ, whose wall is an adiabatic 301. Checked: the momentum of the wall cells; on paraT and paraQ,
+         at p = 1 Pa (P_WORK), also the energy of the cells, against the work of the uniform stress, tau : grad u (see
+         work below).
   rk3    u = 0, uniform p = 10 Pa, T linear (rho = p/(R T)): steady for the Euler equations and, with a face gradient
          exact for linear fields, for the Navier-Stokes equations, at every stage (the low pressure: see P_LOW).
          Three-stage Runge-Kutta step, 12 x 12 cells per block (star3, star5 only). Checked are the cells within 4 cells
@@ -70,7 +72,8 @@ walls 301 and 302 with the Euler equations and the ghost cells must stay those o
 only, whose inviscid part is zero for this state). The diagnostic output holds, per cell, the residual over the step, r,
 and the step dt; r/dt of Navier-Stokes minus r/dt of the reference is the viscous right-hand side per unit volume. It is
 compared with the scale mu |G| (sum of face areas)/volume (mom, momw, momr) or k |g| (sum of face areas)/volume (ene,
-rk3); threshold 1e-11. The cells are grouped by the faces they have: interior (no boundary face), connection (a face
+rk3); threshold 1e-11 (for the energy of momr next to the 302 wall of paraT, plus a bound of the round-off of the temperature
+of the cell: see work). The cells are grouped by the faces they have: interior (no boundary face), connection (a face
 between blocks; corner: two of them, the cells at a point shared by 3 or 5 blocks), symmetry (300), wall 301, wall 302.
 
 ViscousLinearPatch checks every group but wall 302, plus the old metrics: on the rand1 mesh, run mom, diffusive-metric =
@@ -90,6 +93,8 @@ Usage (from a test directory):
   python3 -B make_case.py check MESH RUN NS REF GROUPS prints the largest error of each group and exits with 0 when the
                                                       groups listed (comma-separated) are below the threshold
   python3 -B make_case.py replica MESH NS REF METRIC  compares the viscous force with the replica of METRIC (mom run)
+  python3 -B make_case.py work MESH RUN NS REF GROUPS  run momr on paraT or paraQ: the energy of the cells of the groups
+                                                      against tau : grad u, exits with 0 when below the threshold
   python3 -B make_case.py limits LOG                  the run hot: the counts of the floor and of the cut are positive
 """
 import math
@@ -108,11 +113,16 @@ P_LOW = 10.0                        # mom, rk3: a low pressure. The round-off of
                                     # stays far below the viscous scale mu |G| (face area)/volume (mom: p/(mu |G|) ~ 4e3);
                                     # the velocity it gives at the first stage carries an energy flux (rho e + p) u, of
                                     # order p, into the later stages (rk3: 3e-10 of the scale at 1e5 Pa, 1e-13 at 10 Pa)
+P_WORK = 1.0                        # momr on paraT and paraQ, whose energy is checked (work): the round-off of the energy
+                                    # fluxes, (rho e + p) u (face area)/volume, is 1e-13 of the scale of the work at 1 Pa,
+                                    # 1e-12 at 10 Pa (gfortran; 1e-12 and 4e-12 with ifx)
 LREF = 1.0e-2                       # m
 LREF2 = 2.0**-7                     # m, jump2 and fan: dyadic coordinates
 OFFSET = np.array([1.0, 2.0, 0.0])  # unit coordinates: keep y > 0 away from the axis
 TOL = 1.0e-11
 TOL_REPLICA = 1.0e-10
+N_ULP_T = 6                         # momr on paraT: the temperature of a cell next to the 302 wall can differ from T_w by up
+                                    # to 6 units in the last place of T_w (see work)
 FMT = '{: .17E}'
 MESHES = ('fold2', 'jump', 'jump2', 'fan', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
 RUNS = ('mom', 'ene', 'rk3', 'momw', 'momr', 'enep', 'hot')
@@ -515,7 +525,8 @@ def state(mesh, run, x):
     f = field(mesh, run)
     if run in ('mom', 'momw', 'momr'):
         u = f['u0'] + f['G'].dot(x - f['x0'])
-        return P_LOW / (RGAS * T0), u, P_LOW
+        p = P_WORK if (run == 'momr' and mesh in ('paraT', 'paraQ')) else P_LOW
+        return p / (RGAS * T0), u, p
     if run == 'hot':
         p = P_LOW + GP_HOT * (x[0] - LREF * OFFSET[0])
         return p / (RGAS * T0), np.zeros(3), p
@@ -749,6 +760,76 @@ def check(mesh, run, ns_path, eu_path, wanted):
     return ok
 
 
+def work(mesh, run, ns_path, eu_path, wanted):
+    """Run momr on parallelogram cells (paraT, paraQ): the viscous right-hand side of the energy, per unit volume, is
+    tau : grad u in every cell. A linear velocity has a uniform stress tau, so the net work of the stress on a cell, the
+    sum over its faces of (tau . n) . u A, is (tau : grad u) V when u is the velocity at the centre of each face and the
+    faces are plane (divergence theorem); on parallelogram cells the velocity of a face between cells, the mean of the
+    velocities of the two cells, is the one at its centre, and the face on a wall that moves takes the wall velocity.
+    Compared with the scale mu |G| U (sum of face areas)/volume, U the largest speed of the cell centres; threshold
+    1e-11.
+
+    A cell next to the 302 wall of paraT also takes the heat flux of the wall, k (T - T_w)/d over its area A_w, with d
+    the distance of the cell centre from the wall face: on these parallelogram cells that is the gradient the solver takes
+    across the wall face. T = T_w = T0 here, but the solver computes the temperature of the cell as p/(rho R), with R from
+    the mass fractions (f_Rtot), and T_w is the T0 of bc.txt, read exactly. From the T0 of this script, T holds 8
+    roundings of relative size at most u = 2^-53: the density written here, p/(RGAS T0), 2; RGAS, 1; R of FLINT, Runiv/W,
+    1; f_Rtot, R rho/rho, 2; p/(rho R) of the wall flux, 2. Fast math (the RELEASE builds) may turn each of the three
+    divisions of the solver into a multiplication by a rounded reciprocal: 11 roundings. So |T - T_w| <= 11 u T0, 6.4
+    units in the last place (ulp) of T0 = 300 K, and T - T_w, the difference of two numbers between 256 and 512, is a
+    whole number of ulp: at most N_ULP_T = 6. Each ulp adds k ulp(T0) A_w/(d V) to the energy of the cell, 1.9e-11 of
+    the scale on paraT, where k T0 is 6e5 times mu |G| U d. The threshold of these cells is 1e-11 plus N_ULP_T times
+    that term over the scale."""
+    blocks = build(mesh, run)
+    conn = connections(blocks)
+    f = field(mesh, run)
+    G = f['G']
+    tau = MU * (G + G.T) - 2.0 / 3.0 * MU * np.trace(G) * np.eye(3)
+    phi = float(np.sum(tau * G))
+    rhs = viscous_rhs(read_zones(ns_path), read_zones(eu_path), ['rhoe'])
+    grp = groups(blocks, mesh, run, conn)
+    speed = max(float(np.linalg.norm(f['u0'] + G.dot(c - f['x0']))) for X in blocks for c in centres(X).reshape(-1, 3))
+    worst, limit, within = {}, {}, {}
+    for b, X in enumerate(blocks):
+        ni, nj, nk = dims(X)
+        sgn = face_signs(X)
+        C = centres(X)
+        c = 0
+        for k in range(1, nk + 1):
+            for j in range(1, nj + 1):
+                for i in range(1, ni + 1):
+                    gname = grp[b][c]
+                    if gname is not None:
+                        faces = cell_faces(X, sgn, i, j, k)
+                        area = sum(math.sqrt(float(np.dot(a, a))) for a in faces)
+                        vol = cell_volume(X, i, j, k)
+                        scale = MU * float(np.linalg.norm(G)) * speed * area / vol
+                        tol = TOL
+                        if gname == 'wall302':       # face 3, the wall y = 2 cm: the round-off of T through its heat flux
+                            aw = math.sqrt(float(np.dot(faces[2], faces[2])))
+                            xw = 0.25 * sum(face_nodes(X, 3, i, j, k))
+                            d = abs(float(np.dot(C[i - 1, j - 1, k - 1] - xw, faces[2]))) / aw
+                            tol += N_ULP_T * float(np.spacing(T0)) * KCOND * aw / (d * vol) / scale
+                        e = abs(float(rhs[b][c][0]) - phi) / scale
+                        worst[gname] = max(worst.get(gname, 0.0), e)
+                        limit[gname] = min(limit.get(gname, tol), tol)
+                        within[gname] = within.get(gname, True) and e <= tol
+                    c += 1
+    ok = True
+    for gname in sorted(worst):
+        good = within[gname]
+        if gname in wanted:
+            ok = ok and good
+        mark = ('ok  ' if good else 'FAIL') if gname in wanted else '    '
+        bound = '' if limit[gname] == TOL else f' (threshold {limit[gname]:.3e}: 1e-11 and {N_ULP_T} ulp of T_w)'
+        print(f'    {mesh:6s} {run:4s} {gname:10s} largest |energy rhs - tau:grad u| / scale = {worst[gname]:.3e}{bound}'
+              f'  [{mark}]')
+    missing = [g for g in wanted if g not in worst]
+    if missing:
+        print(f'    {mesh} {run}: no cells in the groups {missing}')
+    return ok
+
+
 def limits(log):
     """The run hot: the line of the run that counts the ghost fills with the cut of the extrapolation and with the floor
     of the 302 wall temperature; both must be positive."""
@@ -891,6 +972,9 @@ def main():
         sys.exit(0 if replica(mesh, ns, eu, metric) else 1)
     elif what == 'limits':
         sys.exit(0 if limits(sys.argv[2]) else 1)
+    elif what == 'work':
+        mesh, run, ns, eu, wanted = sys.argv[2:7]
+        sys.exit(0 if work(mesh, run, ns, eu, wanted.split(',')) else 1)
     else:
         sys.exit('unknown request ' + what)
 

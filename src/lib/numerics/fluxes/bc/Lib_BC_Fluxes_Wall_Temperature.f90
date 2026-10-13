@@ -136,6 +136,9 @@ contains
     Flux = 0.0d0 
     Flux(nu:nw) = Stress * Area
     Flux(np) = Area * ( kl + kt ) * dot_product ( Gradient(np,:), Normal )
+    ! A wall that moves: the work of the wall stress on the wall velocity, (tau . n) . w_wall, as a face between cells
+    ! carries (tau . n) . u of its velocity
+    if ( present(w_wall) ) Flux(np) = Flux(np) + Area * dot_product ( Stress, w_wall )
 
     if (model==2) then
       call RANS_Diffusive_Flux ( flux=Flux(nt:nprim), &
