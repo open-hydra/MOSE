@@ -337,12 +337,26 @@ At a wall face (301, 302, and 503–505 when they do not ablate) the gradient
 takes the difference between the cell and the wall value across the face.
 With `stencil` it also takes the differences of the wall values along the
 wall, between the neighbouring wall faces of the same block face and type
-(central, or one-sided where the wall ends), with the metric of the same
-differences of the positions: the vector from the face centre (the mean of its
-four nodes) to the cell centre across the face, the differences of the face
-centres along it. For a linear field whose wall values are its values at the
-face centres the wall gradient is exact: the temperature of a 302 wall that
+(central, or one-sided where the wall ends or goes on in another block face,
+whose faces it does not take: exact there for a linear wall value, first order
+for a curved one), with the metric of the same differences of the positions:
+the vector from the face centre (the mean of its four nodes) to the cell centre
+across the face, the differences of the face centres along it. For a linear
+field whose wall values are its values at the face centres the wall gradient
+is exact: the temperature of a 302 wall that
 varies along the wall, the velocity of a no-slip wall on cells of any shape.
+The wall temperatures of two neighbouring records are differenced as they are
+given: a jump between them enters the derivative along the wall at the faces
+next to it, of the order of the jump over the spacing of the faces, and on
+cells skewed by θ their heat flux through $\tan\theta$.
+The difference across the face is that of a wall of a finite-volume grid
+[8, Eq. (153)]; the differences along the wall and the metric of the same
+positions are MOSE's own. On a 2-D mesh the wall stencil has the structure of
+the boundary diamond of [11] (a value at the midpoint of the boundary edge and
+values along the edge), there at the vertices of the edge and here at the
+neighbouring face centres. A boundary face that keeps only the normal distance,
+as in [13] (Eq. 3.57–3.59) and in OpenFOAM (OpenFOAM-dev, commit dfa6c7e,
+`fvPatch.C`), has the error of `inverse-mean` and `mean` given below.
 With `inverse-mean` and `mean`, and for the quantities whose wall value is not
 known along the wall (the temperature of 301 walls and of the surface models
 of 503–505, the velocity of the stationary walls of a rotating frame), the
