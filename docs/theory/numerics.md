@@ -471,6 +471,14 @@ known along the wall (the temperature of 301 walls and of the surface models
 of 503–505), the derivatives along the wall are zero and the metric is that of
 the wall cell: on a cell skewed by θ the normal gradient is then wrong by
 $(\partial\phi_w/\partial s)\tan\theta$, which refinement does not reduce.
+The turbulence variables take no difference of their wall values along the
+wall, with every option: their wall values are uniform along a smooth wall
+(zero for $\tilde\nu$ of Spalart–Allmaras, for $k$ and for the Reynolds
+stresses), but not those of $\omega$ of the $k$–$\omega$ models and of
+SSG/LRR, $C\mu_l/d^2$ with $d$ the distance of the cell centre from
+the wall, which follow the height of the first cell, nor that of $\tilde\nu$
+on a rough wall, taken from the value of the cell. Their derivative along the
+wall is left out, with the error above on skewed cells.
 
 A 301 or 302 wall of a stationary face of a rotating frame moves in the frame
 with $\mathbf{u}_w = -\boldsymbol{\Omega}\times(\mathbf{x}-\mathbf{x}_o)$

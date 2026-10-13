@@ -47,8 +47,11 @@ contains
     M = Blk % M (Im,Jm,Km) % c
     Mc = M
     ! diffusive-metric = stencil: velocity and turbulence take the metric of the wall face (Wall_Face_Stencils in
-    ! MOSE_Lib_Stencil_Metrics; their wall values do not vary along the wall, but the velocity of a wall that moves,
-    ! below); the wall temperature below is estimated with the metric of the cell, as before
+    ! MOSE_Lib_Stencil_Metrics), with no difference of their wall values along the wall but for the velocity of a wall
+    ! that moves (below): the velocity of a no-slip wall is uniform along it, while the turbulence values that vary
+    ! along it (omega of the k-omega models, from the wall distance of the cell; nu~ on a rough wall) leave out their
+    ! derivative along the wall (docs/theory/numerics.md); the wall temperature below is estimated with the metric of
+    ! the cell, as before
     wst = .false.
     if ( present(rec) ) wst = rec % wstencil
     if ( wst ) M = rec % wM
