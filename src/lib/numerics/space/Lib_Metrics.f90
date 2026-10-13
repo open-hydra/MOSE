@@ -7,6 +7,7 @@ module MOSE_Lib_Metrics
 
   implicit none
   real(R8), public :: delthe = 0d0  ! grid axisymmetric angle
+  real(R8), public :: cos_delthe = 1d0, sin_delthe = 0d0  ! its cosine and sine, set with it (Check_Mesh_Type)
 
   ! Wall faces of Compute_Yn, read by Wall_Face_Distance while the k-d tree is queried: for face n, wall_corner(:,1:4,n)
   ! are its corners in cyclic order and wall_corner(:,0,n) their mean; on an axisymmetric wedge (wall_meridional) the
@@ -42,6 +43,8 @@ contains
   !>    far from the x axis, which is then taken for a wedge. A 2-D block nearer a turn than a translation, or nearer a
   !>    translation than a turn, but not to within ETA of its thickness, stops the run: its nodes are written with too
   !>    few digits to tell its type, or its k planes are neither parallel nor turned about the x axis.
+  !>  - cos_delthe and sin_delthe: its cosine and sine, computed here once for the fluxes and the ghost cells of the
+  !>    type-200 faces, which turn vectors by delthe at every stage.
   subroutine Check_Mesh_Type( domain )
     use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
@@ -148,6 +151,9 @@ contains
         deallocate ( sector )
 
     end select
+
+    cos_delthe = cos ( delthe )
+    sin_delthe = sin ( delthe )
 
   contains
 

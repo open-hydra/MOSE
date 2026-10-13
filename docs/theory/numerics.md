@@ -57,6 +57,8 @@ w_g = v\sin\varphi + w\cos\varphi = -g\,v\sin\delta + w\cos\delta .
 $$
 
 $u$ and the scalars do not change under a turn about $x$, and are copied.
+The ghost cells and the fluxes of these faces take $\cos\delta$ and
+$\sin\delta$ computed once, with $\delta$, when the mesh is read.
 
 ---
 

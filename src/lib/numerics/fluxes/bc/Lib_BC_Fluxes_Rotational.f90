@@ -33,7 +33,7 @@ contains
 
   subroutine BC_Rotational_Periodic_Eul ( Im, Jm, Km, Fm, Blk )
     use MOSE_Lib_Reconstruction, only : reconstruction
-    use MOSE_Lib_Metrics, only : delthe
+    use MOSE_Lib_Metrics, only : cos_delthe, sin_delthe
     use MOSE_Mod_Riemann
     use FLINT_Lib_Thermodynamic, only : f_ss, co_rotot_Rtot
 
@@ -107,21 +107,21 @@ contains
 
       ! Rotation
       if (Fm == 5) then
-        w_rot =  Prim1(nw) * cos(delthe) - Prim1(nv) * sin(delthe) 
-        v_rot =  Prim1(nw) * sin(delthe) + Prim1(nv) * cos(delthe)
+        w_rot =  Prim1(nw) * cos_delthe - Prim1(nv) * sin_delthe 
+        v_rot =  Prim1(nw) * sin_delthe + Prim1(nv) * cos_delthe
         Prim1(nv) = v_rot
         Prim1(nw) = w_rot
-        w_rot =  Prim2(nw) * cos(delthe) - Prim2(nv) * sin(delthe) 
-        v_rot =  Prim2(nw) * sin(delthe) + Prim2(nv) * cos(delthe)
+        w_rot =  Prim2(nw) * cos_delthe - Prim2(nv) * sin_delthe 
+        v_rot =  Prim2(nw) * sin_delthe + Prim2(nv) * cos_delthe
         Prim2(nv) = v_rot
         Prim2(nw) = w_rot
       elseif (Fm == 6) then
-        w_rot =  Prim3(nw) * cos(delthe) + Prim3(nv) * sin(delthe) 
-        v_rot = -Prim3(nw) * sin(delthe) + Prim3(nv) * cos(delthe)
+        w_rot =  Prim3(nw) * cos_delthe + Prim3(nv) * sin_delthe 
+        v_rot = -Prim3(nw) * sin_delthe + Prim3(nv) * cos_delthe
         Prim3(nv) = v_rot
         Prim3(nw) = w_rot
-        w_rot =  Prim4(nw) * cos(delthe) + Prim4(nv) * sin(delthe) 
-        v_rot = -Prim4(nw) * sin(delthe) + Prim4(nv) * cos(delthe)
+        w_rot =  Prim4(nw) * cos_delthe + Prim4(nv) * sin_delthe 
+        v_rot = -Prim4(nw) * sin_delthe + Prim4(nv) * cos_delthe
         Prim4(nv) = v_rot
         Prim4(nw) = w_rot
       end if  
@@ -172,8 +172,8 @@ contains
         ! Flux is in the face-6 frame (θ=delthe). Rotate momentum back to face-5
         ! frame (θ=0) before applying to Ks, so that (v,w) point in the right
         ! Cartesian directions for a cell sitting at θ=0.
-        Flux(nv) = ( F_v * cos(delthe) + F_w * sin(delthe) ) * Area
-        Flux(nw) = (-F_v * sin(delthe) + F_w * cos(delthe) ) * Area
+        Flux(nv) = ( F_v * cos_delthe + F_w * sin_delthe ) * Area
+        Flux(nw) = (-F_v * sin_delthe + F_w * cos_delthe ) * Area
         blk % r(:,Im,Jm,Ks) = blk % r(:,Im,Jm,Ks) - Flux
       end if
     end if
@@ -213,7 +213,7 @@ contains
   !> with type 200 on k (delthe = 0), where the image is the cell itself and the
   !> fluxes of faces 5 and 6 are the same and cancel.
   subroutine BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, Blk, Mf, Sc, Sct, Prt, Prl, soot_enabled )
-    use MOSE_Lib_Metrics, only : delthe
+    use MOSE_Lib_Metrics, only : delthe, cos_delthe, sin_delthe
     use MOSE_Lib_Diffusive, only : Compute_Diffusive_Flux
     use FLINT_Lib_Thermodynamic, only : co_rotot_Rtot
     implicit none
@@ -283,8 +283,8 @@ contains
       ! momentum turned back, as the inviscid flux
       Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) - Flux
       g2 = Flux(nv) ; g3 = Flux(nw)
-      Flux(nv) =  g2 * cos(delthe) + g3 * sin(delthe)
-      Flux(nw) = -g2 * sin(delthe) + g3 * cos(delthe)
+      Flux(nv) =  g2 * cos_delthe + g3 * sin_delthe
+      Flux(nw) = -g2 * sin_delthe + g3 * cos_delthe
       Blk % r(:,Im,Jm,Ks) = Blk % r(:,Im,Jm,Ks) + Flux
     else
       ! Residual update: momentum only (see above)
@@ -315,8 +315,8 @@ contains
         real(R8) :: Rot(nprim)
 
         Rot = Visc
-        Rot(nv) = Visc(nv) * cos(delthe) + guide(Fm,3) * Visc(nw) * sin(delthe)
-        Rot(nw) = Visc(nv) * sin(delthe) * (-guide(Fm,3)) + Visc(nw) * cos(delthe)
+        Rot(nv) = Visc(nv) * cos_delthe + guide(Fm,3) * Visc(nw) * sin_delthe
+        Rot(nw) = Visc(nv) * sin_delthe * (-guide(Fm,3)) + Visc(nw) * cos_delthe
 
       end function Rotated
 
@@ -331,7 +331,7 @@ contains
   !> turned. Zero where the flux is not computed: a planar 2-D mesh, and face 5 of a sector (the record of face 6
   !> computes the face).
   function Rotational_Periodic_Face_Metric ( Im, Jm, Km, Fm, Blk ) result ( M )
-    use MOSE_Lib_Metrics, only : delthe
+    use MOSE_Lib_Metrics, only : delthe, cos_delthe, sin_delthe
     use MOSE_Lib_Diffusive, only : Face_Metric
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
@@ -355,8 +355,8 @@ contains
       Mg = Blk % M(Im,Jm,Ks) % c
       do d = 1, 3
         g2 = Mg(d,2) ; g3 = Mg(d,3)
-        Mg(d,2) = g2 * cos(delthe) + guide(Fm,3) * g3 * sin(delthe)
-        Mg(d,3) = g2 * sin(delthe) * (-guide(Fm,3)) + g3 * cos(delthe)
+        Mg(d,2) = g2 * cos_delthe + guide(Fm,3) * g3 * sin_delthe
+        Mg(d,3) = g2 * sin_delthe * (-guide(Fm,3)) + g3 * cos_delthe
       end do
     else
       Mg = Blk % M(Im,Jm,Kg) % c
