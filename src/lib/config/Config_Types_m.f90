@@ -42,9 +42,10 @@ module MOSE_Config_Types_m
   !> Counters stored with every vtk solution (field data of its .vts files) and read back by a
   !> restart, so that the restarted run goes on as the uninterrupted one would: CFL ramp and
   !> output cadence, output numbering, residual history and probe rows, multigrid level,
-  !> convergence test.
+  !> convergence test; and what a restart reads of the time of its solution, in every format.
   type :: restart_counters_t
     logical   :: found = .false.            ! The restart solution holds the counters
+    logical   :: time_found = .false.       ! The restart solution holds a time (vtk TIME, Tecplot SOLUTIONTIME)
     logical   :: steady = .false.           ! The restart solution is a steady one: negative time (vtk TIME, Tecplot SOLUTIONTIME)
     integer   :: cycle = 0                  ! Iteration count over all grid levels (CYCLE)
     integer   :: iteration = 0              ! Iteration count of the grid level of the solution

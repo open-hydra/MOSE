@@ -13,6 +13,10 @@
 #     and ramp the CFL number over the first 40 iterations, so the restart must
 #     also carry on the iteration count, the output numbering and the
 #     iteration column of residual-history.dat.
+#  3. A restart from a solution that holds no time must stop at setup with a
+#     message, in a time-accurate and in a steady run: the Tecplot solution of
+#     part 1 without SOLUTIONTIME, and the vtk raw solution of part 2 without
+#     the TIME field data of its block file.
 #  Reuses the coarse Sod inputs (test/1D/Sod79); no new mesh/IC data is stored
 #  here.
 #     C : probes at a restart. Two probes on cells of the tube, by index (pA on
@@ -145,7 +149,54 @@ prepare runs/restart
 [[ -f runs/restart/OUTPUT/field.vtm ]] || { echo "Restart (vtk raw): FAIL — no field.vtm from first half"; exit 1; }
 ( cd runs/restart && write_ini_vtk "$HALF" false ); solve runs/restart solve_restart.log "vtk raw, restart"
 
-python3 -B check_restart_vtk.py runs/full/OUTPUT runs/restart/OUTPUT
+python3 -B check_restart_vtk.py runs/full/OUTPUT runs/restart/OUTPUT || exit 1
+
+# --- 3. A restart from a solution that holds no time -----------------------
+status=0
+for fmt in tecplot vtk; do
+  for kind in time-accurate steady; do
+    d=runs/no-time-$fmt-$kind
+    prepare "$d"
+    if [[ $fmt == tecplot ]]; then
+      sed -e 's/, *SOLUTIONTIME *= *[^,]*//' -e 's/, *STRANDID *= *[0-9]*//' field_full.tec > "$d/OUTPUT/field.tec"
+      ( cd "$d" && write_ini 1 false )
+      file=OUTPUT/field.tec
+    else
+      # the vtk raw solution of part 2, with the TIME field data taken out of the XML header of its block
+      # file (the other arrays keep their offsets into the appended data)
+      python3 -B - runs/full/OUTPUT "$d/OUTPUT" <<'EOF' || { echo "  vtk: FAIL — the solution without TIME was not written"; status=1; continue; }
+import re
+import sys
+from pathlib import Path
+src, dst = Path(sys.argv[1]), Path(sys.argv[2])
+vtm = (src / 'field.vtm').read_text()
+(dst / 'field.vtm').write_text(vtm)
+for entry in re.findall(r'file="([^"]+)"', vtm):
+    head, sep, tail = (src / entry).read_bytes().partition(b'<AppendedData')
+    head, n = re.subn(rb'\s*<DataArray[^>]*Name="TIME"[^>]*/>', b'', head)
+    if n != 1:
+        sys.exit(f'{entry}: {n} TIME field data arrays instead of 1')
+    (dst / entry).parent.mkdir(parents=True, exist_ok=True)
+    (dst / entry).write_bytes(head + sep + tail)
+EOF
+      ( cd "$d" && write_ini_vtk 1 false )
+      file=OUTPUT/field.vtm
+    fi
+    if [[ $kind == steady ]]; then sed -i 's/^time-accurate = true$/time-accurate = false/' "$d/input.ini"; fi
+    ( cd "$d" && "$SOLVER" > solve.log 2>&1 ); rc=$?
+    if [[ $rc -ne 0 ]] && command grep -q "ERROR\] Restart from $file: the solution holds no time" "$d/solve.log" \
+       && command grep -q 'STOP: restart from a solution without a time' "$d/solve.log" \
+       && ! command grep -q -E 'NaN|Program received signal' "$d/solve.log"; then
+      echo "  $fmt, $kind: ok — the restart from a solution without a time stops at setup"
+    else
+      echo "  $fmt, $kind: FAIL — the restart from a solution without a time did not stop with the message, exit code $rc (see $d/solve.log)"
+      status=1
+    fi
+  done
+done
+command grep -h 'ERROR\]' runs/no-time-*/solve.log 2>/dev/null | sort -u | sed 's/^/   /'
+[[ $status -eq 0 ]] || { echo "Restart: FAIL — a restart from a solution without a time does not stop"; exit 1; }
+echo "Restart: ok — Tecplot ASCII to its precision, vtk raw bit for bit, and a solution without a time refused"
 status=$?
 
 # --- C: probes at a restart, the file of one of them removed ----------------

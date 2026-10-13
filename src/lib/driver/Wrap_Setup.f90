@@ -84,6 +84,20 @@ contains
     end if
     ! The ranks decide together on an error of the read (Check_IC)
     call Check_IC ( summary = .true. )
+    ! A restart goes on from the time of the solution it reads: the physical time of a time-accurate
+    ! solution, minus the global iteration count of a steady one. A solution that holds no time (a vtk
+    ! file without TIME, a Tecplot ASCII file without SOLUTIONTIME) cannot tell where to go on: stop
+    if ( .not. obj_sim_param%newrun .and. .not. obj_io%restart%time_found ) then
+      if (mpi_is_root) then
+        write(*,'(A)') ' [ERROR] Restart from '//trim(obj_io%nameinit)//': the solution holds no time '// &
+                       '(vtk TIME, Tecplot SOLUTIONTIME), and a restart goes on from the time of its solution.'
+        write(*,'(A)') ' [ERROR]   To start from this solution, use it as the initial condition: '// &
+                       'INPUT/ic.* with newrun = true.'
+      end if
+      ! Every rank has read the solution and found no time: the ranks stop together, once rank 0 has written the
+      ! message (mpi_stop_all). With MPI_ABORT, another rank could stop rank 0 before it writes.
+      call mpi_stop_all ( 'restart from a solution without a time (see above)' )
+    end if
 
     ! Block count and ijk dimensions.  Cheap, and enough to partition on.
     call Setup_Data_Dimensions ( simulation%domain(1), simulation%IOfield(1) )

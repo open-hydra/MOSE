@@ -124,8 +124,11 @@ contains
     character(clen) :: format(2)
     character(llen) :: vtspath
     integer(I4P)    :: cycle
-    real(R8P)       :: counters(size(restart_counter_names))
-    logical         :: found(size(restart_counter_names))
+    integer         :: nc
+    ! The counters stored with a vtk solution, and TIME, asked for by name to know whether the files hold it
+    character(len=len(restart_counter_names)) :: fldnames(size(restart_counter_names)+1)
+    real(R8P)       :: counters(size(restart_counter_names)+1)
+    logical         :: found(size(restart_counter_names)+1)
 
     error = 0
 
@@ -142,12 +145,18 @@ contains
       IOfield%tec%format = trim(format(2))
       error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit), &
                                              zone_mask=zone_mask,dims_only=dims_only)
-      ! Restart: a steady run writes its solutions at minus the global iteration count, a time-accurate one at
-      ! t >= 0, so a negative solution time marks a steady solution, as a negative TIME does in vtk. Its global
-      ! iteration count, |time|, goes where the vtk branch stores it. The time comes with the zone headers: the
-      ! pass with zone_mask, which reads the variable data of some blocks only, keeps what the first pass found
+      ! Restart: does the solution hold a time? The ORION reader gives -huge(1._R8P) when no zone of a Tecplot
+      ! ASCII file holds SOLUTIONTIME, and every valid time lies far above half of it; a zone of a binary file
+      ! always holds its solution time. A steady run writes its solutions at minus the global iteration count, a
+      ! time-accurate one at t >= 0, so a negative solution time marks a steady solution, as a negative TIME does
+      ! in vtk. Its global iteration count, |time|, goes where the vtk branch stores it. The time comes with the
+      ! zone headers: the pass with zone_mask, which reads the variable data of some blocks only, keeps what the
+      ! first pass found
       if ( .not. obj_sim_param%newrun ) then
-        if ( .not. present(zone_mask) ) obj_io%restart%steady = ( IOfield%solutiontime < 0._R8P )
+        if ( .not. present(zone_mask) ) then
+          obj_io%restart%time_found = ( IOfield%solutiontime > -0.5_R8P*huge(1._R8P) )
+          obj_io%restart%steady = obj_io%restart%time_found .and. ( IOfield%solutiontime < 0._R8P )
+        endif
         if ( obj_io%restart%steady ) IOfield%solutiontime = abs(IOfield%solutiontime)
       endif
     case('vtk')
@@ -170,12 +179,17 @@ contains
         ! The solution time of the file, where the Tecplot reader stores it
         IOfield%solutiontime = obj_io%IOtime
       else
-        ! Restart: also the counters stored with the solution, when it holds them all; the last one, the residual
-        ! reference, is not in the solutions written before it was stored
+        ! Restart: also the counters stored with the solution, when it holds them all (the last one, the residual
+        ! reference, is not in the solutions written before it was stored), and whether it holds a time (the
+        ! reader gives TIME = 0 when the files hold none)
+        nc = size(restart_counter_names)
+        fldnames(1:nc) = restart_counter_names
+        fldnames(nc+1) = 'TIME'
         error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4), &
                                                vtspath=trim(vtspath),time=obj_io%IOtime,cycle=cycle, &
-                                               fldnames=restart_counter_names,fldvalues=counters,fldfound=found)
-        obj_io%restart%found  = all(found(1:4))
+                                               fldnames=fldnames,fldvalues=counters,fldfound=found)
+        obj_io%restart%found      = all(found(1:4))
+        obj_io%restart%time_found = found(nc+1)
         ! A steady run writes its solutions at time -1, a time-accurate one at t >= 0
         obj_io%restart%steady = ( obj_io%IOtime < 0.d0 )
         if ( obj_io%restart%found ) then
