@@ -10,7 +10,12 @@
 #  of its own cell, so another choice gives other bits. The same case with
 #  the records of bc.txt sorted and in reverse order, Navier-Stokes with
 #  HLLC+Tramel and a shock leaving the cut, 20 RK3 steps: the two solutions
-#  must be the same bit for bit. Gas: test/common/Air-viscous.
+#  must be the same bit for bit. The ghost cells of a connection face are
+#  the first two cells of the block across it: with block 1 one cell thick
+#  across the cut (thin), or two cells thick with two multigrid levels, one
+#  at level 2 (thinmg), the run must stop at set-up with a non-zero exit code
+#  and a message that names the record, the block across and its cells.
+#  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
 
@@ -86,10 +91,32 @@ for f in runs/sorted/vtk/*.vts; do
   fi
 done
 [[ $n -eq 2 ]] || { echo "  [FAIL] $n block files, 2 expected"; fail=1; }
+[[ $fail -eq 0 ]] && echo "  [ok  ] the same solution bit for bit ($n block files)"
+
+# thin <case> <level>: block 1 has one cell across the cut (at the multigrid level), fewer than the two ghost cells of
+# a connection read from it; the run must stop at set-up with a non-zero exit code and the message that names it
+thin() {
+  python3 -B make_case.py case "$1" > /dev/null || exit 1
+  rm -rf OUTPUT
+  mkdir -p OUTPUT/vtk
+  "$LOCAL" > "runs/$1.log" 2>&1
+  local rc=$?
+  local want="block 1 across it has 1 cell across its face 4$2, fewer than the 2 a connection needs"
+  if [[ $rc -ne 0 ]] && grep -a -qF "$want" "runs/$1.log"; then
+    echo "  [ok  ] $1: stopped at set-up, exit code $rc, \"$want\""
+  else
+    echo "  [FAIL] $1: exit code $rc, the run was not stopped with the message (see runs/$1.log)"
+    fail=1
+  fi
+}
+echo "-- block 1 one cell thick across the cut, on the mesh and at multigrid level 2 --"
+thin thin ''
+printf '%s\n' '' '[MOSE-Multigrid]' 'levels = 2' 'level1-iter = 20' 'level2-iter = 10' >> input.ini
+thin thinmg ' at multigrid level 2'
+
 if [[ $fail -ne 0 ]]; then
   echo "ConnectionOrder: FAILED"
   exit 1
 fi
-echo "  [ok  ] the same solution bit for bit ($n block files)"
 echo "ConnectionOrder: all checks passed"
 exit 0

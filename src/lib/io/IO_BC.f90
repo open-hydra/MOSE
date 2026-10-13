@@ -43,7 +43,7 @@ contains
       !! Phase 2: Read
       call Read_BCfile ( domain(m) % bc, domain(m) % n_bf, m )
 
-      call Pair_Connections ( domain(m) )
+      call Pair_Connections ( domain(m), m )
 
       if (m == 1) call Setup_Q2D_BC_Data ( domain(m) )
 
@@ -506,18 +506,30 @@ contains
   !> The search goes through a map, per block face, from the two indices of the
   !> cell along the face to its connection record: one pass over the records,
   !> in any order.
-  subroutine Pair_Connections ( domain )
+  !> The gc ghost cells of a connection face are the first gc cells of the
+  !> block across it (Ghost_Connection), and their metrics come from its first
+  !> gc node planes past the face (BC_Connect_Metrics). That block must have at
+  !> least gc cells across its face, at every multigrid level (level): with
+  !> fewer, a ghost cell would be a ghost cell of that block, which another
+  !> record fills at the same time, and a node plane would lie outside the
+  !> block. A record whose block across has fewer cells is an error; the
+  !> directions along the face, and those of blocks with no connection, need
+  !> nothing.
+  subroutine Pair_Connections ( domain, level )
     use MOSE_Advanced_Types_m
     use MOSE_Config_Types_m, only: obj_io_bc
+    use MOSE_Global_m,       only: gc
     use IR_Precision, only: str
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
+    integer, intent(in)                   :: level
     ! Local
     type :: face_records_type
       integer, allocatable :: r(:,:)
     end type face_records_type
     type(face_records_type), allocatable :: rec(:,:)
-    integer :: b, f, i, p, nt(2), t(2)
+    integer :: b, f, i, p, nt(2), t(2), n
+    character(len=32) :: at_level
 
     allocate ( rec(domain % nb, 6) )
 
@@ -562,6 +574,16 @@ contains
            domain % bc(p) % js /= domain % bc(i) % j .or. domain % bc(p) % ks /= domain % bc(i) % k ) then
         obj_io_bc % error_message = '[ERROR] Connection records '//trim(str(.true.,i))//' and '//trim(str(.true.,p))// &
                                     ' do not point at each other'
+        exit
+      end if
+      n = domain % blk(b) % dim((f + 1) / 2)
+      if ( n < gc ) then
+        at_level = ''
+        if ( level > 1 ) at_level = ' at multigrid level '//trim(str(.true.,level))
+        obj_io_bc % error_message = '[ERROR] Connection record '//trim(str(.true.,i))//' (block '// &
+          trim(str(.true.,domain % bc(i) % b))//', face '//trim(str(.true.,domain % bc(i) % f))//'): block '// &
+          trim(str(.true.,b))//' across it has '//trim(str(.true.,n))//' cell across its face '//trim(str(.true.,f))// &
+          trim(at_level)//', fewer than the '//trim(str(.true.,gc))//' a connection needs'
         exit
       end if
       domain % bc(i) % partner = p
