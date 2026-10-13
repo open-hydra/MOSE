@@ -1783,62 +1783,62 @@ contains
   end subroutine BC_Extrapolate_Metrics
 
 
-  subroutine BC_Symmetry_Metrics( Im, Jm, Km, Fm, blk, Mg, dlg, volg )
+  !> Layer g of the ghost cells of a symmetry face (300): a copy of the cell g - 1 behind the face, in M, dl and vol of
+  !> the block and in the copies of the record, Mg(g), dlg(g), volg(g). In a direction with fewer cells than g that cell
+  !> is a ghost cell of the opposite face: Setup_Metrics fills the layers one at a time, every face of a layer before
+  !> the next.
+  subroutine BC_Symmetry_Metrics( Im, Jm, Km, Fm, blk, Mg, dlg, volg, g )
     implicit none
-    integer, intent(in) :: Im, Jm, Km, Fm
-    type(MOSE_block_type), intent(inout)   :: blk
-    type(MOSE_tensor_3D_type), intent(out) :: Mg(2)
-    type(MOSE_vector_3D_type), intent(out) :: dlg(2)
-    real(R8), intent(out)                  :: volg(2)
-    ! Local
-    integer :: g
+    integer, intent(in) :: Im, Jm, Km, Fm, g
+    type(MOSE_block_type), intent(inout)     :: blk
+    type(MOSE_tensor_3D_type), intent(inout) :: Mg(2)
+    type(MOSE_vector_3D_type), intent(inout) :: dlg(2)
+    real(R8), intent(inout)                  :: volg(2)
 
-    do g = 1, gc
-      select case (Fm)
-        case(1)
-          blk % M(Im-g,Jm,Km)   = blk % M(Im+g-1,Jm,Km)
-          blk % dl(Im-g,Jm,Km)  = blk % dl(Im+g-1,Jm,Km)
-          blk % vol(Im-g,Jm,Km) = blk % vol(Im+g-1,Jm,Km)
-          Mg(g)   = blk % M(Im-g,Jm,Km)
-          dlg(g)  = blk % dl(Im-g,Jm,Km)
-          volg(g) = blk % vol(Im-g,Jm,Km)
-        case(2)
-          blk % M(Im+g,Jm,Km)   = blk % M(Im-g+1,Jm,Km)
-          blk % dl(Im+g,Jm,Km)  = blk % dl(Im-g+1,Jm,Km)
-          blk % vol(Im+g,Jm,Km) = blk % vol(Im-g+1,Jm,Km)
-          Mg(g)   = blk % M(Im+g,Jm,Km)
-          dlg(g)  = blk % dl(Im+g,Jm,Km)
-          volg(g) = blk % vol(Im+g,Jm,Km)
-        case(3)
-          blk % M(Im,Jm-g,Km)   = blk % M(Im,Jm+g-1,Km)
-          blk % dl(Im,Jm-g,Km)  = blk % dl(Im,Jm+g-1,Km)
-          blk % vol(Im,Jm-g,Km) = blk % vol(Im,Jm+g-1,Km)
-          Mg(g)   = blk % M(Im,Jm-g,Km)
-          dlg(g)  = blk % dl(Im,Jm-g,Km)
-          volg(g) = blk % vol(Im,Jm-g,Km)
-        case(4)
-          blk % M(Im,Jm+g,Km)   = blk % M(Im,Jm-g+1,Km)
-          blk % dl(Im,Jm+g,Km)  = blk % dl(Im,Jm-g+1,Km)
-          blk % vol(Im,Jm+g,Km) = blk % vol(Im,Jm-g+1,Km)
-          Mg(g)   = blk % M(Im,Jm+g,Km)
-          dlg(g)  = blk % dl(Im,Jm+g,Km)
-          volg(g) = blk % vol(Im,Jm+g,Km)
-        case(5)
-          blk % M(Im,Jm,Km-g)   = blk % M(Im,Jm,Km+g-1)
-          blk % dl(Im,Jm,Km-g)  = blk % dl(Im,Jm,Km+g-1)
-          blk % vol(Im,Jm,Km-g) = blk % vol(Im,Jm,Km+g-1)
-          Mg(g)   = blk % M(Im,Jm,Km-g)
-          dlg(g)  = blk % dl(Im,Jm,Km-g)
-          volg(g) = blk % vol(Im,Jm,Km-g)
-        case(6)
-          blk % M(Im,Jm,Km+g)   = blk % M(Im,Jm,Km-g+1)
-          blk % dl(Im,Jm,Km+g)  = blk % dl(Im,Jm,Km-g+1)
-          blk % vol(Im,Jm,Km+g) = blk % vol(Im,Jm,Km-g+1)
-          Mg(g)   = blk % M(Im,Jm,Km+g)
-          dlg(g)  = blk % dl(Im,Jm,Km+g)
-          volg(g) = blk % vol(Im,Jm,Km+g)
-      end select
-    enddo
+    select case (Fm)
+      case(1)
+        blk % M(Im-g,Jm,Km)   = blk % M(Im+g-1,Jm,Km)
+        blk % dl(Im-g,Jm,Km)  = blk % dl(Im+g-1,Jm,Km)
+        blk % vol(Im-g,Jm,Km) = blk % vol(Im+g-1,Jm,Km)
+        Mg(g)   = blk % M(Im-g,Jm,Km)
+        dlg(g)  = blk % dl(Im-g,Jm,Km)
+        volg(g) = blk % vol(Im-g,Jm,Km)
+      case(2)
+        blk % M(Im+g,Jm,Km)   = blk % M(Im-g+1,Jm,Km)
+        blk % dl(Im+g,Jm,Km)  = blk % dl(Im-g+1,Jm,Km)
+        blk % vol(Im+g,Jm,Km) = blk % vol(Im-g+1,Jm,Km)
+        Mg(g)   = blk % M(Im+g,Jm,Km)
+        dlg(g)  = blk % dl(Im+g,Jm,Km)
+        volg(g) = blk % vol(Im+g,Jm,Km)
+      case(3)
+        blk % M(Im,Jm-g,Km)   = blk % M(Im,Jm+g-1,Km)
+        blk % dl(Im,Jm-g,Km)  = blk % dl(Im,Jm+g-1,Km)
+        blk % vol(Im,Jm-g,Km) = blk % vol(Im,Jm+g-1,Km)
+        Mg(g)   = blk % M(Im,Jm-g,Km)
+        dlg(g)  = blk % dl(Im,Jm-g,Km)
+        volg(g) = blk % vol(Im,Jm-g,Km)
+      case(4)
+        blk % M(Im,Jm+g,Km)   = blk % M(Im,Jm-g+1,Km)
+        blk % dl(Im,Jm+g,Km)  = blk % dl(Im,Jm-g+1,Km)
+        blk % vol(Im,Jm+g,Km) = blk % vol(Im,Jm-g+1,Km)
+        Mg(g)   = blk % M(Im,Jm+g,Km)
+        dlg(g)  = blk % dl(Im,Jm+g,Km)
+        volg(g) = blk % vol(Im,Jm+g,Km)
+      case(5)
+        blk % M(Im,Jm,Km-g)   = blk % M(Im,Jm,Km+g-1)
+        blk % dl(Im,Jm,Km-g)  = blk % dl(Im,Jm,Km+g-1)
+        blk % vol(Im,Jm,Km-g) = blk % vol(Im,Jm,Km+g-1)
+        Mg(g)   = blk % M(Im,Jm,Km-g)
+        dlg(g)  = blk % dl(Im,Jm,Km-g)
+        volg(g) = blk % vol(Im,Jm,Km-g)
+      case(6)
+        blk % M(Im,Jm,Km+g)   = blk % M(Im,Jm,Km-g+1)
+        blk % dl(Im,Jm,Km+g)  = blk % dl(Im,Jm,Km-g+1)
+        blk % vol(Im,Jm,Km+g) = blk % vol(Im,Jm,Km-g+1)
+        Mg(g)   = blk % M(Im,Jm,Km+g)
+        dlg(g)  = blk % dl(Im,Jm,Km+g)
+        volg(g) = blk % vol(Im,Jm,Km+g)
+    end select
 
   end subroutine BC_Symmetry_Metrics
 
