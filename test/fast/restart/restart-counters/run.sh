@@ -36,6 +36,10 @@
 #              last output is the sum of their time steps, in (0, 0.1); from
 #              vtk raw and from Tecplot ASCII (transient-tecplot), where the
 #              steady solution is the one with a negative SOLUTIONTIME.
+#   time-only  a steady restart from a vtk ascii solution of 4 iterations that
+#              holds TIME only (CYCLE and the MOSE_* field data removed) goes
+#              on from the iteration count |TIME|: the restart writes the row
+#              of iteration 5 of residual-history.dat.
 #  and
 #   probes     time-accurate, a solution every 10 iterations and three probes:
 #              p1 every 0.01 s of physical time, p2 every 4 iterations, p3
@@ -125,12 +129,13 @@ write_ini() {
     case $case in
       steady)    printf '%s\n' 'cfl = 0.5' 'cfl-rise-threshold = 30' 'time-accurate = false' ;;
       dtime|probes|torque) printf '%s\n' 'cfl = 0.9' 'time-accurate = true' ;;
-      multigrid|multigrid-tecplot) printf '%s\n' 'cfl = 0.5' 'time-accurate = false' ;;
+      multigrid|multigrid-tecplot|time-only) printf '%s\n' 'cfl = 0.5' 'time-accurate = false' ;;
       transient|transient-tecplot) if [[ $newrun == true ]]; then printf '%s\n' 'cfl = 0.5' 'time-accurate = false'
                  else printf '%s\n' 'cfl = 0.9' 'time-accurate = true'; fi ;;
     esac
     local fmt='vtk raw'
     [[ $case == multigrid-tecplot || $case == transient-tecplot ]] && fmt='tecplot ascii'
+    [[ $case == time-only ]] && fmt='vtk ascii'
     printf '\n%s\n' '[MOSE-IO]' "sol-format = $fmt" 'sol-overwrite = false' 'shell-diter = 1000000000' \
                      'ini-diter = 1000000000'
     case $case in
@@ -241,6 +246,29 @@ sys.exit(0 if ok else 1)
 EOF
 done
 
+# time-only: 4 steady iterations in vtk ascii, the field data of the solution cut down to TIME (minus the iteration count),
+# then a steady restart of one iteration, which must go on from |TIME| = 4: its row of residual-history.dat is iteration 5
+prepare runs/time-only/split
+write_ini runs/time-only/split time-only 4 true;  solve runs/time-only/split first
+python3 -B - runs/time-only/split/OUTPUT/field.vtm <<'EOF' || status=1
+import re
+import sys
+from pathlib import Path
+vtm = Path(sys.argv[1])
+for entry in re.findall(r'file="([^"]+)"', vtm.read_text()):
+    f = vtm.parent / entry
+    f.write_text(re.sub(r'\s*<DataArray[^>]*Name="(CYCLE|MOSE_[A-Z_]+)"[^>]*>.*?</DataArray>', '', f.read_text(), flags=re.S))
+EOF
+write_ini runs/time-only/split time-only 1 false;  solve runs/time-only/split restart
+python3 -B - runs/time-only/split/OUTPUT/residual-history.dat <<'EOF' || status=1
+import sys
+its = [int(l.split()[0]) for l in open(sys.argv[1]) if l.strip()]
+ok = its[-1] == 5
+print('  time-only: the restart from a solution with TIME only writes the row of iteration %d (%s)'
+      % (its[-1], 'ok' if ok else 'expected 5, |TIME| = 4 plus one'))
+sys.exit(0 if ok else 1)
+EOF
+
 # probes: 25 iterations, then the restart from the solution of iteration 20 (the final solution of the first
 # part removed, as after a run that stopped before writing it); residual-history.dat and the probe files
 # must be those of the run in one go
@@ -331,5 +359,5 @@ EOF
 if [[ $status -ne 0 ]]; then
   fail "a restart does not carry on the counters"
 fi
-echo "RestartCounters: ok — steady, dtime, multigrid, probes and rotating-frame (torque.dat) restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline, and a transient from a steady solution starts at t = 0"
+echo "RestartCounters: ok — steady, dtime, multigrid, probes and rotating-frame (torque.dat) restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline, a transient from a steady solution starts at t = 0 and a steady restart from a solution with TIME only goes on from |TIME|"
 exit 0

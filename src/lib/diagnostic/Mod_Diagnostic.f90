@@ -145,8 +145,10 @@ contains
         enddo
         localpath_vtk = trim(path)//'/vtk'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
+        ! The time is the solution time of the Tecplot output: minus the global iteration count in a steady run
         E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=vtknames,time=domain%time)
+                                                             vtmpath=trim(path)//trim(file),varnames=vtknames, &
+                                                             time=IOfield%solutiontime)
         do b = 1, size(IOfield%block)
           deallocate(IOfield%block(b)%vars)
           allocate(IOfield%block(b)%vars(1:obj_io%Onvar,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk))

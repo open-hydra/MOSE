@@ -194,7 +194,8 @@ contains
                                                fldnames=fldnames,fldvalues=counters,fldfound=found)
         obj_io%restart%found      = all(found(1:4))
         obj_io%restart%time_found = found(nc+1)
-        ! A steady run writes its solutions at time -1, a time-accurate one at t >= 0
+        ! A steady run writes its solutions at time minus the global iteration count (before, -1), a
+        ! time-accurate one at t >= 0
         obj_io%restart%steady = ( obj_io%IOtime < 0.d0 )
         if ( obj_io%restart%found ) then
           obj_io%restart%cycle            = cycle
@@ -206,9 +207,14 @@ contains
           obj_io%restart%res_reference    = counters(5)
         endif
         ! The solution time where the Tecplot reader stores it, with its convention for a steady
-        ! solution: the iteration count (0 when the file holds no counters, as before)
+        ! solution: the global iteration count, CYCLE when the file holds it (the reader gives 0
+        ! otherwise), else |TIME|
         if ( obj_io%restart%steady ) then
-          IOfield%solutiontime = real(obj_io%restart%cycle, R8P)
+          if ( cycle > 0 ) then
+            IOfield%solutiontime = real(cycle, R8P)
+          else
+            IOfield%solutiontime = abs(obj_io%IOtime)
+          endif
         else
           IOfield%solutiontime = obj_io%IOtime
         endif
@@ -545,9 +551,10 @@ contains
         if ( name(1:1) == '/' ) name = name(2:)
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
-        ! The counters a restart needs to go on as the uninterrupted run (Read_vtk_tec reads them)
+        ! The counters a restart needs to go on as the uninterrupted run (Read_vtk_tec reads them). The time is
+        ! the solution time of the Tecplot outputs: minus the global iteration count in a steady run
         E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(name), &
-                                               vtmpath=trim(path)//trim(name),varnames=vtknames,time=domain%time, &
+                                               vtmpath=trim(path)//trim(name),varnames=vtknames,time=IOfield%solutiontime, &
                                                cycle=int(obj_sim_param%iter_general,I4P), &
                                                fldnames=restart_counter_names, &
                                                fldvalues=[real(domain%iter,R8P), real(obj_io%output_number,R8P), &

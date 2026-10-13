@@ -105,7 +105,7 @@ every rank stops, also when one rank alone holds the value.
 
 ## Restart
 
-When resuming from a previous run (`newrun = false` in `input.ini`), MOSE reads the initial condition from the latest solution file in `OUTPUT/` instead of from `INPUT/`: `OUTPUT/field.*`, written at the end of a run, or else the highest-numbered `OUTPUT/field<N>.*` (`sol-overwrite = false`). The file is read through ORION, in the `sol-format` format. The flow field is restored, with the physical time of a time-accurate run and the global iteration count of a steady run.
+When resuming from a previous run (`newrun = false` in `input.ini`), MOSE reads the initial condition from the latest solution file in `OUTPUT/` instead of from `INPUT/`: `OUTPUT/field.*`, written at the end of a run, or else the highest-numbered `OUTPUT/field<N>.*` (`sol-overwrite = false`). The file is read through ORION, in the `sol-format` format. The flow field is restored, with the physical time of a time-accurate run and the global iteration count of a steady run: from a vtk solution, `CYCLE`, or `|TIME|` when the file holds no `CYCLE`; from a Tecplot solution, the magnitude of `SOLUTIONTIME`.
 
 A steady run writes its Tecplot solutions at a negative `SOLUTIONTIME`, minus the global iteration count, in zones without `STRANDID` (static zones), and a time-accurate run at its physical time, with the zone of block *b* in strand *b* (`STRANDID` = *b*), so that Tecplot follows each block through the solutions of the run. A restart from Tecplot reads a negative `SOLUTIONTIME` as a steady solution, whose global iteration count is its magnitude; in a `.szplt` file it is the solution time of the zones (the data set auxiliary data `Time` holds the magnitude only). Tecplot solutions written by earlier versions of MOSE hold the count of a steady run as a positive `SOLUTIONTIME`, with `STRANDID = 0`: a steady restart goes on from them as before, but a time-accurate restart takes them for a solution at time t = count. To start a transient from such a solution, use it as the initial condition (`INPUT/ic.tec`, `newrun = true`), which starts at t = 0.
 
@@ -119,7 +119,7 @@ A vtk raw solution stores every value with all its bits, and the field solution 
 
 | Field data | Content |
 |------------|---------|
-| `TIME` | Physical time; −1 in a steady run |
+| `TIME` | Physical time; in a steady run minus the global iteration count (`CYCLE`), as in the wall and diagnostic outputs |
 | `CYCLE` | Global iteration count, over all grid levels: first column of `residual-history.dat`, probe rows with `diter` |
 | `MOSE_ITERATION` | Iteration count of the grid level of the solution: CFL ramp (`cfl-rise-threshold`), `sol-diter`, `res-diter` |
 | `MOSE_OUTPUT_NUMBER` | Number of the last numbered solution (`sol-overwrite = false`) |
@@ -131,7 +131,7 @@ A restart from such a solution goes on as the uninterrupted run would: within th
 
 Why the run is the same: an iteration of MOSE computes the next state from the primitive variables of every cell, the physical time, the counters of the table above and the time counter of each probe. Everything else it uses (ghost cells, shock sensor, reference velocity of the preconditioning (but see its smoothing below), stiffness of the turbulence sources, time steps, fluxes and residuals) is computed again from these at every stage or step, and the boundary data from the input and the time. A vtk raw solution holds the primitive variables with all their bits (64-bit values written and read as they are), the time and the counters; the restart sets the time counter of each probe from the time and drops the rows of `residual-history.dat` and of the probe files written after the solution (below). The restarted run therefore starts from the state of the uninterrupted run and, with the same executable and the same numbers of MPI ranks and OpenMP threads, repeats the same operations and writes the same bits. The limits below are the cases in which part of that state is not in the solution, or in which the uninterrupted run writes something that the solution does not record. The tests `Restart`, `Restart`/`RestartCounters` and `MPIRestart` check it on steady, time-accurate and multigrid runs, with probes, on one and two ranks.
 
-The counters are taken only from a solution written by a run of the same kind, steady or time-accurate (a steady run writes its solutions at `TIME` = −1). A time-accurate restart from a steady solution starts a new transient at t = 0, with the counters of a new run.
+The counters are taken only from a solution written by a run of the same kind, steady or time-accurate (a steady run writes its solutions at a negative `TIME`, minus the global iteration count; the files written before at `TIME` = −1 are steady too). A time-accurate restart from a steady solution starts a new transient at t = 0, with the counters of a new run.
 
 Time-based probe rows (`dtime`) fall on the multiples of `dtime`. A restart that goes on in time writes next the row of the first multiple its time has not reached, whatever the format of the solution; a transient started from a steady solution starts again from the first one.
 

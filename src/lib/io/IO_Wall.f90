@@ -147,8 +147,9 @@ contains
         if ( name(1:1) == '/' ) name = name(2:)
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
+        ! The time is the solution time of the Tecplot output: minus the global iteration count in a steady run
         E_IO = vtk_write_structured_multiblock(orion=IOwall,vtspath=trim(localpath_vtk)//trim(name), &
-                                               vtmpath=trim(path)//trim(name),varnames=vtknames,time=domain%time)
+                                               vtmpath=trim(path)//trim(name),varnames=vtknames,time=IOwall%solutiontime)
       case('tecplot')
         IOwall%tec%format = trim(format(2))
         E_IO = tec_write_structured_multiblock(orion=IOwall,varnames=obj_io%Owallnames,filename=trim(path)//trim(file)//trim(IOwall%tec%extension))
