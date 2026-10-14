@@ -13,6 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   vector between the cell centres; or `mean`, the mean of the two metrics, as before.
 - Probes can record `mi_tilde`, the first turbulence variable, which the solution files name `rhoNuTilde`
   (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model).
+- Builds with `USE_MPI=ON` register a `needs-mpi` test tier (`ctest -L needs-mpi`). Each of its tests writes its own small
+  multi-block case, runs the solver through the MPI launcher that CMake finds (`MPIEXEC_EXECUTABLE`, at most four ranks) and
+  compares output files byte by byte. The CI build has no MPI and does not run this tier.
 
 ### Changed
 
@@ -63,6 +66,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   that `res-threshold` reads says nothing about the convergence of a transient: a time-accurate run started from a steady state
   stopped after one step. A time-accurate case that ended on `res-threshold`, with the key or with its default, now runs to
   `time-threshold` or `iter-threshold`.
+- A face between blocks (`101`, `201`) whose block across has fewer than two cells across that face, at any grid level of a
+  multigrid sequence, stops the run at set-up with a message that names the record, its block and face, the block across and
+  the level. The second ghost cell of such a face is a ghost cell of the block across, which another record fills in the same
+  loop: a release build read past its node array and ran on with no message, and a build with bounds checking stopped with an
+  index error.
+- The two records of a face between blocks (`101`, `201`) must point at each other: a record that points at a cell and face
+  with no connection record, at its own cell and face, or at a record that does not point back at it stops the run at set-up
+  with a message. Such records were accepted, and each side computed the face with its own ghost cells.
 
 ### Removed
 
@@ -148,3 +159,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The QCR2000 stress takes the laminar and the eddy viscosity in the order in which the solver passes them: the quadratic
   correction acted on the laminar stress, and the eddy-viscosity stress went in uncorrected. `turbulence` does not accept
   QCR2000 today, as the guide now says, so no run changes.
+- The fluxes of the boundary faces no longer depend on the order of the records in `bc.txt`, and each MPI rank walks only the
+  records of its own blocks. The boundary fluxes were computed in one worksharing loop per range of records, in file order, on
+  every rank: the face contributions of a corner cell were summed in the order of the file, and with the records out of order
+  and more than one thread two threads could update the same corner cell inside one loop, a data race whose result is
+  unspecified; every rank also read every boundary record of the mesh at every stage. The records of the local blocks are now
+  grouped by block and face, keeping the file order within a face, with one loop per face of a block. A `bc.txt` sorted by
+  block and face, as the guide lists the records, gives the same solution bit for bit; any other order gives the solution of
+  the sorted file. The wall output still needs the records in the order of the guide.
+- A face between two blocks (block cut `101`, periodic connection `201`) is computed once, and its flux is given with opposite
+  signs to the cells on its two sides. Each block computed the face for its own cell with its own inputs, the shock sensor of
+  its own cell and, with HLLC-PC, a reference velocity of zero in the ghost cell. The two shares then differed: mass, momentum
+  and energy were not conserved at the face (with HLLC+Tramel the total mass of a periodic shock tube in two blocks drifted by
+  4.3e-3 of its value in 40 steps), and a mesh split into blocks did not give the solution of the unsplit mesh (up to 1.8e-1
+  apart). The record that computes the flux is that of the cell on the low-index side of the face; between faces of the same
+  parity (index directions permuted across the cut), the record with the smaller (block, face, k, j, i), so that the result
+  does not depend on the order of the records. Between MPI ranks the share of the other cell travels in one more message per
+  stage. With `preconditioning-Ur-smooth` > 0 the smoothing next to such a face now sees the cell across it, where it saw a
+  zero. Results change where a shock sensor or the preconditioning acts at a face between blocks, and at round-off where the
+  two blocks store the nodes of the common face with different digits or a periodic connection translates them.
+- Every MPI exchange uses one tag, within 32767, the bound that the MPI standard guarantees on every library. The tags were the
+  rank of the sender plus an offset per exchange, up to 30000 plus the rank for the residual smoothing, and the output gathers
+  used the block number: beyond 2768 ranks, or 31767 blocks, a library that offers only the least bound may reject such tags as
+  invalid, and an MPI error stops the run. Each receive names its source, so the rank in the tag told nothing more. Results do
+  not change.
+- In a planar case with one cell in k and symmetry (`300`) on all its k faces, round-off in w no longer grows until the run
+  stops. The two mirror planes one cell apart give w the mode dw/dt = −2aw/Δz (a the speed of sound), which leaves the real
+  stability interval of Heun when 2aΔt/Δz exceeds 2, and that of RK3 when it exceeds 2.51, as on a layer thin against the
+  in-plane cells. Between such faces, when they are planes normal to z, the z momentum is no longer integrated and w is set
+  to zero at set-up, with a warning. A layer whose k faces are not normal to z (planes inclined to z) keeps w, as the gas
+  moves along them, across the layer: it is integrated as before, with a warning, and on a thin layer the mode can
+  still stop the run. Null (`0`) and periodic (`200`) k faces and axisymmetric wedges are unchanged.
+- On the 2-D axisymmetric wedge (one cell in k, type `200` on the k faces) the two k faces carry their viscous stress. Only
+  their inviscid flux was computed, so the radial momentum lacked −τθθ/r, with τθθ = 2μu_r/r + λ∇·u, which near the axis is as
+  large as the radial stress terms it balances, and with swirl the faces also lacked τrθ. On Homann's stagnation-point flow the
+  radial viscous force was off by 14.45 and 28.67 times the largest exact force on 32×32 and 64×64 cells; it now converges with
+  second order away from the axis. Results change for every viscous run on a wedge; planar meshes with type `200` on k are
+  unchanged.
+- On the 2-D axisymmetric wedge the local time step includes the stiffness that the stress of the wedge faces adds next to the
+  axis, for either sign of the wedge angle. That stress damps the radial momentum of the first rows of cells off the axis,
+  about (16/3)ν/Δr² in the first row of square cells, beyond the viscous limit of the step: at the vnn the rule declares
+  stable (0.62 with RK3, 1/2 with Heun) a diffusion-dominated 1° wedge broke down in the first row. The rule adds s_h, the
+  increase of the largest row sum of the viscous operator that the stress brings; nothing changes off the wedge. The local
+  step is smaller next to the axis: in the wedge cases of the tests by up to 20.4 % and 25.5 % of the largest step, on 32×32
+  and 64×64 cells.
