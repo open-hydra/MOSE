@@ -15,7 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model).
 - Builds with `USE_MPI=ON` register a `needs-mpi` test tier (`ctest -L needs-mpi`). Each of its tests writes its own small
   multi-block case, runs the solver through the MPI launcher that CMake finds (`MPIEXEC_EXECUTABLE`, at most four ranks) and
-  compares output files byte by byte. The CI build has no MPI and does not run this tier.
+  compares output files byte by byte. The CI runs this tier in a second job, `test-mpi`, which builds MOSE with gfortran,
+  the Open MPI of Ubuntu and `USE_MPI=ON`.
 - At start-up the root process reports how far the wall distance can be from exact on twisted 3-D wall faces: the largest
   bound, min(|T|/16, |T_n|/2), over the distance of the cell next to the face, with that cell (T is the twist of the corners
   of the face, T_n its part along the normal of the face). It is a warning above 1 %. 2-D and axisymmetric meshes have plane
@@ -275,3 +276,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the face, takes the choked state, normal Mach 1. Past a pressure ratio (p0/p = 6.12 for a cell at rest at the reservoir
   temperature, normal inflow) the subsonic equations gave such a face: at p0 = 36 p normal Mach 1.85 and a mass flux of
   13.9 ρa, below the 20.8 ρa of the choked face. Results change for inlets at high pressure ratios, `401` and `402` included.
+- With `sol-format = vtk` the wall output sets the block sizes of its files, which it never set: depending on what they held, a
+  run with a viscous wall could stop in the wall output or write wall files of no extent and one point. Each vtk wall file now
+  has the extent and the points of its face. Tecplot wall files do not change.
+- With more than one OpenMP thread per MPI rank, MPI is called only from the thread that initialised it, as
+  `MPI_THREAD_FUNNELED`, the thread level MOSE requests, requires. Inside the parallel region of the Runge–Kutta stages the halo
+  exchange and the exchange of the smoothed residuals were wrapped in `single` constructs, which any thread of the team may
+  execute: with more than one thread per rank, MPI calls could come from threads other than the primary one. They are now
+  `master` constructs, which the primary thread executes, each followed by the barrier that the `single` construct implied.
+  Results do not change.
+- MOSE builds and runs with gfortran 10 or later and an MPI library whose Fortran interface gives no explicit interface for the
+  routines with choice buffers, such as Intel MPI 2021.12 with gfortran 13. The build stopped with errors in `Mod_MPI.f90` (the
+  same routine called with buffers of different types and ranks), and a build forced through them crashed in
+  `MPI_Reduce`: MOSE compiles with `-fno-underscoring`, under which the special addresses that the `mpi` module of the library
+  declares in COMMON blocks (`MPI_IN_PLACE` among them) are not those of the library. With GNU 10 or later and `USE_MPI`,
+  `Mod_MPI.f90` is compiled with `-fallow-argument-mismatch`, which turns those errors into warnings, and the three reductions
+  that used `MPI_IN_PLACE` take a separate send buffer, on every compiler; the values they return are the same.
+- With `chemistry = equilibrium` an MPI run on more than one rank no longer passes to the equilibrium the blocks that the rank
+  does not hold: the explicit step computed the equilibrium on every block of the mesh, also on the blocks of the other ranks,
+  whose state is not allocated on the rank after the partition. It now skips them, as the finite-rate chemistry already did, and
+  on several ranks such a run gives the bits of one rank. Runs on one rank, and runs without equilibrium chemistry, do not
+  change.
+- In an index direction with one cell (the k direction of a 2-D case, the j direction of a 1-D case) with symmetry (`300`) on its
+  faces, the metrics of the second layer of ghost cells no longer depend on the order of the OpenMP threads: the set-up filled
+  every ghost layer in one loop, and the second layer of one face read the first layer of the other while another thread wrote
+  it. Each layer of the symmetry faces now has a loop of its own, after the previous one. The results of the tests do not change.
+- At start-up one thread writes the number of OpenMP threads, in MOSE and in the manufactured-solution driver (`MOSE_mms`);
+  every thread wrote it, a data race without effect on the value.
+- A release build with ifx and interprocedural optimisation finds the `llvm-ar` and `llvm-ranlib` of the compiler in the
+  layouts of oneAPI 2023 and 2024 (`<bin>/compiler` from 2024 on, `<bin>/../bin-llvm` up to 2023, `<bin>`), also for an `ifx`
+  reached through a symbolic link; `-DIPO_AR` and `-DIPO_RANLIB` give them for any other layout. With oneAPI up to 2023 IPO
+  was switched off, and the fallback hid the release flags set after it, so the targets were compiled without
+  `-ffast-math`, and without `-fomit-frame-pointer` until a second configure; with oneAPI 2024 every configure also added one
+  more `-ipo` to the link flags.
