@@ -13,9 +13,16 @@ module MOSE_IO_BC
   ! Empty fields of a property line. A null value of list-directed input (two commas with only blanks between) leaves
   ! its variable as it was: undefined for a field without a default value. Read_BCfile sets those fields to EMPTY
   ! (IEMPTY for integers, a blank token for a direction) before the read, and Need_R, Need_I and Need_Inlet stop the run
-  ! on a field still EMPTY after it; a field with a default value keeps it (docs/user/boundary-conditions.md).
+  ! on a field still EMPTY after it; a field with a default value keeps it (docs/user/boundary-conditions.md). Every
+  ! number of a property line, required or with a default value, must be finite (Need_Finite, before the test of EMPTY):
+  ! every comparison with a NaN is false, so a NaN passes the test of EMPTY, and with -ffast-math, an option of the
+  ! RELEASE build, the compiler can take it for EMPTY.
   real(R8), parameter :: EMPTY  = -huge(1.0_R8)
   integer,  parameter :: IEMPTY = -huge(1)
+
+  ! The name of the boundary file that Read_BCfile reads, for the messages that name a line of it: bc.txt, or
+  ! bc<level>.txt on a coarse multigrid level, after the phase prefix (at most clen = 16 characters)
+  character(len=32) :: bc_name = 'bc.txt'
 
 contains
 
@@ -186,6 +193,11 @@ contains
       obj_io_bc%error_message = '[ERROR] Boundary condition file not found for grid '//trim(str(.true.,level))
       return
     endif
+    if (level == 1) then
+      bc_name = trim(MOSE_phase_prefix)//'bc.txt'
+    else
+      bc_name = trim(MOSE_phase_prefix)//'bc'//trim(str(.true.,level))//'.txt'
+    endif
 
     ! Counters for specific BC types
     if (level == 1) then
@@ -260,6 +272,7 @@ contains
             if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
             if ( ios /= 0 ) call BC_Line_Error ( i, bc(i)%type, nline, pline )
             if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, bc(i)%donorID(s,1:4), 'bD iD jD kD' )
+            if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, bc(i)%volume_fraction(s:s), 'vol_frac' )
             if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%volume_fraction(s:s), 'vol_frac' )
           enddo
           do s = bc(i)%ni(1)+1, bc(i)%ni(1)+bc(i)%ni(2)
@@ -267,6 +280,7 @@ contains
             if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
             if ( ios /= 0 ) call BC_Line_Error ( i, bc(i)%type, nline, pline )
             if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, bc(i)%donorID(s,1:4), 'bD iD jD kD' )
+            if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, bc(i)%volume_fraction(s:s), 'vol_frac' )
             if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%volume_fraction(s:s), 'vol_frac' )
           enddo
           if (sum(bc(i)%volume_fraction(1:bc(i)%ni(1))) < 0.5d0 .or. &
@@ -308,6 +322,8 @@ contains
           bc(i)%qw = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%qw, bc(i)%k_rough, bc(i)%eps_wall
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%qw, bc(i)%k_rough, bc(i)%eps_wall ], &
+                                             'q_wall k_rough eps_wall' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qw ], 'q_wall' )
 
         ! ─────────────────────────────────────────────────────────────────────
@@ -319,6 +335,8 @@ contains
           bc(i)%Tw = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%Tw, bc(i)%k_rough, bc(i)%eps_wall
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%Tw, bc(i)%k_rough, bc(i)%eps_wall ], &
+                                             'T_wall k_rough eps_wall' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%Tw ], 'T_wall' )
 
         ! ─────────────────────────────────────────────────────────────────────
@@ -355,10 +373,15 @@ contains
             block
               use MOSE_Mod_MPI, only: mpi_stop_all
               character(len=512) :: msg
-              write(msg,'(A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', i, ', type 402): '//trim(msg402)
+              write(msg,'(3A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', i, ', type 402): '// &
+                trim(msg402)
               call mpi_stop_all(trim(msg))
             end block
           end if
+          ! Every number of the line is finite, as Need_Inlet checks for the other inlets
+          call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%T0, bc(i)%rel_fac ], 'T0 rel_fac' )
+          call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
+          call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
           call bc(i)%p0time%initialize(file=trim(p0file), bar=.true.)
           if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
 
@@ -415,6 +438,7 @@ contains
           bc(i)%pamb = EMPTY ; bc(i)%rel_fac = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%pamb, bc(i)%rel_fac
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%pamb, bc(i)%rel_fac ], 'p_back rel_fac' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%pamb, bc(i)%rel_fac ], 'p_back rel_fac' )
 
         ! ─────────────────────────────────────────────────────────────────────
@@ -476,6 +500,10 @@ contains
             bc(i)%T0, bc(i)%p0, bc(i)%psub, bc(i)%psup, bc(i)%mdot, bc(i)%rel_fac, &
             (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
           if ( ios == 0 ) then
+            call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%T0, bc(i)%p0, bc(i)%psub, bc(i)%psup, bc(i)%mdot, &
+                               bc(i)%rel_fac ], 'T0 p0 p_sub p_sup g rel_fac' )
+            call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
+            call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
             call Need_R ( i, bc(i)%type, nline, [ bc(i)%T0, bc(i)%p0 ], 'T0 p0' )
             call Need_R ( i, bc(i)%type, nline, [ bc(i)%mdot, bc(i)%rel_fac ], 'g rel_fac' )
             call Need_R ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
@@ -505,6 +533,8 @@ contains
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%Taf, bc(i)%aCoeff, bc(i)%n, bc(i)%pRef, &
             bc(i)%rhoGrain, bc(i)%SF_geo, (bc(i)%ci(s), s = 1, nsc)
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%Taf, bc(i)%aCoeff, bc(i)%n, bc(i)%pRef, &
+                                             bc(i)%rhoGrain, bc(i)%SF_geo, bc(i)%ci ], 'T_af a n p_ref rho_grain SF_geo massf' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%Taf, bc(i)%aCoeff, bc(i)%n, bc(i)%pRef ], &
                                         'T_af a n p_ref' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
@@ -520,6 +550,9 @@ contains
           bc(i)%Tw = EMPTY ; bc(i)%qrad = EMPTY ; bc(i)%ci = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%cp_wall, bc(i)%Tw, bc(i)%Ti_wall, bc(i)%dh_wall, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%cp_wall, bc(i)%Tw, bc(i)%Ti_wall, &
+                                             bc(i)%dh_wall, bc(i)%qrad, bc(i)%eps_wall, bc(i)%ci ], &
+                                             'cp_wall T_wall Ti_wall dh_wall q_rad eps_wall massf' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%Tw, bc(i)%qrad ], 'T_wall q_rad' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
 
@@ -534,6 +567,8 @@ contains
           bc(i)%qrad = EMPTY ; bc(i)%ci = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%GSI_pyro_model_id, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%qrad, bc(i)%eps_wall, bc(i)%ci ], &
+                                             'q_rad eps_wall massf' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
 
@@ -547,6 +582,7 @@ contains
           bc(i)%qrad = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%GSI_surf_reac_id, bc(i)%qrad
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
 
         ! ─────────────────────────────────────────────────────────────────────
@@ -560,6 +596,8 @@ contains
           bc(i)%qrad = EMPTY ; bc(i)%ci = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%GSI_pyro_model_id, bc(i)%GSI_surf_reac_id, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%qrad, bc(i)%eps_wall, bc(i)%ci ], &
+                                             'q_rad eps_wall massf' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
 
@@ -814,14 +852,14 @@ contains
     character(len=160) :: head
 
     if ( len_trim(line) == 0 ) then
-      write(head,'(A,I0,A,I0)') '[ERROR] bc.txt ends at line ', nline, ', before the end of record ', n
+      write(head,'(3A,I0,A,I0)') '[ERROR] ', trim(bc_name), ' ends at line ', nline, ', before the end of record ', n
       call mpi_stop_all ( trim(head) )
     end if
     if ( btype < 0 ) then
-      write(head,'(A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, &
+      write(head,'(3A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, &
         '): the line is not block, i, j, k, face and type'
     else
-      write(head,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
+      write(head,'(3A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type ', btype, &
         '): the line is short or holds a value that is not a number'
     end if
     call mpi_stop_all ( trim(head)//': "'//trim(line(1:min(len(line),200)))//'"' )
@@ -865,7 +903,8 @@ contains
 
   !─────────────────────────────────────────────────────────────────────────────
   ! Need_Inlet: the fields of an inlet line, in its order: the leading values lead (names), alpha, beta, rel_fac, the
-  !   mass fractions and the turbulence values.
+  !   mass fractions and the turbulence values: each one finite (Need_Finite; alpha and beta are read and checked by
+  !   Need_Direction), then given (not empty).
   subroutine Need_Inlet ( n, nline, bc, lead, names, alpha_tok, beta_tok )
     use MOSE_Advanced_Types_m, only: MOSE_bc_type
     use MOSE_Global_m,         only: nsc, nrans
@@ -875,6 +914,10 @@ contains
     real(R8), intent(in)           :: lead(:)
     character(len=*), intent(in)   :: names, alpha_tok, beta_tok
 
+    call Need_Finite ( n, bc%type, nline, lead, names )
+    call Need_Finite ( n, bc%type, nline, [ bc%rel_fac ], 'rel_fac' )
+    call Need_Finite ( n, bc%type, nline, bc%ci(nrans+1:nrans+nsc), 'massf' )
+    call Need_Finite ( n, bc%type, nline, bc%ci(1:nrans), 'turb' )
     call Need_R ( n, bc%type, nline, lead, names )
     if ( len_trim(alpha_tok) == 0 ) call Empty_Field ( n, bc%type, nline, 'alpha' )
     if ( len_trim(beta_tok) == 0 ) call Empty_Field ( n, bc%type, nline, 'beta' )
@@ -883,6 +926,35 @@ contains
     call Need_R ( n, bc%type, nline, bc%ci(1:nrans), 'turb' )
 
   end subroutine Need_Inlet
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Need_Finite: stop the run on the first of the values v of record n, type btype, line nline of the file that is not
+  !   finite (NaN or infinity): the numbers of a property line, required or with a default value. names as for Need_R.
+  !   The test reads the bits of each value (Not_Finite), and comes before the test of EMPTY (Need_R): every comparison
+  !   with a NaN is false, so that test lets a NaN through, and with -ffast-math, an option of the RELEASE build, the
+  !   compiler can take a NaN for EMPTY (ifx did); a build that traps the invalid operations (the DEBUG build) stopped
+  !   with SIGFPE at the first operation on the value.
+  subroutine Need_Finite ( n, btype, nline, v, names )
+    use MOSE_Finite_m, only: Not_Finite
+    use MOSE_Mod_MPI,  only: mpi_stop_all
+    implicit none
+    integer, intent(in)          :: n, btype, nline
+    real(R8), intent(in)         :: v(:)
+    character(len=*), intent(in) :: names
+    ! Local
+    integer :: k
+    character(len=240) :: msg
+
+    do k = 1, size(v)
+      if ( Not_Finite ( v(k) ) ) then
+        write(msg,'(3A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type ', btype, &
+          '): the value of '//trim(Name_Of ( names, k ))//' is not finite (NaN or infinity)'
+        call mpi_stop_all ( trim(msg) )
+      end if
+    end do
+
+  end subroutine Need_Finite
 
 
   !─────────────────────────────────────────────────────────────────────────────
@@ -896,7 +968,7 @@ contains
     ! Local
     character(len=240) :: msg
 
-    write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
+    write(msg,'(3A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type ', btype, &
       '): the value of '//trim(what)//' is empty (docs/user/boundary-conditions.md)'
     call mpi_stop_all ( trim(msg) )
 
@@ -1079,8 +1151,9 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
-  ! Need_Direction: the flow directions alpha and beta of an inlet line (record n, type btype, line nline of bc.txt)
-  !   from their tokens; a token that is neither a number nor normal stops the run.
+  ! Need_Direction: the flow directions alpha and beta of an inlet line (record n, type btype, line nline of the file)
+  !   from their tokens; a token that is neither a number nor normal, or a number that is not finite (Need_Finite), stops
+  !   the run.
   subroutine Need_Direction ( n, btype, nline, alpha_tok, beta_tok, alpha, beta )
     use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
@@ -1093,16 +1166,17 @@ contains
 
     call parse_dir_tok ( alpha_tok, alpha, ios )
     if ( ios /= 0 ) then
-      write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
+      write(msg,'(3A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type ', btype, &
         "): alpha is neither a number nor normal: '"//trim(adjustl(alpha_tok))//"'"
       call mpi_stop_all ( trim(msg) )
     end if
     call parse_dir_tok ( beta_tok, beta, ios )
     if ( ios /= 0 ) then
-      write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
+      write(msg,'(3A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type ', btype, &
         "): beta is neither a number nor normal: '"//trim(adjustl(beta_tok))//"'"
       call mpi_stop_all ( trim(msg) )
     end if
+    call Need_Finite ( n, btype, nline, [ alpha, beta ], 'alpha beta' )
 
   end subroutine Need_Direction
 

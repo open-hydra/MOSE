@@ -84,6 +84,16 @@
 #  so the check of decreasing times let a NaN time through, and a NaN
 #  pressure closed the face of the inlet in silence.
 #
+#  A value of a property line of bc.txt that is not finite stops the run at
+#  set-up, in every build, with the line, the record, its type and the name of
+#  the value: the duct of BCInput with its inlet made an inlet 401 whose total
+#  pressure is NaN and Infinity, or whose flow direction alpha is NaN, with its
+#  inlet 402 of an infinite total temperature, and, with the Navier-Stokes
+#  equations, with a wall 302 on a face cell whose roughness, a value with a
+#  default, is NaN, must end with exit code 1 and the message, and write no
+#  solution. The check of an empty value let a NaN through, as every
+#  comparison with a NaN is false.
+#
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
 #  of the INI reader). The run used to stop on the first required key,
@@ -444,6 +454,61 @@ EOI
 run_table table-nan  3 2 NaN
 run_table table-inf  3 2 Infinity
 run_table table-time 4 1 NaN
+
+echo "-- a value of a property line of bc.txt that is not finite stops the run at set-up --"
+# run_bc <tag> <equations> <awk program> <message>: the duct of the inlet 402 of BCInput (../../boundary-conditions/bc-input/make_case.py case
+# p0.dat), its bc.txt changed by the awk program, must stop at set-up with exit code 1 and the message, and write no solution
+run_bc() {
+  local tag="$1" equations="$2" edit="$3" message="$4" gas=$COMMON found=missing solution=none
+  rm -f INPUT/*
+  [[ $equations == navier-stokes ]] && gas=$VISC
+  ln -sf "../$gas/phase.txt" INPUT/phase.txt; ln -sf "../$gas/thermo.dat" INPUT/thermo.dat
+  [[ $equations == navier-stokes ]] && ln -sf "../$gas/transport.dat" INPUT/transport.dat
+  python3 -B ../../boundary-conditions/bc-input/make_case.py case p0.dat || exit 1
+  awk "$edit" INPUT/bc.txt > INPUT/bc.new && mv INPUT/bc.new INPUT/bc.txt
+  cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 40
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = $equations
+
+[MOSE-Numerics]
+cfl = 0.5
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+EOI
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  local rc=$?
+  grep -a -q -F -- "$message" "OUTPUT/$tag.log" && found=found
+  [[ -f OUTPUT/field.tec ]] && solution=written
+  if [[ $rc -eq 1 && $found == found && $solution == none ]]; then
+    echo "  [ok  ] $tag: exit code 1, \"$message\""
+  else
+    echo "  [FAIL] $tag: exit code $rc (required 1), message \"$message\" $found, solution $solution (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+}
+# the inlet (record 1, lines 1 and 2) made an inlet 401: T0, p0, alpha, beta, rel_fac, mass fraction
+run_bc bc-p0-nan euler 'NR == 1 { $6 = 401 } NR == 2 { $0 = "300.0, NaN, normal, normal, 1.0, 1.0" } { print }' \
+  "[ERROR] bc.txt line 2 (record 1, type 401): the value of p0 is not finite (NaN or infinity)"
+run_bc bc-p0-inf euler 'NR == 1 { $6 = 401 } NR == 2 { $0 = "300.0, Infinity, normal, normal, 1.0, 1.0" } { print }' \
+  "[ERROR] bc.txt line 2 (record 1, type 401): the value of p0 is not finite (NaN or infinity)"
+run_bc bc-alpha euler 'NR == 1 { $6 = 401 } NR == 2 { $0 = "300.0, 1.2E+05, NaN, normal, 1.0, 1.0" } { print }' \
+  "[ERROR] bc.txt line 2 (record 1, type 401): the value of alpha is not finite (NaN or infinity)"
+# the inlet 402: T0, p0 file, alpha, beta, rel_fac, mass fraction
+run_bc bc-402-t0 euler 'NR == 2 { $0 = "Infinity, p0.dat, normal, normal, 1.0, 1.0" } { print }' \
+  "[ERROR] bc.txt line 2 (record 1, type 402): the value of T0 is not finite (NaN or infinity)"
+# record 3 (line 5, face 3 of cell 1) made a wall 302 with its property line: T_wall, k_rough, eps_wall
+run_bc bc-wall-k navier-stokes 'NR == 5 { $6 = 302; print; print "300.0, NaN, 0.0"; next } { print }' \
+  "[ERROR] bc.txt line 6 (record 3, type 302): the value of k_rough is not finite (NaN or infinity)"
 
 echo "-- an input.ini that cannot be read stops the run at set-up --"
 # run_ini <tag> <reason expected in the log>: the Sod tube with the input.ini left by the caller

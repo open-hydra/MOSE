@@ -77,7 +77,9 @@ Every value of the data line is required, except those with a default value: `k_
 `Ti_wall` and `dh_wall` (0), `pyro_id` and `reac_id` (0), `rho_grain` (0), `SF_geo` (1), `p_sub` and `p_sup` (0). An
 empty value (two commas with nothing between them) keeps that default; an empty required value stops the run at set-up,
 with the line of `bc.txt`, the record, its type and the name of the value. So does a line short of a value, or with a
-value that is not a number. Blank lines between records are skipped.
+value that is not a number, and a value that is not finite (NaN or infinity), required or with a default, the flow
+directions `alpha` and `beta` included. Blank lines between records are skipped. On a coarse level of a multigrid run the
+messages name the file of that level.
 
 ## BC Types
 
