@@ -467,6 +467,11 @@ $E_m$ in either case: for an ideal gas this is TMR's
 $p = (\gamma-1)\,\rho\,(E - \tfrac12 u_iu_i - k)$.  TMR notes that the $k$
 terms are sometimes dropped "for non-supersonic speed flows"; they matter where
 $k$ is not small against the kinetic energy of the mean flow.
+With the default, MOSE leaves $k$ out of the energy and the pressure of the
+fluxes, as OpenFOAM-dev does: its compressible solvers carry the kinetic energy
+of the mean flow, $\tfrac12|\mathbf{U}|^2$, and no $k$ (OpenFOAM-dev, commit
+10f026fd, `applications/modules/shockFluid/thermophysicalPredictor.C` and
+`applications/modules/fluid/thermophysicalPredictor.C`).
 
 ---
 
