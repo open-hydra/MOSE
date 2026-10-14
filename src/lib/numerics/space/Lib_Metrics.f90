@@ -807,18 +807,47 @@ contains
       end function Face_Corners
 
 
+      !> Thickness of cell (Im, Jm, Km) of a block across its face Fm: the distance from the centre of the face to the
+      !> centre of the opposite face of the cell, along the normal of the face (the cross product of its diagonals), or
+      !> the distance between the two centres when the face has no normal.
+      function Cell_Across ( blk, Im, Jm, Km, Fm ) result ( h )
+        implicit none
+        type(MOSE_block_type), intent(in) :: blk
+        integer, intent(in)               :: Im, Jm, Km, Fm
+        real(R8)                          :: h
+        ! Local
+        real(R8) :: c(3,4), o(3,4), d(3), nrm(3)
+
+        c = Face_Corners ( blk, Im, Jm, Km, Fm )
+        o = Face_Corners ( blk, Im, Jm, Km, merge ( Fm + 1, Fm - 1, mod ( Fm, 2 ) == 1 ) )
+        d = 0.25d0 * ( sum ( o, dim=2 ) - sum ( c, dim=2 ) )
+        nrm = Cross3 ( c(:,3) - c(:,1), c(:,4) - c(:,2) )
+        if ( norm2 ( nrm ) > 0d0 ) then
+          h = abs ( dot_product ( d, nrm ) ) / norm2 ( nrm )
+        else
+          h = norm2 ( d )
+        end if
+
+      end function Cell_Across
+
+
       !> Images of the wall across the periodic boundaries (img_shift, img_angle, nimg), the lattice of the periodic
       !> translations (nv, basis, dual), the wall faces moved into one cell of it (around anchor), and their box.
       !>  - Translations: each periodic connection (201) gives the vector from its source face to its own face (the
       !>    difference of the face centres), in the meridional plane on a wedge, where it must lie along x. On a 3-D mesh
       !>    without sectors (delthe = 0) so does each block whose k faces are closed by type 200: its last k node plane
       !>    is the first one translated (Check_Mesh_Type), and the cells next to face 5 go on in those next to face 6
-      !>    (Ghost_Axysimmetry). The two sides of a periodic boundary match only to within the precision of the mesh
-      !>    file, so vectors that differ by less than MATCH times the size of the coordinates are the same (the tolerance
-      !>    of Check_Mesh_Type). The distinct vectors, shortest first, are reduced to a basis of the lattice they
-      !>    generate; a vector that is not an integer combination of the basis, within that tolerance times the number
-      !>    of vectors combined, stops the run. The basis is then reduced pairwise (Lagrange) and, with three
-      !>    translations, by threes (Reduce_By_Two): the same lattice, with shorter vectors.
+      !>    (Ghost_Axysimmetry). The two sides of a periodic boundary match only to the round-off of the coordinates in
+      !>    the mesh file, so vectors that differ by at most ETA of the thinnest cell across the periodic boundaries are
+      !>    the same: the rule of Check_Mesh_Type, relative to the cells and not to the size of the coordinates, whose
+      !>    round-off grows with their distance from the origin (at 1e-6 of the size of the coordinates, a periodic
+      !>    channel turned by 30 degrees and written with 5 significant digits stops the run). The thickness of a cell
+      !>    across a periodic face is the distance from the centre of the face to the centre of the opposite face of
+      !>    the cell, along the normal of the face (Cell_Across); for a block closed in k by type 200, the move of its
+      !>    nodes per cell in k (Check_Mesh_Type). The distinct vectors, shortest first, are reduced to a basis of the
+      !>    lattice they generate; a vector that is not an integer combination of the basis, within that tolerance
+      !>    times the number of vectors combined, stops the run. The basis is then reduced pairwise (Lagrange) and,
+      !>    with three translations, by threes (Reduce_By_Two): the same lattice, with shorter vectors.
       !>  - Every wall face is moved, whole, by the vector of the lattice that brings its centre into the cell of the
       !>    lattice around anchor, the centre of the first wall face, where |B*_i . (x - anchor)| <= 1/2 (B* the dual
       !>    basis); Reduced_Point moves each cell centre the same way. The periodic wall is the same set.
@@ -836,30 +865,18 @@ contains
         implicit none
         ! Local
         integer, parameter    :: MAXV = 3
-        real(R8), parameter   :: MATCH = 1d-6, PI = 3.141592653589793d0
+        real(R8), parameter   :: ETA = 1d-2, PI = 3.141592653589793d0
         real(R8), allocatable :: raw(:,:), cand(:,:), clen(:)
         integer,  allocatable :: order(:)
         logical,  allocatable :: closed(:)
         real(R8)              :: ginv(MAXV,MAXV), coef(MAXV), rhs(MAXV), rho(MAXV), beta(MAXV)
-        real(R8)              :: t(3), lo(3), hi(3), cface(3,4), scale, tol, lim, mr, images
+        real(R8)              :: t(3), cface(3,4), hmin, thick, tol, lim, mr, images
         integer               :: nraw, nc, kmax(MAXV), mrot, i, j, m, n, l, b, k1, k2, k3, kk(MAXV)
         logical               :: sector, span, changed
-        character(len=256)    :: msg
-
-        ! Size of the coordinates, for the tolerance
-        lo = huge(1d0)
-        hi = -huge(1d0)
-        do b = 1, nb
-          do n = 1, 3
-            lo(n) = min ( lo(n), minval ( blk(b) % node(:,:,:) % c(n) ) )
-            hi(n) = max ( hi(n), maxval ( blk(b) % node(:,:,:) % c(n) ) )
-          enddo
-        enddo
-        scale = maxval ( max ( abs(lo), abs(hi) ) )
-        tol   = MATCH * scale
+        character(len=512)    :: msg
 
         ! Translations: of the periodic connections, and of the blocks closed in k by type 200 on a 3-D mesh without
-        ! sectors
+        ! sectors; hmin, the thinnest cell across them
         span = ndir == 3 .and. delthe >= 0d0 .and. delthe <= 0d0
         nraw = 0
         do l = 1, nbound
@@ -868,6 +885,7 @@ contains
         if ( span ) nraw = nraw + nb
         allocate ( raw(3, max(nraw,1)), cand(3, max(nraw,1)), clen(max(nraw,1)), order(max(nraw,1)) )
         nraw = 0
+        hmin = huge(1d0)
         do l = 1, nbound
           if ( bc(l) % type /= 201 ) cycle
           cface = Face_Corners ( blk(bc(l)%b), bc(l)%i, bc(l)%j, bc(l)%k, bc(l)%f )
@@ -875,6 +893,8 @@ contains
           cface = Face_Corners ( blk(bc(l)%bs), bc(l)%is, bc(l)%js, bc(l)%ks, bc(l)%fs )
           nraw = nraw + 1
           raw(:,nraw) = t - 0.25d0 * sum ( cface, dim=2 )
+          hmin = min ( hmin, Cell_Across ( blk(bc(l)%b), bc(l)%i, bc(l)%j, bc(l)%k, bc(l)%f ), &
+                             Cell_Across ( blk(bc(l)%bs), bc(l)%is, bc(l)%js, bc(l)%ks, bc(l)%fs ) )
         enddo
         if ( span ) then
           allocate ( closed(nb) )
@@ -886,9 +906,19 @@ contains
             if ( .not. closed(b) ) cycle
             nraw = nraw + 1
             raw(:,nraw) = blk(b) % node(0,0,blk(b)%dim(3)) % c - blk(b) % node(0,0,0) % c
+            ! The move of the nodes per cell in k, as Check_Mesh_Type takes it
+            thick = 0d0
+            do j = 0, blk(b) % dim(2)
+              do i = 0, blk(b) % dim(1)
+                thick = max ( thick, maxval ( abs ( blk(b) % node(i,j,blk(b)%dim(3)) % c - blk(b) % node(i,j,0) % c ) ) )
+              enddo
+            enddo
+            hmin = min ( hmin, thick / blk(b) % dim(3) )
           enddo
           deallocate ( closed )
         end if
+        tol = 0d0
+        if ( nraw > 0 ) tol = ETA * hmin
         nc = 0
         do l = 1, nraw
           t = raw(:,l)
@@ -941,12 +971,19 @@ contains
             if ( norm2 ( t - matmul ( basis(:,1:nv), anint ( coef(1:nv) ) ) ) <= lim ) cycle
             ! In the span of the basis, between its integer combinations: the periodic boundaries disagree
             if ( norm2 ( t - matmul ( basis(:,1:nv), coef(1:nv) ) ) <= lim ) then
-              write(msg,'(A,3ES12.4,A)') '[ERROR] Wall distance: the periodic translation (', t, &
-                ') is not an integer combination of the others'
+              write(msg,'(A,3ES12.4,A,ES8.2,A)') '[ERROR] Wall distance: the periodic translation (', t, &
+                ') is not an integer combination of the others, to 1e-2 of the thinnest cell across the periodic'// &
+                ' boundaries (', hmin, '): the two sides of each periodic boundary must match to that, with the node'// &
+                ' coordinates written with enough significant digits'
               call mpi_abort_all ( trim(msg) )
             end if
           end if
-          if ( nv == MAXV ) call mpi_abort_all ( '[ERROR] Wall distance: more than three independent periodic translations' )
+          if ( nv == MAXV ) then
+            write(msg,'(A,ES8.2,A)') '[ERROR] Wall distance: more than three independent periodic translations, to'// &
+              ' 1e-2 of the thinnest cell across the periodic boundaries (', hmin, '): the two sides of each periodic'// &
+              ' boundary must match to that, with the node coordinates written with enough significant digits'
+            call mpi_abort_all ( trim(msg) )
+          end if
           nv = nv + 1
           basis(:,nv) = t
         enddo

@@ -20,7 +20,7 @@ Three single-block cases, the wall on the j = 1 face, faces 300 elsewhere (and 2
   lip     the lip of a nozzle on a 1-degree axisymmetric wedge: in the meridional plane the nozzle wall, curved, meets the
           lip face at a convex corner of 90 degrees at x = 0, r = 2; in the jet below the lip the nearest wall point is the
           lip. The distance is the one in the meridional plane, from the wall curve.
-Nine more cases have periodic boundaries, across which the wall goes on: the distance is the minimum over the periodic
+Eleven more cases have periodic boundaries, across which the wall goes on: the distance is the minimum over the periodic
 images of the wall too.
   periodic  2-D channel periodic in x (connections 201 between the i faces, period 1), wall on the j = 1 face for x in
             [0, 0.5] only, symmetry on the rest; near x = 1 the nearest wall is the image of the wall that starts at x = 1.
@@ -54,6 +54,18 @@ images of the wall too.
             dependent: no pairwise step shortens them, but E1 + E2 + E3 = (0, 0, 0.02) is fifty times shorter, and the
             images of the wall are planes 0.02 apart. The reference takes the images along the reduced basis
             (0, 0, 0.02), E1, -E2.
+  turned5   the channel of periodic turned by 30 degrees about z, its node coordinates rounded to 5 significant digits, as
+            in a mesh file written with 5 digits: the two sides of the period no longer match exactly, and the
+            translations of the periodic faces (the centre of face 1 of cell (1, j) less that of face 2 of cell (NI, j))
+            differ by up to 6.8e-6, 1.1e-4 of the cells across them. Translations that differ by at most 1e-2 of the
+            thinnest cell across the periodic boundaries are the same, and the run takes one of them: d must lie between
+            the least and the largest of the distances with the translation of each periodic face (1.4e-4 apart at
+            most), within 1e-9.
+  turned4   the same with 4 significant digits: the translations differ by up to 5.5e-5, 8.8e-4 of the cells (the
+            distances with each of them by up to 1.2e-3).
+With 2 significant digits (case turned2) the translations differ by up to 8.5e-3, 0.15 of the cells: the run must stop at
+set-up with the message on the periodic translations, which names the tolerance and asks for sides that match, with no NaN
+and no floating-point trap before it.
 The reference is the exact distance from the cell centre (mean of the nodes; in the wedge in the coordinates x and
 r = sqrt(y^2 + z^2)) to the wall of the mesh (straight faces between the wall nodes, plane in every case) and to its
 periodic images, by a scan of all faces. It is checked on the cells that do not touch the wall (in one step the wall
@@ -67,6 +79,8 @@ Usage (from the test directory):
   python3 -B make_case.py check N1=E1 ...      exit status 0 when the error of every case is below its tolerance
   python3 -B make_case.py case twist           INPUT/ic.tec and INPUT/bc.txt of the 3-D case with twisted wall faces
   python3 -B make_case.py twist LOG            exit status 0 when LOG reports the twist of the wall faces of the twist case
+  python3 -B make_case.py turnstop LOG         exit status 0 when LOG (case turned2) stopped at set-up with the message on
+                                               the periodic translations
 
 The twist case is a 3-D block whose wall, on the j = 1 face, is the surface y = 2 (x - 0.5)(z - 0.5): every wall face is a
 bilinear surface with twist 2 dx dz = 1/32 along y, and the four triangles of a face lie within 1/512 of it. MOSE reports
@@ -238,7 +252,8 @@ def geometry(name):
 
 
 PERIODIC = {"periodic": (16, 10, 1), "pipe": (16, 10, 1), "sector": (4, 6, 12), "noisy": (16, 10, 1),
-            "span": (4, 6, 12), "thin": (2, 8, 2), "far": (16, 10, 1), "staggered": (24, 10, 1), "oblique": (4, 4, 2)}
+            "span": (4, 6, 12), "thin": (2, 8, 2), "far": (16, 10, 1), "staggered": (24, 10, 1), "oblique": (4, 4, 2),
+            "turned5": (16, 10, 1), "turned4": (16, 10, 1), "turned2": (16, 10, 1)}
 OBLIQUE_EPS = 0.02                  # case oblique: the edges E1, E2, E3 of the block, E1 + E2 + E3 = (0, 0, eps)
 OBLIQUE = ((1.0, 0.0, 0.0), (-0.5, 0.5 * math.sqrt(3.0), 0.0), (-0.5, -0.5 * math.sqrt(3.0), OBLIQUE_EPS))
 THIN_P, THIN_H = 0.005, 0.5         # case thin: periods in x and z, and height
@@ -246,6 +261,8 @@ FAR = 10.0                          # case far: the shift in x of the channel of
 STAGGER, BLADE = 1.7, (7, 18)       # case staggered: slope of the blade, and its cells on the j = 1 face (x in [0, 1])
 SECTOR = math.radians(60.0)
 SPAN = 0.6                          # period in z of the case span
+TURN = math.radians(30.0)           # cases turned5, turned4, turned2: the channel of periodic turned about z
+TURN_DIGITS = {"turned5": 5, "turned4": 4, "turned2": 2}   # and the significant digits of their node coordinates
 WALL_LINE = "    0.000000E+00,    0.000000E+00,    0.000000E+00,\n"
 
 
@@ -270,6 +287,11 @@ def periodic_nodes(name):
                     xyz = (THIN_P * i / ni, THIN_H * (j / nj) ** 1.5, THIN_P * k / nk)
                 elif name == "far":
                     xyz = (x + FAR, 0.5 * (j / nj) ** 1.5, (0.0, LZ)[k])
+                elif name in TURN_DIGITS:
+                    y = 0.5 * (j / nj) ** 1.5
+                    xyz = tuple(float(f"{v:.{TURN_DIGITS[name] - 1}E}") for v in
+                                (x * math.cos(TURN) - y * math.sin(TURN), x * math.sin(TURN) + y * math.cos(TURN),
+                                 (0.0, LZ)[k]))
                 elif name == "staggered":
                     xs = -0.5 + 2.0 * i / ni
                     xyz = (xs, STAGGER * xs + j / nj, (0.0, LZ)[k])
@@ -322,7 +344,7 @@ def write_periodic_case(name):
                 out += [rec(1, j, k, 1, 201), con(1, ni, j, k, 2, 1, 0, 0, 1)]
                 out += [rec(ni, j, k, 2, 201), con(1, 1, j, k, 1, 1, 0, 0, 1)]
         for i in range(1, ni + 1):
-            if name in ("periodic", "noisy", "far"):
+            if name in ("periodic", "noisy", "far") or name in TURN_DIGITS:
                 out += [rec(i, 1, k, 3, 301 if i <= ni // 2 else 300), rec(i, nj, k, 4, 300)]
             elif name == "thin":
                 out += [rec(i, 1, k, 3, 301), rec(i, nj, k, 4, 300)]
@@ -341,7 +363,7 @@ def write_periodic_case(name):
             else:
                 out += [rec(i, 1, k, 3, 301 if k <= nk // 2 else 300), rec(i, nj, k, 4, 300)]
     kface = {"periodic": 0, "pipe": 200, "sector": 200, "noisy": 0, "span": 200, "thin": 201, "far": 0,
-             "staggered": 0, "oblique": 201}[name]
+             "staggered": 0, "oblique": 201, "turned5": 0, "turned4": 0, "turned2": 0}[name]
     for j in range(1, nj + 1):
         for i in range(1, ni + 1):
             if kface == 201:
@@ -377,10 +399,27 @@ def triangle_distance(p, a, b, c):
 
 
 def periodic_reference(name):
-    """Exact distance of every cell (i, j, k), 1-based, that does not touch the wall, to the wall and its images."""
+    """Exact distance of every cell (i, j, k), 1-based, that does not touch the wall, to the wall and its images; in the
+    cases turned5 and turned4, the least and the largest of the distances with the translation of each periodic face."""
     ni, nj, nk = PERIODIC[name]
     xyz = periodic_nodes(name)
     out = {}
+    if name in TURN_DIGITS:
+        # the wall (j = 0, the first half along i) and its images by m times the translation of a periodic face, the
+        # centre of face 1 of cell (1, j) less that of face 2 of cell (NI, j), |m| <= 2 (the wall is half a period long)
+        wall = [(xyz[(i, 0, 0)][:2], xyz[(i + 1, 0, 0)][:2]) for i in range(ni // 2)]
+        shifts = []
+        for j in range(nj):
+            ends = [[sum(xyz[(i, j + b, k)][c] for b in (0, 1) for k in (0, 1)) / 4.0 for c in range(2)] for i in (0, ni)]
+            shifts.append((ends[1][0] - ends[0][0], ends[1][1] - ends[0][1]))
+        for j in range(2, nj + 1):
+            for i in range(1, ni + 1):
+                corners = [xyz[(i - 1 + a, j - 1 + b, k)] for a in (0, 1) for b in (0, 1) for k in (0, 1)]
+                p = (sum(q[0] for q in corners) / 8.0, sum(q[1] for q in corners) / 8.0)
+                ds = [min(segment_distance((p[0] - m * s[0], p[1] - m * s[1]), a, b)[0]
+                          for m in (-2, -1, 0, 1, 2) for a, b in wall) for s in shifts]
+                out[(i, j, 1)] = (min(ds), max(ds))
+        return out
     if name == "thin":
         # the wall and its images are the plane y = 0: the distance is y of the centre
         for k in range(1, nk + 1):
@@ -467,8 +506,26 @@ def periodic_error(name, path):
         n = ((k - 1) * nj + (j - 1)) * ni + (i - 1)
         rhs = data["rhoNuTilde"][n] / data["dt"][n]
         d = math.sqrt(RHO * NUT * NUT * f / rhs) if rhs < 0.0 else float("inf")
-        err = max(err, abs(d / d0 - 1.0))
+        if isinstance(d0, tuple):           # turned5, turned4: between the least and the largest reference distance
+            err = max(err, (d0[0] - d) / d0[0], (d - d0[1]) / d0[0])
+        else:
+            err = max(err, abs(d / d0 - 1.0))
     print(f"{err:.3e} {len(ref)} 0")
+
+
+def turn_stop(log):
+    """The run of the case turned2 stopped at set-up with the message on the periodic translations, which names the
+    tolerance and asks for sides that match, with no NaN and no floating-point trap before it."""
+    text = open(log, errors="replace").read()
+    head = re.search(r"(STOP|ABORT): \[ERROR\] Wall distance: (the periodic translation \(.*\) is not an integer "
+                     r"combination of the others|more than three independent periodic translations), to 1e-2 of the "
+                     r"thinnest cell across the periodic boundaries", text)
+    remedy = "the two sides of each periodic boundary must match to that, with the node coordinates written with enough" \
+             " significant digits" in text
+    clean = not re.search(r"NaN|Floating-point exception|SIGFPE|Program received signal", text)
+    print(f"    message on the periodic translations: {'yes' if head else 'no'}; remedy named: {'yes' if remedy else 'no'};"
+          f" clean stop without NaN or trap: {'yes' if clean else 'no'}")
+    sys.exit(0 if head and remedy and clean else 1)
 
 
 TWIST = (8, 6, 8)
@@ -643,6 +700,8 @@ def main():
         check(sys.argv[2:])
     elif what == "twist":
         twist_check(sys.argv[2])
+    elif what == "turnstop":
+        turn_stop(sys.argv[2])
     else:
         sys.exit(f"unknown request {what}")
 

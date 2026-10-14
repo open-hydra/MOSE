@@ -11,7 +11,7 @@
 #  function of nu~/nu alone, and so the distance d of every cell
 #  (make_case.py). Three cases: a convex corner of 90 degrees between two
 #  walls, a curved wall under a leaning mesh, and the lip of a nozzle on an
-#  axisymmetric wedge (distance in the meridional plane); and nine cases
+#  axisymmetric wedge (distance in the meridional plane); and eleven cases
 #  with periodic boundaries, across which the wall goes on: a 2-D channel and a
 #  pipe on a wedge periodic in x, a 3-D sector closed by the rotational
 #  periodicity, the channel with the two sides of the period matched to 1e-8
@@ -22,10 +22,19 @@
 #  origin; a staggered row of plane blades, each 1.7 periods long along
 #  the periodic direction; and a 3-D block periodic along three nearly
 #  dependent translations, whose sum is fifty times shorter than each of
-#  them and than any pairwise combination. On the cells that do not touch
-#  the wall, d must
+#  them and than any pairwise combination; and the 2-D channel turned by 30
+#  degrees about z, its node coordinates rounded to 5 and to 4 significant
+#  digits, whose periodic faces give translations that differ by up to
+#  1.1e-4 and 8.8e-4 of the cells across them: translations that differ by
+#  at most 1e-2 of the thinnest cell across the periodic boundaries are the
+#  same. On the cells that do not touch the wall, d must
 #  equal the exact distance to the wall of the mesh and its periodic images
-#  within 1e-9 (1e-6 for the channel matched to 1e-8). On a 3-D wall of
+#  within 1e-9 (1e-6 for the channel matched to 1e-8; for the turned
+#  channel, it must lie within 1e-9 between the distances with the
+#  translation of each periodic face, of which the run takes one). Rounded
+#  to 2 digits, the turned channel gives translations that differ by up to
+#  0.15 of its cells: the run must stop at set-up with the message on the
+#  periodic translations, which asks for sides that match. On a 3-D wall of
 #  twisted faces, where the four triangles of a face are not the face, the
 #  run must report at start-up the largest bound of their gap over the
 #  distance of the cell next to the face; on plane faces it must report
@@ -81,7 +90,7 @@ EOF
 
 echo "-- distance to the wall read back from the Spalart-Allmaras source --"
 errors=()
-for name in corner arc lip periodic pipe sector noisy span thin far staggered oblique; do
+for name in corner arc lip periodic pipe sector noisy span thin far staggered oblique turned5 turned4; do
   python3 -B make_case.py case "$name" || exit 1
   rm -f OUTPUT/diagnostic.tec
   "$LOCAL" > "OUTPUT/$name.log" 2>&1
@@ -104,6 +113,17 @@ else
   fail=1
 fi
 
+echo "-- periodic sides that do not match to 1e-2 of the cells: stop at set-up --"
+python3 -B make_case.py case turned2 || exit 1
+rm -f OUTPUT/diagnostic.tec
+"$LOCAL" > OUTPUT/turned2.log 2>&1
+if [[ ! -f OUTPUT/diagnostic.tec ]] && python3 -B make_case.py turnstop OUTPUT/turned2.log; then
+  echo "  [ok  ] stopped at set-up with the message on the periodic translations"
+else
+  echo "  [FAIL] turned2: no stop at set-up with the message on the periodic translations (see OUTPUT/turned2.log)"
+  fail=1
+fi
+
 echo "-- twisted wall faces in 3-D: the start-up report of the error bound --"
 python3 -B make_case.py case twist || exit 1
 "$LOCAL" > OUTPUT/twist.log 2>&1
@@ -113,7 +133,7 @@ else
   echo "  [FAIL] the twist of the wall faces is not reported, or not right (see OUTPUT/twist.log)"
   fail=1
 fi
-for name in corner arc lip periodic pipe sector noisy span thin far staggered oblique; do
+for name in corner arc lip periodic pipe sector noisy span thin far staggered oblique turned5 turned4; do
   if grep -a -q 'twisted wall faces' "OUTPUT/$name.log"; then
     echo "  [FAIL] $name: a twist reported on plane wall faces"
     fail=1

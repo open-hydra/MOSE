@@ -699,8 +699,15 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   reduction only keeps the number of images small. The
   images are the integer combinations $\sum_i k_i B_i$ of the basis (along $x$
   on an axisymmetric wedge). The two sides of a periodic boundary match only
-  to the precision of the mesh file: translations that differ by less than
-  $10^{-6}$ of the size of the coordinates are the same. On a 3-D mesh whose
+  to the round-off of the coordinates in the mesh file: translations that
+  differ by at most $10^{-2}$ of the thinnest cell across the periodic
+  boundaries are the same, as in the type of the mesh. The thickness of a
+  cell across a periodic face is the distance from the centre of the face to
+  the centre of the opposite face of the cell, along the normal of the face;
+  for a block closed in $k$ by type `200`, the move of its nodes per cell in
+  $k$. The round-off of a coordinate grows with its size, so a tolerance
+  relative to the size of the coordinates would depend on where the mesh
+  lies; relative to the cells it does not. On a 3-D mesh whose
   sectors are closed by the rotational periodicity (type `200` on faces 5–6)
   the images are also the turns by multiples of the sector angle about the
   $x$ axis, up to half a turn either way.
