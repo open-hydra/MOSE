@@ -138,7 +138,9 @@ MOSE prints diagnostic information to the console during loading and iteration. 
     gives for `MPI_ABORT` with error code 1. With MPI, an error that every rank finds (for example a decomposition map
     that does not fit, an `input.ini` that cannot be read, a line of `bc.txt` that cannot be read, a time table that
     cannot be read or whose times decrease, a mesh whose blocks do not make one type) stops every rank together, and so
-    does a value of `input.ini` read again out of its rule, also when one rank alone finds it: each rank writes its
+    does a value of `input.ini` read again out of its rule, also when one rank alone finds it, and an error that rank 0
+    alone finds at set-up (in the thermodynamic, transport or chemistry data, in the rules of `input.ini`, in the initial
+    condition, in the boundary conditions), which rank 0 writes and then passes to every rank: each rank writes its
     message, the ranks finalize MPI and end with exit code 1. A divergence is caught on any value that is not finite
     (NaN, infinity) or on a negative pressure, also in RELEASE builds with fast math.
 

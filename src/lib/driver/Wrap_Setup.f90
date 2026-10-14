@@ -27,7 +27,7 @@ contains
     use MOSE_IO_Probes,            only: Setup_Probes
     use MOSE_IO_Wall,              only: Initialize_Wall_File
     use MOSE_Lib_Ghost,            only: Fill_Ghost_Cell
-    use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_abort_all
+    use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_stop_all, mpi_bcast_logical
     use MOSE_Mod_Timers,           only: timer_run_begin
     use MOSE_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index, &
                                          allocate_exchange_schedules
@@ -36,6 +36,7 @@ contains
     ! Local
     integer :: m, ios
     logical :: partition_first, lean_read
+    logical :: setup_error   ! an error found by a check of rank 0 (Stop_Together)
     logical, allocatable :: keep(:)
 
     !! ------------------------------------------------------
@@ -46,11 +47,15 @@ contains
     ! Load tables (thermo, transport, chemistry)
     call Load_ThermoTransport ()
     call Load_Chemistry ()
-    if (mpi_is_root) call Check_Tables ()
+    setup_error = .false.
+    if (mpi_is_root) call Check_Tables ( setup_error )
+    call Stop_Together ( setup_error, 'thermodynamic, transport or chemistry data error (see above)' )
 
     ! Read input.ini
     call Read_Inifile ()
-    if (mpi_is_root) call Check_Input ()
+    setup_error = .false.
+    if (mpi_is_root) call Check_Input ( setup_error )
+    call Stop_Together ( setup_error, 'input file error (see above)' )
 
     ! Allocate container objects Domain and IOfield.
     allocate ( simulation%domain  ( obj_multigrid%MGL ) )
@@ -61,7 +66,9 @@ contains
     call Assign_Setup ()
 
     ! Stop on configuration errors now, before the (possibly long) initial-condition read.
-    if (mpi_is_root) call Stop_Simulation()
+    setup_error = .false.
+    if (mpi_is_root) call Stop_Simulation ( setup_error )
+    call Stop_Together ( setup_error, 'setup error (see above)' )
 
     ! Read file for initial solution.
     !
@@ -75,7 +82,9 @@ contains
     else
       call Read_IC ( simulation%IOfield(1) )
     end if
-    if (mpi_is_root) call Check_IC ()
+    setup_error = .false.
+    if (mpi_is_root) call Check_IC ( setup_error )
+    call Stop_Together ( setup_error, 'initial condition error (see above)' )
 
     ! Block count and ijk dimensions.  Cheap, and enough to partition on.
     call Setup_Data_Dimensions ( simulation%domain(1), simulation%IOfield(1) )
@@ -97,7 +106,9 @@ contains
 
     ! Read Boundary Conditions file
     call Setup_BC ( simulation%domain )
-    if (mpi_is_root) call Check_BC ()
+    setup_error = .false.
+    if (mpi_is_root) call Check_BC ( setup_error )
+    call Stop_Together ( setup_error, 'boundary condition error (see above)' )
 
     ! MPI: partition blocks once on finest-level cell counts (restriction and
     ! prolongation are block-local, so a block must live on the same rank at
@@ -216,7 +227,9 @@ contains
     if (mpi_is_root) call Print_Warnings ()
 
     ! If errors are found, print error messages and stop the simulation.
-    if (mpi_is_root) call Stop_Simulation()
+    setup_error = .false.
+    if (mpi_is_root) call Stop_Simulation ( setup_error )
+    call Stop_Together ( setup_error, 'setup error (see above)' )
 
     ! Set-up is over: start the solver clock
     call timer_run_begin()
@@ -251,9 +264,9 @@ contains
     end subroutine Print_Header
 
 
-    subroutine Check_Tables()
+    subroutine Check_Tables ( has_error )
       implicit none
-      logical :: has_error
+      logical, intent(out) :: has_error
 
       has_error = .false.
 
@@ -288,18 +301,17 @@ contains
         write(*,'(A,T35,A)') '   Chemistry', 'OK'
       endif
 
-      if (has_error) call mpi_abort_all('thermodynamic, transport or chemistry data error (see above)')
-
     end subroutine Check_Tables
 
 
-    subroutine Check_IC()
+    subroutine Check_IC ( has_error )
       implicit none
+      logical, intent(out) :: has_error
 
-      if (index(obj_io%error_message,'ERROR')>0) then
+      has_error = index(obj_io%error_message,'ERROR') > 0
+      if ( has_error ) then
         write(*,'(A,T35,A)') '   Initial conditions', 'FAIL'
         write(*,'(4X,A)') trim(obj_io%error_message)
-        call mpi_abort_all('initial condition error (see above)')
       else
         write(*,'(A,T35,A)') '   Initial conditions', 'OK'
       endif
@@ -307,16 +319,17 @@ contains
     end subroutine Check_IC
 
 
-    subroutine Check_Input()
+    subroutine Check_Input ( has_error )
       use MOSE_Input_Registry
       implicit none
+      logical, intent(out) :: has_error
       character(len=hlen) :: out
 
       out = Validate_Registry()
-      if (index(out,'ERROR')>0) then
+      has_error = index(out,'ERROR') > 0
+      if ( has_error ) then
         write(*,'(A,T35,A)') '   Input file', 'FAIL'
         write(*,'(4X,A)') trim(out)
-        call mpi_abort_all('input file error (see above)')
       else
         write(*,'(A,T35,A)') '   Input file', 'OK'
       endif
@@ -324,13 +337,14 @@ contains
     end subroutine Check_Input
 
 
-    subroutine Check_BC()
+    subroutine Check_BC ( has_error )
       implicit none
+      logical, intent(out) :: has_error
 
-      if (index(obj_io_bc%error_message,'ERROR')>0) then
+      has_error = index(obj_io_bc%error_message,'ERROR') > 0
+      if ( has_error ) then
         write(*,'(A,T35,A)') '   Boundary conditions', 'FAIL'
         write(*,'(4X,A)') trim(obj_io_bc%error_message)
-        call mpi_abort_all('boundary condition error (see above)')
       else
         write(*,'(A,T35,A)') '   Boundary conditions', 'OK'
       endif
@@ -365,9 +379,9 @@ contains
     end subroutine Print_Warnings
 
 
-    subroutine Stop_Simulation()
+    subroutine Stop_Simulation ( has_error )
       implicit none
-      logical :: has_error
+      logical, intent(out) :: has_error
 
       has_error = .false.
 
@@ -401,9 +415,23 @@ contains
         write(*,'(A)') obj_irs%error_message;          has_error = .true.
       endif
 
-      if (has_error) call mpi_abort_all('setup error (see above)')
-
     end subroutine Stop_Simulation
+
+
+    !> The checks of the set-up run on rank 0 alone, which writes what it finds. Rank 0 broadcasts whether it found an
+    !> error, and on an error every rank stops together (mpi_stop_all): rank 0 has written its message before any rank
+    !> ends, and the run ends with exit code 1. With MPI_ABORT from rank 0 alone, which makes only a best attempt to stop
+    !> the processes (MPI-4.1, section 11.4.2), the launcher could end while rank 0 was still writing: with Intel MPI
+    !> 2021.12 a run ended once in ten with exit code 141 (128 + SIGPIPE) and without the line of the abort.
+    subroutine Stop_Together ( found, why )
+      implicit none
+      logical, intent(inout)       :: found
+      character(len=*), intent(in) :: why
+
+      call mpi_bcast_logical ( found )
+      if ( found ) call mpi_stop_all ( why )
+
+    end subroutine Stop_Together
 
 
     subroutine Print_Shell_Info()

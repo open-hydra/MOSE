@@ -4,9 +4,13 @@
 #
 #  An error that rank 0 alone finds at set-up must stop every rank: the
 #  100-cell Sod tube of test/1D/Sod79 with cfl = -1, on 2 ranks, must end
-#  within 60 s with exit code 1 to 128 and the message of the rule; and so
-#  must the run without input.ini, which every rank finds it cannot read
-#  (the ranks stop together, with MPI_FINALIZE). A rank
+#  within 60 s with exit code 1, the message of the rule and the STOP line
+#  of both ranks: rank 0 broadcasts the error and the ranks stop together,
+#  with MPI_FINALIZE, once rank 0 has written its message (with MPI_ABORT
+#  from rank 0 alone, Intel MPI 2021.12 ended once in ten runs with exit
+#  code 141, SIGPIPE, and lines lost). The run without input.ini, which every
+#  rank finds it cannot read, must end within 60 s with exit code 1 to 128
+#  and its message (the ranks stop together, with MPI_FINALIZE). A rank
 #  that ends alone, with STOP and without MPI_FINALIZE, leaves the others to
 #  the launcher: the mpiexec of Intel MPI 2021.12 kills them and ends with
 #  exit code 255. The inputs come from ../../fast/input-checks/exit-codes/make_case.py
@@ -71,20 +75,29 @@ riemann-solver = HLLC
 EOI
 
 fail=0
-# run2 <tag> <message>: 2 ranks must end within 60 s with exit code 1 to 128 and the message
+# run2 <tag> <message> [<stop>]: 2 ranks must end within 60 s with exit code 1 to 128 and the message; with <stop>, with
+# exit code 1 and the line "STOP: <stop>" of both ranks (the ranks stop together)
 run2() {
-  local tag="$1" message="$2"
+  local tag="$1" message="$2" stop="${3:-}"
   timeout -k 10 60 "$MPIEXEC" "$NPFLAG" 2 "$LOCAL" > "OUTPUT/$tag.log" 2>&1
   local rc=$?
-  if [[ $rc -ge 1 && $rc -le 128 && $rc -ne 124 ]] && grep -a -q -- "$message" "OUTPUT/$tag.log"; then
-    echo "  [ok  ] $tag, 2 ranks, exit code $rc, \"$message\""
+  local ok=1 nstop=0 need="1 to 128 within 60 s; 124 is the time limit"
+  [[ $rc -ge 1 && $rc -le 128 && $rc -ne 124 ]] || ok=0
+  grep -a -q -- "$message" "OUTPUT/$tag.log" || ok=0
+  if [[ -n $stop ]]; then
+    need="1 within 60 s, and the STOP line of both ranks"
+    nstop=$(grep -a -c -F -- "] STOP: $stop" "OUTPUT/$tag.log")
+    [[ $rc -eq 1 && $nstop -eq 2 ]] || ok=0
+  fi
+  if [[ $ok -eq 1 ]]; then
+    echo "  [ok  ] $tag, 2 ranks, exit code $rc, \"$message\"${stop:+, the STOP line of both ranks}"
   else
-    echo "  [FAIL] $tag, 2 ranks, exit code $rc (required 1 to 128 within 60 s; 124 is the time limit), message \"$message\" $(grep -a -q -- "$message" "OUTPUT/$tag.log" && echo found || echo missing) (see OUTPUT/$tag.log)"
+    echo "  [FAIL] $tag, 2 ranks, exit code $rc (required $need), message \"$message\" $(grep -a -q -- "$message" "OUTPUT/$tag.log" && echo found || echo missing)${stop:+, STOP lines $nstop of 2} (see OUTPUT/$tag.log)"
     fail=1
   fi
 }
 echo "-- an error that rank 0 finds at set-up stops every rank (2 ranks) --"
-run2 mpi-input "cfl must be > 0"
+run2 mpi-input "cfl must be > 0" "input file error (see above)"
 echo "-- an input.ini that cannot be read stops every rank (2 ranks) --"
 rm -f input.ini
 run2 mpi-ini-missing "input.ini cannot be opened"

@@ -333,9 +333,10 @@ if(USE_MPI)
     # map for other ranks stops every rank with the same message.
     mose_add_mpi_script(MPIDecompositionMap mpi/decomposition-map "needs-mpi;implementation;2D")
 
-    # Exit codes under MPI: an input error that rank 0 finds at set-up, and an
-    # input.ini that every rank finds it cannot read, stop both ranks of a 2-rank run
-    # within 60 s, with exit code 1 to 128; a value out of its rule in input.ini read
+    # Exit codes under MPI: an input error that rank 0 finds at set-up stops both
+    # ranks of a 2-rank run within 60 s, with exit code 1 and the STOP line of both
+    # ranks; an input.ini that every rank finds it cannot read stops them within 60 s,
+    # with exit code 1 to 128; a value out of its rule in input.ini read
     # again by rank 1 alone (each rank in its own folder) stops both ranks with exit code 1.
     mose_add_mpi_script(MPIExitCodes mpi/exit-codes "needs-mpi;implementation;1D")
 endif()
