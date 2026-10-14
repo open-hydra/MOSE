@@ -8,9 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- The key `diffusive-metric` of `[MOSE-Numerics]` chooses the face metric of the viscous fluxes at interior faces:
-  `inverse-mean`, the default, the inverse of the mean of the inverse metrics of the two cells, whose face-normal edge is the
-  vector between the cell centres; or `mean`, the mean of the two metrics, as before.
+- The key `diffusive-metric` of `[MOSE-Numerics]` chooses the face metric of the viscous fluxes: `stencil`, the default, from the
+  same differences of the cell centres that the face gradient takes of the field (see Changed); `inverse-mean`, the inverse of the
+  mean of the inverse metrics of the two cells, whose face-normal edge is the vector between the cell centres; or `mean`, the mean
+  of the two metrics, as before.
 - Probes can record `mi_tilde`, the first turbulence variable, which the solution files name `rhoNuTilde`
   (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model).
 - Builds with `USE_MPI=ON` register a `needs-mpi` test tier (`ctest -L needs-mpi`). Each of its tests writes its own small
@@ -42,14 +43,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   after the solution it reads: the run split in two parts writes the same files as the run in one go, byte for byte, within the
   limits that the guide lists. A restart from vtk raw solutions did not start at all, and one from Tecplot started its counters
   again: the numbered solutions of the second part replaced those of the first. A solution written before restarts as before.
+- The manufactured-solution driver (`MOSE_mms`) takes its field from the environment variable `MOSE_MMS_FIELD`: `periodic2d`,
+  the field of `test/2D/viscous/mms` and the default, `periodic3d`, and the wall fields `wall2d` and `wall3d`, with walls at
+  y = 0 and y = 1 and the wall temperature varying along them; an unknown value stops the driver at start. Where the total
+  boundary flux of an equation is zero for any state (every equation of the periodic fields, the mass with walls), the driver
+  removes the mean of the discrete source once after set-up, so that the discrete steady problem has a solution; the mean and
+  its ratio to the mean of |S| go to the log.
 
 ### Changed
 
-- The interior faces of the viscous fluxes take by default the inverse of the mean of the inverse metrics. The mean of the two
-  metrics divided the difference across a face by the mean of 1/h instead of the distance between the cell centres: it
-  overstated the face-normal gradient, and with it the viscous, conductive and diffusive fluxes, by (1 + r)²/(4r) at a cell-size
-  ratio r (4.2 % at r = 1.5, 8.9 % at r = 1.8), at any resolution. Viscous runs change wherever neighbouring cells differ in
-  size; `diffusive-metric = mean` keeps the previous metric.
+- The interior faces of the viscous fluxes no longer take by default the mean of the two metrics, which divided the difference
+  across a face by the mean of 1/h instead of the distance between the cell centres: it overstated the face-normal gradient, and
+  with it the viscous, conductive and diffusive fluxes, by (1 + r)²/(4r) at a cell-size ratio r (4.2 % at r = 1.5, 8.9 % at
+  r = 1.8), at any resolution. Viscous runs change wherever neighbouring cells differ in size; `diffusive-metric = mean` keeps the
+  previous metric. The default is `stencil` (below).
 - Set-up errors stop the run before the initial condition is read, on every MPI rank: the root rank found them only after
   reading the initial condition, and stopped by itself. Errors of the transport data are reported there, such as a mixture of
   more than one species with `schmidt` = 0, its default, without `INPUT/diffusion.dat`, which failed later, in the first step of
@@ -132,9 +139,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   different iterations in different units, and a flow at low density could stop after its first iteration, unconverged. Every
   steady run that ends on `res-threshold` ends at another iteration (the PrandtlMeyer case of the test suite runs 761 iterations
   instead of 555); runs that end on `iter-threshold` do not change. `residual-history.dat` and the screen still report the
-  residual as it is. A restart from a solution that holds no reference measures the threshold from its own first iteration, with
-  a warning. An input written for the absolute test keeps its stop with `res-threshold` divided by the density residual of the
-  first iteration (see the user guide, Stopping criteria).
+  residual as it is. A restart from a solution that holds no reference measures the threshold from its own first iteration, with a
+  warning. An input written for the absolute test keeps its stop with `res-threshold` divided by the density residual of the first
+  iteration (see the user guide, Stopping criteria).
 - With `sol-format = vtk raw` the field solutions hold their data as raw binary appended to each file, as the wall and diagnostic
   outputs did: they were base64 inside the XML, in a time-accurate run, and in a steady one up to its first diagnostic output.
   The values are the same, bit for bit; base64 took a third more room.
@@ -159,6 +166,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - MOSE uses ORION main a978930 (PR #7 merged; was 8cda645), whose multi-block VTK reader and writer handle field data (`TIME`,
   `CYCLE` and named scalars), any number of blocks and surface blocks, and whose Tecplot reader and writer handle the solution
   time with its sign, strands and data set auxiliary data. The vtk wall files now hold the cell values of their faces.
+- The viscous fluxes take by default (`diffusive-metric = stencil`) a face metric made of the same differences of the cell centres
+  that the face gradient takes of the field, so that the gradient of a linear field is exact on any mesh at the interior faces and
+  at the block connections, and at periodic pairs and symmetry faces for the linear fields that they allow; the k faces of a wedge
+  or of a 3-D sector (type `200`) keep the `inverse-mean` metric with every value of the key, which is not exact where the cell
+  size changes along the face (see the theory guide). `inverse-mean` builds the metric from the mean edges of the two cells, which
+  are not those differences: on meshes with nodes moved at random, cells of alternating size, grid lines that fold at a face
+  between blocks, points shared by three or five blocks or skewed cells on a symmetry plane, a linear velocity or temperature,
+  whose viscous force and heat conduction vanish, gave up to 5.4e-2 of their face-flux scale in the patch test with it, at any
+  resolution. The metric is computed at set-up and stored on the faces (27 values per cell); a face between blocks takes one
+  gradient, as an interior face. Results change for viscous runs on meshes that are not Cartesian; on meshes stretched across a
+  boundary layer, where the tangential derivatives of `mean` and `inverse-mean` carry the factor (1 + r)²/(4r); and at the faces
+  between blocks with SST, Wilcox 2006 or QCR, whose fluxes are not linear in the gradient, also on Cartesian meshes. A face whose
+  stencil does not span three directions (a degenerate cell, a face that collapses) stops the run at set-up with its block, cell
+  and face, and the remedy `diffusive-metric = inverse-mean`.
+- A viscous run on a 2-D axisymmetric wedge or on a 3-D sector closed by type `200` whose axis nodes are exactly at r = 0 stops
+  at set-up, with every `diffusive-metric`, with a message that asks to put the axis nodes at a small radius (the meshes of MOSE
+  put them at 1e-6 of the radial size of the first cell). On such an axis the faces have zero area, their ghost cells copy the
+  cells, and the faces of type `200` take the derivative in r across the axis with a ghost cell one cell away: the hoop stress of
+  the first row of cells was wrong, on the wedge by 1/6 of the hoop term in Homann's stagnation-point flow, and on the sector next
+  to its faces of type `200`, and refinement does not reduce it. A wall on a face of zero area, as on the axis of a 3-D mesh
+  around it, stops with its remedy: the symmetry condition (`300`) on the axis. With `inverse-mean` and `mean` a viscous run on a
+  3-D mesh stops at set-up at any boundary face of zero area, as on such a polar line, with a message that asks for
+  `diffusive-metric = stencil`: with them the viscous force of the first row of cells of a linear field, which is zero, grows as
+  the mesh is refined, while `stencil` is exact there.
+- In time-accurate RANS runs the local time step takes, for the stiffness of the turbulence sources, a bound that the state of
+  the cell gives alone: Spalart–Allmaras 2 c_w1 (1 + c_w3⁶)^(1/6) ν̃/y², SST max(β*, 2 max(β₁, β₂)) ω, Wilcox 2006
+  max(β*, 2 β₀) ω. Each step evaluated the turbulence sources once more, with a fill and an exchange of the ghost cells, only
+  to take their derivative. The step of a cell where the stiffness sets it is shorter, by the ratio of the bound to the
+  derivative (1.10 for SST where F₁ = 1, at most 1.18 for Wilcox 2006 in 3-D, about 2 for Spalart–Allmaras in an equilibrium
+  boundary layer); the stages and the positivity of ν̃, k and ω do not change; steady runs do not change.
+- The viscous fluxes compute the viscous variables of each cell once per stage, the face metric of the faces of type `200`
+  once at set-up, the cosine and sine of the periodicity angle once, and read the stored face metrics in place: a viscous run
+  holds one more array of the size of the state. The same operations act on the same values; with the `-fp-model fast=2` of
+  the ifx release build the results can differ in the last bits.
+- The wall output (`OUTPUT/wall.tec`) writes, on every face of every wall, the traction of the gas on the wall, the heat flux
+  into the gas and the mass flux into the gas: it wrote them along the face normal of the solver, toward growing index, so two
+  walls that mirror each other wrote opposite values by the parity of their faces. On faces 2, 4 and 6 `tauX`, `tauY`, `tauZ`
+  and the `mdot` of the walls `503`–`505` change sign, on faces 1, 3 and 5 `qw`; `y+`, `pw`, `Tw` and the solution do not
+  change. A script that undid the parity must drop that.
+- The configuration refuses ifx 2024.1 at `-O2` or above without interprocedural optimization (a RELEASE build with
+  `USE_IPO=OFF`, or whose toolchain cannot do IPO, and the TESTING build), with a message: that compiler builds a loop of the
+  ghost metrics wrongly there (a minimal program in standard Fortran gives wrong values at `-O2` and `-O3` and the right ones at
+  `-O0`, `-O1` and with `-ipo`), and MOSE stopped at set-up on the check of the ghost metrics, or ran with wrong ghost metrics.
+  The RELEASE build with IPO, the default, and the DEBUG build configure as before, with the same compile and link lines.
 
 ### Removed
 
@@ -174,9 +225,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Faces between blocks and chimera faces take the inverse of the mean of the inverse metrics: across a large size jump at a block
-  connection the mean of the two metrics made the normal gradient far too steep, and the explicit diffusion unstable on the large
-  cell.
+- Faces between blocks take the inverse of the mean of the inverse metrics with `diffusive-metric = inverse-mean` or `mean`, and
+  chimera faces with every value of the key: across a large size jump at a block connection the mean of the two metrics made the
+  normal gradient far too steep, and the explicit diffusion unstable on the large cell.
 - With MPI the tangential neighbours of the source cell of a block connection, which on the edge of a face can be ghost cells
   filled from another rank, are taken after the ghost exchange: they were one stage old, and MPI runs drifted from the serial run
   at block edges and junctions.
@@ -552,3 +603,85 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   lacked its last numbered solution and probe rows, and a restart from a first part that ended there numbered the solutions
   after it one lower, shifted the time-based ones and left the state of that iteration in no file. The guide no longer lists
   this as a limit of the restart.
+- With `diffusive-metric = stencil` the gradient at a wall face takes, along the wall, the differences of the wall values (the
+  temperatures of the neighbouring `302` faces; zero for the velocity of a no-slip wall and for the turbulence variables) with
+  the same differences of the positions, so that it is exact for a linear field whose wall values are its values at the face
+  centres. It set the derivatives along the wall to zero and mapped the result with the metric of the wall cell, whose direction
+  across the face is the wall normal only on parallelogram cells: where the wall temperature varies along a skewed wall the
+  normal gradient was off by (dT_w/ds)·tan θ, at any resolution, and on wall cells that are not parallelograms the direction of
+  the velocity gradient was wrong too (1.4e-2 to 8.8e-2 of the scale in the patch test; now at most 3.5e-13). Results change only
+  there.
+- With `diffusive-metric = stencil` the source terms of the turbulence models (Spalart–Allmaras and its variants, SST,
+  Wilcox 2006, SSG/LRR) and the eddy viscosity of the output take cell gradients whose metric comes from the same differences of
+  the positions as of the values, with each ghost value at the point where it is right. With the metric of the cell the gradient
+  of a linear field was wrong next to a jump of cell size (5 % in the wall cell of a layer growing by 1.2), inside a stretched
+  layer, behind walls on skewed cells (a copied density took a normal gradient it does not have) and next to zero-gradient faces
+  (half the one-sided difference). Results change for RANS runs, mostly in the cells next to boundaries.
+- With `diffusive-metric = stencil` a mesh with faces of zero area, such as an axis at r = 0 or the polar line of a 3-D mesh
+  around its axis with symmetry on it, no longer stops at set-up on a not-a-number: such a face has a zero normal, as in the
+  rest of the solver, its ghost cell is the cell itself, and its flux is zero.
+- The ghost cells behind viscous walls (`301`, `302`, `503`–`505`) and extrapolation faces (`400`) are filled once per stage, for the fluxes and the source terms alike, from the quantities whose differences the fluxes take:
+  with a wall value q_w the ghost takes 2q_w − q₁ (the velocity of the walls and the turbulence variables), the temperature of a
+  `302` wall max(2T_w − T₁, T_w/2), and the other quantities an extrapolation kept within [q₁/2, 2q₁]; the density follows from
+  p/(R T). The extrapolation 3q₁ − 3q₂ + q₃ of every primitive variable could turn negative and amplify (a negative ghost
+  density next to a hot wall), put the wall value on the face only when the profile was linear over three cells, and the source
+  terms read a second set of ghost values. A line at the end of a run counts the ghost fills in which the cut or the floor
+  acted. Results change for every run with a wall or a `400` face, in the first rows of cells next to them.
+- The ghost cells behind the boundary faces other than `101`, `201` and `300` take their nodes by a linear extrapolation along
+  the index lines, so that both layers keep the edge across the face of the first cell. The cubic extrapolation made the second
+  ghost layer vanish where the second cell is 1.5 times as wide as the first, and the first layer at twice: a run stopped on a
+  determinant of exactly zero, or went on with a metric as large as 1/det, and at chimera faces (`102`) the viscous flux took an
+  infinite, undefined or reversed value where the second cell is three times the first or more. A cell whose determinant is
+  below 1e-12 of the product of its edges, or a ghost cell turned over or degenerate against the first cell, now stops the run
+  at set-up with its block, cell, face and ratio, and the message gives the thresholds and the remedy (index lines that change
+  smoothly across the first two node layers at the face). Every run changes in the last bits next to such faces, and by
+  O(r − 1) where the cells are stretched across them.
+- A cell folded at one of its corners, or turned against the orientation of its block, stops the run at set-up, naming block,
+  cell, corner node, the Jacobian there and the bound; the coarse levels of a sequence of grids are checked too. Such a cell
+  passed in silence: the volume of a cell is a sum of tetrahedra taken in absolute value, and the cell check looked at the
+  determinant of the mean edges only. On a valid mesh nothing changes, bit for bit.
+- The two k faces of a 3-D sector closed by type `200`, one interior face of the whole annulus, carry its viscous flux (viscous
+  stress, heat flux, diffusion of species and turbulence variables), computed once between the cell next to face 6 and the
+  turned image of the cell next to face 5. They carried the inviscid flux only, so the solution tended to that of a sector
+  whose periodic planes are free of traction and adiabatic, an error whose share grows as the mesh is refined. Runs on the wedge do not change.
+- On a 3-D block closed in k by type `200` with no angle (a translated sector), the ghost cells sit one period away, where their
+  values belong: with `diffusive-metric = stencil` the metrics put them at the cell at the other end of the block, which scaled
+  the derivative along k of the two layers of cells next to the k faces by 2/(2 − nk) (−1/3 with 8 cells), at any resolution.
+- A wall `301` applies its heat flux `q_wall` into the fluid on every face, as the guide defines it. On faces 1, 3 and 5 it
+  applied it out of the fluid, so a positive `q_wall` cooled the gas there, and the wall temperature it estimated followed the
+  same wrong sign. Results change for every wall `301` with a non-zero `q_wall` on faces 1, 3 or 5.
+- With the rotating frame, the wall output of a stationary wall uses the velocity of that wall, −(Ω × r) at the face centre, as
+  the boundary fluxes do: the skin friction and the heat flux written for it were those of a wall rotating with the frame.
+- On a wall `301` or `302` of a stationary face of the rotating frame (`stationary-face-<n>`), the wall gradient takes the
+  derivatives of the wall velocity along the wall, from its gradient −[Ω×], with every `diffusive-metric`. They were zero, so
+  the wall stress lacked μ times them, an error of order μ|Ω| on any mesh, orthogonal cells included: a gas at rest in the
+  laboratory felt a shear μΩ on such a wall. The wall stress changes there, in the wall flux and in the wall output.
+- On the same walls the energy flux of the wall face carries the work of the wall stress on the wall velocity, (τ·n)·w, as the
+  faces between cells carry it with the velocity of their cells. The energy of the wall cells lacked it, by an amount per unit
+  area of wall that does not depend on the mesh.
+- A `stationary-face-<n>` that is not made of walls `301` and `302`, or that has no record in `bc.txt`, stops the run at set-up
+  with a message that names the key, the record and its type: on a wall `503`–`505` such a face was at rest in the inviscid flux
+  and turning with the frame in the viscous flux, a boundary condition of no wall, and a face with no record did nothing.
+- With the rotation–curvature correction of Spalart–Allmaras (`turbulence = SA-RC`) the ghost cells behind the faces between
+  blocks (`101`) and of the periodic pairs (`201`) hold the velocity gradient of the cell across, from another rank by message,
+  and on a 3-D sector closed by `200` the gradient of the turned image, so the result no longer depends on how the mesh is
+  divided into blocks. They held a copy of the gradient of the cell, so next to such a face the strain-rate gradient took half
+  of a one-sided difference. With SA-RC a mesh of one block changes next to its periodic pairs, next to the
+  faces of a 3-D sector turned about x and, with swirl, on the 2-D wedge; without SA-RC nothing changes.
+- With a RANS model, the ghost cells behind an SRM grain (`502`) take the turbulence values that its flux uses in the same
+  stage: those of the blowing wall while the surface burns (ν̃ = 0, k = 0 and the wall value of ω), those of the impermeable
+  wall at the flame temperature when it does not, as 2φ_w − φ₁ times the density of the ghost cell, in both ghost layers; and
+  the wall distance counts the grain as a wall. Next to the grain the distance was that to the other walls, or 10⁸ with no other
+  wall, so the destruction and the production of Spalart–Allmaras, the blending functions of SST and the wall value of ω at the
+  grain were those of a flow without the grain there. Without RANS, or without a `502` boundary, nothing changes.
+- With `integration-variables = prec` and SST or Wilcox 2006, the viscous floor of the reference velocity of each cell takes the
+  eddy viscosity at the strain rate of the cell. The velocity gradient was computed only by SA-RC, so for the other models it
+  stayed zero, and SST and Wilcox 2006, which limit their eddy viscosity with the strain rate, gave the eddy viscosity of zero
+  strain, larger wherever the limiter acts: there the reference velocity was too large, and with it the local time step, the
+  preconditioned update and the flux HLLC-PC (in a test the local step was 0.771 of the rule with SST and 0.782 with
+  Wilcox 2006). Runs without `prec` (the default is `cons`) do not change.
+- The ghost cells of the walls coupled to another solver (`103`, `104`) take the ratio of the extrapolation and, with
+  `diffusive-metric = stencil`, the positions of the ghost values of a wall: they kept a ratio of 0, so the extrapolated
+  quantities were copied, and the face metrics placed their ghost values where they are not, so the viscous flux of the faces
+  between two wall cells was wrong for a linear field on skewed cells. Their velocity and turbulence variables take the wall
+  values 2q_w − q₁ of an adiabatic wall, as the other walls: the turbulence variables were copied from the cell.
