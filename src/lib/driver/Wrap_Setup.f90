@@ -100,6 +100,8 @@ contains
 
     if ( .not. partition_first ) then
       call Setup_Data_Fields ( simulation%domain(1), simulation%IOfield(1) )
+      ! Every value that the initial condition gives the domain is finite, before the coarse levels are built from it
+      call Check_IC_Values ( simulation%domain(1), simulation%IOfield(1) )
       ! With multigrid, allocate Grid and IOfield 2,...,MGL
       call Setup_Multigrid ( simulation )
     end if
@@ -130,6 +132,8 @@ contains
       if ( lean_read ) call Read_IC ( simulation%IOfield(1), zone_mask = keep )
       call Setup_Data_Fields ( simulation%domain(1), simulation%IOfield(1), keep )
       deallocate(keep)
+      ! Every value that the initial condition gives the blocks of this rank is finite
+      call Check_IC_Values ( simulation%domain(1), simulation%IOfield(1) )
     end if
 
     call allocate_exchange_schedules(obj_multigrid%MGL)
@@ -317,6 +321,82 @@ contains
       endif
 
     end subroutine Check_IC
+
+
+    !> The initial condition, or the solution that a restart reads, gives the domain the coordinates of its nodes and the
+    !> variables of its cells, and a value there that is not finite (NaN, infinity) stops the run at set-up, with the place
+    !> of the value. Not_Finite reads the bits of each value, an operation on integers that raises no floating-point
+    !> exception: a build that traps the invalid operations (the DEBUG build; a comparison with a NaN is one) stopped
+    !> with SIGFPE at the first such operation on the value, at the end of the set-up, and -ffast-math cannot fold the
+    !> test away. Each rank checks the values it holds: the nodes of every block, the cells of the blocks whose state it
+    !> holds (on one grid level with MPI, its own blocks and their chimera donors). The ranks take the decision together
+    !> (the largest of a flag), the first rank that found a value writes it, and every rank stops with mpi_stop_all:
+    !> exit code 1, in every build.
+    subroutine Check_IC_Values ( domain, IOfield )
+      use Lib_ORION_data,    only: ORION_data
+      use MOSE_Lib_Newstate, only: Not_Finite
+      use MOSE_Mod_MPI,      only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8
+      implicit none
+      type(MOSE_domain_type), intent(in) :: domain
+      type(ORION_data), intent(in)       :: IOfield
+      ! Local
+      character(len=1), parameter :: axis(3) = ['x', 'y', 'z']
+      character(len=hlen) :: what
+      character(len=40)   :: name
+      integer  :: b, i, j, k, d, off
+      real(R8) :: flag, flag_all, first
+
+      what = ''
+      blocks: do b = 1, domain%nb
+        do k = 0, domain%blk(b)%dim(3)
+          do j = 0, domain%blk(b)%dim(2)
+            do i = 0, domain%blk(b)%dim(1)
+              do d = 1, 3
+                if ( Not_Finite(domain%blk(b)%node(i,j,k)%c(d)) ) then
+                  write(what,'(3A,I0,A,2(I0,A),I0)') 'coordinate ', axis(d), ' of block ', b, ', node i, j, k = ', &
+                    i, ', ', j, ', ', k
+                  exit blocks
+                end if
+              end do
+            end do
+          end do
+        end do
+        if ( .not. allocated(domain%blk(b)%P) ) cycle
+        do k = 1, domain%blk(b)%dim(3)
+          do j = 1, domain%blk(b)%dim(2)
+            do i = 1, domain%blk(b)%dim(1)
+              do d = 1, nprim
+                if ( Not_Finite(domain%blk(b)%P(d,i,j,k)) ) then
+                  ! The name of the variable when the file gives the names (Tecplot ASCII), which come after the coordinates
+                  name = ''
+                  if ( allocated(IOfield%varnames) .and. allocated(IOfield%block(1)%vars) ) then
+                    off = size(IOfield%varnames) - size(IOfield%block(1)%vars, 1)
+                    if ( off >= 0 .and. off + d <= size(IOfield%varnames) ) &
+                      name = ' ('//trim(adjustl(IOfield%varnames(off + d)))//')'
+                  end if
+                  write(what,'(A,I0,2A,I0,A,2(I0,A),I0)') 'variable ', d, trim(name), ' of block ', b, &
+                    ', cell i, j, k = ', i, ', ', j, ', ', k
+                  exit blocks
+                end if
+              end do
+            end do
+          end do
+        end do
+      end do blocks
+
+      flag = 0.0_R8
+      if ( len_trim(what) > 0 ) flag = 1.0_R8
+      call mpi_allreduce_max_r8 ( flag, flag_all )
+      if ( flag_all > 0.0_R8 ) then
+        ! Written once, by the first rank that found a value (rank 0 when every rank holds it)
+        call mpi_allreduce_min_r8 ( merge(real(mpi_rank_, R8), huge(1.0_R8), flag > 0.0_R8), first )
+        if ( flag > 0.0_R8 .and. nint(first) == mpi_rank_ ) &
+          write(*,'(A)') ' [ERROR] '//trim(obj_io%nameinit)//' holds a value that is not finite (NaN or infinity): '// &
+                         trim(what)
+        call mpi_stop_all ( 'initial condition error (see above)' )
+      end if
+
+    end subroutine Check_IC_Values
 
 
     subroutine Check_Input ( has_error )

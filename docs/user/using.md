@@ -142,7 +142,8 @@ MOSE prints diagnostic information to the console during loading and iteration. 
     alone finds at set-up (in the thermodynamic, transport or chemistry data, in the rules of `input.ini`, in the initial
     condition, in the boundary conditions), which rank 0 writes and then passes to every rank: each rank writes its
     message, the ranks finalize MPI and end with exit code 1. A divergence is caught on any value that is not finite
-    (NaN, infinity) or on a negative pressure, also in RELEASE builds with fast math.
+    (NaN, infinity) or on a negative pressure, also in RELEASE builds with fast math; a value of the initial condition
+    that is not finite stops the run at set-up, in every build ([Initial Conditions](initial-conditions.md#required-variables)).
 
     Known limit: errors raised inside the ORION library, which reads and writes the solution files, still end with
     code 0, because ORION stops with `STOP`. For example, a binary Tecplot file (`ic-format = tecplot binary`) in a

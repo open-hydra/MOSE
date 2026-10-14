@@ -16,6 +16,15 @@
 #  exit code 255. The inputs come from ../../fast/input-checks/exit-codes/make_case.py
 #  (the Sod ones); nothing else is stored here.
 #
+#  A value of the initial condition that is not finite must stop every rank,
+#  also when one rank alone holds it: the Sod tube with a NaN velocity in one
+#  cell (make_case.py nan), its one block on rank 1 (INPUT/decomposition.map,
+#  ../write_map.py), so that rank 1 alone holds the state of its cells and
+#  rank 0 only its nodes, and the tube with an infinite coordinate of one
+#  node (make_case.py inf), which both ranks hold, must end within 60 s with
+#  exit code 1, the place of the value, written once, and the STOP line of
+#  both ranks.
+#
 #  A value out of its rule that one rank alone reads again must stop every
 #  rank as well: two ranks launched as two programs (MPMD), each in its own
 #  folder with its own input.ini (mpmd/runs/A for rank 0, mpmd/runs/B for
@@ -101,6 +110,44 @@ run2 mpi-input "cfl must be > 0" "input file error (see above)"
 echo "-- an input.ini that cannot be read stops every rank (2 ranks) --"
 rm -f input.ini
 run2 mpi-ini-missing "input.ini cannot be opened"
+
+echo "-- a value of the initial condition that is not finite stops every rank, also when one rank alone holds it (2 ranks) --"
+cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 50
+newrun = true
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.9
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+EOI
+python3 -B ../write_map.py --layout 1x1 --cells 100 1 --owners list:1 > /dev/null || exit 1
+for tag in mpi-nan-ic mpi-inf-node; do
+  if [[ $tag == mpi-nan-ic ]]; then
+    python3 -B ../../fast/input-checks/exit-codes/make_case.py nan "$SOD" || exit 1
+    place="variable 2 (u) of block 1, cell i, j, k = 50, 1, 1"
+  else
+    python3 -B ../../fast/input-checks/exit-codes/make_case.py inf "$SOD" || exit 1
+    place="coordinate y of block 1, node i, j, k = 20, 1, 1"
+  fi
+  run2 $tag "holds a value that is not finite (NaN or infinity): $place" "initial condition error (see above)"
+  n=$(grep -a -c -F -- "holds a value that is not finite" "OUTPUT/$tag.log")
+  if [[ $n -eq 1 ]]; then
+    echo "  [ok  ] $tag, the place of the value written once"
+  else
+    echo "  [FAIL] $tag, the place of the value written $n times (required once, by the first rank that found it)"
+    fail=1
+  fi
+done
+rm -f INPUT/decomposition.map
 
 echo "-- a value out of its rule that one rank alone reads again stops every rank (2 ranks, two folders) --"
 SOLVER="$(cd bin && pwd -P)/MOSE"

@@ -3,7 +3,7 @@ module MOSE_Lib_Newstate
 
   implicit none
   private
-  public :: Newstate_Conservative, Newstate_Primitive, Count_Negative_Turbulence, Report_Negative_Turbulence
+  public :: Newstate_Conservative, Newstate_Primitive, Count_Negative_Turbulence, Report_Negative_Turbulence, Not_Finite
 
   !> Cell updates of this process in which a stage made nu~, k or omega negative, before the realizability floor
   integer(I8) :: n_negative_turbulence = 0
@@ -529,7 +529,9 @@ contains
 
   !> .true. for NaN and infinities, the values with all the exponent bits set. The test reads the bits:
   !> -ffast-math (-ffinite-math-only), an option of the RELEASE build, lets gfortran fold isnan, ieee_is_nan and
-  !> ieee_is_finite to constants.
+  !> ieee_is_finite to constants. Reading the bits is an operation on integers, which raises no floating-point
+  !> exception: the set-up checks the initial condition with it (Wrap_Setup), also in a build that traps the invalid
+  !> operations, such as the DEBUG build.
   elemental logical function Not_Finite ( x )
     use iso_fortran_env, only: int64
     implicit none

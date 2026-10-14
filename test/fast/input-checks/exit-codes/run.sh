@@ -52,11 +52,8 @@
 #
 #  Error stops. Each case below breaks the Sod tube in one way: a run that
 #  diverges (CFL 20; stop inside the OpenMP loop of the state update), an
-#  initial condition with a NaN velocity in one cell (the same stop: the
-#  check of the state update must catch a value that is not finite in any
-#  build; -ffast-math, an option of the RELEASE build, lets gfortran fold
-#  isnan to false), an initial condition with fewer variables than the model
-#  needs (set-up), a rotating frame with an axis of zero length (set-up),
+#  initial condition with fewer variables than the model needs (set-up), a
+#  rotating frame with an axis of zero length (set-up),
 #  chemistry = equilibrium without the elements of the species,
 #  INPUT/composition.txt (set-up; the run used to start and go on with an
 #  equilibrium of no element), and a value outside the rule of the registry
@@ -66,6 +63,16 @@
 #  three used to run with no message (set-up). The exit code must be
 #  between 1 and 128 (128 is what ifx gives to ERROR STOP; above 128 the
 #  shell reports a signal) and the log must hold the message.
+#
+#  A value of the initial condition that is not finite stops the run at
+#  set-up, in every build: the tube with a NaN velocity in one cell, and the
+#  tube with an infinite coordinate of one node, must end with exit code 1,
+#  the place of the value (the variable or the coordinate, the block, the
+#  cell or the node) and the STOP line of the set-up, and write no solution.
+#  The check reads the bits of each value, so that it holds in a DEBUG
+#  build, which traps the invalid operations (the NaN case ended there with
+#  SIGFPE, exit code 136, at the end of the set-up), and with -ffast-math,
+#  an option of the RELEASE build, which lets gfortran fold isnan to false.
 #
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
@@ -295,11 +302,11 @@ write_case() {
   else
     ln -sf "../$COMMON/phase.txt" INPUT/phase.txt; ln -sf "../$COMMON/thermo.dat" INPUT/thermo.dat
   fi
-  if [[ "$tag" == nan-ic ]]; then
-    python3 -B make_case.py nan "$SOD" || exit 1
-  else
-    python3 -B make_case.py sod "$SOD" || exit 1
-  fi
+  case "$tag" in
+    nan-ic)   python3 -B make_case.py nan "$SOD" || exit 1 ;;
+    inf-node) python3 -B make_case.py inf "$SOD" || exit 1 ;;
+    *)        python3 -B make_case.py sod "$SOD" || exit 1 ;;
+  esac
   local cfl=0.9
   [[ "$tag" == diverge ]] && cfl=20
   cat > input.ini <<EOI
@@ -336,9 +343,31 @@ run_case() {
   fi
 }
 
+# run_value <tag> <place>: the tube whose initial condition holds a value that is not finite at <place> (make_case.py
+# nan, inf) must stop at set-up with exit code 1, the message that names the place, the STOP line of the set-up and no
+# solution
+run_value() {
+  local tag="$1" place="$2"
+  local message="holds a value that is not finite (NaN or infinity): $place" found=missing stop=missing solution=none
+  write_case "$tag" "equations = euler"
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  local rc=$?
+  grep -a -q -F -- "$message" "OUTPUT/$tag.log" && found=found
+  grep -a -q -F -- "STOP: initial condition error (see above)" "OUTPUT/$tag.log" && stop=found
+  [[ -f OUTPUT/field.tec ]] && solution=written
+  if [[ $rc -eq 1 && $found == found && $stop == found && $solution == none ]]; then
+    echo "  [ok  ] $tag: exit code 1, \"$message\""
+  else
+    echo "  [FAIL] $tag: exit code $rc (required 1), message \"$message\" $found, STOP line $stop, solution $solution (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+}
+
 echo "-- exit codes of the error stops --"
 run_case diverge  "Integration failed"              "equations = euler"
-run_case nan-ic   "Integration failed"              "equations = euler"
+run_value nan-ic   "variable 2 (u) of block 1, cell i, j, k = 50, 1, 1"
+run_value inf-node "coordinate y of block 1, node i, j, k = 20, 1, 1"
 run_case ic-vars  "Number of variables in IOfield"  "equations = navier-stokes
 turbulence = SA
 schmidt = 0.7"

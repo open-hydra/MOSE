@@ -192,8 +192,9 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # test/fast/input-checks/run.sh.
 # Exit codes of the error stops: a run that MOSE stops on an error ends with a
 # non-zero exit code and its message: the Sod tube as a viscous mixture of four
-# species without a diffusion table, a run that diverges, a NaN in the initial
-# condition, an initial condition with too few variables, a rotating frame
+# species without a diffusion table, a run that diverges, a NaN or an infinity
+# in the initial condition (a stop at set-up, exit code 1, in every build), an
+# initial condition with too few variables, a rotating frame
 # with a zero axis, chemistry = equilibrium without the elements of the species,
 # a value outside the rule of the registry (an interval, a list of reals, a list
 # of integers), an input.ini that cannot be read (missing, empty, of comment
@@ -338,5 +339,7 @@ if(USE_MPI)
     # ranks; an input.ini that every rank finds it cannot read stops them within 60 s,
     # with exit code 1 to 128; a value out of its rule in input.ini read
     # again by rank 1 alone (each rank in its own folder) stops both ranks with exit code 1.
+    # A value of the initial condition that is not finite stops both ranks with exit
+    # code 1, also when rank 1 alone holds it.
     mose_add_mpi_script(MPIExitCodes mpi/exit-codes "needs-mpi;implementation;1D")
 endif()

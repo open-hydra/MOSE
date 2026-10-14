@@ -8,6 +8,9 @@ Usage (from test/fast/input-checks/exit-codes):
       writes INPUT/ic.tec and INPUT/bc.txt, copies of the Sod ones.
   python3 -B make_case.py nan SOD_INPUT_DIR
       the same, with the velocity u of cell 50 written as NaN in INPUT/ic.tec.
+  python3 -B make_case.py inf SOD_INPUT_DIR
+      the same, with the coordinate y of node (i, j, k) = (20, 1, 1) written as Infinity in INPUT/ic.tec (the nodes
+      in the order of the file, i first, from 0).
   python3 -B make_case.py steam SOD_INPUT_DIR PHASE
       the same, the tube holding instead the gas of the phase file PHASE (the 13 C-H-O species of
       test/2D/euler/rocket-nozzle/equilibrium): steam with 0.2 % of hydrogen, 1.6 % of oxygen and 0.2 % of
@@ -45,6 +48,7 @@ SOOT_SPECIES = (("C2H2", 26.038, "C2H4"), ("O2", 31.998, "O2"), ("N2", 28.014, "
 Y_SOOT = (0.05, 0.233, 0.716999, 0.0, 0.0, 1.0e-6)
 RHO_S, U_S, P_S, NP_S, MU_S = 1.16, 10.0, 1.0e5, 1.0e14, 1.8e-5
 NAN_CELL = 50
+INF_NODE = (20, 1, 1)                                          # (i, j, k) from 0, as the solver counts the nodes
 RU = 8314.46261815324                                          # J/(kmol K), universal gas constant of FLINT
 STEAM = {"H2O": 0.98, "H2": 0.002, "O2": 0.016, "CO2": 0.002}   # mass fractions
 LEFT, RIGHT = (1e5, 1500.0), (1e4, 1200.0)                     # (p [Pa], T [K]) of the two halves
@@ -76,6 +80,19 @@ def nan(sod_dir):
     sod(sod_dir)
     header, zone, nodes, cells, vals = read_tube(os.path.join(sod_dir, "ic_x1.tec"))
     vals[3 * nodes + cells + NAN_CELL - 1] = 'NaN'          # u of cell NAN_CELL
+    os.remove(os.path.join("INPUT", "ic.tec"))
+    with open(os.path.join("INPUT", "ic.tec"), 'w') as f:
+        f.write(header + '\n' + zone + '\n')
+        for v in vals:
+            f.write(' %s\n' % v)
+
+
+def inf(sod_dir):
+    sod(sod_dir)
+    header, zone, nodes, cells, vals = read_tube(os.path.join(sod_dir, "ic_x1.tec"))
+    ni, nj = (int(re.search(r'%s=\s*(\d+)' % c, zone).group(1)) for c in 'IJ')
+    i, j, k = INF_NODE
+    vals[nodes + i + ni * (j + nj * k)] = 'Infinity'        # y of node INF_NODE: the y values follow the nodes' x values
     os.remove(os.path.join("INPUT", "ic.tec"))
     with open(os.path.join("INPUT", "ic.tec"), 'w') as f:
         f.write(header + '\n' + zone + '\n')
@@ -213,6 +230,8 @@ if __name__ == '__main__':
         sod(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == 'nan':
         nan(sys.argv[2])
+    elif len(sys.argv) == 3 and sys.argv[1] == 'inf':
+        inf(sys.argv[2])
     elif len(sys.argv) == 4 and sys.argv[1] == 'steam':
         steam(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 4 and sys.argv[1] == 'mixture':
