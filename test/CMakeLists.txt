@@ -74,6 +74,8 @@ mose_add_test(NAME ShuOsher DIR 1D/Shu-Osher
 mose_add_test(NAME ShuOsherConvergence DIR 1D/Shu-Osher
               RUN "./MOSE.sh test" VERIFY convergence.py
               LABELS "validation;numerics;1D")
+#   the two run in the same folder and write OUTPUT/field.tec there: never at the same time (ctest -j)
+set_tests_properties(ShuOsher ShuOsherConvergence PROPERTIES RESOURCE_LOCK Shu-Osher)
 
 # 2-D steady Euler (analytic Prandtl-Meyer)
 mose_add_test(NAME PrandtlMeyer DIR 2D/euler/prandtl-meyer
