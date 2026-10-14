@@ -82,9 +82,8 @@ contains
     else
       call Read_IC ( simulation%IOfield(1) )
     end if
-    setup_error = .false.
-    if (mpi_is_root) call Check_IC ( setup_error )
-    call Stop_Together ( setup_error, 'initial condition error (see above)' )
+    ! The ranks decide together on an error of the read (Check_IC)
+    call Check_IC ( summary = .true. )
 
     ! Block count and ijk dimensions.  Cheap, and enough to partition on.
     call Setup_Data_Dimensions ( simulation%domain(1), simulation%IOfield(1) )
@@ -129,7 +128,11 @@ contains
     if ( partition_first ) then
       keep = blocks_needing_full_arrays ( simulation%domain(1) )
       ! Variable data for the owned blocks only; coordinates for all of them.
-      if ( lean_read ) call Read_IC ( simulation%IOfield(1), zone_mask = keep )
+      if ( lean_read ) then
+        call Read_IC ( simulation%IOfield(1), zone_mask = keep )
+        ! Each rank has read the variables of its own blocks: an error of the read on any rank stops every rank
+        call Check_IC ( summary = .false. )
+      end if
       call Setup_Data_Fields ( simulation%domain(1), simulation%IOfield(1), keep )
       deallocate(keep)
       ! Every value that the initial condition gives the blocks of this rank is finite
@@ -308,16 +311,38 @@ contains
     end subroutine Check_Tables
 
 
-    subroutine Check_IC ( has_error )
+    !> An error of the read of the initial condition (Read_IC, the reader writes it in obj_io%error_message) stops the run.
+    !> Every rank reads the file, the whole of it or, with the lean read of a .szplt file, the headers of its blocks and
+    !> then the variables of the blocks whose state it holds, which differ from rank to rank; and a rank can fail to read
+    !> what rank 0 reads. So the ranks take the decision together (the largest of a flag): with summary, rank 0 writes the
+    !> line of the set-up summary with the verdict of all ranks; the first rank that found an error writes it (with its
+    !> rank when the run has more than one), and every rank stops with mpi_stop_all, exit code 1.
+    subroutine Check_IC ( summary )
+      use MOSE_Mod_MPI, only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8
       implicit none
-      logical, intent(out) :: has_error
+      logical, intent(in) :: summary   ! write the line of the set-up summary
+      real(R8) :: flag, flag_all, first
 
-      has_error = index(obj_io%error_message,'ERROR') > 0
-      if ( has_error ) then
-        write(*,'(A,T35,A)') '   Initial conditions', 'FAIL'
-        write(*,'(4X,A)') trim(obj_io%error_message)
-      else
-        write(*,'(A,T35,A)') '   Initial conditions', 'OK'
+      flag = 0.0_R8
+      if ( index(obj_io%error_message,'ERROR') > 0 ) flag = 1.0_R8
+      call mpi_allreduce_max_r8 ( flag, flag_all )
+      if ( summary .and. mpi_is_root ) then
+        if ( flag_all > 0.0_R8 ) then
+          write(*,'(A,T35,A)') '   Initial conditions', 'FAIL'
+        else
+          write(*,'(A,T35,A)') '   Initial conditions', 'OK'
+        endif
+      endif
+      if ( flag_all > 0.0_R8 ) then
+        call mpi_allreduce_min_r8 ( merge(real(mpi_rank_, R8), huge(1.0_R8), flag > 0.0_R8), first )
+        if ( flag > 0.0_R8 .and. nint(first) == mpi_rank_ ) then
+          if ( mpi_size_ > 1 ) then
+            write(*,'(4X,A,I0,A)') trim(obj_io%error_message)//' (rank ', mpi_rank_, ')'
+          else
+            write(*,'(4X,A)') trim(obj_io%error_message)
+          endif
+        endif
+        call mpi_stop_all ( 'initial condition error (see above)' )
       endif
 
     end subroutine Check_IC
@@ -498,7 +523,7 @@ contains
     end subroutine Stop_Simulation
 
 
-    !> The checks of the set-up run on rank 0 alone, which writes what it finds. Rank 0 broadcasts whether it found an
+    !> A check of the set-up that runs on rank 0 alone writes what it finds there. Rank 0 broadcasts whether it found an
     !> error, and on an error every rank stops together (mpi_stop_all): rank 0 has written its message before any rank
     !> ends, and the run ends with exit code 1. With MPI_ABORT from rank 0 alone, which makes only a best attempt to stop
     !> the processes (MPI-4.1, section 11.4.2), the launcher could end while rank 0 was still writing: with Intel MPI

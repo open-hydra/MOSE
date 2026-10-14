@@ -340,6 +340,7 @@ if(USE_MPI)
     # with exit code 1 to 128; a value out of its rule in input.ini read
     # again by rank 1 alone (each rank in its own folder) stops both ranks with exit code 1.
     # A value of the initial condition that is not finite stops both ranks with exit
-    # code 1, also when rank 1 alone holds it.
+    # code 1, also when rank 1 alone holds it; so does an initial condition that
+    # rank 1 alone cannot read (two folders).
     mose_add_mpi_script(MPIExitCodes mpi/exit-codes "needs-mpi;implementation;1D")
 endif()

@@ -40,6 +40,15 @@
 #  to poll), the test says so and fails. The MOSE processes of this run that
 #  the launcher leaves behind (this copy of the solver, working in
 #  mpmd/runs/A or mpmd/runs/B) are named, stopped, and fail the test.
+#
+#  An initial condition that one rank alone cannot read must stop every
+#  rank: the Sod tube in two folders (MPMD, mpmd/ic/A for rank 0, mpmd/ic/B
+#  for rank 1), the initial condition of rank 1 cut in the middle of its
+#  values, must end within 60 s with exit code 1, the line "Initial
+#  conditions FAIL" of the set-up summary, the error of the read written
+#  once with the rank that found it, and the STOP line of both ranks: the
+#  ranks decide together on the error of the read. The processes left
+#  behind are handled as above.
 #===============================================================================
 set -uo pipefail
 
@@ -250,6 +259,61 @@ else
     echo "  [FAIL] mpi-one-rank, MOSE processes of this run left behind by the launcher, now stopped: $left"
     fail=1
   fi
+fi
+
+echo "-- an initial condition that one rank alone cannot read stops every rank (2 ranks, two folders) --"
+python3 -B ../../fast/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
+mkdir -p "$M/ic"
+for d in A B; do
+  rm -rf "$M/ic/$d"
+  mkdir -p "$M/ic/$d/INPUT" "$M/ic/$d/OUTPUT"
+  cp INPUT/phase.txt INPUT/thermo.dat INPUT/bc.txt INPUT/ic.tec "$M/ic/$d/INPUT/"
+  cat > "$M/ic/$d/input.ini" <<EOI
+[MOSE-Parameters]
+iter-threshold = 50
+newrun = true
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.9
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+EOI
+done
+# the initial condition of rank 1 cut in the middle of its values: the reader meets the end of the file
+head -c $(( $(wc -c < INPUT/ic.tec) / 2 )) INPUT/ic.tec > "$M/ic/B/INPUT/ic.tec"
+RUNS="$(cd "$M/ic" && pwd -P)"
+timeout -k 10 60 "$MPIEXEC" "$NPFLAG" 1 -wdir "$RUNS/A" "$SOLVER" : "$NPFLAG" 1 -wdir "$RUNS/B" "$SOLVER" \
+  > OUTPUT/mpi-ic-read.log 2>&1
+rc=$?
+left=$(left_behind | paste -sd ' ' -)
+if [[ -n $left ]]; then
+  kill -TERM $left 2>/dev/null
+  sleep 2
+  kill -KILL $left 2>/dev/null
+fi
+nmsg=$(grep -a -c -F -- "[ERROR] reading input file INPUT/ic.tec (rank 1)" OUTPUT/mpi-ic-read.log)
+nstop=$(grep -a -c -F -- "] STOP: initial condition error (see above)" OUTPUT/mpi-ic-read.log)
+summary=missing
+grep -a -q -E 'Initial conditions +FAIL' OUTPUT/mpi-ic-read.log && summary=found
+if [[ $rc -eq 1 && $nmsg -eq 1 && $nstop -eq 2 && $summary == found ]]; then
+  echo "  [ok  ] mpi-ic-read, 2 ranks, the initial condition of rank 1 cut: exit code 1, \"Initial conditions FAIL\"," \
+       "the error of the read of rank 1 written once, the STOP line of both ranks"
+else
+  echo "  [FAIL] mpi-ic-read, 2 ranks, the initial condition of rank 1 cut: exit code $rc (required 1 within 60 s; 124 is" \
+       "the time limit), \"Initial conditions FAIL\" $summary, the error of the read of rank 1 written $nmsg times (required" \
+       "once), STOP lines $nstop of 2 (see OUTPUT/mpi-ic-read.log)"
+  fail=1
+fi
+if [[ -n $left ]]; then
+  echo "  [FAIL] mpi-ic-read, MOSE processes of this run left behind by the launcher, now stopped: $left"
+  fail=1
 fi
 if [[ $fail -eq 0 ]]; then
   echo "MPIExitCodes: all checks passed"
