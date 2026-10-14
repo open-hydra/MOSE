@@ -101,6 +101,16 @@
 #  the face at t = 0 and t = 1 s, with the pressure of the second zone NaN,
 #  or its SOLUTIONTIME Infinity, must end with exit code 1 and the message,
 #  and write no solution.
+#  So does a Q2D file that cannot be read, with the file and, for a zone, the
+#  zone and the line of its header: the same duct with q2d.dat missing, cut
+#  in the values of the second zone, with a word among them, with I=two in
+#  the header of the second zone, and with one value more in the first zone
+#  (the line after its data is not the header of the next zone), and so does
+#  a file whose zones go back in time (the first zone at t = 2 s, the second
+#  at t = 1 s). The reader did not check its reads: the values not read kept
+#  those of the zone before, or the zones after it were read shifted; and it
+#  took the times of the zones in the order of the file, where the
+#  interpolation wants them increasing. The run went on.
 #
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
@@ -525,11 +535,12 @@ run_bc bc-wall-k navier-stokes 'NR == 5 { $6 = 302; print; print "300.0, NaN, 0.
   "[ERROR] bc.txt line 6 (record 3, type 302): the value of k_rough is not finite (NaN or infinity)"
 
 echo "-- a value of the Q2D file of a face 410 that is not finite stops the run at set-up --"
-# run_q2d <tag> <time of zone 2> <pressure of zone 2> <message>: the duct of BCInput, its inlet (record 1) made a face of type
-# 410 that reads q2d.dat, two zones of that face (block 1, face 1: one cell) at t = 0 and at the time given, the state of the
-# second one with the pressure given, must stop at set-up with exit code 1 and the message, and write no solution
+# run_q2d <tag> <time of zone 2> <pressure of zone 2> <message> [edit]: the duct of BCInput, its inlet (record 1) made a face of
+# type 410 that reads q2d.dat, two zones of that face (block 1, face 1: one cell) at t = 0 and at the time given, the state of
+# the second one with the pressure given, the file then changed by the awk program edit (missing: no file), must stop at
+# set-up with exit code 1 and the message, and write no solution
 run_q2d() {
-  local tag="$1" time2="$2" p2="$3" message="$4" found=missing solution=none
+  local tag="$1" time2="$2" p2="$3" message="$4" edit="${5:-}" found=missing solution=none
   run_bc_case_files
   awk 'NR == 1 { $6 = 410 } NR == 2 { $0 = "q2d.dat" } { print }' INPUT/bc.txt > INPUT/bc.new && mv INPUT/bc.new INPUT/bc.txt
   {
@@ -541,6 +552,11 @@ run_q2d() {
       printf '%s\n' '0.0 0.0 0.0 0.0' '0.0 0.01 0.0 0.01' '-5.0E-04 -5.0E-04 5.0E-04 5.0E-04' '1.16' '50.0' '0.0' '0.0' "$p"
     done
   } > q2d.dat
+  if [[ $edit == missing ]]; then
+    rm -f q2d.dat
+  elif [[ -n $edit ]]; then
+    awk "$edit" q2d.dat > q2d.new && mv q2d.new q2d.dat
+  fi
   rm -f OUTPUT/field.tec
   "$LOCAL" > "OUTPUT/$tag.log" 2>&1
   local rc=$?
@@ -557,6 +573,29 @@ run_q2d q2d-nan 1.0 NaN \
   "[ERROR] Q2D file q2d.dat, zone 2 (line 11), variable p, cell 1, 1: a value that is not finite (NaN or infinity)"
 run_q2d q2d-time Infinity 1.0E+05 \
   "[ERROR] Q2D file q2d.dat, line 11 (zone 2): SOLUTIONTIME is not finite (NaN or infinity)"
+
+echo "-- a Q2D file of a face 410 that cannot be read stops the run at set-up --"
+# the file of run_q2d with finite values (zone 2 at 1 s), 19 lines (zone 1: lines 2 to 10, its header and the values of x, y,
+# z, rho(1), u, v, w, p; zone 2: lines 11 to 19), missing, cut before its last line (the value of p of zone 2), with a word for
+# the value of u of zone 2 (line 16), with I=two in the header of zone 2, with the line of p of zone 1 written twice, with the
+# time of zone 1 made 2 s (after that of zone 2)
+run_q2d q2d-missing 1.0 1.0E+05 "[ERROR] Q2D file q2d.dat cannot be opened" missing
+run_q2d q2d-short 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat, zone 2 (line 11): the values of p: the file ends before all the values that I and J give" \
+  'NR < 19'
+run_q2d q2d-word 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat, zone 2 (line 11): the values of u: a value that is not a number" \
+  'NR == 16 { $0 = "fifty" } { print }'
+run_q2d q2d-header 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat, line 11 (zone 2): the value of I cannot be read: two" \
+  'NR == 11 { sub(/I=2/, "I=two") } { print }'
+run_q2d q2d-long 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat, zone 1 (line 2): the line after its data is not the header of zone 2 (line 12)" \
+  'NR == 10 { print } { print }'
+# the first zone at t = 2 s, the second at t = 1 s: the zones go back in time
+run_q2d q2d-order 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat, line 11 (zone 2): SOLUTIONTIME 1.00000E+00 is less than 2.00000E+00, the time of a zone above it: the zones must come in increasing time" \
+  'NR == 2 { sub(/SOLUTIONTIME=0.0/, "SOLUTIONTIME=2.0") } { print }'
 
 echo "-- an input.ini that cannot be read stops the run at set-up --"
 # run_ini <tag> <reason expected in the log>: the Sod tube with the input.ini left by the caller

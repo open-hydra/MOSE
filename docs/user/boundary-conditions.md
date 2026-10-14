@@ -138,6 +138,13 @@ type not listed on this page, gets no flux, and this version does not stop on it
 grid level only: do not use it with a sequence of grid levels. Its file (Tecplot ASCII, one zone per block and time) must
 hold finite values: a zone whose `SOLUTIONTIME` is not finite (NaN or infinity), or whose value for a face of type `410` is
 not, stops the run at set-up, with the file, the zone, the line of its header, and the variable and the cell of the value.
+So does a file that cannot be read, with the file and, for a zone, the zone and the line of its header: a file that cannot
+be opened or holds no `VARIABLES` line or no zone, a zone header whose `I`, `J`, `SOLUTIONTIME` or block number of the title
+(`T="B<block>_T<n>"`) does not read, zone data with a value that is not a number or that end before the values that `I`
+and `J` give, and a zone with more values than they give (the line after the data of a zone must be the header of the
+next one, with no blank line between). The zones must come in increasing time: a zone whose time no zone above it has
+must have a time greater than every time above it (the zones of other blocks at a time already given may come anywhere
+after it); otherwise the run stops at set-up, with the file, the zone, the line of its header and the two times.
 
 **Common fields:**
 

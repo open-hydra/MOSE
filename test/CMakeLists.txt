@@ -195,7 +195,10 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # species without a diffusion table, a run that diverges, a NaN or an infinity
 # in the initial condition (a stop at set-up, exit code 1, in every build), in
 # the time table of an inlet 402, in a property line of bc.txt and in the file
-# of a face 410, an initial condition with too few variables, a rotating frame
+# of a face 410, a file of a face 410 that cannot be read (missing, cut, with a
+# word among its values, an unreadable zone header or a value too many) or
+# whose zones go back in time, an initial condition with too few variables, a
+# rotating frame
 # with a zero axis, chemistry = equilibrium without the elements of the species,
 # a value outside the rule of the registry (an interval, a list of reals, a list
 # of integers), an input.ini that cannot be read (missing, empty, of comment
