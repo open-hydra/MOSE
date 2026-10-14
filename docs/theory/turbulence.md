@@ -183,6 +183,20 @@ $$
 Activated when compressibility effects on turbulence are significant
 (high-speed boundary layers, mixing layers).
 
+!!! warning "Stopped at set-up"
+    A run with `turbulence = SAcomp` stops at set-up. The correction takes
+    $c$ from $c^2 f(c) = 25\,\Omega\,\tilde\nu f_{v1}/a$, with
+    $f(c) = 0.44/(1 + 14c^5) + 0.56$, and multiplies the production by
+    $f_1(c)\,f(c)$, with $f_1(c) = 0.6/(1 + 9c^6) + 0.4$: the left side is a
+    number and the right side a speed (the code divides by $a$, not by $a^2$
+    as written above), so the factor depends on the units. For
+    $\Omega = 10^3$ 1/s, $\nu_t = 10^{-3}$ m²/s and $a = 340$ m/s it is 0.99
+    with lengths in metres and 0.22 with lengths in millimetres; and since
+    $a$ only divides, at $\Omega = 10^5$ 1/s it cuts the production by 78 %
+    whatever the Mach number. Until the correction is checked against its
+    source (the article the code cites, doi:10.2514/2.3967) it is not
+    available: use `SA` or another model.
+
 #### SAR — Rotation Correction
 
 Adds a rotation term proportional to the difference between the strain

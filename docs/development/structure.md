@@ -178,7 +178,7 @@ and binds the selected implementation to four procedure pointers in `Mod_RANS`:
 | Key | Implementation | Description |
 |-----|---------------|-------------|
 | `SA` | `Lib_Spalart` | Baseline Spalart–Allmaras |
-| `SAcomp` | `Lib_Spalart` | + compressibility correction |
+| `SAcomp` | `Lib_Spalart` | + compressibility correction (stops at set-up: its result depends on the units) |
 | `SAR` | `Lib_Spalart` | + rotation correction |
 | `SA-RC` | `Lib_SpalartShur` | Rotation–curvature (Shur) correction |
 | `SST` | `Lib_SST` | Menter k-ω SST (SST-2003) |

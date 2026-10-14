@@ -41,6 +41,13 @@
 #  of different sizes (a run-time error with bounds checking); without it,
 #  it named one variable fewer than it wrote and put the density of C(gr)
 #  under dt.
+#
+#  turbulence = SAcomp. Its compressibility correction takes c from
+#  c^2 f(c) = 25 Omega nu_t / a, a number against a speed, so its result
+#  depends on the units: on the state of the soot runs with
+#  Spalart-Allmaras and no soot, which runs to the end with SA, the run must
+#  stop at set-up with exit code 1 to 128 and the message, and write no
+#  diagnostic output.
 #===============================================================================
 set -uo pipefail
 
@@ -184,16 +191,20 @@ check $? "it says which sol-variables to set"
 
 echo "-- soot model LL91, steady, two iterations: the diagnostic output --"
 PREMIX=../../../1D/premixed-flame/INPUT
-# soot_run <kind: sa, soot, plain or sa-plain>: the run of make_case.py soot <kind>, its exit status in OUTPUT/soot-<kind>.rc
+# soot_run <kind: sa, soot, plain, sa-plain or sacomp>: the run of make_case.py soot <kind> (sacomp: the state of sa-plain,
+# with turbulence = SAcomp), its exit status in OUTPUT/soot-<kind>.rc
 soot_run() {
   rm -f INPUT/*
-  python3 -B make_case.py soot "$PREMIX" "$SOD/ic_x1.tec" INPUT "$1" || exit 1
+  local state=$1
+  [[ $1 == sacomp ]] && state=sa-plain
+  python3 -B make_case.py soot "$PREMIX" "$SOD/ic_x1.tec" INPUT "$state" || exit 1
   # faces 3 and 4 of the tube, one cell thick in j: a copy (type 0), not the extrapolation 400, which takes
   # three cells and with one cell reads ghost cells that no record fills
   awk '$5 == 3 || $5 == 4 { $6 = 0 } { print }' "$SOD/bc_x1.txt" > INPUT/bc.txt
   local turb=none soot=LL91
   [[ $1 == sa || $1 == sa-plain ]] && turb=SA
   [[ $1 == plain || $1 == sa-plain ]] && soot=none
+  [[ $1 == sacomp ]] && turb=SAcomp && soot=none
   {
     printf '%s\n' '[MOSE-Parameters]' 'iter-threshold = 2' 'newrun = true' ''
     printf '%s\n' '[MOSE-Physics]' 'equations = navier-stokes' "turbulence = $turb" 'schmidt = 0.7' "soot-generation = $soot" ''
@@ -221,6 +232,17 @@ for kind in sa soot; do
   python3 -B make_case.py diagnostic-check "OUTPUT/diagnostic-$kind.tec" "$ref" $names dt beta
   check $? "$kind: the diagnostic output names every variable it writes, dt under dt"
 done
+
+echo "-- turbulence = SAcomp stops at set-up --"
+soot_run sacomp
+rc=$(cat OUTPUT/soot-sacomp.rc)
+SACOMP='turbulence = SAcomp: its compressibility correction solves'
+if [[ $rc -ge 1 && $rc -le 128 && ! -f OUTPUT/diagnostic-sacomp.tec ]] && grep -a -q -- "$SACOMP" OUTPUT/soot-sacomp.log; then
+  echo "  [ok  ] sacomp: exit code $rc, \"$SACOMP\""
+else
+  echo "  [FAIL] sacomp: exit code $rc (required 1 to 128, no diagnostic output), message \"$SACOMP\" $(grep -a -q -- "$SACOMP" OUTPUT/soot-sacomp.log && echo found || echo missing) (see OUTPUT/soot-sacomp.log)"
+  fail=1
+fi
 
 if [[ $fail -ne 0 ]]; then
   echo "ExitCodes: FAILED"

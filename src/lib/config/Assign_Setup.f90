@@ -136,6 +136,12 @@ contains
       obj_transport%error_message = &
         '[ERROR] Sc<=0 (multicomponent diffusion) requires a binary diffusion table (INPUT/diffusion.dat)'
     end if
+    ! SAcomp: Compressibility_Correction (Lib_Spalart) takes c from c^2 f(c) = 25 Omega nu~ fv1 / a, a number against a
+    ! speed, so the factor it gives the production depends on the units; until the correction is checked against its
+    ! source, the model is refused
+    if (model == 2 .and. obj_rans%SAcomp) obj_rans%error_message = '[ERROR] turbulence = SAcomp: its '// &
+      'compressibility correction solves c^2 f(c) = 25 Omega nu_t / a, a number against a speed, so the result '// &
+      'depends on the units. Use SA or another turbulence model.'
     ! Turbulence sources in time-accurate runs
     if (model == 2 .and. obj_time_scheme%time_accurate) then
       if (obj_rans%point_implicit) obj_time_scheme%warning_message = '[WARNING] point-implicit is not applied in '// &

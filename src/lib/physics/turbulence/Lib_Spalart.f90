@@ -263,6 +263,8 @@ contains
 
 
   ! Compressibility correction Paciorri-Sabetta https://doi.org/10.2514/2.3967
+  ! Not reached: turbulence = SAcomp stops at set-up (Assign_Setup), since staux, a speed, is set against the number
+  ! c^2 f(c), which makes the result depend on the units
   subroutine Compressibility_Correction ( nit, rho, chi, rhoi, p, Rgas, om, prod )
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
