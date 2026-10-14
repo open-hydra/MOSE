@@ -88,11 +88,13 @@ contains
     use Finer,               only: file_ini
     use MOSE_Backend_INI,    only: Load_Ini
     use MOSE_Input_Registry
-    use MOSE_Mod_MPI,        only: mpi_is_root, mpi_abort_all
+    use MOSE_Mod_MPI,        only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8, mpi_stop_all
+    use iso_fortran_env,     only: R8 => real64
     implicit none
     ! Local
     type(file_ini) :: fini
     character(len=1024) :: out
+    real(R8) :: flag, flag_all, first
 
     ! Load input.ini: a file that cannot be read stops the run
     call Load_Input_File(fini, 'Input file, read again')
@@ -101,14 +103,23 @@ contains
     call Load_Ini(fini)
 
     ! Validate registry: the values read again keep to the rules of the registry, as at setup
-    ! (Check_Input in Wrap_Setup); a value out of its rule stops the run with the message of the rule
+    ! (Check_Input in Wrap_Setup); a value out of its rule stops the run with the message of the rule.
+    ! Every rank reads input.ini again on its own, and a file rewritten while the ranks read it can give them different
+    ! contents: the ranks take the decision together (the largest of a flag), so that every rank stops, or none (a rank
+    ! that stopped alone would wait for the others in mpi_stop_all).
     out = Validate_Registry()
-    if (index(out,'ERROR') > 0) then
-      if (mpi_is_root) then
+    flag = 0.0_R8
+    if (index(out,'ERROR') > 0) flag = 1.0_R8
+    call mpi_allreduce_max_r8(flag, flag_all)
+    if (flag_all > 0.0_R8) then
+      ! The rule broken is written once, by the first rank that found it (rank 0 when every rank reads the same file)
+      call mpi_allreduce_min_r8(merge(real(mpi_rank_, R8), huge(1.0_R8), flag > 0.0_R8), first)
+      if (flag > 0.0_R8 .and. nint(first) == mpi_rank_) then
         write(*,'(A,T35,A)') '   Input file, read again', 'FAIL'
         write(*,'(4X,A)') trim(out)
       end if
-      call mpi_abort_all('input file error, input.ini read again during the run (see above)')
+      if (flag > 0.0_R8) call mpi_stop_all('input file error, input.ini read again during the run (see above)')
+      call mpi_stop_all('stopped with the ranks that found an error in input.ini read again')
     end if
 
   end subroutine Read_Inifile_Runtime

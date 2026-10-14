@@ -133,10 +133,14 @@ MOSE prints diagnostic information to the console during loading and iteration. 
 !!! note "Exit code"
     A run that MOSE stops on an error — at loading, at set-up, or because the solution diverges («Integration failed at
     b, i, j, k», then «NaN, infinity or p<0 detected») — ends with a non-zero exit code, so that scripts and job
-    schedulers see the failure: 1 where MOSE ends with `stop 1`; otherwise that of `ERROR STOP` (128 with ifx, 1 with
-    gfortran) or, when the error stops every rank of an MPI run, the one the MPI launcher gives for `MPI_ABORT` with
-    error code 1. A divergence is caught on any value that is not finite (NaN, infinity) or on a negative pressure,
-    also in RELEASE builds with fast math.
+    schedulers see the failure: 1 where MOSE ends with `stop 1` or `error stop 1`; otherwise that of `ERROR STOP` (128
+    with ifx, 1 with gfortran) or, when a rank stops every rank of an MPI run with `MPI_ABORT`, the one the MPI launcher
+    gives for `MPI_ABORT` with error code 1. With MPI, an error that every rank finds (for example a decomposition map
+    that does not fit, an `input.ini` that cannot be read, a line of `bc.txt` that cannot be read, a time table that
+    cannot be read or whose times decrease, a mesh whose blocks do not make one type) stops every rank together, and so
+    does a value of `input.ini` read again out of its rule, also when one rank alone finds it: each rank writes its
+    message, the ranks finalize MPI and end with exit code 1. A divergence is caught on any value that is not finite
+    (NaN, infinity) or on a negative pressure, also in RELEASE builds with fast math.
 
     Known limit: errors raised inside the ORION library, which reads and writes the solution files, still end with
     code 0, because ORION stops with `STOP`. For example, a binary Tecplot file (`ic-format = tecplot binary`) in a

@@ -353,10 +353,10 @@ contains
           end if
           if ( ios /= 0 ) then
             block
-              use MOSE_Mod_MPI, only: mpi_abort_all
+              use MOSE_Mod_MPI, only: mpi_stop_all
               character(len=512) :: msg
               write(msg,'(A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', i, ', type 402): '//trim(msg402)
-              call mpi_abort_all(trim(msg))
+              call mpi_stop_all(trim(msg))
             end block
           end if
           call bc(i)%p0time%initialize(file=trim(p0file), bar=.true.)
@@ -806,7 +806,7 @@ contains
   !   must hold (short, or a value that is not a number): its record line (btype < 0) or a property line of type btype;
   !   an empty line is the end of the file.
   subroutine BC_Line_Error ( n, btype, nline, line )
-    use MOSE_Mod_MPI, only: mpi_abort_all
+    use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
     integer, intent(in)          :: n, btype, nline
     character(len=*), intent(in) :: line
@@ -815,7 +815,7 @@ contains
 
     if ( len_trim(line) == 0 ) then
       write(head,'(A,I0,A,I0)') '[ERROR] bc.txt ends at line ', nline, ', before the end of record ', n
-      call mpi_abort_all ( trim(head) )
+      call mpi_stop_all ( trim(head) )
     end if
     if ( btype < 0 ) then
       write(head,'(A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, &
@@ -824,7 +824,7 @@ contains
       write(head,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
         '): the line is short or holds a value that is not a number'
     end if
-    call mpi_abort_all ( trim(head)//': "'//trim(line(1:min(len(line),200)))//'"' )
+    call mpi_stop_all ( trim(head)//': "'//trim(line(1:min(len(line),200)))//'"' )
 
   end subroutine BC_Line_Error
 
@@ -889,7 +889,7 @@ contains
   ! Empty_Field: stop the run on the field what of the property line of record n, type btype, line nline of the file,
   !   left empty.
   subroutine Empty_Field ( n, btype, nline, what )
-    use MOSE_Mod_MPI, only: mpi_abort_all
+    use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
     integer, intent(in)          :: n, btype, nline
     character(len=*), intent(in) :: what
@@ -898,7 +898,7 @@ contains
 
     write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
       '): the value of '//trim(what)//' is empty (docs/user/boundary-conditions.md)'
-    call mpi_abort_all ( trim(msg) )
+    call mpi_stop_all ( trim(msg) )
 
   end subroutine Empty_Field
 
@@ -1082,7 +1082,7 @@ contains
   ! Need_Direction: the flow directions alpha and beta of an inlet line (record n, type btype, line nline of bc.txt)
   !   from their tokens; a token that is neither a number nor normal stops the run.
   subroutine Need_Direction ( n, btype, nline, alpha_tok, beta_tok, alpha, beta )
-    use MOSE_Mod_MPI, only: mpi_abort_all
+    use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
     integer, intent(in)          :: n, btype, nline
     character(len=*), intent(in) :: alpha_tok, beta_tok
@@ -1095,13 +1095,13 @@ contains
     if ( ios /= 0 ) then
       write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
         "): alpha is neither a number nor normal: '"//trim(adjustl(alpha_tok))//"'"
-      call mpi_abort_all ( trim(msg) )
+      call mpi_stop_all ( trim(msg) )
     end if
     call parse_dir_tok ( beta_tok, beta, ios )
     if ( ios /= 0 ) then
       write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] bc.txt line ', nline, ' (record ', n, ', type ', btype, &
         "): beta is neither a number nor normal: '"//trim(adjustl(beta_tok))//"'"
-      call mpi_abort_all ( trim(msg) )
+      call mpi_stop_all ( trim(msg) )
     end if
 
   end subroutine Need_Direction

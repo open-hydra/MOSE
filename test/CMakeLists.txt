@@ -335,6 +335,7 @@ if(USE_MPI)
 
     # Exit codes under MPI: an input error that rank 0 finds at set-up, and an
     # input.ini that every rank finds it cannot read, stop both ranks of a 2-rank run
-    # within 60 s, with exit code 1 to 128.
+    # within 60 s, with exit code 1 to 128; a value out of its rule in input.ini read
+    # again by rank 1 alone (each rank in its own folder) stops both ranks with exit code 1.
     mose_add_mpi_script(MPIExitCodes mpi/exit-codes "needs-mpi;implementation;1D")
 endif()

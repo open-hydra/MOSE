@@ -39,7 +39,7 @@ contains
   !>    translation than a turn, but not to within ETA of its thickness, stops the run: its nodes are written with too
   !>    few digits to tell its type, or its k planes are neither parallel nor turned about the x axis.
   subroutine Check_Mesh_Type( domain )
-    use MOSE_Mod_MPI, only: mpi_abort_all
+    use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
@@ -79,13 +79,13 @@ contains
             write(msg,'(A,I0,A,ES10.3,A,ES9.2,A)') '[ERROR] Mesh type: block ', b, ' is nearer a wedge of angle ', ang_b, &
               ' rad than a plane block, but its nodes match the turn only to ', fit, ' of its thickness (1e-2 needed):'// &
               ' write the node coordinates with more significant digits'
-            call mpi_abort_all ( trim(msg) )
+            call mpi_stop_all ( trim(msg) )
           end if
           if ( nearer_move .and. .not. moved ) then
             write(msg,'(A,I0,A,ES9.2,A)') '[ERROR] Mesh type: block ', b, ' is nearer a plane block than a wedge, but its'// &
               ' k = 1 node plane is the k = 0 plane translated only to ', fit_move, ' of its thickness (1e-2 needed):'// &
               ' its k planes must be parallel, or the coordinates written with more significant digits'
-            call mpi_abort_all ( trim(msg) )
+            call mpi_stop_all ( trim(msg) )
           end if
           if ( .not. turned ) cycle
           nturn = nturn + 1
@@ -94,7 +94,7 @@ contains
           elseif ( abs ( ang_b - ang ) > ETA * abs ( ang ) ) then
             write(msg,'(A,I0,A,ES12.5,A,ES12.5,A)') '[ERROR] Mesh type: block ', b, ' is a wedge of angle ', ang_b, &
               ' rad, another block one of ', ang, ' rad'
-            call mpi_abort_all ( trim(msg) )
+            call mpi_stop_all ( trim(msg) )
           end if
         enddo
         if ( nturn == nb ) then
@@ -102,7 +102,7 @@ contains
         elseif ( nturn > 0 ) then
           write(msg,'(A,I0,A,I0,A)') '[ERROR] Mesh type: ', nturn, ' of the ', nb, &
             ' blocks of the 2-D mesh are axisymmetric wedges (k = 1 plane turned about the x axis), the others are not'
-          call mpi_abort_all ( trim(msg) )
+          call mpi_stop_all ( trim(msg) )
         end if
 
       case ( 3 )
@@ -125,7 +125,7 @@ contains
             elseif ( abs ( ang_b - ang ) > ETA * abs ( ang ) ) then
               write(msg,'(A,I0,A,ES12.5,A,ES12.5,A)') '[ERROR] Mesh type: block ', b, ' is a sector of angle ', ang_b, &
                 ' rad, another block one of ', ang, ' rad'
-              call mpi_abort_all ( trim(msg) )
+              call mpi_stop_all ( trim(msg) )
             end if
           elseif ( moved ) then
             nmove = nmove + 1
@@ -133,11 +133,11 @@ contains
             write(msg,'(A,I0,A,ES9.2,A,ES9.2,A)') '[ERROR] Mesh type: block ', b, ' has type 200 on its k faces, but its'// &
               ' last k node plane is neither the first one turned about the x axis nor translated, to 1e-2 of the move of'// &
               ' its nodes per cell in k (the turn fits to ', fit, ', the translation to ', fit_move, ')'
-            call mpi_abort_all ( trim(msg) )
+            call mpi_stop_all ( trim(msg) )
           end if
         enddo
         if ( nturn > 0 .and. nmove > 0 ) then
-          call mpi_abort_all ( '[ERROR] Mesh type: type 200 closes sectors turned about the x axis in some blocks and'// &
+          call mpi_stop_all ( '[ERROR] Mesh type: type 200 closes sectors turned about the x axis in some blocks and'// &
                                ' translated ones in others' )
         end if
         if ( nturn > 0 ) delthe = ang
@@ -534,7 +534,7 @@ contains
   
   subroutine Compute_Yn ( blk, bc, nb, nbound, report )
     use MOSE_Lib_KDTree, only: kdtree_t, kdtree_build, kdtree_free
-    use MOSE_Mod_MPI,    only: is_local_block, mpi_is_root, mpi_abort_all
+    use MOSE_Mod_MPI,    only: is_local_block, mpi_is_root, mpi_stop_all
     implicit none
     integer, intent(in)                                  :: nb, nbound
     type(MOSE_block_type), dimension(nb), intent(inout)  :: blk
@@ -925,7 +925,7 @@ contains
           if ( norm2 ( t ) <= tol ) cycle
           if ( wall_meridional ) then
             if ( abs ( t(2) ) > tol .or. abs ( t(3) ) > tol ) &
-              call mpi_abort_all ( '[ERROR] Wall distance: a periodic connection (201) of an axisymmetric wedge is not '// &
+              call mpi_stop_all ( '[ERROR] Wall distance: a periodic connection (201) of an axisymmetric wedge is not '// &
                                    'a translation along the x axis' )
             t(2:3) = 0d0
           end if
@@ -975,14 +975,14 @@ contains
                 ') is not an integer combination of the others, to 1e-2 of the thinnest cell across the periodic'// &
                 ' boundaries (', hmin, '): the two sides of each periodic boundary must match to that, with the node'// &
                 ' coordinates written with enough significant digits'
-              call mpi_abort_all ( trim(msg) )
+              call mpi_stop_all ( trim(msg) )
             end if
           end if
           if ( nv == MAXV ) then
             write(msg,'(A,ES8.2,A)') '[ERROR] Wall distance: more than three independent periodic translations, to'// &
               ' 1e-2 of the thinnest cell across the periodic boundaries (', hmin, '): the two sides of each periodic'// &
               ' boundary must match to that, with the node coordinates written with enough significant digits'
-            call mpi_abort_all ( trim(msg) )
+            call mpi_stop_all ( trim(msg) )
           end if
           nv = nv + 1
           basis(:,nv) = t
@@ -998,7 +998,7 @@ contains
         if ( sector ) then
           do m = 1, nv
             if ( abs ( basis(2,m) ) > tol .or. abs ( basis(3,m) ) > tol ) &
-              call mpi_abort_all ( '[ERROR] Wall distance: a periodic connection (201) of a mesh with rotational '// &
+              call mpi_stop_all ( '[ERROR] Wall distance: a periodic connection (201) of a mesh with rotational '// &
                                    'periodicity (200) is not a translation along the x axis' )
           enddo
         end if
@@ -1089,7 +1089,7 @@ contains
         if ( .not. ( images - 1d0 < real ( huge(nimg), R8 ) ) ) then
           write(msg,'(A,ES10.3,A)') '[ERROR] Wall distance: ', images - 1d0, ' periodic images of the wall, more'// &
             ' than an integer holds'
-          call mpi_abort_all ( trim(msg) )
+          call mpi_stop_all ( trim(msg) )
         end if
         kmax = 0
         mrot = 0

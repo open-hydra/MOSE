@@ -107,7 +107,7 @@ write_short() {  # <directory> <ini-diter, or empty> [key = value ...]: the requ
 }
 
 stopped_on_cfl() {  # <log>: the run stopped with the message of the rule of cfl
-  command grep -q 'ERROR\] cfl must be > 0' "$1" && command grep -q 'ABORT' "$1" \
+  command grep -q 'ERROR\] cfl must be > 0' "$1" && command grep -q -E '(ABORT|STOP): ' "$1" \
     && ! command grep -q -E 'NaN|Program received signal' "$1"
 }
 
