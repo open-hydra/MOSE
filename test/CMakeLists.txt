@@ -199,7 +199,8 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # word among its values, an unreadable zone header or a value too many) or
 # whose zones go back in time, an initial condition with too few variables, a
 # rotating frame
-# with a zero axis, chemistry = equilibrium without the elements of the species,
+# with a zero axis, or with an axis or an origin that is not finite,
+# chemistry = equilibrium without the elements of the species,
 # a value outside the rule of the registry (an interval, a list of reals, a list
 # of integers), an input.ini that cannot be read (missing, empty, of comment
 # lines only), a probe of an unknown variable; a valid run with chemistry and

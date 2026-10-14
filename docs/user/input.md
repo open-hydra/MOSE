@@ -43,6 +43,9 @@ space-reconstruction = MUSCL
 !!! warning "Values outside their rules stop the run"
     A value outside the rule of its parameter (column Allowed of the [Parameter Registry](registry.md): a bound such as `> 0`, an interval such as `in (0, 1)`, where `(` and `)` leave the end out and `[` and `]` take it in, each held by every value of a list of numbers; a list of names; `logical`) stops the run with a message: at the start, and when MOSE reads `input.ini` again during the run, every `ini-diter` iterations (10000 by default), to take the values changed meanwhile. The parameters that `input.ini` leaves out keep their values.
 
+!!! warning "Values that are not finite stop the run"
+    A value of `axis` or `origin` of the rotating frame that is not finite (NaN or infinity) stops the run at the start, with a message that names the key. So does a real parameter read as an infinity (gfortran reads a number too large for a real, such as `1e999`, as one), with a rule or without, at the start and when MOSE reads `input.ini` again during the run: a bound such as `> 0` let it through.
+
 !!! warning "What a reading during the run changes"
     When MOSE reads `input.ini` again during the run, only the parameters that the solver reads at every step take the new values, such as `cfl`, `vnn` and the intervals of the outputs. The choices that the set-up makes once from the input are not made again, nor are its checks between keys: a new value of `equations`, `turbulence`, `chemistry`, `space-reconstruction`, `flux-limiter`, `riemann-solver`, `shock-detector` or `time-scheme` is checked against its rule and leaves the run as it was. Do not turn residual smoothing on during a run (`irs = true`): its work arrays exist only when it was on at the start, and the run stops with a segmentation fault.
 

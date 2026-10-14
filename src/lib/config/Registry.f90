@@ -346,9 +346,12 @@ contains
   !> Every rule of the column Allowed is checked: a bound (> x, >= x, < x, <= x) or an interval (in (a, b), with [ or ]
   !> for an end that belongs to it) for a number, on each value of a list of numbers; a list of names for a string;
   !> logical (or the list true, false) for a logical, which the reader of input.ini takes only as a logical. A rule of
-  !> another form stops the run as well, so that no rule is skipped in silence.
+  !> another form stops the run as well, so that no rule is skipped in silence. So does a real value that is not finite,
+  !> with a rule or without, before the rule is checked: every comparison with a NaN is false, and an infinity passes a
+  !> bound such as > 0 (gfortran reads a number too large for a real, such as 1e999, as an infinity). The test reads the
+  !> bits (Not_Finite).
   function Validate_Registry() result(out)
-
+    use MOSE_Finite_m, only: Not_Finite
     implicit none
 
     character(len=1024) :: out
@@ -363,6 +366,22 @@ contains
       if (reg%params(i)%required .and. .not. reg%params(i)%is_set) then
         out = "[ERROR] Required parameter not set: "//trim(reg%params(i)%name)
         return
+      end if
+
+      ! A real value, or a value of a list of reals, that is not finite
+      if (associated(reg%params(i)%value%r)) then
+        if (Not_Finite(reg%params(i)%value%r)) then
+          out = "[ERROR] "//trim(reg%params(i)%name)//" is not finite (NaN or infinity)"
+          return
+        end if
+      else if (associated(reg%params(i)%value%rarr)) then
+        do k = 1, size(reg%params(i)%value%rarr)
+          if (Not_Finite(reg%params(i)%value%rarr(k))) then
+            write(nth,'(I0)') k
+            out = "[ERROR] "//trim(reg%params(i)%name)//" is not finite (NaN or infinity) (value "//trim(nth)//" of the list)"
+            return
+          end if
+        end do
       end if
 
       if (reg%params(i)%allowed == "") cycle

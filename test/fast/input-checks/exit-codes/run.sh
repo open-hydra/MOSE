@@ -64,6 +64,11 @@
 #  between 1 and 128 (128 is what ifx gives to ERROR STOP; above 128 the
 #  shell reports a signal) and the log must hold the message.
 #
+#  A rotating frame whose axis or origin in input.ini holds a value that is
+#  not finite (axis = NaN 0.0 0.0, origin = 0.0 Infinity 0.0) stops the run
+#  at set-up, in every build, with exit code 1 and a message that names the
+#  key: read as numbers, the values went into every term of the frame.
+#
 #  A value of the initial condition that is not finite stops the run at
 #  set-up, in every build: the tube with a NaN velocity in one cell, and the
 #  tube with an infinite coordinate of one node, must end with exit code 1,
@@ -414,6 +419,16 @@ rotational-frame = rigid-body" "
 [MOSE-Rotating-Frame]
 omega = 1.0
 axis = 0.0 0.0 0.0"
+run_case rot-axis-nan "Rotating frame: a value of axis in input.ini is not finite (NaN or infinity)" "equations = euler
+rotational-frame = rigid-body" "
+[MOSE-Rotating-Frame]
+omega = 1.0
+axis = NaN 0.0 0.0"
+run_case rot-origin-inf "Rotating frame: a value of origin in input.ini is not finite (NaN or infinity)" "equations = euler
+rotational-frame = rigid-body" "
+[MOSE-Rotating-Frame]
+omega = 1.0
+origin = 0.0 Infinity 0.0"
 run_case chem-elements "chemistry = equilibrium needs the elements of the species" "equations = euler
 chemistry = equilibrium"
 run_case rule-interval "preconditioning-eps-min must be in (0, 1)" "equations = euler" "preconditioning-eps-min = 1"
