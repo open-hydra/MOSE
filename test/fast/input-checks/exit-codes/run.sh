@@ -94,6 +94,14 @@
 #  solution. The check of an empty value let a NaN through, as every
 #  comparison with a NaN is false.
 #
+#  A value of the Q2D file of an assigned state (410) that is not finite stops
+#  the run at set-up, in every build, with the file, the zone, the line of its
+#  header, and the variable and the cell of the value: the duct of BCInput
+#  with its inlet made a face of type 410 that reads q2d.dat, two zones of
+#  the face at t = 0 and t = 1 s, with the pressure of the second zone NaN,
+#  or its SOLUTIONTIME Infinity, must end with exit code 1 and the message,
+#  and write no solution.
+#
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
 #  of the INI reader). The run used to stop on the first required key,
@@ -456,16 +464,15 @@ run_table table-inf  3 2 Infinity
 run_table table-time 4 1 NaN
 
 echo "-- a value of a property line of bc.txt that is not finite stops the run at set-up --"
-# run_bc <tag> <equations> <awk program> <message>: the duct of the inlet 402 of BCInput (../../boundary-conditions/bc-input/make_case.py case
-# p0.dat), its bc.txt changed by the awk program, must stop at set-up with exit code 1 and the message, and write no solution
-run_bc() {
-  local tag="$1" equations="$2" edit="$3" message="$4" gas=$COMMON found=missing solution=none
+# run_bc_case_files [equations]: the inputs of the duct of the inlet 402 of BCInput (../../boundary-conditions/bc-input/make_case.py case p0.dat), in
+# air (Euler) or in the viscous air of test/common (navier-stokes), and its input.ini
+run_bc_case_files() {
+  local equations="${1:-euler}" gas=$COMMON
   rm -f INPUT/*
   [[ $equations == navier-stokes ]] && gas=$VISC
   ln -sf "../$gas/phase.txt" INPUT/phase.txt; ln -sf "../$gas/thermo.dat" INPUT/thermo.dat
   [[ $equations == navier-stokes ]] && ln -sf "../$gas/transport.dat" INPUT/transport.dat
   python3 -B ../../boundary-conditions/bc-input/make_case.py case p0.dat || exit 1
-  awk "$edit" INPUT/bc.txt > INPUT/bc.new && mv INPUT/bc.new INPUT/bc.txt
   cat > input.ini <<EOI
 [MOSE-Parameters]
 iter-threshold = 40
@@ -484,6 +491,13 @@ space-reconstruction = MUSCL
 flux-limiter = vanleer
 riemann-solver = HLLC
 EOI
+}
+# run_bc <tag> <equations> <awk program> <message>: the duct, its bc.txt changed by the awk program, must stop at set-up with
+# exit code 1 and the message, and write no solution
+run_bc() {
+  local tag="$1" equations="$2" edit="$3" message="$4" found=missing solution=none
+  run_bc_case_files "$equations"
+  awk "$edit" INPUT/bc.txt > INPUT/bc.new && mv INPUT/bc.new INPUT/bc.txt
   rm -f OUTPUT/field.tec
   "$LOCAL" > "OUTPUT/$tag.log" 2>&1
   local rc=$?
@@ -509,6 +523,40 @@ run_bc bc-402-t0 euler 'NR == 2 { $0 = "Infinity, p0.dat, normal, normal, 1.0, 1
 # record 3 (line 5, face 3 of cell 1) made a wall 302 with its property line: T_wall, k_rough, eps_wall
 run_bc bc-wall-k navier-stokes 'NR == 5 { $6 = 302; print; print "300.0, NaN, 0.0"; next } { print }' \
   "[ERROR] bc.txt line 6 (record 3, type 302): the value of k_rough is not finite (NaN or infinity)"
+
+echo "-- a value of the Q2D file of a face 410 that is not finite stops the run at set-up --"
+# run_q2d <tag> <time of zone 2> <pressure of zone 2> <message>: the duct of BCInput, its inlet (record 1) made a face of type
+# 410 that reads q2d.dat, two zones of that face (block 1, face 1: one cell) at t = 0 and at the time given, the state of the
+# second one with the pressure given, must stop at set-up with exit code 1 and the message, and write no solution
+run_q2d() {
+  local tag="$1" time2="$2" p2="$3" message="$4" found=missing solution=none
+  run_bc_case_files
+  awk 'NR == 1 { $6 = 410 } NR == 2 { $0 = "q2d.dat" } { print }' INPUT/bc.txt > INPUT/bc.new && mv INPUT/bc.new INPUT/bc.txt
+  {
+    echo 'VARIABLES = "x" "y" "z" "rho(1)" "u" "v" "w" "p"'
+    for zone in 1 2; do
+      local t=0.0 p=1.0E+05
+      [[ $zone == 2 ]] && t=$time2 && p=$p2
+      echo "ZONE T=\"B1_T$zone\", I=2, J=2, SOLUTIONTIME=$t, DATAPACKING=BLOCK, VARLOCATION=([4-8]=CELLCENTERED)"
+      printf '%s\n' '0.0 0.0 0.0 0.0' '0.0 0.01 0.0 0.01' '-5.0E-04 -5.0E-04 5.0E-04 5.0E-04' '1.16' '50.0' '0.0' '0.0' "$p"
+    done
+  } > q2d.dat
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  local rc=$?
+  grep -a -q -F -- "$message" "OUTPUT/$tag.log" && found=found
+  [[ -f OUTPUT/field.tec ]] && solution=written
+  if [[ $rc -eq 1 && $found == found && $solution == none ]]; then
+    echo "  [ok  ] $tag: exit code 1, \"$message\""
+  else
+    echo "  [FAIL] $tag: exit code $rc (required 1), message \"$message\" $found, solution $solution (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+}
+run_q2d q2d-nan 1.0 NaN \
+  "[ERROR] Q2D file q2d.dat, zone 2 (line 11), variable p, cell 1, 1: a value that is not finite (NaN or infinity)"
+run_q2d q2d-time Infinity 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat, line 11 (zone 2): SOLUTIONTIME is not finite (NaN or infinity)"
 
 echo "-- an input.ini that cannot be read stops the run at set-up --"
 # run_ini <tag> <reason expected in the log>: the Sod tube with the input.ini left by the caller

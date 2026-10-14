@@ -69,10 +69,18 @@ contains
   ! Two-pass reading:
   !   Pass 1 — scan VARIABLES line + all ZONE headers (no data read)
   !   Pass 2 — rewind, read zone data and distribute to matching BCs
+  ! The time of a zone, and every value that goes to a type 410 BC, must be
+  ! finite: one that is not (NaN or infinity) stops the run at set-up, with the
+  ! file, the zone and the line of its header (Not_Finite reads the bits:
+  ! every comparison with a NaN is false, and a build that traps the invalid
+  ! operations stops on it). The values that the reader skips (coordinates,
+  ! variables that map to no primitive, cells of no 410 face) are not used.
   ! ---------------------------------------------------------------------------
   subroutine Read_Q2D_Tecplot ( domain, filename )
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
+    use MOSE_Finite_m, only: Not_Finite
+    use MOSE_Mod_MPI,  only: mpi_stop_all
     use strings, only: lowercase
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
@@ -97,6 +105,9 @@ contains
     real(R8), allocatable :: unique_times(:)
     integer :: bc_i1, bc_i2
     logical :: found
+    integer :: nl                          ! lines of the file read in the pass over the zone headers
+    integer, allocatable :: zone_line(:)   ! line of the header of each zone
+    character(len=512) :: msg
 
     ! --- Open file ---
     open(newunit=u, file=filename, status='old', iostat=ios, action='read')
@@ -158,19 +169,27 @@ contains
     endif
 
     allocate(zone_block(nzones_total), zone_tidx(nzones_total))
-    allocate(zone_time(nzones_total), zone_I(nzones_total), zone_J(nzones_total))
+    allocate(zone_time(nzones_total), zone_I(nzones_total), zone_J(nzones_total), zone_line(nzones_total))
     allocate(unique_times_tmp(nzones_total))
 
     ! Rewind once: parse zone headers
     rewind(u)
     iz = 0
+    nl = 0
     do
       read(u, '(A)', iostat=ios) line
       if (ios /= 0) exit
+      nl = nl + 1
       if (Is_Zone_Record(line)) then
         iz = iz + 1
         call parse_zone_header(line, zone_block(iz), &
                                zone_I(iz), zone_J(iz), zone_time(iz))
+        zone_line(iz) = nl
+        if (Not_Finite(zone_time(iz))) then
+          write(msg,'(3A,I0,A,I0,A)') '[ERROR] Q2D file ', trim(filename), ', line ', nl, ' (zone ', iz, &
+            '): SOLUTIONTIME is not finite (NaN or infinity)'
+          call mpi_stop_all(trim(msg))
+        endif
       endif
     enddo
 
@@ -289,6 +308,12 @@ contains
         ! Map file variables to MOSE primitives
         do iv = 1, nvar_file
           if (varmap(iv) > 0) then
+            if (Not_Finite(cell_buf(iv, bc_i1, bc_i2))) then
+              write(msg,'(3A,I0,A,I0,3A,I0,A,I0,A)') '[ERROR] Q2D file ', trim(filename), ', zone ', iz, ' (line ', &
+                zone_line(iz), '), variable ', trim(tmp_names(3+iv)), ', cell ', bc_i1, ', ', bc_i2, &
+                ': a value that is not finite (NaN or infinity)'
+              call mpi_stop_all(trim(msg))
+            endif
             domain%bc(ibc)%q2d_map(varmap(iv))%var(t_zone) = cell_buf(iv, bc_i1, bc_i2)
           endif
         enddo
@@ -300,7 +325,7 @@ contains
 
     close(u)
     deallocate(node_buf, cell_buf)
-    deallocate(varmap, zone_block, zone_tidx, zone_time, zone_I, zone_J, unique_times)
+    deallocate(varmap, zone_block, zone_tidx, zone_time, zone_I, zone_J, zone_line, unique_times)
 
   end subroutine Read_Q2D_Tecplot
 

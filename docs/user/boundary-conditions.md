@@ -135,7 +135,9 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 
 Type `409` (a forced outlet named in the reader of the boundary file) is not implemented: a record of type `409`, or of any
 type not listed on this page, gets no flux, and this version does not stop on it. Type `410` reads its data on the finest
-grid level only: do not use it with a sequence of grid levels.
+grid level only: do not use it with a sequence of grid levels. Its file (Tecplot ASCII, one zone per block and time) must
+hold finite values: a zone whose `SOLUTIONTIME` is not finite (NaN or infinity), or whose value for a face of type `410` is
+not, stops the run at set-up, with the file, the zone, the line of its header, and the variable and the cell of the value.
 
 **Common fields:**
 
