@@ -422,6 +422,15 @@ stops at setup and names `stencil`: next to the axis
 the viscous force of the first row of cells grows as the mesh is refined (a
 linear field, whose force is zero).
 
+With the axis nodes exactly at $r = 0$ the polar line runs with `stencil`, but
+the solution next to the axis is of first order. On smooth fields the residual
+of the two rows of cells next to the axis does not converge as the mesh is
+refined: its viscous part grows as $1/h$ and its convective part does not
+decrease. With `inverse-mean` and `mean` the viscous residual of the cells next
+to a symmetry plane (`300`) that bounds a sector of a polar mesh does not
+converge either: on smooth fields that the plane allows it stays of order one as
+the mesh is refined, while with `stencil` those cells converge as the others.
+
 In one dimension $M = 1/h$, so `mean` divides the difference across the face by
 the mean of $1/h$ instead of the centre-to-centre distance. With a cell-size
 ratio $r = h_R/h_L$ it overstates the face-normal gradient, and so the viscous,
