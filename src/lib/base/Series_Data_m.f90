@@ -18,7 +18,7 @@ module MOSE_Series_Data_m
 contains
 
   subroutine initialize(self,file,bar)
-    use MOSE_Mod_MPI, only: mpi_abort_all
+    use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
     class(time_series_type), intent(inout) :: self
     character(len=*), intent(in)     :: file
@@ -29,8 +29,10 @@ contains
 
     self%exists = .true.
     self%n = 0
+    ! Every rank reads the tables of the boundary conditions (all the records of bc.txt), so every rank finds an
+    ! error in one: the ranks stop together (mpi_stop_all), and the message reaches the log
     open(newunit=UnitFree, file = trim(file), status = 'OLD', action = 'READ', form = 'FORMATTED', iostat=ios)
-    if (ios /= 0) call mpi_abort_all('[ERROR] Time table '//trim(file)//': the file cannot be opened')
+    if (ios /= 0) call mpi_stop_all('[ERROR] Time table '//trim(file)//': the file cannot be opened')
     ! One (time, value) pair per line; blank lines and the 'periodic' line are not pairs
     do
       read(UnitFree,'(A)',iostat=ios) line
@@ -41,7 +43,7 @@ contains
         self%n = self%n + 1
       endif
     enddo
-    if (self%n < 1) call mpi_abort_all('[ERROR] Time table '//trim(file)//': no (time, value) pair in the file')
+    if (self%n < 1) call mpi_stop_all('[ERROR] Time table '//trim(file)//': no (time, value) pair in the file')
     rewind(UnitFree)
     allocate(self%time(1:self%n))
     allocate(self%var(1:self%n))
@@ -52,7 +54,7 @@ contains
     close(UnitFree)
     ! update interpolates between consecutive times: they must not decrease (two equal times make a jump)
     if (any(self%time(2:) < self%time(:self%n-1))) &
-      call mpi_abort_all('[ERROR] Time table '//trim(file)//': the times decrease')
+      call mpi_stop_all('[ERROR] Time table '//trim(file)//': the times decrease')
     
     if (bar) self%var = self%var*1d+5
 
