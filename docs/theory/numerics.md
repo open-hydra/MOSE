@@ -249,6 +249,20 @@ Block-connection and chimera faces always use the inverse mean: across a large
 cell-size jump at a block interface, the mean makes the normal gradient so steep
 that the explicit diffusion becomes unstable.
 
+The viscous flux of a chimera face is the mean of two fluxes: one with the
+central differences along the face of the row of the cell, one with those of
+the row of the ghost cells, filled from the donors. With a stress linear in the
+gradient (laminar, Spalart–Allmaras) the mean is the flux of the mean gradient,
+whose differences along the face are the mean of those of the two rows, as on
+an interior face (Vinokur 1986, NASA CR-177416, eqs. 90–91, p. 23). Beyond the
+edges of the block face the row of the ghost cells is extrapolated linearly, in
+the variables whose differences the stencil takes: the difference there is the
+one-sided one, exact for a linear field (a copy of the ghost cell would halve
+it, and the face would take 3/4 of the derivative of a linear field along the
+edge). In the k direction of a 2-D mesh the neighbours of a ghost cell are the
+ghost cell turned by the wedge angle, as those of a cell are; across a block
+one cell wide in another direction they are the ghost cell itself.
+
 !!! note "Tangential derivatives"
     The tangential derivatives on a face are central differences over two cells,
     divided by the cell's own tangential edge. With stretching in a tangential

@@ -46,6 +46,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   does not allocate, and the velocity gradients at block edges read ghost cells that were never filled.
 - At chimera faces (`102`) the viscous flux takes the tangential gradient of the donor side, and in RANS runs the chimera ghost
   cells take the wall distance and roughness of the receiver instead of zero.
+- Beyond the edges of a chimera block face the viscous stencil takes the row of the ghost cells extrapolated linearly, and in
+  the k direction of a 2-D axisymmetric wedge the ghost cell turned by the wedge angle, as the cells do: the ghost cell copied
+  there gave the faces at the edges 3/4 of the tangential derivative of a linear field, and on a wedge every chimera face half
+  of the v/r of the divergence.
 - With a turbulence model the diagnostic output writes the residuals of the turbulence variables and declares as many variables
   as it writes: it declared nres + 2 variables and named and filled seven.
 - An unknown probe variable, or a probe file that cannot be opened, stops every rank with a message: the variable was left
@@ -56,9 +60,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The diagnostic output of a steady run names and fills the soot residuals (`rho*Yp`, `rho*Np`) between ρE and the turbulence
   variables: with a soot model it named fewer variables than it wrote, and with a turbulence model too it stopped on a run-time
   error in builds with bounds checking.
-- Where two chimera faces (`102`) of a block meet, or two faces of type `410`, the ghost cell of their common edge is filled one
-  face direction at a time: both faces wrote it in the same parallel loop and read it back for the viscous stencil, a data race
-  whose result could depend on the threads.
+- Where two faces of type `410` of a block meet, the ghost cell of their common edge is filled one face direction at a time:
+  both faces wrote it in the same parallel loop and read it back for the viscous stencil, a data race whose result could depend
+  on the threads. Chimera faces (`102`), which had the same race, write no ghost cell beyond the edges of a block face.
 - The exact Riemann solver (`riemann-solver = exact`) takes for the face state the wave of each side, shock or rarefaction, that
   the last Newton iteration computed. It chose the wave with the velocity of the contact updated after that iteration, and where
   the two fell on the two sides of the normal velocity of the cell it read the speed of the other wave, which that iteration had

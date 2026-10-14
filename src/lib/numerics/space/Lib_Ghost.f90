@@ -97,10 +97,10 @@ contains
       end select
     enddo
 
-    ! Compute Pg for Q2D (410) connections where Bm is local. As for the
-    ! chimera faces below, two 410 faces of a block that meet at an edge both
-    ! write the ghost cell of the edge and read it back: one loop per
-    ! direction of the faces, each ending in its implicit barrier.
+    ! Compute Pg for Q2D (410) connections where Bm is local. Two 410 faces of
+    ! a block that meet at an edge both write the ghost cell of the edge and
+    ! read it back: one loop per direction of the faces, each ending in its
+    ! implicit barrier.
     do fdir = 1, 3
       !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
       do ii = 1, domain % n_local_bc
@@ -167,24 +167,21 @@ contains
     enddo
 
     ! Chimera Pg(:,3:6): reads the ghost columns written just above, so it
-    ! must stay a separate loop (implicit barrier in between). Where two
-    ! chimera faces of a block meet, both write the ghost cell of their common
-    ! edge and read it back: one loop per direction of the faces, each ending
-    ! in its implicit barrier, orders those writes (two unordered writes of a
-    ! location by different threads are a data race, OpenMP 5.2, 1.4.1)
-    do fdir = 1, 3
-      !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
-      do ii = 1, domain % n_local_bc
-        i = domain % local_bc_idx(ii)
-        if (domain % bc(i) % type /= 102) cycle
-        Fm = domain % bc(i) % f
-        if ( (Fm + 1) / 2 /= fdir ) cycle
-        Bm = domain % bc(i) % b
-        Im = domain % bc(i) % i
-        Jm = domain % bc(i) % j
-        Km = domain % bc(i) % k
-        call Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
-      enddo
+    ! must stay a separate loop (implicit barrier in between). Each entry
+    ! writes its own Pg only: beyond the edges of a block face the ghost row
+    ! is extrapolated into Pg, not written in the block (Fill_BC_Ghost_Chimera),
+    ! so the entries of two chimera faces of a block that meet at an edge write
+    ! no common location, and one loop over all the entries has no data race
+    !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
+    do ii = 1, domain % n_local_bc
+      i = domain % local_bc_idx(ii)
+      if (domain % bc(i) % type /= 102) cycle
+      Bm = domain % bc(i) % b
+      Im = domain % bc(i) % i
+      Jm = domain % bc(i) % j
+      Km = domain % bc(i) % k
+      Fm = domain % bc(i) % f
+      call Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
     enddo
 
     ! Process INTER-RANK type-1 entries (Bm local, Bs remote)
@@ -543,84 +540,84 @@ contains
   end subroutine Fill_BC_Ghost_Connection
 
 
+  !> Pg(:,3:6) of a chimera face: the tangential neighbours of its ghost cell, for the viscous stencil of the face
+  !> (BC_Connection_Visc), which takes on the side of the ghost cells the central differences along the face of the row of
+  !> the ghost cells, as on the side of the cell those of the row of the cell. Pg(:,3:4) are the lower and the upper
+  !> neighbour in the first tangential direction of the face, Pg(:,5:6) in the second (j and k for faces 1-2, i and k for
+  !> 3-4, i and j for 5-6). Within the block face a neighbour is the ghost cell of the row, filled from the donors
+  !> (Ghost_Chimera). Beyond an edge of the block face the row has no ghost cell: the neighbour is extrapolated linearly
+  !> along the row, in the variables whose differences the stencil takes, so that the central difference there is the
+  !> one-sided one, exact for a linear field as that of the row of the cell is (the ghost cell copied there halves it, and
+  !> the face takes 3/4 of the derivative of a linear field along that direction). A block one cell wide in a direction has
+  !> no row to extrapolate along: in the k direction of a 2-D mesh the neighbour is the ghost cell turned by the wedge
+  !> angle, as the k neighbours of a cell are (Ghost_Axysimmetry; no turn on a plane mesh), elsewhere the ghost cell
+  !> itself. Nothing is written in the block: two chimera faces that meet at an edge of a block share no written location.
   subroutine Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, blk, Pg )
+    use MOSE_Lib_Metrics, only: delthe
     implicit none
-    integer, intent(in) :: Im, Jm, Km, Fm
-    type(MOSE_block_type), intent(inout) :: blk
-    real(R8), intent(inout)              :: Pg(nprim,6)
+    integer, intent(in)               :: Im, Jm, Km, Fm
+    type(MOSE_block_type), intent(in) :: blk
+    real(R8), intent(inout)           :: Pg(nprim,6)
     ! Local
-    integer :: i1, j1, k1, i2, j2, k2, i3, j3, k3, i4, j4, k4
-    integer :: dim(3), Ig, Jg, Kg
+    integer :: c(3), g(3), e(3), t(2), n, s, m
 
-    dim = blk % dim
-    Ig = Im - guide(Fm,1)
-    Jg = Jm - guide(Fm,2)
-    Kg = Km - guide(Fm,3)
-
+    c = [ Im, Jm, Km ]
+    g = c - guide(Fm,:)
     select case (Fm)
-      case(1:2)
-        if ( Jm == 1 )      blk % P (:,Ig, Jm-1, Km) = blk % P (:,Ig, Jm, Km)
-        if ( Jm == dim(2) ) blk % P (:,Ig, Jm+1, Km) = blk % P (:,Ig, Jm, Km)
-        if ( Km == 1 )      blk % P (:,Ig, Jm, Km-1) = blk % P (:,Ig, Jm, Km)
-        if ( Km == dim(3) ) blk % P (:,Ig, Jm, Km+1) = blk % P (:,Ig, Jm, Km)
-      case(3:4)
-        if ( Im == 1 )      blk % P (:,Im-1, Jg, Km) = blk % P (:,Im, Jg, Km)
-        if ( Im == dim(1) ) blk % P (:,Im+1, Jg, Km) = blk % P (:,Im, Jg, Km)
-        if ( Km == 1 )      blk % P (:,Im, Jg, Km-1) = blk % P (:,Im, Jg, Km)
-        if ( Km == dim(3) ) blk % P (:,Im, Jg, Km+1) = blk % P (:,Im, Jg, Km)
-      case(5:6)
-        if ( Im == 1 )      blk % P (:,Im-1, Jm, Kg) = blk % P (:,Im, Jm, Kg)
-        if ( Im == dim(1) ) blk % P (:,Im+1, Jm, Kg) = blk % P (:,Im, Jm, Kg)
-        if ( Jm == 1 )      blk % P (:,Im, Jm-1, Kg) = blk % P (:,Im, Jm, Kg)
-        if ( Jm == dim(2) ) blk % P (:,Im, Jm+1, Kg) = blk % P (:,Im, Jm, Kg)
+      case (1:2)
+        t = [ 2, 3 ]
+      case (3:4)
+        t = [ 1, 3 ]
+      case default
+        t = [ 1, 2 ]
     end select
 
-    select case(Fm)
-      case(1:2)
-        i1 = Ig
-        j1 = Jm - 1
-        k1 = Km
-        i2 = Ig
-        j2 = Jm + 1
-        k2 = Km
-        i3 = Ig
-        j3 = Jm
-        k3 = Km - 1
-        i4 = Ig
-        j4 = Jm
-        k4 = Km + 1
-      case(3:4)
-        i1 = Im - 1
-        j1 = Jg
-        k1 = Km
-        i2 = Im + 1
-        j2 = Jg 
-        k2 = Km
-        i3 = Im
-        j3 = Jg
-        k3 = Km - 1
-        i4 = Im
-        j4 = Jg 
-        k4 = Km + 1
-      case(5:6)
-        i1 = Im - 1
-        j1 = Jm
-        k1 = Kg
-        i2 = Im + 1
-        j2 = Jm
-        k2 = Kg
-        i3 = Im
-        j3 = Jm - 1
-        k3 = Kg
-        i4 = Im
-        j4 = Jm + 1
-        k4 = Kg
-    end select
-    
-    Pg (:,3) = blk % P (:,i1,j1,k1)
-    Pg (:,4) = blk % P (:,i2,j2,k2)
-    Pg (:,5) = blk % P (:,i3,j3,k3)
-    Pg (:,6) = blk % P (:,i4,j4,k4)
+    do n = 1, 2
+      e = 0
+      e(t(n)) = 1
+      do s = -1, 1, 2
+        m = 2*n + 1 + (s+1)/2   ! Pg(:,3) and Pg(:,4) for n = 1, Pg(:,5) and Pg(:,6) for n = 2
+        if ( c(t(n)) + s >= 1 .and. c(t(n)) + s <= blk % dim(t(n)) ) then
+          ! Within the block face: the ghost cell of the row
+          Pg(:,m) = blk % P (:,g(1)+s*e(1),g(2)+s*e(2),g(3)+s*e(3))
+        elseif ( blk % dim(t(n)) > 1 ) then
+          ! Beyond an edge of the block face: extrapolated along the row
+          Pg(:,m) = Visc_Extrapolated ( blk % P (:,g(1),g(2),g(3)), blk % P (:,g(1)-s*e(1),g(2)-s*e(2),g(3)-s*e(3)) )
+        else
+          ! One cell in this direction: the ghost cell, in the k direction of a 2-D mesh turned by the wedge angle as by
+          ! Ghost_Axysimmetry beyond face 5 (s = -1) or face 6 (s = 1)
+          Pg(:,m) = blk % P (:,g(1),g(2),g(3))
+          if ( t(n) == 3 .and. ndir < 3 ) then
+            Pg(nv,m) = blk % P (nv,g(1),g(2),g(3)) * cos(delthe) - s * blk % P (nw,g(1),g(2),g(3)) * sin(delthe)
+            Pg(nw,m) = blk % P (nv,g(1),g(2),g(3)) * sin(delthe) * s + blk % P (nw,g(1),g(2),g(3)) * cos(delthe)
+          end if
+        end if
+      enddo
+    enddo
+
+  contains
+
+    !> The state whose viscous variables (mass fractions, velocity, temperature, and the other variables per unit mass:
+    !> those of Visc_Variables in BC_Connection_Visc) are twice those of the state a minus those of the state b, with the
+    !> density of a, which keeps it positive whatever the jump from b to a
+    function Visc_Extrapolated ( a, b ) result ( q )
+      use FLINT_Lib_Thermodynamic
+      implicit none
+      real(R8), intent(in) :: a(nprim), b(nprim)
+      real(R8)             :: q(nprim)
+      ! Local
+      real(R8) :: rho_a, rho_b, rho_q, R_a, R_b, R_q, temperature
+
+      call co_rotot_Rtot ( a(1:nsc), rho_a, R_a )
+      call co_rotot_Rtot ( b(1:nsc), rho_b, R_b )
+      q(1:nsc)    = ( 2d0 * a(1:nsc) / rho_a - b(1:nsc) / rho_b ) * rho_a
+      q(nu:nw)    = 2d0 * a(nu:nw) - b(nu:nw)
+      temperature = 2d0 * a(np) / ( rho_a * R_a ) - b(np) / ( rho_b * R_b )
+      call co_rotot_Rtot ( q(1:nsc), rho_q, R_q )
+      q(np)       = rho_q * R_q * temperature
+      if ( nprim > np ) q(np+1:nprim) = ( 2d0 * a(np+1:nprim) / rho_a - b(np+1:nprim) / rho_b ) * rho_a
+
+    end function Visc_Extrapolated
 
   end subroutine Fill_BC_Ghost_Chimera
 

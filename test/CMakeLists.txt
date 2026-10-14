@@ -121,6 +121,15 @@ mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D"
 # and a chimera case whose chimera faces meet at the edges of a block.
 mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D")
 
+# Faces between blocks (Connections): the parts below, each in its folder of
+# test/fast/connections, run one after the other by
+# test/fast/connections/run.sh.
+# Viscous stencil of chimera faces (F9): one evaluation of the residual of a
+# linear field next to chimera faces, also at the edges of the block face, in
+# 2-D, in 3-D and on a 2-D axisymmetric wedge (against the same mesh as one
+# block).
+mose_add_fast_script(Connections fast/connections "fast;numerics;2D")
+
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
 # at a restart a missing probe file is written again, an existing one appended,
 # with the probe rows of the uninterrupted run.
