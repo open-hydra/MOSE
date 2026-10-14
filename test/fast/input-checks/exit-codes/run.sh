@@ -64,6 +64,16 @@
 #  between 1 and 128 (128 is what ifx gives to ERROR STOP; above 128 the
 #  shell reports a signal) and the log must hold the message.
 #
+#  A key of input.ini whose value does not read as the type of its parameter
+#  stops the run at set-up, in every build, with exit code 1, the file, the
+#  section, the key and the value as written, the STOP line of the set-up,
+#  and no solution: the Sod tube with sol-dtime = NaN, Infinity and 0,5 (a
+#  decimal comma), sol-diter = seven and 2.5, sol-overwrite = yes, and
+#  levels = 2.0 in [MOSE-Multigrid], which the reader takes outside the
+#  registry. The run went on with the default of the key, with exit code 0
+#  and "Input file OK"; an integer written 2.5 or 2.0 was refused by
+#  gfortran and cut to 2 by ifx, so the text of an integer is checked too.
+#
 #  A rotating frame whose axis or origin in input.ini holds a value that is
 #  not finite (axis = NaN 0.0 0.0, origin = 0.0 Infinity 0.0) stops the run
 #  at set-up, in every build, with exit code 1 and a message that names the
@@ -442,6 +452,40 @@ probe1 = middle
 [middle]
 variables = p
 index-position = 1 -1 1 1"
+
+echo "-- a key of input.ini whose value does not read as its type stops the run at set-up --"
+# run_key <tag> <lines> <message>: the Sod tube of write_case with the lines added to its input.ini must stop at set-up with
+# exit code 1, the message, the STOP line of the set-up, and no solution
+run_key() {
+  local tag="$1" lines="$2" message="$3" found=missing stop=missing solution=none
+  write_case "$tag" "equations = euler" "$lines"
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  local rc=$?
+  grep -a -q -F -- "$message" "OUTPUT/$tag.log" && found=found
+  grep -a -q -F -- "STOP: input file error (see above)" "OUTPUT/$tag.log" && stop=found
+  [[ -f OUTPUT/field.tec ]] && solution=written
+  if [[ $rc -eq 1 && $found == found && $stop == found && $solution == none ]]; then
+    echo "  [ok  ] $tag: exit code 1, \"$message\""
+  else
+    echo "  [FAIL] $tag: exit code $rc (required 1), message \"$message\" $found, STOP line $stop, solution $solution (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+}
+run_key key-nan $'[MOSE-IO]\nsol-dtime = NaN' \
+  "[ERROR] input.ini, [MOSE-IO] sol-dtime = NaN: the value is not a finite real number"
+run_key key-inf $'[MOSE-IO]\nsol-dtime = Infinity' \
+  "[ERROR] input.ini, [MOSE-IO] sol-dtime = Infinity: the value is not a finite real number"
+run_key key-comma $'[MOSE-IO]\nsol-dtime = 0,5' \
+  "[ERROR] input.ini, [MOSE-IO] sol-dtime = 0,5: the value is not a finite real number"
+run_key key-word $'[MOSE-IO]\nsol-diter = seven' \
+  "[ERROR] input.ini, [MOSE-IO] sol-diter = seven: the value is not an integer"
+run_key key-integer $'[MOSE-IO]\nsol-diter = 2.5' \
+  "[ERROR] input.ini, [MOSE-IO] sol-diter = 2.5: the value is not an integer"
+run_key key-logical $'[MOSE-IO]\nsol-overwrite = yes' \
+  "[ERROR] input.ini, [MOSE-IO] sol-overwrite = yes: the value is not a logical (true or false)"
+run_key key-levels $'[MOSE-Multigrid]\nlevels = 2.0' \
+  "[ERROR] input.ini, [MOSE-Multigrid] levels = 2.0: the value is not an integer"
 
 echo "-- a time table with a value that is not finite stops the run at set-up --"
 # run_table <tag> <line> <column> <token>: the duct of the inlet 402 of BCInput, the field <column> of line <line> of its

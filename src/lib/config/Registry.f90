@@ -34,6 +34,8 @@ module MOSE_Input_Registry
 
     logical :: required = .false.
     logical :: is_set   = .false.
+    logical :: unread   = .false.               ! In input.ini with a value that does not read as its type (Load_Ini)
+    character(len=:), allocatable :: text       ! The value in input.ini as written, when the key is there (Load_Ini)
 
     integer :: type_id = 0
     type(param_value_t) :: value
@@ -49,6 +51,9 @@ module MOSE_Input_Registry
 
     integer :: size = 0
     integer :: capacity = 0
+
+    ! An error of input.ini outside the keys of the registry, which Validate_Registry gives first (Scan_Ini: levels)
+    character(len=:), allocatable :: load_error
 
   contains
 
@@ -349,7 +354,12 @@ contains
   !> another form stops the run as well, so that no rule is skipped in silence. So does a real value that is not finite,
   !> with a rule or without, before the rule is checked: every comparison with a NaN is false, and an infinity passes a
   !> bound such as > 0 (gfortran reads a number too large for a real, such as 1e999, as an infinity). The test reads the
-  !> bits (Not_Finite).
+  !> bits (Not_Finite). Before every rule, a key of input.ini whose value does not read as the type of its parameter
+  !> (Load_Ini marks it: a value that does not convert, NaN and Infinity included, an integer written with a period or
+  !> an exponent, a list with more values than the parameter holds, no value) stops the run, and so does such a value of
+  !> levels, which the reader takes outside the
+  !> registry (Scan_Ini): the run went on with the default, or with the value of the previous reading, without a word.
+  !> The message gives the file, the section, the key and the value as written.
   function Validate_Registry() result(out)
     use MOSE_Finite_m, only: Not_Finite
     implicit none
@@ -361,7 +371,17 @@ contains
 
     out=""
 
+    if (allocated(reg%load_error)) then
+      out = reg%load_error
+      return
+    end if
+
     do i=1,reg%size
+
+      if (reg%params(i)%unread) then
+        out = Unread_Message(i)
+        return
+      end if
 
       if (reg%params(i)%required .and. .not. reg%params(i)%is_set) then
         out = "[ERROR] Required parameter not set: "//trim(reg%params(i)%name)
@@ -371,14 +391,14 @@ contains
       ! A real value, or a value of a list of reals, that is not finite
       if (associated(reg%params(i)%value%r)) then
         if (Not_Finite(reg%params(i)%value%r)) then
-          out = "[ERROR] "//trim(reg%params(i)%name)//" is not finite (NaN or infinity)"
+          out = "[ERROR] "//Key_And_Value(i)//": the value is not a finite real number"
           return
         end if
       else if (associated(reg%params(i)%value%rarr)) then
         do k = 1, size(reg%params(i)%value%rarr)
           if (Not_Finite(reg%params(i)%value%rarr(k))) then
             write(nth,'(I0)') k
-            out = "[ERROR] "//trim(reg%params(i)%name)//" is not finite (NaN or infinity) (value "//trim(nth)//" of the list)"
+            out = "[ERROR] "//Key_And_Value(i)//": value "//trim(nth)//" of the list is not a finite real number"
             return
           end if
         end do
@@ -436,8 +456,9 @@ contains
 
       case(TYPE_LOG)
 
-        ! The reader takes a logical value only (a list-directed read: T or F, after an optional period, starts the value,
-        ! and any other value stops the run): nothing is left to check, if the rule says no more than that
+        ! The reader takes a logical value only (a list-directed read: T or F, after an optional period, starts the value;
+        ! any other value is a value that does not read, given above): nothing is left to check, if the rule says no more
+        ! than that
         if (.not. logical_rule(reg%params(i)%allowed)) then
           out = "[ERROR] "//trim(reg%params(i)%name)//": the registry does not check its rule "//trim(reg%params(i)%allowed)
           return
@@ -451,6 +472,58 @@ contains
     end do
 
   end function Validate_Registry
+
+
+  !> The key i of input.ini, as the messages of Validate_Registry give it: the file, the section, the key and the value as
+  !> written, when the file holds one
+  function Key_And_Value(i) result(out)
+
+  implicit none
+
+  integer, intent(in) :: i
+  character(len=:), allocatable :: out
+
+  out = "input.ini, ["//trim(reg%params(i)%section)//"] "//trim(reg%params(i)%name)//" ="
+  if (allocated(reg%params(i)%text)) out = out//" "//trim(reg%params(i)%text)
+
+  end function Key_And_Value
+
+
+  !> The error of a key of input.ini whose value does not read as the type of its parameter (Load_Ini): no value, or a
+  !> value not of its type (a list: more values than the parameter holds, or a value not of its type)
+  function Unread_Message(i) result(out)
+
+  implicit none
+
+  integer, intent(in) :: i
+  character(len=:), allocatable :: out
+  character(len=16) :: n
+
+  out = "[ERROR] "//Key_And_Value(i)//": the value "
+  if (.not. allocated(reg%params(i)%text)) then
+    out = out//"is empty"
+  else if (len_trim(reg%params(i)%text) == 0) then
+    out = out//"is empty"
+  else if (associated(reg%params(i)%value%iarr)) then
+    write(n,'(I0)') size(reg%params(i)%value%iarr)
+    out = out//"is not a list of at most "//trim(n)//" integers"
+  else if (associated(reg%params(i)%value%rarr)) then
+    write(n,'(I0)') size(reg%params(i)%value%rarr)
+    out = out//"is not a list of at most "//trim(n)//" finite real numbers"
+  else
+    select case (reg%params(i)%type_id)
+    case (TYPE_INT)
+      out = out//"is not an integer"
+    case (TYPE_REAL)
+      out = out//"is not a finite real number"
+    case (TYPE_LOG)
+      out = out//"is not a logical (true or false)"
+    case default
+      out = out//"cannot be read"
+    end select
+  end if
+
+  end function Unread_Message
 
 
   !> The rule of a logical: logical, or the list of its two values (true, false; with or without the periods)

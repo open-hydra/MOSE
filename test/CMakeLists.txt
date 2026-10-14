@@ -203,7 +203,8 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # chemistry = equilibrium without the elements of the species,
 # a value outside the rule of the registry (an interval, a list of reals, a list
 # of integers), an input.ini that cannot be read (missing, empty, of comment
-# lines only), a probe of an unknown variable; a valid run with chemistry and
+# lines only), a key of input.ini whose value does not read as its type, a
+# probe of an unknown variable; a valid run with chemistry and
 # exclude-blocks ends with 0, and a block excluded from chemistry = equilibrium
 # keeps the bits of the run without chemistry, also with multigrid. A steady run
 # with a soot model ends normally and its diagnostic output names every variable
