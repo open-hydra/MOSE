@@ -37,6 +37,9 @@ space-reconstruction = MUSCL
 !!! warning "Keys that are not read"
     MOSE warns at the start for every line `key = value` of `input.ini` whose key the reader does not give in its section, with its line: such a key is an error in the input, and the run goes on with the default of its parameter in place of the value written. Comment lines (lines that start with `!`, `;` or `#`) are skipped, also when they hold `=`.
 
+!!! warning "An input.ini that cannot be read stops the run"
+    If `input.ini` cannot be opened (missing, or without read permission), holds no line that is not blank, or the INI reader returns an error while it loads the file (a file with no section, a line it cannot parse, which the reader names on its error output), the run stops with the reason and exit code 1: at the start, and when MOSE reads `input.ini` again during the run. With MPI every rank stops. Without the stop the parameters would keep their defaults, or the values of the previous reading, in silence.
+
 !!! warning "Values outside their rules stop the run"
     A value outside the rule of its parameter (column Allowed of the [Parameter Registry](registry.md): a bound such as `> 0`, an interval such as `in (0, 1)`, where `(` and `)` leave the end out and `[` and `]` take it in, each held by every value of a list of numbers; a list of names; `logical`) stops the run with a message: at the start, and when MOSE reads `input.ini` again during the run, every `ini-diter` iterations (10000 by default), to take the values changed meanwhile. The parameters that `input.ini` leaves out keep their values.
 

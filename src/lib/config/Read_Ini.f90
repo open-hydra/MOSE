@@ -22,8 +22,8 @@ contains
 
     allocate(obj_chemistry%RT(1:nsc+1), obj_chemistry%AT(1:nsc+1))
 
-    ! Load input.ini
-    call fini%load(filename='input.ini')
+    ! Load input.ini: a file that cannot be read stops the run
+    call Load_Input_File(fini, 'Input file')
 
     ! Scan input.ini for unknown number of probes and multigrid levels
     call Scan_Ini(fini, nprobes, probes_name, nmgl)
@@ -94,8 +94,8 @@ contains
     type(file_ini) :: fini
     character(len=1024) :: out
 
-    ! Load input.ini
-    call fini%load(filename='input.ini')
+    ! Load input.ini: a file that cannot be read stops the run
+    call Load_Input_File(fini, 'Input file, read again')
 
     ! Registry is built, now load the values from the ini file
     call Load_Ini(fini)
@@ -112,6 +112,59 @@ contains
     end if
 
   end subroutine Read_Inifile_Runtime
+
+
+  !> Loads input.ini into fini, and stops the run if it cannot be read: a file that cannot be opened (missing, or without
+  !> read permission), a file with no line that is not blank, or an error of the INI reader (FiNeR load gives an error
+  !> code other than 0: a file with no section, a line that it cannot parse; FiNeR names such a line on stderr, without
+  !> its number). Every rank reads input.ini: the ranks take the decision together (the largest of a flag), then every
+  !> rank stops with mpi_stop_all (exit code 1). Without this stop, the parameters kept their defaults at set-up and the
+  !> values of the previous reading during the run, and an empty file ended the run inside the reader.
+  subroutine Load_Input_File(fini, label)
+    use Finer,           only: file_ini
+    use MOSE_Mod_MPI,    only: mpi_allreduce_max_r8, mpi_stop_all
+    use iso_fortran_env, only: R8 => real64
+    implicit none
+    type(file_ini),   intent(inout) :: fini
+    character(len=*), intent(in)    :: label   !< Line of the set-up summary: Input file, or Input file, read again
+    ! Local
+    character(len=512)  :: reason, msg
+    character(len=1024) :: line
+    integer  :: unit, ios, error, n
+    real(R8) :: flag, flag_all
+
+    reason = ''
+    open(newunit=unit, file='input.ini', status='old', action='read', iostat=ios, iomsg=msg)
+    if (ios /= 0) then
+      reason = 'cannot be opened: '//trim(msg)
+    else
+      n = 0
+      do
+        read(unit, '(A)', iostat=ios) line
+        if (ios /= 0) exit
+        if (len_trim(line) > 0) n = n + 1
+      end do
+      close(unit)
+      if (n == 0) reason = 'is empty'
+    end if
+    if (len_trim(reason) == 0) then
+      call fini%load(filename='input.ini', error=error)
+      if (error /= 0) write(reason, '(A,I0,A)') 'cannot be read by the INI reader (FiNeR error ', error, &
+        '; a line that FiNeR could not parse is named above, if any)'
+    end if
+
+    flag = 0.0_R8
+    if (len_trim(reason) > 0) flag = 1.0_R8
+    call mpi_allreduce_max_r8(flag, flag_all)
+    if (flag_all > 0.0_R8) then
+      if (len_trim(reason) > 0) then
+        write(*,'(A,T35,A)') '   '//trim(label), 'FAIL'
+        write(*,'(4X,A)') '[ERROR] input.ini '//trim(reason)
+      end if
+      call mpi_stop_all('input.ini cannot be read (see above)')
+    end if
+
+  end subroutine Load_Input_File
 
 
 end module MOSE_Read_Ini

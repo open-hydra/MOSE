@@ -196,7 +196,8 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # condition, an initial condition with too few variables, a rotating frame
 # with a zero axis, chemistry = equilibrium without the elements of the species,
 # a value outside the rule of the registry (an interval, a list of reals, a list
-# of integers), a probe of an unknown variable; a valid run with chemistry and
+# of integers), an input.ini that cannot be read (missing, empty, of comment
+# lines only), a probe of an unknown variable; a valid run with chemistry and
 # exclude-blocks ends with 0, and a block excluded from chemistry = equilibrium
 # keeps the bits of the run without chemistry, also with multigrid. A steady run
 # with a soot model ends normally and its diagnostic output names every variable
@@ -332,7 +333,8 @@ if(USE_MPI)
     # map for other ranks stops every rank with the same message.
     mose_add_mpi_script(MPIDecompositionMap mpi/decomposition-map "needs-mpi;implementation;2D")
 
-    # Exit codes under MPI: an input error that rank 0 finds at set-up stops both
-    # ranks of a 2-rank run within 60 s, with exit code 1 to 128.
+    # Exit codes under MPI: an input error that rank 0 finds at set-up, and an
+    # input.ini that every rank finds it cannot read, stop both ranks of a 2-rank run
+    # within 60 s, with exit code 1 to 128.
     mose_add_mpi_script(MPIExitCodes mpi/exit-codes "needs-mpi;implementation;1D")
 endif()

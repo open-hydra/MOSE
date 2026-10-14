@@ -4,7 +4,9 @@
 #
 #  An error that rank 0 alone finds at set-up must stop every rank: the
 #  100-cell Sod tube of test/1D/Sod79 with cfl = -1, on 2 ranks, must end
-#  within 60 s with exit code 1 to 128 and the message of the rule. A rank
+#  within 60 s with exit code 1 to 128 and the message of the rule; and so
+#  must the run without input.ini, which every rank finds it cannot read
+#  (the ranks stop together, with MPI_FINALIZE). A rank
 #  that ends alone, with STOP and without MPI_FINALIZE, leaves the others to
 #  the launcher: the mpiexec of Intel MPI 2021.12 kills them and ends with
 #  exit code 255. The inputs come from ../../fast/input-checks/exit-codes/make_case.py
@@ -52,14 +54,27 @@ flux-limiter = vanleer
 riemann-solver = HLLC
 EOI
 
+fail=0
+# run2 <tag> <message>: 2 ranks must end within 60 s with exit code 1 to 128 and the message
+run2() {
+  local tag="$1" message="$2"
+  timeout -k 10 60 "$MPIEXEC" "$NPFLAG" 2 "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  local rc=$?
+  if [[ $rc -ge 1 && $rc -le 128 && $rc -ne 124 ]] && grep -a -q -- "$message" "OUTPUT/$tag.log"; then
+    echo "  [ok  ] $tag, 2 ranks, exit code $rc, \"$message\""
+  else
+    echo "  [FAIL] $tag, 2 ranks, exit code $rc (required 1 to 128 within 60 s; 124 is the time limit), message \"$message\" $(grep -a -q -- "$message" "OUTPUT/$tag.log" && echo found || echo missing) (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+}
 echo "-- an error that rank 0 finds at set-up stops every rank (2 ranks) --"
-timeout -k 10 60 "$MPIEXEC" "$NPFLAG" 2 "$LOCAL" > OUTPUT/mpi-input.log 2>&1
-rc=$?
-if [[ $rc -ge 1 && $rc -le 128 && $rc -ne 124 ]] && grep -a -q -- "cfl must be > 0" OUTPUT/mpi-input.log; then
-  echo "  [ok  ] 2 ranks, exit code $rc, \"cfl must be > 0\""
+run2 mpi-input "cfl must be > 0"
+echo "-- an input.ini that cannot be read stops every rank (2 ranks) --"
+rm -f input.ini
+run2 mpi-ini-missing "input.ini cannot be opened"
+if [[ $fail -eq 0 ]]; then
   echo "MPIExitCodes: all checks passed"
   exit 0
 fi
-echo "  [FAIL] 2 ranks, exit code $rc (required 1 to 128 within 60 s; 124 is the time limit), message \"cfl must be > 0\" $(grep -a -q -- "cfl must be > 0" OUTPUT/mpi-input.log && echo found || echo missing) (see OUTPUT/mpi-input.log)"
 echo "MPIExitCodes: FAILED"
 exit 1

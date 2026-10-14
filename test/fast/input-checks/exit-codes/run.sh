@@ -67,6 +67,12 @@
 #  between 1 and 128 (128 is what ifx gives to ERROR STOP; above 128 the
 #  shell reports a signal) and the log must hold the message.
 #
+#  An input.ini that cannot be read stops the run at set-up with its reason:
+#  input.ini missing, empty, and of comment lines only (no section, an error
+#  of the INI reader). The run used to stop on the first required key,
+#  naming that key and not the file, or, with the empty file, to end inside
+#  the reader with a run-time error.
+#
 #  And a valid run must end with exit code 0: with finite-rate chemistry and
 #  exclude-blocks = 1 the same tube must run, its set-up summary listing
 #  block 1 under "Inactive blocks" (the setup deallocated that list before it
@@ -354,6 +360,28 @@ probe1 = middle
 [middle]
 variables = p
 index-position = 1 -1 1 1"
+
+echo "-- an input.ini that cannot be read stops the run at set-up --"
+# run_ini <tag> <reason expected in the log>: the Sod tube with the input.ini left by the caller
+run_ini() {
+  local tag="$1" message="$2"
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  local rc=$?
+  if [[ $rc -ge 1 && $rc -le 128 && ! -f OUTPUT/field.tec ]] && grep -a -q -- "$message" "OUTPUT/$tag.log"; then
+    echo "  [ok  ] $tag: exit code $rc, \"$message\""
+  else
+    echo "  [FAIL] $tag: exit code $rc (required 1 to 128, no solution), message \"$message\" $(grep -a -q -- "$message" "OUTPUT/$tag.log" && echo found || echo missing) (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+}
+write_case ini-missing "equations = euler"; rm -f input.ini
+run_ini ini-missing "input.ini cannot be opened"
+write_case ini-empty "equations = euler"; : > input.ini
+run_ini ini-empty "input.ini is empty"
+write_case ini-comments "equations = euler"
+printf '%s\n' '; the keys of the run were here' '# iter-threshold = 50' > input.ini
+run_ini ini-comments "input.ini cannot be read by the INI reader"
 
 echo "-- a valid run ends with exit code 0 --"
 write_case chem-excl "equations = euler
