@@ -59,3 +59,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Where two chimera faces (`102`) of a block meet, or two faces of type `410`, the ghost cell of their common edge is filled one
   face direction at a time: both faces wrote it in the same parallel loop and read it back for the viscous stencil, a data race
   whose result could depend on the threads.
+- The exact Riemann solver (`riemann-solver = exact`) takes for the face state the wave of each side, shock or rarefaction, that
+  the last Newton iteration computed. It chose the wave with the velocity of the contact updated after that iteration, and where
+  the two fell on the two sides of the normal velocity of the cell it read the speed of the other wave, which that iteration had
+  not computed: the value of an earlier iteration, or an undefined one, in a DEBUG build a signalling NaN that stopped the run
+  with a floating-point exception (the coarse Sod tube of `RiemannSmoke`).
