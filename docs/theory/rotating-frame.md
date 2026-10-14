@@ -129,7 +129,7 @@ For steady-state turbomachinery flows, a steady rotating-frame solution avoids t
   the far field, and the power of the torque file. The frame is taken at constant $\boldsymbol{\Omega}$ between two
   readings: the force $-\rho\,\dot{\boldsymbol{\Omega}} \times \boldsymbol{r}$ of a frame that speeds up is not modelled.
   A change of `rotational-frame` or of the `stationary-face-<n>` keys, which changes the equations or the boundary
-  conditions, stops the run.
+  conditions, stops the run, and so does a value of `axis` or `origin` read again that is not finite (NaN or infinity).
 - The origin of the coordinate system (where $\boldsymbol{r} = \boldsymbol{0}$) should coincide with the axis of rotation.
 - All flux routines (convective and viscous) operate on the relative velocity without modification.
 

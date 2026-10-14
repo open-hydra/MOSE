@@ -176,10 +176,13 @@ contains
   !> of the torque file read at each use. The same arithmetic as Setup_RotatingFrame, so values read again unchanged leave
   !> every bit as it was. The model and the stationary faces change the equations and the boundary conditions: a change
   !> of rotational-frame, or of the number or the faces of the stationary-face-<k> keys (n_file of them in the file read
-  !> again), stops the run. Every rank reads input.ini again on its own, and a file rewritten while the ranks read it can
+  !> again), stops the run. So does a value of axis or origin that is not finite: read as a number, it would enter every
+  !> term of the frame, and the test of the length of the axis compares, which a NaN passes as false (Not_Finite reads the
+  !> bits). Every rank reads input.ini again on its own, and a file rewritten while the ranks read it can
   !> give them different contents: the ranks take the decision to stop together (the largest of a flag), so that every
   !> rank stops, or none (a rank that stopped alone would wait for the others in mpi_stop_all).
   subroutine Reload_RotatingFrame ( n_file )
+    use MOSE_Finite_m, only: Not_Finite
     use MOSE_Mod_MPI, only: mpi_is_root, mpi_allreduce_max_r8, mpi_stop_all
     implicit none
     integer, intent(in) :: n_file
@@ -206,8 +209,14 @@ contains
       if ( len_trim(reason) == 0 ) then
         read(obj_rot%axis_str, *)   axis
         read(obj_rot%origin_str, *) origin
-        norm = sqrt( sum(axis**2) )
-        if ( norm < 1.0e-14_R8 ) reason = '[ERROR] Rotation axis has zero length (input.ini read again)'
+        if ( any(Not_Finite(axis)) ) then
+          reason = '[ERROR] Rotating frame: a value of axis in input.ini read again is not finite (NaN or infinity)'
+        else if ( any(Not_Finite(origin)) ) then
+          reason = '[ERROR] Rotating frame: a value of origin in input.ini read again is not finite (NaN or infinity)'
+        else
+          norm = sqrt( sum(axis**2) )
+          if ( norm < 1.0e-14_R8 ) reason = '[ERROR] Rotation axis has zero length (input.ini read again)'
+        end if
       end if
     end if
     flag = 0.0_R8

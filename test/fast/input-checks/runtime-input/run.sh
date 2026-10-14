@@ -51,7 +51,10 @@
 #     b. rotational-frame = none, and c. stationary-face-1 = 1 3: the run
 #        must stop when it reads input.ini again, at iteration 20, with a
 #        message that the model, or the stationary faces, cannot change
-#        during the run.
+#        during the run;
+#     d. axis = NaN 0.0 0.0: the run must stop when it reads input.ini again,
+#        at iteration 20, with the message that a value of axis is not finite
+#        (read as a number, the NaN went into every term of the frame).
 #===============================================================================
 set -uo pipefail
 
@@ -223,7 +226,7 @@ else
 fi
 
 echo "-- 5. the rotating frame read again --"
-write_frame() {  # <directory> <iter-threshold> <newrun> <model> <omega> <stationary face>: input.ini written whole
+write_frame() {  # <directory> <iter-threshold> <newrun> <model> <omega> <stationary face> [axis]: input.ini written whole
   cat > "$1/input.ini.new" <<FRAME
 [MOSE-Parameters]
 iter-threshold = $2
@@ -253,13 +256,13 @@ shell-diter   = 1000000000
 
 [MOSE-Rotating-Frame]
 omega             = $5
-axis              = 1.0 0.0 0.0
+axis              = ${7:-1.0 0.0 0.0}
 origin            = 0.0 0.0 0.0
 stationary-face-1 = $6
 FRAME
   mv "$1/input.ini.new" "$1/input.ini"
 }
-during() {  # <directory> <model> <omega> <face>: start at omega = 1e4 with face 1 1, write the change after iteration 7
+during() {  # <directory> <model> <omega> <face> [axis]: start at omega = 1e4 with face 1 1, write the change after iteration 7
   local d=$1 pid n
   prepare_frame "$d"; write_frame "$d" 30 true rigid-body 1.0e4 '1 1'
   ( cd "$d" && exec "$SOLVER" > solve.log 2>&1 ) &
@@ -271,7 +274,7 @@ during() {  # <directory> <model> <omega> <face>: start at omega = 1e4 with face
   done
   first=no; late=no
   [[ -f $d/OUTPUT/field1.vtm ]] && first=yes
-  write_frame "$d" 30 true "$2" "$3" "$4"
+  write_frame "$d" 30 true "$2" "$3" "$4" "${5:-1.0 0.0 0.0}"
   # the change came too late if the run had already written its row of iteration 20, after which it reads input.ini
   [[ $(awk 'NF {n = $1} END {print n + 0}' "$d/OUTPUT/residual-history.dat" 2>/dev/null) -ge 20 ]] && late=yes
   wait "$pid"
@@ -314,6 +317,16 @@ for c in "model:none:1 1:the model cannot change" "face:rigid-body:1 3:the stati
          "see runs/frame-$tag/solve.log)"; status=1
   fi
 done
+during runs/frame-axis rigid-body 1.0e4 '1 1' 'NaN 0.0 0.0'
+if [[ $first != yes || $late == yes ]]; then
+  echo "  FAIL — axis: the change did not come between iterations 10 and 20 (host too slow to poll)"; status=1
+elif [[ $last == 20 ]] && \
+     command grep -q 'a value of axis in input.ini read again is not finite (NaN or infinity)' runs/frame-axis/solve.log; then
+  echo "  ok — axis: the run stopped at iteration 20: $(command grep -m1 'ERROR\] Rotating frame' runs/frame-axis/solve.log | cut -c1-90)…"
+else
+  echo "  FAIL — axis: the run did not stop at iteration 20 with the message (last iteration ${last:-none}," \
+       "see runs/frame-axis/solve.log)"; status=1
+fi
 
 if [[ $status -eq 0 ]]; then
   echo "RuntimeInput: all checks passed"
