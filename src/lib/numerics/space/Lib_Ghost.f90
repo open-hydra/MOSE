@@ -23,7 +23,7 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: ii, i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s
-    integer :: fg
+    integer :: fg, fdir
     logical :: mpi_on
 
     ! On a single rank the exchange has nothing to do, and running it anyway
@@ -97,19 +97,25 @@ contains
       end select
     enddo
 
-    ! Compute Pg for Q2D (410) connections where Bm is local.
-    !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
-    do ii = 1, domain % n_local_bc
-      i = domain % local_bc_idx(ii)
-      Bm = domain % bc(i) % b
-      Im = domain % bc(i) % i
-      Jm = domain % bc(i) % j
-      Km = domain % bc(i) % k
-      Fm = domain % bc(i) % f
-      select case (domain % bc(i) % type)
-        case(410)
-          call Fill_BC_Ghost_Q2D ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
-      end select
+    ! Compute Pg for Q2D (410) connections where Bm is local. As for the
+    ! chimera faces below, two 410 faces of a block that meet at an edge both
+    ! write the ghost cell of the edge and read it back: one loop per
+    ! direction of the faces, each ending in its implicit barrier.
+    do fdir = 1, 3
+      !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
+      do ii = 1, domain % n_local_bc
+        i = domain % local_bc_idx(ii)
+        Bm = domain % bc(i) % b
+        Im = domain % bc(i) % i
+        Jm = domain % bc(i) % j
+        Km = domain % bc(i) % k
+        Fm = domain % bc(i) % f
+        if ( (Fm + 1) / 2 /= fdir ) cycle
+        select case (domain % bc(i) % type)
+          case(410)
+            call Fill_BC_Ghost_Q2D ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
+        end select
+      enddo
     enddo
 
     ! MPI: wait for P receives to complete; unpack chimera donor cells into
@@ -161,17 +167,24 @@ contains
     enddo
 
     ! Chimera Pg(:,3:6): reads the ghost columns written just above, so it
-    ! must stay a separate loop (implicit barrier in between)
-    !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
-    do ii = 1, domain % n_local_bc
-      i = domain % local_bc_idx(ii)
-      if (domain % bc(i) % type /= 102) cycle
-      Bm = domain % bc(i) % b
-      Im = domain % bc(i) % i
-      Jm = domain % bc(i) % j
-      Km = domain % bc(i) % k
-      Fm = domain % bc(i) % f
-      call Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
+    ! must stay a separate loop (implicit barrier in between). Where two
+    ! chimera faces of a block meet, both write the ghost cell of their common
+    ! edge and read it back: one loop per direction of the faces, each ending
+    ! in its implicit barrier, orders those writes (two unordered writes of a
+    ! location by different threads are a data race, OpenMP 5.2, 1.4.1)
+    do fdir = 1, 3
+      !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
+      do ii = 1, domain % n_local_bc
+        i = domain % local_bc_idx(ii)
+        if (domain % bc(i) % type /= 102) cycle
+        Fm = domain % bc(i) % f
+        if ( (Fm + 1) / 2 /= fdir ) cycle
+        Bm = domain % bc(i) % b
+        Im = domain % bc(i) % i
+        Jm = domain % bc(i) % j
+        Km = domain % bc(i) % k
+        call Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
+      enddo
     enddo
 
     ! Process INTER-RANK type-1 entries (Bm local, Bs remote)

@@ -117,7 +117,8 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
 mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")
 
-# Serial vs OpenMP equivalence (I5): 1 vs 4 threads bit-identical.
+# Serial vs OpenMP equivalence (I5): 1 vs 4 threads bit-identical, the Sod tube
+# and a chimera case whose chimera faces meet at the edges of a block.
 mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D")
 
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;

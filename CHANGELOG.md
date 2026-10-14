@@ -56,3 +56,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The diagnostic output of a steady run names and fills the soot residuals (`rho*Yp`, `rho*Np`) between ρE and the turbulence
   variables: with a soot model it named fewer variables than it wrote, and with a turbulence model too it stopped on a run-time
   error in builds with bounds checking.
+- Where two chimera faces (`102`) of a block meet, or two faces of type `410`, the ghost cell of their common edge is filled one
+  face direction at a time: both faces wrote it in the same parallel loop and read it back for the viscous stencil, a data race
+  whose result could depend on the threads.
