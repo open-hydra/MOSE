@@ -359,7 +359,7 @@ contains
     !> exit code 1, in every build.
     subroutine Check_IC_Values ( domain, IOfield )
       use Lib_ORION_data,    only: ORION_data
-      use MOSE_Lib_Newstate, only: Not_Finite
+      use MOSE_Finite_m,     only: Not_Finite
       use MOSE_Mod_MPI,      only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8
       implicit none
       type(MOSE_domain_type), intent(in) :: domain

@@ -176,8 +176,9 @@ Runge–Kutta stage (see
 The `p0_file` of an inlet `402` is a text file of pairs `time [s]  p0 [bar]`, one per line, in increasing time (two
 equal times make a jump); a first line `periodic` makes the table repeat. The name is taken as written on the line,
 directories included (for example `INPUT/p0.dat`, relative to the directory of the run), up to 256 characters; a name with
-blanks goes in quotes. A table that cannot be opened, holds no pair or has decreasing times stops the run at set-up, and
-so does a `402` line with fewer values than listed above or with an empty one.
+blanks goes in quotes. A table that cannot be opened, holds no pair, holds a time or a value that is not finite (NaN or
+infinity: the message gives its line and column) or has decreasing times stops the run at set-up, and so does a `402` line
+with fewer values than listed above or with an empty one.
 
 ### Viscous Walls
 

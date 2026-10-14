@@ -193,8 +193,9 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # Exit codes of the error stops: a run that MOSE stops on an error ends with a
 # non-zero exit code and its message: the Sod tube as a viscous mixture of four
 # species without a diffusion table, a run that diverges, a NaN or an infinity
-# in the initial condition (a stop at set-up, exit code 1, in every build), an
-# initial condition with too few variables, a rotating frame
+# in the initial condition (a stop at set-up, exit code 1, in every build), and
+# in the time table of an inlet 402, an initial condition with too few
+# variables, a rotating frame
 # with a zero axis, chemistry = equilibrium without the elements of the species,
 # a value outside the rule of the registry (an interval, a list of reals, a list
 # of integers), an input.ini that cannot be read (missing, empty, of comment

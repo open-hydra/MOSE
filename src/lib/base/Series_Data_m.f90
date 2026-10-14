@@ -18,13 +18,15 @@ module MOSE_Series_Data_m
 contains
 
   subroutine initialize(self,file,bar)
-    use MOSE_Mod_MPI, only: mpi_stop_all
+    use MOSE_Mod_MPI,  only: mpi_stop_all
+    use MOSE_Finite_m, only: Not_Finite
     implicit none
     class(time_series_type), intent(inout) :: self
     character(len=*), intent(in)     :: file
     logical, intent(in)              :: bar
     character(len=256)               :: line
-    integer :: ios, i
+    character(len=512)               :: msg
+    integer :: ios, i, col
     integer :: UnitFree
 
     self%exists = .true.
@@ -51,12 +53,51 @@ contains
     do i = 1, self%n
       read(UnitFree,*) self%time(i), self%var(i)
     enddo
+    ! Every time and every value is finite. A NaN passes every comparison as false: the check of the times below let a NaN
+    ! time through, and a NaN pressure of an inlet 402 closed its face in silence, the run ending with exit code 0; in a
+    ! build that traps the invalid operations it stopped the run with SIGFPE. Not_Finite reads the bits, with no such
+    ! operation: the run stops here, with the line and the column of the value
+    do i = 1, self%n
+      col = 0
+      if ( Not_Finite(self%time(i)) ) then
+        col = 1
+      elseif ( Not_Finite(self%var(i)) ) then
+        col = 2
+      endif
+      if ( col > 0 ) then
+        write(msg,'(A,I0,A,I0,A)') '[ERROR] Time table '//trim(file)//', line ', Line_Of_Pair(i), ', column ', col, &
+          ': a value that is not finite (NaN or infinity)'
+        call mpi_stop_all(trim(msg))
+      endif
+    enddo
     close(UnitFree)
     ! update interpolates between consecutive times: they must not decrease (two equal times make a jump)
     if (any(self%time(2:) < self%time(:self%n-1))) &
       call mpi_stop_all('[ERROR] Time table '//trim(file)//': the times decrease')
     
     if (bar) self%var = self%var*1d+5
+
+  contains
+
+    !> The line of the file that holds pair k: the pairs are the lines that are not blank and hold no 'periodic', as
+    !> counted above
+    integer function Line_Of_Pair ( k )
+      integer, intent(in) :: k
+      integer :: npair, ios_
+
+      rewind(UnitFree)
+      Line_Of_Pair = 0
+      npair = 0
+      do
+        read(UnitFree,'(A)',iostat=ios_) line
+        if (ios_ /= 0) exit
+        Line_Of_Pair = Line_Of_Pair + 1
+        if (index(line, 'periodic') > 0 .or. len_trim(line) == 0) cycle
+        npair = npair + 1
+        if (npair == k) return
+      enddo
+
+    end function Line_Of_Pair
 
   end subroutine initialize
 

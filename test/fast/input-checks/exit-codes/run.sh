@@ -74,6 +74,16 @@
 #  SIGFPE, exit code 136, at the end of the set-up), and with -ffast-math,
 #  an option of the RELEASE build, which lets gfortran fold isnan to false.
 #
+#  A time table of a boundary condition with a time or a value that is not
+#  finite stops the run at set-up, in every build, with the file, the line
+#  and the column: the duct of BCInput, an inlet 402 whose total pressure
+#  comes from the table p0.dat (../../boundary-conditions/bc-input/make_case.py case p0.dat), with
+#  the pressure of line 3 written as NaN and as Infinity, and the time of
+#  line 4 as NaN, must end with exit code 1 and the message, and write no
+#  solution. The check reads the bits: every comparison with a NaN is false,
+#  so the check of decreasing times let a NaN time through, and a NaN
+#  pressure closed the face of the inlet in silence.
+#
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
 #  of the INI reader). The run used to stop on the first required key,
@@ -389,6 +399,51 @@ probe1 = middle
 [middle]
 variables = p
 index-position = 1 -1 1 1"
+
+echo "-- a time table with a value that is not finite stops the run at set-up --"
+# run_table <tag> <line> <column> <token>: the duct of the inlet 402 of BCInput, the field <column> of line <line> of its
+# table p0.dat written as <token>, must stop at set-up with exit code 1, the file, the line and the column, and no solution
+run_table() {
+  local tag="$1" line="$2" col="$3" tok="$4"
+  local message="[ERROR] Time table p0.dat, line $line, column $col: a value that is not finite (NaN or infinity)"
+  local found=missing solution=none
+  rm -f INPUT/*
+  ln -sf "../$COMMON/phase.txt" INPUT/phase.txt; ln -sf "../$COMMON/thermo.dat" INPUT/thermo.dat
+  python3 -B ../../boundary-conditions/bc-input/make_case.py case p0.dat || exit 1
+  awk -v n="$line" -v c="$col" -v t="$tok" 'NR == n { $c = t } { print }' p0.dat > p0.new && mv p0.new p0.dat
+  cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 40
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.5
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+EOI
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  local rc=$?
+  grep -a -q -F -- "$message" "OUTPUT/$tag.log" && found=found
+  [[ -f OUTPUT/field.tec ]] && solution=written
+  if [[ $rc -eq 1 && $found == found && $solution == none ]]; then
+    echo "  [ok  ] $tag: exit code 1, \"$message\""
+  else
+    echo "  [FAIL] $tag: exit code $rc (required 1), message \"$message\" $found, solution $solution (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+}
+run_table table-nan  3 2 NaN
+run_table table-inf  3 2 Infinity
+run_table table-time 4 1 NaN
 
 echo "-- an input.ini that cannot be read stops the run at set-up --"
 # run_ini <tag> <reason expected in the log>: the Sod tube with the input.ini left by the caller
