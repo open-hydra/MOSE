@@ -227,7 +227,8 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # keeps the bits of the run without chemistry, also with multigrid. A steady run
 # with a soot model ends normally and its diagnostic output names every variable
 # it writes; a steady single-species run without thermo or transport output
-# stops with a message that says so.
+# stops with a message that says so. A restart from a solution whose time or a
+# counter is not finite stops at set-up.
 # Limiter defaults: the reconstruction that runs is the declared one (MUSCL
 # without flux-limiter = van Leer; first-order ignores a given limiter), and
 # the set-up warnings say so.

@@ -155,6 +155,11 @@ contains
                                                cycle=cycle,fldnames=restart_counter_names, &
                                                fldvalues=counters(1:nc),fldfound=found(1:nc))
       endif
+      ! Restart: a time or a counter of the solution that is not finite stops the run (Check_IC), before the tests
+      ! below, which compare
+      if ( .not. obj_sim_param%newrun .and. .not. present(zone_mask) .and. error == 0 ) then
+        if ( Restart_Not_Finite ( IOfield%solutiontime ) ) return
+      endif
       ! Restart: does the solution hold a time? The ORION reader gives -huge(1._R8P) when no zone of a Tecplot
       ! ASCII file holds SOLUTIONTIME, and every valid time lies far above half of it; a zone of a binary file
       ! always holds its solution time. A steady run writes its solutions at minus the global iteration count, a
@@ -201,6 +206,10 @@ contains
         error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4), &
                                                vtspath=trim(vtspath),time=obj_io%IOtime,cycle=cycle, &
                                                fldnames=fldnames,fldvalues=counters,fldfound=found)
+        ! A time or a counter that is not finite stops the run (Check_IC), before the tests below, which compare
+        if ( error == 0 ) then
+          if ( Restart_Not_Finite ( obj_io%IOtime ) ) return
+        endif
         obj_io%restart%time_found = found(nc+1)
         ! A steady run writes its solutions at time minus the global iteration count (before, -1), a
         ! time-accurate one at t >= 0
@@ -236,6 +245,35 @@ contains
     endif
 
     if (error/=0) obj_io%error_message = "[ERROR] reading input file "//trim(obj_io%nameinit)
+
+  contains
+
+    !> The time that a restart reads, and the counters that the solution holds (found(1:nc), values counters(1:nc)): the
+    !> first one that is not finite (NaN or infinity) is an error of the read, which stops the run (Check_IC), and the
+    !> result is .true.. The test reads the bits (Not_Finite): the tests of the time compare, and every comparison with
+    !> a NaN is false; a counter goes to an integer with nint, which an infinity or a NaN does not fit.
+    logical function Restart_Not_Finite ( time )
+      use MOSE_Finite_m, only: Not_Finite
+      implicit none
+      real(R8P), intent(in) :: time
+      ! Local
+      integer :: k
+
+      Restart_Not_Finite = .true.
+      if ( Not_Finite(time) ) then
+        obj_io%error_message = '[ERROR] '//trim(obj_io%nameinit)//': the solution time is not finite (NaN or infinity)'
+        return
+      endif
+      do k = 1, nc
+        if ( found(k) .and. Not_Finite(counters(k)) ) then
+          obj_io%error_message = '[ERROR] '//trim(obj_io%nameinit)//': '//trim(restart_counter_names(k))// &
+                                 ' is not finite (NaN or infinity)'
+          return
+        endif
+      enddo
+      Restart_Not_Finite = .false.
+
+    end function Restart_Not_Finite
 
   end subroutine Read_vtk_tec
 
