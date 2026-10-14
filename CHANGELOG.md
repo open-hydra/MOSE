@@ -21,6 +21,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   bound, min(|T|/16, |T_n|/2), over the distance of the cell next to the face, with that cell (T is the twist of the corners
   of the face, T_n its part along the normal of the face). It is a warning above 1 %. 2-D and axisymmetric meshes have plane
   wall faces and print nothing. The distances do not change.
+- MPI runs take the rank of every block from `INPUT/decomposition.map` (with the phase prefix of `bc.txt` in multi-phase runs)
+  when the case has one: the decomposition map that the ATLAS mesh decomposer (MDB) writes next to the split mesh, one line per
+  block with its cells along i, j and k, its number of cells and its rank, checked against the mesh. A map that does not fit the
+  mesh or the run (a block line missing or one too many, blocks out of order, other cells, a rank the run does not have, a map
+  made for another number of ranks, a value that is not an integer, a directory in place of the file) stops the run at set-up:
+  every rank prints the same message, finalizes MPI and ends with exit code 1. The map is read in every build, so a map made
+  for more ranks also stops a serial run. With fewer blocks than ranks some ranks idle, with a warning, as without a map.
+  Without the file the assignment of the blocks and the outputs are those of before, bit for bit; with it the solution does not
+  change, only the rank on which each block is computed.
+- At set-up MOSE warns, with the line number, about every `key = value` of `input.ini` that the reader does not take in its
+  section: such a key is not read, and its parameter keeps its default. The guide says that a key lost this way is an error in
+  the input. Inputs whose keys are all read do not change.
 
 ### Changed
 
@@ -84,6 +96,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   with `rel_fac = 1` it repeated the same computation 1000 times and then set the discriminant to zero. Now that the gas enters
   only when the reservoir can push it in (see Fixed), that case is not reached, and p0 is used as given. Results change at
   most at round-off.
+- When `input.ini` is read again during a run (every `ini-diter` iterations, 10 000 by default), a value outside the rule of its
+  key stops the run with the message of the rule, as it does at set-up; it was taken without a word (a negative `cfl` written
+  during a steady run made the residual grow until the run stopped on a negative pressure nine iterations later). The keys that
+  the file leaves out keep their values: the set-up no longer writes the names of its summary into the values of
+  `integration-variables`, `riemann-solver` and `flux-limiter`, and the summary prints the same names as before.
+- A key of `input.ini` whose value does not read as the type of its parameter stops the run, at set-up and when the file is read
+  again during the run, with exit code 1 and a message that gives the file, the section, the key and the value as written: a
+  number that is not one (a word, `NaN`, `Infinity`, a decimal comma such as `0,5`), an integer written with a period or an
+  exponent (`2.0`, `1e3`: gfortran refused it, ifx cut the fraction, `2.7` read as 2), a logical that does not start with `T` or
+  `F`, a list with more values than its parameter holds, a key with no value; so does `levels` of `[MOSE-Multigrid]`. Such a key
+  was taken as one not given: its parameter kept the default, or the value of the previous reading, in silence.
+- MOSE builds with FiNeR v2.3.0 instead of v2.0.6. FiNeR v2.1.0 and later skip a comment line also when it holds `=` or a
+  bracket, and report the failures of their parser: with v2.0.6 such a line ended the reading of its section, and the keys
+  after it kept their defaults, so such an `input.ini` now gives the values written after the line. The five libraries that
+  FiNeR v2.0.7 and later no longer carry (PENF, FACE, FLAP, BeFoR64 and StringiFor) are submodules of MOSE under
+  `lib/third_party/`, at their release tags (v2.0.1, v1.1.17, v2.5.3, v1.2.4 and v1.8.0), and CMake adds them before FiNeR
+  from `FINER_DEPS_PATH` (`lib/third_party/` by default): a build needs neither FoBiS nor a download besides the submodules.
+  After pulling this change into an existing clone, run `git submodule update --init --recursive`: CMake initializes a
+  missing submodule, but does not update one that is checked out at an older commit, and stops with this command when
+  FiNeR is older than v2.1.0. ifx 2023.0 stops with an internal compiler error on StringiFor v1.8.0 and is not supported:
+  this version is tested with gfortran 12 and 13 and with ifx 2024.1 (see the installation guide).
 
 ### Removed
 
@@ -91,6 +124,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   c² f(c) = 25 Ω ν_t / a, a number against a speed, so the factor it gave the production depended on the units: 0.99 with
   lengths in metres and 0.22 with lengths in millimetres for Ω = 1e3 1/s, ν_t = 1e-3 m²/s and a = 340 m/s; at Ω = 1e5 1/s it
   cut the production by 78 % whatever the Mach number. No case or test of the repository used it.
+- Implicit residual smoothing (`irs = true` or `irs-beta > 0`) in time-accurate runs: it is refused at set-up; steady runs keep
+  it. The smoothed residual is not the residual of the space discretization, so a run with it did not follow the transient of
+  the discretized equations: in one step from the same state the time derivative changed, by an amount that did not depend on
+  the step, and so did the final density of a Sod run. The change does not vanish as the step does. MOSE has no dual time
+  stepping, in whose pseudo time residual smoothing belongs.
 
 ### Fixed
 
@@ -309,3 +347,114 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   was switched off, and the fallback hid the release flags set after it, so the targets were compiled without
   `-ffast-math`, and without `-fomit-frame-pointer` until a second configure; with oneAPI 2024 every configure also added one
   more `-ipo` to the link flags.
+- `space-reconstruction = MUSCL` without `flux-limiter` runs van Leer, as its warning says, and `first-order` ignores a
+  `flux-limiter` given, with a warning; the set-up summary names the limiter in use. MUSCL without a limiter ran first order
+  (zero slopes) while the summary said MUSCL, first-order with a limiter ran MUSCL with that limiter, and first-order without a
+  limiter printed a spurious warning. Results change only for these two inputs.
+- `shock-detector = Tramel` or `Chen`, the values that its rule admits, turns that shock sensor on. The set-up compared the key
+  with `tramel` and `chen`, so a value of the rule never turned a sensor on and, written, it also kept off the sensor that
+  HLLC+Tramel, HLLE++, HLLC+Chen and AUSM+M take without the key: the reconstruction stayed second order at shocks, and
+  HLLC+Tramel was HLLC everywhere. Runs that leave the key out do not change; runs that write it change near shocks.
+- A run with a chemistry model and `exclude-blocks` other than `none` no longer stops at set-up: the list of the blocks without
+  chemistry was deallocated before it was ever allocated, an error that ends the run (exit code 2 with gfortran).
+- `exclude-blocks` excludes its blocks from the equilibrium chemistry too, and on every multigrid level. The equilibrium step
+  changed the composition and the pressure of every block, and with multigrid the excluded blocks got the chemistry on the
+  coarse levels, with either model, and carried it to the fine one. Runs without `exclude-blocks` do not change.
+- A word of `exclude-blocks` that is not a block number, or a number beyond the blocks of the mesh, stops the run at set-up with
+  a message. A word that did not read emptied the list and the next word was written beyond it: a build with bounds checking
+  stopped with an index error, and a release build went on with chemistry in every block; a number of four or more digits kept
+  its first three, and a number beyond the mesh named no block, in silence.
+- With `chemistry = equilibrium` and no element of the species read (no `INPUT/composition.txt`), the run stops at set-up with a
+  message that names the file, before the initial condition is read. The equilibrium keeps the amount of each element, and
+  without the elements the solver had no such constraint: a build with bounds checks stopped inside it. The guide of the
+  equilibrium says which file it needs, and its format.
+- The divergence check of the state update stops the run on any value that is not finite (NaN or infinity), or on a negative
+  pressure, with any compiler and options: it tested `isnan`, which gfortran folds to false with `-ffast-math`, an option of
+  the RELEASE build (a diverging run of such a build ended with a segmentation fault), and which misses an infinity. Its
+  message is "NaN, infinity or p<0 detected". The user guide gives the exit code of a run that MOSE stops on an error, and the
+  known limit that errors raised inside ORION end with exit code 0.
+- A value that is not finite (NaN or infinity) in the initial condition, or in the solution that a restart reads, stops the run
+  at set-up with exit code 1, in every build and on every rank, with the place of the value: the variable of a cell (by its
+  position after the coordinates, with its name when the file gives the names) or the coordinate of a node, the block and the
+  indices. A build that traps the invalid floating-point operations (the DEBUG build) ended with SIGFPE, exit code 136, at the
+  first operation on the value. In the other builds a NaN velocity stopped the run at the divergence check of the state update
+  ("Integration failed"); an infinite coordinate ended it on a bound of an array (gfortran with bounds checking, exit code 2)
+  or on a degenerate cell ("Metric tensor det=0", ifx). Runs whose initial condition is finite do not change.
+- An inlet `402` names its total-pressure table as written: a file name with a directory, quoted, or longer than 32 characters
+  (up to 256). The property line was read as a list, so a slash ended the read and the values after the name were never read,
+  and a long name was cut. A table that cannot be opened, holds no (time, value) pair or has decreasing times stops the run at
+  set-up with the name of the file: a missing table was not reported, and a table with decreasing times was read without a word,
+  the run ending with exit code 0. So does a time or a value of the table that is not finite (NaN, infinity), with the line and
+  the column: every comparison with a NaN is false, so a NaN pressure closed the face of the inlet in silence (no gas through
+  it) and the run ended with exit code 0, a NaN time passed the check of decreasing times, and a build that traps the invalid
+  floating-point operations (the DEBUG build) stopped with SIGFPE.
+- A property line of `bc.txt` with an empty value (two commas with nothing between them) for a value without a default stops
+  the run at set-up, with the line of the file, the record, its type and the name of the value; the value was left undefined,
+  and the run went on. The values with a default keep it, and the guide lists them.
+- A line of `bc.txt` that is short of a value or holds a value that is not a number stops the run at set-up, with the line, the
+  record and its type: read as a list from the file, a short line took its last values from the next line, and every record
+  after it was read out of place. Blank lines between records are skipped, as before.
+- A flow direction (`alpha`, `beta`) that is neither a number nor the token `normal` stops the run at set-up: a misspelt token
+  (`Normal`, `nromal`) was taken as 0 rad without a word.
+- A value of a property line of `bc.txt` that is not finite (NaN or infinity), required or with a default value, the flow
+  directions included, stops the run at set-up with exit code 1, in every build, with the line of the file, the record, its type
+  and the name of the value. The test of an empty value let a NaN through, as every comparison with a NaN is false: a NaN total
+  pressure of an inlet `401` closed its face in silence and the run ended with exit code 0 (with `-ffast-math`, an option of the
+  ifx RELEASE build, it was taken for an empty value), an infinite total temperature of an inlet `402` ran to the end with exit
+  code 0, a NaN roughness of a wall `302` did so in a gnu TESTING build and stopped at the divergence check in the ifx RELEASE
+  build, an infinite total pressure or a NaN direction stopped at the divergence check ("Integration failed"), and a build that
+  traps the invalid floating-point operations (the DEBUG build) stopped with SIGFPE at the first operation on the value. The
+  messages of the reader name the file it reads, which on a coarse multigrid level is the file of that level, not `bc.txt`.
+- A time (`SOLUTIONTIME`) or a value of the file of an assigned state (`410`) that is not finite (NaN or infinity) stops the
+  run at set-up with exit code 1, in every build, with the file, the zone, the line of its header, and the variable and the
+  cell of the value. A NaN pressure ended the run at its first step: with a run-time error of an index out of bounds (gfortran
+  with bounds checking), with a non-physical state at a face that named no file (ifx), or with SIGFPE (the DEBUG build); an
+  infinite time was taken without a word, and the run ended with exit code 0.
+- A file of an assigned state (`410`) that cannot be read stops the run at set-up with exit code 1, in every build, with the file
+  and, for a zone, the zone and the line of its header: a file missing or with no `VARIABLES` line or no zone, a zone header
+  whose `I`, `J`, `SOLUTIONTIME` or block number of the title does not read, values that are not numbers or that end before the
+  values that `I` and `J` give, one value too many. So does a file whose zones do not come in increasing time, with the two
+  times: the reader took the times in the order of the file, and the face took the state of the wrong time in silence. The reader
+  did not check its reads: the values not read kept those of the zone before, or the zones after were read shifted, and the run
+  went on; its stops were ERROR STOP.
+- A zone header of the file of an assigned state (`410`) that gives no `I=` or no `J=` stops the run at set-up with exit code
+  1, in every build, with the file, the line of the header, the zone and the form to write (`I=<n>, J=<n>`, in upper case with
+  no blank around `=`). The reader takes the nodes of a zone only so written: a header with `I = 3` or `j=2` kept the default
+  of 2 nodes in silence, the values of the zone were read for that size, and the run ended with exit code 0. Other forms are
+  still not read.
+- With the rotating frame, `stationary-face-<n>` entries no longer make the start-up hang: the count of the entries asked for
+  `stationary-face-1` at every pass, so stationary walls could not be used. A `rotational-frame` other than `rigid-body`, its
+  default `none` included, turns the frame off before its entries are read; with `none` the switch of the frame was left
+  undefined.
+- The user guide gives the data lines of the boundary types `420`, `502` and `506` as MOSE reads them: the fifth value of `420`
+  is the mass flux `g` through the face, not a throat radius; the line of `502` ends with the mass fractions of the products;
+  `506` was missing.
+- The guide names the boundary files of the multigrid levels as MOSE reads them, `bc.txt`, `bc2.txt`, `bc3.txt`, … (it said
+  `bc_x1.txt`, `bc_x2.txt`, …).
+- Every rule of the parameter registry is checked, at set-up and when `input.ini` is read again: intervals such as the `in (0,
+  1)` of `preconditioning-eps-min`, and the rule of a list of numbers on each of its values (`index-position` of a probe, `>=
+  0`; `ode-relative-tol-species` and `ode-absolute-tol-species`, `> 0`). Only the bounds of single numbers and the lists of
+  names were checked, and a value outside the other rules ran with no message. A rule of another form stops the run as an error
+  of the registry. Runs whose values keep to the rules do not change.
+- A value of `axis` or `origin` of the rotating frame that is not finite (NaN or infinity) stops the run at set-up, in every
+  build, with a message that names the key (the run went on to the divergence check, or stopped with the message of an axis of
+  zero length, or with SIGFPE in a DEBUG build). So does a real parameter of `input.ini` read as an infinity (gfortran reads
+  `1e999` as one), with a rule or without, at the start and when `input.ini` is read again: a bound such as `> 0` let it through.
+- An `input.ini` that cannot be read stops the run with the reason, at set-up and when it is read again during the run, on every
+  MPI rank and with exit code 1: a file that cannot be opened, that holds no line that is not blank, or that the INI reader
+  rejects. A missing, unreadable or comments-only file stopped the run on the first required key without naming the file, an
+  empty one ended the run inside the reader, and a file that could not be read again during the run left the values of the
+  previous reading in place, without a word.
+- With MPI, an error that every rank finds stops every rank together, and the message of every rank reaches the log: an error in
+  a time table, in a line of `bc.txt`, in a value of `input.ini` read again, in the mesh type or in the periodic images of a
+  wall. Every rank called `MPI_ABORT`, which makes only a best attempt to stop the processes: the first call could stop the
+  others before they wrote their line, and at times no line reached the log. An error in a value of `input.ini` read again
+  stops every rank also when only one rank reads it (a file rewritten while the ranks read it), as the ranks decide together,
+  and the first of those ranks writes the rule: only rank 0 wrote it, so it was missing when rank 0 had read a valid value.
+  An error that rank 0 alone finds at set-up (the data tables, the rules of `input.ini`, the boundary conditions) stops every
+  rank together too, once rank 0 has written it: with `MPI_ABORT` from rank 0 alone, a run with Intel MPI 2021.12 could end with
+  exit code 141 (SIGPIPE) and without the last line of its log. An initial condition that one rank cannot read stops every rank
+  as well: the ranks decide together on the error of the read, rank 0 writes the line of the set-up summary with the verdict of
+  all, and the first rank that found the error writes it, with its rank. Rank 0 decided alone, so a run in which rank 1 could not
+  read its copy of the file went on to its end; and with the lean read of a `.szplt` file, where each rank reads the variables of
+  its own blocks after that decision, an error of that read was never looked at.
