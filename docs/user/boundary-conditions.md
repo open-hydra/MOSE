@@ -13,10 +13,13 @@ When multigrid is enabled, one BC file per grid level is required:
 
 | File | Level |
 |------|-------|
-| `INPUT/bc_x1.txt` | Finest grid |
-| `INPUT/bc_x2.txt` | 2× coarser |
-| `INPUT/bc_x4.txt` | 4× coarser |
-| `INPUT/bc_x8.txt` | 8× coarser |
+| `INPUT/bc.txt` | 1, the finest grid |
+| `INPUT/bc2.txt` | 2, 2× coarser |
+| `INPUT/bc3.txt` | 3, 4× coarser |
+| `INPUT/bc4.txt` | 4, 8× coarser |
+
+Level $n$ has half the cells of level $n-1$ in each direction, and `INPUT/bc<n>.txt` lists its boundary cells; a direction
+of one cell (j or k of a 1-D or 2-D case) keeps one cell.
 
 For single-grid cases the file is simply `INPUT/bc.txt`.
 
