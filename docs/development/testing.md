@@ -16,7 +16,11 @@ test/
 │   ├── Tor99/
 │   ├── Ein91/
 │   ├── Noh87/
-│   └── Shu-Osher/             # Mach-3 shock / sine-wave interaction
+│   ├── Shu-Osher/             # Mach-3 shock / sine-wave interaction
+│   ├── Fer14/                 # Finite-rate reactive shock tube
+│   ├── diff1/                 # Unity-Lewis diffusion
+│   ├── diff2/                 # Multicomponent diffusion
+│   └── premixed-flame/        # Premixed CH4/air laminar flame against a Cantera reference
 ├── fast/                      # Fast pre-push tests (hard-invariant checks)
 │   ├── riemann-smoke/         # Every shock-capturing solver stays positive
 │   ├── numerics-smoke/        # Limiter / time-scheme / recon / int-var sweep
@@ -68,11 +72,13 @@ test/
 │   │   ├── hypersonic-cylinder/
 │   │   ├── chang-nozzle/
 │   │   ├── rocket-nozzle/     # Subdirs: frozen/ equilibrium/ finite-rate/
-│   │   └── supersonic-forward-step/
+│   │   ├── supersonic-forward-step/
+│   │   ├── gresho-vortex/     # Low-Mach Gresho vortex
+│   │   └── isentropic-vortex/ # Isentropic vortex convection (N1): order of accuracy on 32/64/128 grids
 │   └── viscous/               # Viscous cases
 │       ├── flat-plate-laminar/
 │       ├── flat-plate-turbulent/
-│       ├── Flat_Plate_SGGLRR/
+│       ├── ablating-wall/     # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column
 │       ├── mms/                   # residuals/: right-hand sides on manufactured fields (RANS, wedge); skewed/: order on skewed grids (validation tier)
 │       ├── wedge-axis-step/       # Local time step next to the axis of the wedge (validation tier)
 │       ├── point-implicit-steady/ # Steady state with the point-implicit factor independent of the time step
@@ -90,12 +96,15 @@ test/
 │   └── bit-identity/          # The same output bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads
 ├── 3D/                        # 3-D validation cases
 │   ├── coriolis-channel/
-│   └── viscous/
-│       └── mms/               # Manufactured solution on skewed 3-D grids (validation tier)
-├── Pressure_Centrifugal_eq/   # Rotating-frame equilibrium case
+│   ├── viscous/
+│   │   └── mms/               # Manufactured solution on skewed 3-D grids (validation tier)
+│   ├── hyshotII/              # HyShot II scramjet combustor
+│   └── pressure-centrifugal/  # Rotating-frame equilibrium case
 └── common/                    # Shared thermodynamic databases
     ├── Air/                   # 5-species air (dimensional)
-    └── nondim-Air/            # 5-species air (non-dimensional)
+    ├── nondim-Air/            # 5-species air (non-dimensional)
+    ├── Air-sutherland/        # Transport table of air: viscosity and conductivity
+    └── Air-viscous/           # One-species air: phase, thermodynamic and transport tables
 ```
 
 ### Categories
@@ -106,7 +115,7 @@ test/
 | **2-D inviscid** | `test/2D/euler/` | Converged Euler flow fields against reference data |
 | **2-D viscous** | `test/2D/viscous/` | Converged Navier–Stokes / RANS solutions against reference data |
 | **3-D** | `test/3D/` | 3-D flow cases |
-| **Rotating frame** | `test/Pressure_Centrifugal_eq/` | Centrifugal equilibrium in a rotating reference frame |
+| **Rotating frame** | `test/3D/pressure-centrifugal/` | Centrifugal equilibrium in a rotating reference frame |
 | **Common** | `test/common/` | Shared thermodynamic databases used by multiple cases |
 
 ---
@@ -258,6 +267,7 @@ seconds on a CI runner.
 | `OpenMPEquiv` | 1 vs 4 threads bit-identical: the Sod tube, and a block overset on another whose four chimera faces meet at its edges (Navier–Stokes) | `test/fast/openmp-equiv` |
 | `Connections`/`ChimeraFace` | the viscous stencil of chimera faces, one evaluation of the residual of a linear field on two blocks that overlap with their ghost cells on cells of the other block: with u = G y in 2-D and u = G (y + z) in 3-D the y and z momentum residual is zero also in the cells at the ends of the chimera faces; with a radial velocity on a 2-D wedge of 1 degree the momentum residual of every cell is that of the same mesh as one block (within 1e-9 of μ G / H) | `test/fast/connections/chimera-face` |
 | `Restart` | split + restart reproduces the uninterrupted run; at a restart a missing probe file is written again and an existing one is appended to, with the rows of the uninterrupted run: to the precision of the file with Tecplot ASCII, bit for bit with `vtk raw`, iteration counters and output numbering included; a restart from a solution that holds no time (Tecplot ASCII without `SOLUTIONTIME`, `vtk raw` without `TIME`), time-accurate or steady, stops at setup with a message and a non-zero exit code; a solution written in `vtk raw`, `vtk ascii` and Tecplot ASCII, copied into `INPUT/` (`field.vtm` with its `vtk/` folder, `field.tec`), starts a new run whose cell values after 25 steps are those of the restart from the same solution, bit for bit | `test/fast/restart` |
+| `AblatingWall` | the ablative wall boundary conditions (503 melting, 504 pyrolysis) on an isothermal blown column, an exact steady solution, against its closed form; the melting column also without `schmidt` | `test/2D/viscous/ablating-wall` |
 | `OutputFiles`/`WallOutput` | a vtk raw run of a 2x2-block box with no-slip walls on its four sides ends, and every wall file `wallB<b>F<f>.vts` has the extent of its face, taken from `fieldBlock<b>.vts`, as WholeExtent and as Piece Extent, its points and one value of each wall variable per cell (a direction with one plane of nodes counts one layer of cells, as in the cell-centered ordered data of the Tecplot format), as raw appended data | `test/fast/output-files/wall-output` |
 | `Restart`/`RestartCounters` | with `vtk raw`, steady (CFL ramp, numbered solutions, diagnostic output, a probe every 3 iterations), time-based output and two-level multigrid restarts write the same files, byte for byte, as the uninterrupted runs; a two-level multigrid restart from Tecplot ASCII goes on with the global iteration count; a time-accurate restart from a steady solution starts at t = 0; a time-accurate restart from an older solution (probes by time, by iteration and by both) writes `residual-history.dat` and the probe files of the uninterrupted run, and the probe by time of a new run writes one row per multiple of its `dtime`, from the first; the same restart from history files cut by hand (the last row without its newline, or cut in the middle) writes the same files; with the rotating frame, the same restart writes the `torque.dat` of the uninterrupted run; a first part that ends on an output iteration (by iteration, also with `sol-overwrite = true` and with two grid levels, and by time) writes there the solution and the probe row due, and its final solution holds the output number (and the time of the last output) after them: the restart in the same folder writes the files of the uninterrupted run | `test/fast/restart/restart-counters` |
 | `OutputFiles`/`ProbePosition` | probes given by position at the centres of three cells of a planar 2-D duct (one cell in k, a different pressure in every cell, two steps): each probe row holds the values of its cell in the solution of the same step, never those of a neighbour or of a ghost cell | `test/fast/output-files/probe-position` |
@@ -287,7 +297,12 @@ A few heavier checks carry the `validation` (not `fast`) label because they
 need reference data or plotting — for example `ShuOsherConvergence`, a 4-grid
 Shu–Osher Richardson study (N=200/400/800/1600) that estimates a grid-independent
 solution by Richardson extrapolation, asserts a sane observed order and monotone
-L1 convergence against it, and regenerates the V&V figure. `PointImplicitSteady`
+L1 convergence against it, and regenerates the V&V figure. `IsentropicVortex`
+(`test/2D/euler/isentropic-vortex`) measures the order of accuracy of the
+convection of the isentropic vortex (N1) on 32, 64 and 128 cells, and
+`MMSViscous` (`test/2D/viscous/mms`) that of the viscous operator with a
+manufactured solution (N2) on 32 and 64 cells (the full study, with 128
+cells, makes the V&V figure). `PointImplicitSteady`
 (`test/2D/viscous/point-implicit-steady`) is there for its
 cost, 14 000 iterations per model: the steady state of a short hypersonic plate
 with the point-implicit factor (Spalart–Allmaras, SST) does not depend on the
