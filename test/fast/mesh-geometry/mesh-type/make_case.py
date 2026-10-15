@@ -295,7 +295,7 @@ def read_zones(path):
     for part in re.split(r'(?m)^\s*ZONE', text)[1:]:
         head, _, body = part.partition('\n')
         ni, nj, nk = (int(re.search(k + r'\s*=\s*(\d+)', head).group(1)) for k in ('I', 'J', 'K'))
-        values = [float(v) for v in " ".join(body.splitlines()).split()]
+        values = [float(v) for v in " ".join(l for l in body.splitlines() if not l.startswith("DATASETAUXDATA")).split()]
         nn, nc, out, pos = ni * nj * nk, (ni - 1) * (nj - 1) * max(nk - 1, 1), {}, 0
         for k, name in enumerate(names):
             cnt = nn if k < 3 else nc

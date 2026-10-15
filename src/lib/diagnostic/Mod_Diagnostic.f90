@@ -8,6 +8,8 @@ module MOSE_Mod_Diagnostic
 
 contains
 
+  !> The sum over the cells of the block is taken in a fixed order, the same for any number of threads: each thread sums
+  !> whole i lines, and the sums of the lines are added in turn.
   subroutine Compute_Residual ( new, old, dt, n, average, total )
     use MOSE_Global_m
     implicit none
@@ -20,21 +22,29 @@ contains
     ! Local
     integer :: i, j, k
     real(R8) :: resn(nres), residuo(nres)
+    real(R8), allocatable :: line(:,:,:)   ! sum over each i line
 
-    residuo = 0d0
+    allocate ( line(nres, n(2), n(3)) )
 
-    !$omp parallel
-    !$omp do private ( resn ) reduction ( + : residuo ) collapse (3)
+    !$omp parallel do private ( i, resn ) collapse (2)
     do k = 1, n(3)
     do j = 1, n(2)
-    do i = 1, n(1)
+      line(:,j,k) = 0d0
+      do i = 1, n(1)
 
-      resn(1) = abs ( sum(new(1:nsc,i,j,k) - old(1:nsc,i,j,k)) )  ! delta(rho)
-      resn(2:nres) = abs ( new(nu:nprim,i,j,k) - old(nu:nprim,i,j,k) ) ! delta(...)
-      residuo = residuo + resn*resn  ! sum ( r(i)**2 )
+        resn(1) = abs ( sum(new(1:nsc,i,j,k) - old(1:nsc,i,j,k)) )  ! delta(rho)
+        resn(2:nres) = abs ( new(nu:nprim,i,j,k) - old(nu:nprim,i,j,k) ) ! delta(...)
+        line(:,j,k) = line(:,j,k) + resn*resn  ! sum ( r(i)**2 )
 
-    enddo; enddo; enddo
-    !$omp end parallel
+      enddo
+    enddo; enddo
+    !$omp end parallel do
+
+    residuo = 0d0
+    do k = 1, n(3)
+    do j = 1, n(2)
+      residuo = residuo + line(:,j,k)
+    enddo; enddo
 
     ! do i = 1, nres; resmax_(i) = maxval ( reslocal(i,:,:,:) ); enddo
 
@@ -42,6 +52,7 @@ contains
     average = sqrt ( residuo / float ( n(1)*n(2)*n(3) ) )
     ! Overall residual
     total = total + residuo
+    deallocate ( line )
 
   end subroutine Compute_Residual
 
@@ -65,9 +76,10 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    character(len=hlen) :: varnames
+    character(len=hlen) :: varnames, vtknames
     integer             :: E_IO, b, i, j, k, ndiag
     character(len=clen) :: format(2), extension
+    real(R8), allocatable :: full(:,:,:,:)
 
     ! Residuals of rho, rho*u, rho*v, rho*w, rho*E and of the variables that follow the energy in r: soot, passive
     ! scalars, RANS (named as in the solution files, Setup_Output_Solution), then dt and beta
@@ -117,10 +129,30 @@ contains
       select case(trim(format(1)))
       case('vtk')
         IOfield%vtk%format = trim(format(2))
+        ! The names become XML attributes (Name="..."): the double quotes of the Tecplot list must go
+        vtknames = varnames
+        do i = 1, len_trim(vtknames)
+          if ( vtknames(i:i) == '"' ) vtknames(i:i) = ' '
+        enddo
+        ! IOfield is the output buffer of the field, with obj_io%Onvar columns, and the vtk
+        ! writer writes every column it holds: give it the ndiag diagnostic columns only,
+        ! then the field's size back (the field writer fills every column at each write).
+        do b = 1, size(IOfield%block)
+          call move_alloc(IOfield%block(b)%vars, full)
+          allocate(IOfield%block(b)%vars(1:ndiag,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk))
+          IOfield%block(b)%vars(:,:,:,:) = full(1:ndiag,:,:,:)
+          deallocate(full)
+        enddo
         localpath_vtk = trim(path)//'/vtk'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
+        ! The time is the solution time of the Tecplot output: minus the global iteration count in a steady run
         E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=varnames,time=domain%time)
+                                                             vtmpath=trim(path)//trim(file),varnames=vtknames, &
+                                                             time=IOfield%solutiontime)
+        do b = 1, size(IOfield%block)
+          deallocate(IOfield%block(b)%vars)
+          allocate(IOfield%block(b)%vars(1:obj_io%Onvar,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk))
+        enddo
       case('tecplot')
         if (format(2)=='binary') then
           extension = '.szplt'

@@ -33,6 +33,28 @@
 #     history of the same run without it, byte for byte, and the setup names
 #     no key as not read (FiNeR before 2.1.0 ended the section at that line:
 #     cfl and the keys after it kept their defaults).
+#  5. the rotating frame read again, on the box with 24 x 24 cells per block
+#     (runs/frame-case): the box in a rigid-body frame turning
+#     about the x axis, with its wall on face 1 of block 1 (the plane x = 0,
+#     a surface of revolution about the axis) at rest in the laboratory
+#     (stationary-face-1 = 1 1), solutions every 7 iterations, the change
+#     written once the solution of iteration 7 is, before the reading of
+#     iteration 20 (else the test says so and fails):
+#     a. omega from 1e4 to 2e4 rad/s: from iteration 21 the run must go on as
+#        one that restarts from its solution of iteration 20 with omega = 2e4
+#        from its set-up for 10 iterations: residual-history.dat, torque.dat,
+#        the solutions of iterations 21, 28 and 30 and the wall output of
+#        iteration 30 byte for byte
+#        (the Coriolis and centrifugal sources and the velocity of the
+#        stationary wall all at 2e4 rad/s), and the log must give the omega
+#        read again;
+#     b. rotational-frame = none, and c. stationary-face-1 = 1 3: the run
+#        must stop when it reads input.ini again, at iteration 20, with a
+#        message that the model, or the stationary faces, cannot change
+#        during the run;
+#     d. axis = NaN 0.0 0.0: the run must stop when it reads input.ini again,
+#        at iteration 20, with the message that a value of axis is not finite
+#        (read as a number, the NaN went into every term of the frame).
 #===============================================================================
 set -uo pipefail
 
@@ -57,6 +79,8 @@ ln -sf "../$COMMON/thermo.dat"    INPUT/thermo.dat
 ln -sf "../$COMMON/transport.dat" INPUT/transport.dat
 python3 -B ../../../mpi/make_case.py --layout 2x2 --cells 48 48 --bc box --zfaces 300 > /dev/null \
   || { echo "RuntimeInput: FAIL — case generation"; exit 1; }
+python3 -B ../../../mpi/make_case.py --layout 2x2 --cells 24 24 --bc box --zfaces 300 --outdir runs/frame-case > /dev/null \
+  || { echo "RuntimeInput: FAIL — case generation (part 5)"; exit 1; }
 
 write_ini() {  # <directory> <cfl>: input.ini written whole, then moved in place
   cat > "$1/input.ini.new" <<EOF
@@ -92,6 +116,16 @@ prepare() {  # <directory>
   rm -rf "$1"; mkdir -p "$1/INPUT" "$1/OUTPUT"
   for f in phase.txt thermo.dat transport.dat ic.tec bc.txt; do
     ln -s "../../../INPUT/$f" "$1/INPUT/$f"
+  done
+}
+
+prepare_frame() {  # <directory>: the box of part 5, 24 x 24 cells per block
+  rm -rf "$1"; mkdir -p "$1/INPUT" "$1/OUTPUT"
+  for f in phase.txt thermo.dat transport.dat; do
+    ln -s "../../../INPUT/$f" "$1/INPUT/$f"
+  done
+  for f in ic.tec bc.txt; do
+    ln -s "../../frame-case/INPUT/$f" "$1/INPUT/$f"
   done
 }
 
@@ -189,6 +223,109 @@ if [[ -s runs/comment-plain/OUTPUT/residual-history.dat ]] \
 else
   echo "  FAIL — with the comment line: residual history not that of the run without it, or a key named as not read:" \
        "$(command grep -m1 'is not read' runs/comment-comment/solve.log | cut -c1-80) (see runs/comment-*/solve.log)"; status=1
+fi
+
+echo "-- 5. the rotating frame read again --"
+write_frame() {  # <directory> <iter-threshold> <newrun> <model> <omega> <stationary face> [axis]: input.ini written whole
+  cat > "$1/input.ini.new" <<FRAME
+[MOSE-Parameters]
+iter-threshold = $2
+res-threshold  = 1e-300
+newrun         = $3
+
+[MOSE-Physics]
+equations        = navier-stokes
+schmidt          = 1.0
+rotational-frame = $4
+
+[MOSE-Numerics]
+cfl                   = 0.5
+time-accurate         = false
+time-scheme           = RK3
+integration-variables = cons
+space-reconstruction  = MUSCL
+flux-limiter          = vanleer
+riemann-solver        = HLLC
+
+[MOSE-IO]
+sol-format    = vtk raw
+sol-diter     = 7
+sol-overwrite = false
+ini-diter     = 20
+shell-diter   = 1000000000
+
+[MOSE-Rotating-Frame]
+omega             = $5
+axis              = ${7:-1.0 0.0 0.0}
+origin            = 0.0 0.0 0.0
+stationary-face-1 = $6
+FRAME
+  mv "$1/input.ini.new" "$1/input.ini"
+}
+during() {  # <directory> <model> <omega> <face> [axis]: start at omega = 1e4 with face 1 1, write the change after iteration 7
+  local d=$1 pid n
+  prepare_frame "$d"; write_frame "$d" 30 true rigid-body 1.0e4 '1 1'
+  ( cd "$d" && exec "$SOLVER" > solve.log 2>&1 ) &
+  pid=$!
+  for ((n = 0; n < 6000; n++)); do
+    [[ -f $d/OUTPUT/field1.vtm ]] && break
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.05
+  done
+  first=no; late=no
+  [[ -f $d/OUTPUT/field1.vtm ]] && first=yes
+  write_frame "$d" 30 true "$2" "$3" "$4" "${5:-1.0 0.0 0.0}"
+  # the change came too late if the run had already written its row of iteration 20, after which it reads input.ini
+  [[ $(awk 'NF {n = $1} END {print n + 0}' "$d/OUTPUT/residual-history.dat" 2>/dev/null) -ge 20 ]] && late=yes
+  wait "$pid"
+  last=$(awk 'NF {n = $1} END {print n}' "$d/OUTPUT/residual-history.dat" 2>/dev/null)
+}
+during runs/frame-omega rigid-body 2.0e4 '1 1'
+d=runs/frame-restart
+prepare_frame "$d"; write_frame "$d" 20 true rigid-body 1.0e4 '1 1'
+( cd "$d" && "$SOLVER" > solve1.log 2>&1 )
+write_frame "$d" 10 false rigid-body 2.0e4 '1 1'
+( cd "$d" && "$SOLVER" > solve2.log 2>&1 )
+same=yes
+for f in residual-history.dat torque.dat field3.vtm field4.vtm field.vtm vtk/field3Block1.vts vtk/field4Block2.vts \
+         vtk/fieldBlock1.vts vtk/fieldBlock2.vts vtk/fieldBlock3.vts vtk/fieldBlock4.vts vtk/wallB1F1.vts; do
+  if ! cmp -s "runs/frame-omega/OUTPUT/$f" "$d/OUTPUT/$f"; then
+    same=no
+    echo "  differs: $f"
+  fi
+done
+if [[ $first != yes ]]; then
+  echo "  FAIL — a. the run ended before its solution of iteration 7 (see runs/frame-omega/solve.log)"; status=1
+elif [[ $late == yes ]]; then
+  echo "  FAIL — a. input.ini changed after the run had passed iteration 20: the test cannot tell (host too slow to poll)"; status=1
+elif [[ $last == 30 && $same == yes ]] && \
+     command grep -q 'Rotating frame, input.ini read again: omega =  2.0000000E+04' runs/frame-omega/solve.log; then
+  echo "  ok — a. omega read again at iteration 20: the run goes on as the restart with omega = 2e4, byte for byte"
+else
+  echo "  FAIL — a. omega read again: last iteration ${last:-none}, the same files as the restart: $same" \
+       "(see runs/frame-omega/solve.log)"; status=1
+fi
+for c in "model:none:1 1:the model cannot change" "face:rigid-body:1 3:the stationary faces cannot change"; do
+  IFS=: read -r tag model face msg <<< "$c"
+  during "runs/frame-$tag" "$model" 1.0e4 "$face"
+  if [[ $first != yes || $late == yes ]]; then
+    echo "  FAIL — $tag: the change did not come between iterations 10 and 20 (host too slow to poll)"; status=1
+  elif [[ $last == 20 ]] && command grep -q "$msg during the run" "runs/frame-$tag/solve.log"; then
+    echo "  ok — $tag: the run stopped at iteration 20: $(command grep -m1 'ERROR\] Rotating frame' "runs/frame-$tag/solve.log" | cut -c1-90)…"
+  else
+    echo "  FAIL — $tag: the run did not stop at iteration 20 with the message (last iteration ${last:-none}," \
+         "see runs/frame-$tag/solve.log)"; status=1
+  fi
+done
+during runs/frame-axis rigid-body 1.0e4 '1 1' 'NaN 0.0 0.0'
+if [[ $first != yes || $late == yes ]]; then
+  echo "  FAIL — axis: the change did not come between iterations 10 and 20 (host too slow to poll)"; status=1
+elif [[ $last == 20 ]] && \
+     command grep -q 'a value of axis in input.ini read again is not finite (NaN or infinity)' runs/frame-axis/solve.log; then
+  echo "  ok — axis: the run stopped at iteration 20: $(command grep -m1 'ERROR\] Rotating frame' runs/frame-axis/solve.log | cut -c1-90)…"
+else
+  echo "  FAIL — axis: the run did not stop at iteration 20 with the message (last iteration ${last:-none}," \
+       "see runs/frame-axis/solve.log)"; status=1
 fi
 
 if [[ $status -eq 0 ]]; then

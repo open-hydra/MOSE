@@ -137,6 +137,13 @@
 #  naming that key and not the file, or, with the empty file, to end inside
 #  the reader with a run-time error.
 #
+#  A restart from a solution whose time or counter is not finite stops the
+#  run at set-up, in every build, with exit code 1, the file, the name of the
+#  value and the STOP line of the set-up, and leaves the solution as it was:
+#  the Sod tube written as OUTPUT/field.tec (Tecplot ASCII), its SOLUTIONTIME
+#  made NaN, or its MOSE_LAST_OUTPUT_TIME made Infinity, then read by a
+#  restart (newrun = false).
+#
 #  And a valid run must end with exit code 0: with finite-rate chemistry and
 #  exclude-blocks = 1 the same tube must run, its set-up summary listing
 #  block 1 under "Inactive blocks" (the setup deallocated that list before it
@@ -693,6 +700,40 @@ run_ini ini-empty "input.ini is empty"
 write_case ini-comments "equations = euler"
 printf '%s\n' '; the keys of the run were here' '# iter-threshold = 50' > input.ini
 run_ini ini-comments "input.ini cannot be read by the INI reader"
+
+echo "-- a restart from a solution whose time or counter is not finite stops the run at set-up --"
+# run_restart <tag> <sed program> <message>: the Sod tube of write_case, its solution OUTPUT/field.tec (Tecplot ASCII) changed by
+# the sed program, then a restart from it (newrun = false), must stop at set-up with exit code 1, the message and the STOP line
+# of the set-up, and leave the solution as it was
+run_restart() {
+  local tag="$1" edit="$2" message="$3" found=missing stop=missing solution=kept
+  write_case "$tag" "equations = euler"
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$tag-first.log" 2>&1
+  if [[ ! -f OUTPUT/field.tec ]]; then
+    echo "  [FAIL] $tag: the run that writes the solution to restart from failed (see OUTPUT/$tag-first.log)"
+    fail=1
+    return
+  fi
+  sed "$edit" OUTPUT/field.tec > "OUTPUT/$tag-restart.tec" && cp "OUTPUT/$tag-restart.tec" OUTPUT/field.tec
+  sed -i 's/^newrun = true$/newrun = false/' input.ini
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  local rc=$?
+  grep -a -q -F -- "$message" "OUTPUT/$tag.log" && found=found
+  grep -a -q -F -- "STOP: initial condition error (see above)" "OUTPUT/$tag.log" && stop=found
+  cmp -s OUTPUT/field.tec "OUTPUT/$tag-restart.tec" || solution=written
+  rm -f OUTPUT/field.tec
+  if [[ $rc -eq 1 && $found == found && $stop == found && $solution == kept ]]; then
+    echo "  [ok  ] $tag: exit code 1, \"$message\""
+  else
+    echo "  [FAIL] $tag: exit code $rc (required 1), message \"$message\" $found, STOP line $stop, solution $solution (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+}
+run_restart restart-time 's/SOLUTIONTIME=[^,]*/SOLUTIONTIME=NaN/' \
+  "[ERROR] OUTPUT/field.tec: the solution time is not finite (NaN or infinity)"
+run_restart restart-counter 's/^DATASETAUXDATA MOSE_LAST_OUTPUT_TIME = .*$/DATASETAUXDATA MOSE_LAST_OUTPUT_TIME = "Infinity"/' \
+  "[ERROR] OUTPUT/field.tec: MOSE_LAST_OUTPUT_TIME is not finite (NaN or infinity)"
 
 echo "-- a valid run ends with exit code 0 --"
 write_case chem-excl "equations = euler

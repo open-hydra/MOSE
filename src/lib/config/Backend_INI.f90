@@ -1,7 +1,7 @@
 module MOSE_Backend_INI
   implicit none
   private
-  public :: Load_Ini, Scan_Ini
+  public :: Load_Ini, Scan_Ini, Count_Stationary_Faces
 
 contains
 
@@ -103,15 +103,33 @@ contains
     enddo
     
     ! Count the stationary faces for the rotating frame: stationary-face-1, -2, ... up to the first missing
-    obj_rot%n_stationary = 0
-    do
-      call fini%get(section_name=trim(codename)//'-Rotating-Frame', &
-                    option_name='stationary-face-'//trim(str(.true.,obj_rot%n_stationary+1)), val=wholestring, error=error)
-      if (error /= 0) exit
-      obj_rot%n_stationary = obj_rot%n_stationary + 1
-    enddo
+    obj_rot%n_stationary = Count_Stationary_Faces(fini)
     if (obj_rot%n_stationary > 0) allocate(obj_rot%stationary_face_str(obj_rot%n_stationary))
     
   end subroutine Scan_Ini
+
+
+  !> The number of stationary-face-<k> keys of [MOSE-Rotating-Frame] in fini: stationary-face-1, -2, ... up to the
+  !> first missing (at set-up, and when input.ini is read again during the run).
+  function Count_Stationary_Faces(fini) result(n)
+    use Finer, only: file_ini
+    use MOSE_Global_m
+    use IR_precision
+    implicit none
+    type(file_ini), intent(in) :: fini
+    integer :: n
+    ! Local
+    character(len=llen) :: wholestring
+    integer :: error
+
+    n = 0
+    do
+      call fini%get(section_name=trim(codename)//'-Rotating-Frame', &
+                    option_name='stationary-face-'//trim(str(.true.,n+1)), val=wholestring, error=error)
+      if (error /= 0) exit
+      n = n + 1
+    enddo
+
+  end function Count_Stationary_Faces
 
 end module MOSE_Backend_INI

@@ -130,7 +130,7 @@ def read_field(path, nx=None, ny=None):
     with open(path) as f:
         lines = f.read().splitlines()
     names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s,"]+)', lines[0].split('=', 1)[1])]
-    values = [float(v) for v in " ".join(lines[2:]).split()]
+    values = [float(v) for v in " ".join(l for l in lines[2:] if not l.startswith("DATASETAUXDATA")).split()]
     nn, nc, out, pos = (nx + 1) * (ny + 1) * 2, nx * ny, {}, 0
     for k, name in enumerate(names):
         cnt = nn if k < 3 else nc
@@ -214,7 +214,7 @@ def read_cells(path, nx, ny):
     with open(path) as f:
         lines = f.read().splitlines()
     names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s,"]+)', lines[0].split('=', 1)[1])]
-    values = [float(v) for v in " ".join(lines[2:]).split()]
+    values = [float(v) for v in " ".join(l for l in lines[2:] if not l.startswith("DATASETAUXDATA")).split()]
     nn, nc, out, pos = (nx + 1) * (ny + 1) * 2, nx * ny, {}, 0
     for k, name in enumerate(names):
         cnt = nn if k < 3 else nc

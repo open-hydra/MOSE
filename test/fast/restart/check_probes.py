@@ -1,12 +1,14 @@
 """Probe rows at a restart (part C of the Restart test).
 
 Compares the probe files of a run split by a restart with those of the same
-run in one go. A restarted run numbers its iterations from 1 again, so the
-rows written after the restart (those after the first PRE rows of a split
-file) stand for the iterations OFFSET + n of the run in one go. Every row
-must be found there, with the same values to within 1e-10 of the largest
-value of each column (solution-file round-trip precision), and the probes
-must read the flow: no column may be zero in every row.
+run in one go. The rows written after the restart (those after the first PRE
+rows of a split file) stand for the iterations OFFSET + n of the run in one
+go: OFFSET is 0 when the restarted run goes on with the iteration count of
+its solution, the number of iterations before the restart when it numbers
+them from 1 again. Every row must be found there, with the same values to
+within 1e-10 of the largest value of each column (solution-file round-trip
+precision), and the probes must read the flow: no column may be zero in
+every row.
 
 Usage: python check_probes.py OFFSET <full> <split> PRE [<full> <split> PRE ...]
 Exit 0 = pass, 1 = fail.

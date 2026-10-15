@@ -143,7 +143,7 @@ def read_field(path):
         lines = f.read().splitlines()
     names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s,"]+)', lines[0].split('=', 1)[1])]
     time = float(re.search(r'SOLUTIONTIME\s*=\s*([-+0-9.EeDd]+)', lines[1]).group(1).replace('D', 'E'))
-    values = [float(v) for v in " ".join(lines[2:]).split()]
+    values = [float(v) for v in " ".join(l for l in lines[2:] if not l.startswith("DATASETAUXDATA")).split()]
     nn, out, pos = (NX + 1) * 2 * 2, {}, 0
     for k, name in enumerate(names):
         cnt = nn if k < 3 else NX

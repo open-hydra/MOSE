@@ -24,7 +24,7 @@ contains
     use MOSE_IO_BC,                only: Setup_BC
     use MOSE_Mod_Metrics,          only: Setup_Metrics
     use MOSE_Mod_Fluxes,           only: Setup_Quasi2D_W
-    use MOSE_IO_Probes,            only: Setup_Probes
+    use MOSE_IO_Probes,            only: Setup_Probes, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
     use MOSE_IO_Wall,              only: Initialize_Wall_File
     use MOSE_Lib_Ghost,            only: Fill_Ghost_Cell
     use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_stop_all, mpi_bcast_logical
@@ -35,7 +35,7 @@ contains
     type(MOSE_simulation_type), intent(inout) :: simulation
     ! Local
     integer :: m, ios
-    logical :: partition_first, lean_read
+    logical :: partition_first, lean_read, resume
     logical :: setup_error   ! an error found by a check of rank 0 (Stop_Together)
     logical, allocatable :: keep(:)
 
@@ -84,6 +84,20 @@ contains
     end if
     ! The ranks decide together on an error of the read (Check_IC)
     call Check_IC ( summary = .true. )
+    ! A restart goes on from the time of the solution it reads: the physical time of a time-accurate
+    ! solution, minus the global iteration count of a steady one. A solution that holds no time (a vtk
+    ! file without TIME, a Tecplot ASCII file without SOLUTIONTIME) cannot tell where to go on: stop
+    if ( .not. obj_sim_param%newrun .and. .not. obj_io%restart%time_found ) then
+      if (mpi_is_root) then
+        write(*,'(A)') ' [ERROR] Restart from '//trim(obj_io%nameinit)//': the solution holds no time '// &
+                       '(vtk TIME, Tecplot SOLUTIONTIME), and a restart goes on from the time of its solution.'
+        write(*,'(A)') ' [ERROR]   To start from this solution, use it as the initial condition: '// &
+                       'INPUT/ic.* with newrun = true.'
+      end if
+      ! Every rank has read the solution and found no time: the ranks stop together, once rank 0 has written the
+      ! message (mpi_stop_all). With MPI_ABORT, another rank could stop rank 0 before it writes.
+      call mpi_stop_all ( 'restart from a solution without a time (see above)' )
+    end if
 
     ! Block count and ijk dimensions.  Cheap, and enough to partition on.
     call Setup_Data_Dimensions ( simulation%domain(1), simulation%IOfield(1) )
@@ -210,17 +224,67 @@ contains
             endif
             obj_sim_param%iter_general = 0
           else
+            ! The restart solution is read on the finest level: its time and iteration count hold for
+            ! every level (the coarse IOfields are built from the fine one and hold no time)
             if (obj_time_scheme%time_accurate) then
-              simulation%domain(m)%time = simulation%IOfield(m)%solutiontime
+              if (obj_io%restart%steady) then
+                ! A transient started from a steady solution starts at t = 0
+                simulation%domain(m)%time = 0.0d0
+              else
+                simulation%domain(m)%time = simulation%IOfield(1)%solutiontime
+              endif
               obj_sim_param%iter_general = 0
             else
-              obj_sim_param%iter_general = int(simulation%IOfield(m)%solutiontime)
+              obj_sim_param%iter_general = int(simulation%IOfield(1)%solutiontime)
               simulation%domain(m)%time = -1.d0
             endif
           endif
           obj_sim_param%time_from_call = simulation%domain(m)%time
           obj_sim_param%iter_from_call = 0
         enddo
+
+        ! The counters stored with a solution, in any format: the restart goes on as the uninterrupted run
+        ! would (CFL ramp, output cadence and numbering, residual history, multigrid level), if
+        ! that run was of the same kind, steady or time-accurate. Otherwise, or with a solution
+        ! that holds no counters, the run starts its counters as a new one, as before.
+        resume = .false.
+        if ( .not. obj_sim_param%newrun ) &
+          resume = obj_io%restart%found .and. ( obj_io%restart%steady .neqv. obj_time_scheme%time_accurate )
+        if ( resume ) then
+          obj_sim_param%iter_general   = obj_io%restart%cycle
+          obj_multigrid%MG_level       = max(1, min(obj_multigrid%MGL, obj_io%restart%grid_level))
+          ! The solution read is that of the finest level, and so is its iteration count
+          simulation%domain(1)%iter    = obj_io%restart%iteration
+          obj_sim_param%time_from_call = obj_io%restart%last_output_time
+          obj_io%output_number         = obj_io%restart%output_number
+          ! The unit of res-threshold, when the solution holds it: the first iteration of the restart keeps it
+          obj_sim_param%res_reference  = obj_io%restart%res_reference
+          obj_sim_param%res_restored   = obj_io%restart%res_found
+          ! A run that went on past the solution read left in residual-history.dat and in the probe files
+          ! the rows of the iterations after it, which the restart writes again: drop them
+          if (mpi_is_root) then
+            close(obj_io%unitRES)
+            call Drop_Rows_After ( 'OUTPUT/'//trim(MOSE_phase_prefix)//'residual-history.dat', 2 + nres, &
+                                   obj_io%restart%cycle, simulation%domain(1)%time )
+            open(newunit=obj_io%unitRES,file='OUTPUT/'//trim(MOSE_phase_prefix)//'residual-history.dat', &
+                 status='old',position='append',form='formatted')
+          endif
+          call Drop_Probe_Rows ( obj_io%restart%cycle, simulation%domain(1)%time )
+          ! The same for the torque of the rotating frame: rows of iteration, time, torque, power
+          if (obj_rot%enabled .and. mpi_is_root) &
+            call Drop_Rows_After ( 'OUTPUT/torque.dat', 4, obj_io%restart%cycle, simulation%domain(1)%time )
+        endif
+        ! Without it (a solution written before it was stored, or a time-accurate one), a steady restart
+        ! takes the density residual of its own first iteration, as a new run
+        if ( .not. ( obj_sim_param%newrun .or. obj_time_scheme%time_accurate .or. obj_sim_param%res_restored ) ) &
+          obj_io%warning_message = '[WARNING] The restart solution holds no residual reference of a steady run: '// &
+            'res-threshold is relative to the density residual of the first iteration of the restart.'
+        ! Time-based probe rows fall on the multiples of their dtime: a restart that goes on in time
+        ! writes the next one not reached yet; a new transient starts from the first, as a new run
+        if ( .not. obj_sim_param%newrun ) then
+          call Restart_Probes ( simulation%domain(1)%time, &
+                                resume = .not. ( obj_io%restart%steady .and. obj_time_scheme%time_accurate ) )
+        endif
         call Fill_Ghost_Cell ( simulation%domain(1) )
         call Update_Derived_Variables ( simulation%domain(1) )
 
