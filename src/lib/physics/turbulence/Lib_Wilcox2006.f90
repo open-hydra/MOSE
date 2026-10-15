@@ -22,19 +22,26 @@ module MOSE_Lib_Wilcox2006
   gamma = 13d0/25d0, &
   Clim = 7d0/8d0
 
+  !> C of the asymptotic omega wall condition, omega_wall = C nu/d**2: the limit 6/beta_0 of the omega equation as y -> 0
+  !> (NASA Turbulence Modeling Resource, Wilcox 2006 page)
+  real(R8), parameter, public :: Wilcox2006_omega_wall_asymptotic = 6d0/beta_0
+
 contains
 
   subroutine Wilcox2006_Source_Terms ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rans
+    use MOSE_Config_Types_m, only: obj_rans, obj_time_scheme
     use MOSE_Mod_MPI, only: is_local_block
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: b
-    logical :: k_energy_coupling
+    logical :: k_energy_coupling, point_implicit
 
     k_energy_coupling = obj_rans%k_energy_coupling
+    ! The point-implicit factor serves steady runs only: in time-accurate runs the sources are explicit and their
+    ! stiffness enters the time step (Compute_dt)
+    point_implicit = obj_rans%point_implicit .and. .not. obj_time_scheme%time_accurate
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
@@ -44,16 +51,17 @@ contains
                         domain % blk(b) % M,       &
                         domain % blk(b) % vol,     &
                         domain % blk(b) % dtlocal, &
+                        domain % blk(b) % stiff,   &
                         domain % blk(b) % dim,     &
                         k_energy_coupling,         &
-                        obj_rans%point_implicit )
+                        point_implicit )
 
     enddo
 
   end subroutine Wilcox2006_Source_Terms
 
 
-  subroutine Wilcox_Blk ( Prim, Res, M, Volume, dt, n, k_energy_coupling, point_implicit )
+  subroutine Wilcox_Blk ( Prim, Res, M, Volume, dt, stiff, n, k_energy_coupling, point_implicit )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -67,6 +75,7 @@ contains
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
+    real(R8), dimension(n(1), n(2), n(3)), intent(out) :: stiff  ! largest destruction rate: max(beta* omega, 2 beta omega)
     ! Local
     integer :: i, j, k, ii, jj, kk
     real(R8) :: rho, kap, ome, Gradvel(3,3), Divel, Sij(3,3), Sij_bar(3,3), diag, ome_hat, mi_t, Tij(3,3), Prod(2)
@@ -137,10 +146,11 @@ contains
       if ( dkDotdw <= 0d0 ) sigma_d = 0d0
       Diff = sigma_d * rho / ome * dkDotdw
 
-      ! Dissipation term
-      Sij_hat(1,1) = Sij(1,1) - 0.5d0 * Divel 
-      Sij_hat(2,2) = Sij(2,2) - 0.5d0 * Divel 
-      Sij_hat(3,3) = Sij(3,3) - 0.5d0 * Divel 
+      ! Dissipation term. S^_ki = S_ki - (1/2) du_m/dx_m delta_ki: off the diagonal S^ = S
+      Sij_hat = Sij
+      Sij_hat(1,1) = Sij(1,1) - 0.5d0 * Divel
+      Sij_hat(2,2) = Sij(2,2) - 0.5d0 * Divel
+      Sij_hat(3,3) = Sij(3,3) - 0.5d0 * Divel
 
       omega_w = Vorticity_Vector ( Gradvel )
       ! Use absolute vorticity for f_beta: W_ij^abs = W_ij^rel + Omega_frame tensor.
@@ -167,11 +177,19 @@ contains
       Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
 
-      ! Point-implicit (Patankar) treatment of the destruction terms.
+      ! Stiffness of the destruction terms (derivatives with respect to k and omega)
+      stiff(i,j,k) = max ( beta_star * ome, 2d0 * beta * ome )
+
+      ! Point-implicit factors of steady runs. Each multiplies the whole increment of its row: the fluxes already in
+      ! Res (Internal_Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not depend
+      ! on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1;
+      ! T. H. Pulliam, AIAA Paper 93-3360, eq. 8)
       fk = 1d0 ; fw = 1d0
       if ( point_implicit ) then
         fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
         fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
+        Res(nt,  i,j,k) = Res(nt,  i,j,k) * fk
+        Res(nt+1,i,j,k) = Res(nt+1,i,j,k) * fw
       end if
 
       Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
@@ -244,7 +262,7 @@ contains
 
     rkw(1) = 0d0 ! Solid surface condition on k
     ! Smooth-surface BC: omega_wall = C*mi_l/dist**2, with C set by omega-wall-bc
-    ! (800 = Menter practical, 80 = asymptotic y->0 limit). See Setup_RANS_Model.
+    ! (800 = Menter practical, 6/beta_0 = asymptotic y->0 limit). See Setup_RANS_Model.
     rkw(2) = obj_rans%omega_wall_coef * mi_l / ( dist**2 )
 
   end subroutine Wilcox2006_Set_Wall_Values

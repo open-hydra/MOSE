@@ -1,9 +1,9 @@
 !>@brief: Module to evaluate correction terms (depending on DSij/Dt) in -RC turbulence corrections:
-!> r* = S/Omega and the numerator of r~, 2 W_ik S_jk DS_ij/Dt, shared by SA-RC (Spalart & Shur 1997;
+!> the factor 2 r*/(1 + r*) of f_r1 (r* = S/Omega) and the numerator of r~, 2 W_ik S_jk DS_ij/Dt, shared by
+!> SA-RC (Spalart & Shur 1997;
 !> Shur et al. 2000) and SST-RC (Smirnov & Menter 2009).  DS_ij/Dt is the steady convective part
-!> u.grad(S_ij); the frame-rotation term (eps_imn S_jn + eps_jmn S_in) Omega_m of the published r~
-!> is not included, so in a rotating frame the correction sees the frame only through the
-!> absolute vorticity in W_ik and Omega.
+!> u.grad(S_ij); in a rotating frame the frame-rotation term (eps_imn S_jn + eps_jmn S_in) Omega_m
+!> of the published r~ is added to it (c + c^T in Compute_RC_Terms).
 module MOSE_Lib_SpalartShur
   use iso_fortran_env, only: I4 => int32, R8 => real64
   implicit none
@@ -67,7 +67,7 @@ contains
   end subroutine Compute_Velocity_Gradient
 
 
-  ! Computation of rstar and rtilde (missing denominator) for the Spalart-Shur correction.
+  ! Computation of 2 r*/(1 + r*) and rtilde (missing denominator) for the Spalart-Shur correction.
   ! fr1 (the overall correction term) is not computed here as the model constants and rtilde
   ! denominator definition are different between SA and SST.
   subroutine Compute_RC_Terms ( domain )
@@ -82,13 +82,13 @@ contains
     ! Local
     integer :: b, i, j, k, ii, jj, kk
     real(R8), dimension(3,3,3) :: strain_gradient
-    real(R8), dimension(3,3) :: Sij, Wij, strain_transport
+    real(R8), dimension(3,3) :: Sij, Wij, strain_transport, c
     real(R8) :: omega(3), S, O, rtilde
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
       !$omp do collapse(3) private (i, j, k, ii, jj, kk, strain_gradient), &
-      !$omp private (Sij, Wij, strain_transport, omega, S, O, rtilde)
+      !$omp private (Sij, Wij, strain_transport, c, omega, S, O, rtilde)
       do k = 1, domain % blk(b) % dim(3)
       do j = 1, domain % blk(b) % dim(2)
       do i = 1, domain % blk(b) % dim(1)
@@ -117,8 +117,17 @@ contains
         if (obj_rot%enabled) omega = omega + 2.0_R8 * obj_rot%Omega_vec
         Wij = Vorticity_Tensor( omega )
         S = sqrt ( 2d0*sum (Sij**2) )
-        O = max ( sqrt ( sum(omega**2) ), 1d-30 )
-        domain%blk(b)%rc_term1(i,j,k) = S/O
+        O = sqrt ( sum(omega**2) )
+        ! The factor 2 r*/(1 + r*) of fr1, r* = S/O, as 2 S/(S + O): where the vorticity vanishes it takes its limit 2.
+        ! Where strain and vorticity are both below 1e-30 1/s, in a fluid at rest in a fixed frame or a uniform flow, r* is
+        ! not defined (the velocity gradient there is the 1d-40 added to the differences in Compute_Velocity_Gradient,
+        ! times the metric of the cell): the factor is 1, the value of simple shear, and rtilde is 0 below, so the
+        ! correction does not act and the production is that of the model without it
+        if ( S + O > 1d-30 ) then
+          domain%blk(b)%rc_term1(i,j,k) = 2d0*S/(S + O)
+        else
+          domain%blk(b)%rc_term1(i,j,k) = 1d0
+        end if
         ! Material derivative of strain rate tensor, neglecting the time term
         do ii = 1, 3
         do jj = 1, 3
@@ -126,6 +135,16 @@ contains
                                                   strain_gradient(ii,jj,:) )
         enddo
         enddo
+        ! In a rotating frame also (eps_imn S_jn + eps_jmn S_in) Omega_m (NASA TMR, SA-RC and SST-RC): with c(:,jj) the cross
+        ! product of Omega and row jj of S, the term (ii,jj) is c(ii,jj) + c(jj,ii)
+        if (obj_rot%enabled) then
+          do jj = 1, 3
+            c(1,jj) = obj_rot%Omega_vec(2)*Sij(jj,3) - obj_rot%Omega_vec(3)*Sij(jj,2)
+            c(2,jj) = obj_rot%Omega_vec(3)*Sij(jj,1) - obj_rot%Omega_vec(1)*Sij(jj,3)
+            c(3,jj) = obj_rot%Omega_vec(1)*Sij(jj,2) - obj_rot%Omega_vec(2)*Sij(jj,1)
+          enddo
+          strain_transport = strain_transport + c + transpose(c)
+        end if
         rtilde = 0d0
         do ii = 1, 3
         do jj = 1, 3
@@ -135,7 +154,10 @@ contains
         enddo
         enddo
         ! Note ! Denominator is missing as its different between models
-        domain%blk(b)%rc_term2(i,j,k) = 2d0*rtilde 
+        ! Below the threshold of the factor, rtilde is a ratio of the 1d-40 of the velocity gradient, not zero where the
+        ! metric of the cells changes along the flow: it is 0 there, as in simple shear
+        if ( S + O <= 1d-30 ) rtilde = 0d0
+        domain%blk(b)%rc_term2(i,j,k) = 2d0*rtilde
         ! Note !
       enddo
       enddo

@@ -338,6 +338,11 @@ contains
       if (index(obj_thermo%warning_message,'WARNING')>0) write(*,'(A)') obj_thermo%warning_message
       if (index(obj_transport%warning_message,'WARNING')>0) write(*,'(A)') obj_transport%warning_message
       if (index(obj_rans%warning_message,'WARNING')>0) write(*,'(A)') obj_rans%warning_message
+      ! Rotation-curvature correction in a time-accurate run, written here: with SST-RC the warning above is that of
+      ! k-omega models (Assign_Setup)
+      if (model == 2 .and. obj_time_scheme%time_accurate .and. obj_rans%SpalartShur) write(*,'(A)') &
+        '[WARNING] The rotation-curvature correction (-RC) omits the time derivative of the strain-rate tensor: '// &
+        'it holds for steady flows only.'
       if (index(obj_rot%warning_message,'WARNING')>0) write(*,'(A)') obj_rot%warning_message
       if (index(obj_chemistry%warning_message,'WARNING')>0) write(*,'(A)') obj_chemistry%warning_message
       if (index(obj_soot%warning_message,'WARNING')>0) write(*,'(A)') obj_soot%warning_message

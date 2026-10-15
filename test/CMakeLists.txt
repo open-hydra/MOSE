@@ -114,6 +114,22 @@ mose_add_fast_script(RiemannSmoke   fast/riemann-smoke  "fast;numerics;1D")
 # Numerics smoke (N4): limiter / time-scheme / reconstruction / int-var sweep.
 mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 
+# Time integration (TimeIntegration): the parts below, each in its folder of
+# test/fast/time-integration, run one after the other by
+# test/fast/time-integration/run.sh.
+# Time control: second order in time with a time-dependent inlet (BC 402,
+# boundary data at the stage times), time tables before their first instant,
+# res-threshold not ending a time-accurate run.
+# Local time step: stable on square and skewed 2-D cells, on cubic 3-D cells
+# and in diffusion-dominated cells (heat conduction, species), with Heun and RK3;
+# heat conduction on 3-D rhombohedra at 115 degrees with Heun at vnn 0.5.
+# Turbulence sources in time-accurate runs: nu~, k and omega converge with the
+# order of Heun and RK3, and no stage makes them negative near a wall; SST-RC
+# prints the start-up warnings of k-omega models and of -RC; the
+# vortex-stretching function of Wilcox 2006 on a 3-D flow; the asymptotic omega
+# wall value of Wilcox 2006 and SST.
+mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;3D")
+
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
 mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")
 
@@ -147,9 +163,30 @@ mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D"
 # thermo or transport output stops with a message that says so.
 mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
 
+# Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).
+# Spalart-Allmaras with variable density: the right-hand side of the equation
+# for rho nu~ converges to the standard conservation form; with SA-RC, the
+# right-hand side of a 3-D flow does not depend on how the flow is turned, it
+# takes the rotation of the frame in r~, a uniform flow keeps nu~, and air at
+# rest next to a wall, or flowing along it on stretched cells, changes nu~ as
+# with SA.
+mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")
+
+# Steady state with the point-implicit factor: it must not depend on the time
+# step (a short hypersonic plate, Spalart-Allmaras and SST). Validation tier:
+# it converges 14 000 iterations per model.
+mose_add_fast_script(PointImplicitSteady 2D/viscous/point-implicit-steady "validation;numerics;2D")
+
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
 # which is an exact steady solution, checked against its closed form. These
 # boundary conditions have no other coverage in the suite.
 # The melting column also runs without schmidt: the default, 0, needs no
 # diffusion table with a single species.
 mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;physics;2D")
+
+# Quadratic constitutive relation QCR2000: a unit check of the stress as the
+# solver calls it (laminar viscosity, then eddy viscosity), against the
+# definition. QCR2000 is not selectable from the input, so no run passes there.
+add_fortran_executable(qcr2000_check unit/qcr2000_check.f90)
+add_test(NAME QCR2000Stress COMMAND qcr2000_check)
+set_tests_properties(QCR2000Stress PROPERTIES LABELS "fast;physics;unit" TIMEOUT 60)

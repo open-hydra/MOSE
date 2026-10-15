@@ -25,8 +25,14 @@ test/
 │   ├── restart/               # Restart round-trip reproduces uninterrupted run
 │   ├── input-checks/          # Input checks
 │   │   └── exit-codes/        # Runs stopped on an error end with a non-zero exit code and their message
-│   └── connections/           # Faces between blocks
-│       └── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
+│   ├── connections/           # Faces between blocks
+│   │   └── chimera-face/      # Viscous stencil of chimera faces at the edges of a block face
+│   └── time-integration/      # Time integration
+│       ├── time-control/      # Time-dependent inlet order, time tables, stop criteria
+│       ├── local-time-step/   # Local time step stable on square/skewed/cubic cells and in diffusive cells
+│       └── turbulence-sources/ # Time order and positivity of the turbulence sources; Wilcox 2006 vortex stretching; asymptotic omega wall value
+├── unit/                      # Unit checks of library functions, built against the library
+│   └── qcr2000_check.f90      # QCR2000 stress, called as the solver calls it, against its definition
 ├── 2D/                        # 2-D validation cases
 │   ├── euler/                 # Inviscid cases
 │   │   ├── oblique-shock/
@@ -40,6 +46,8 @@ test/
 │       ├── flat-plate-laminar/
 │       ├── flat-plate-turbulent/
 │       ├── Flat_Plate_SGGLRR/
+│       ├── mms/                   # residuals/: RANS right-hand sides on manufactured fields
+│       ├── point-implicit-steady/ # Steady state with the point-implicit factor independent of the time step
 │       └── swbli/
 ├── 3D/                        # 3-D validation cases
 │   └── coriolis-channel/
@@ -199,18 +207,27 @@ seconds on a CI runner.
 | `PrandtlMeyer` | analytic turning angle | `test/2D/euler/prandtl-meyer` |
 | `RiemannSmoke` | every shock-capturing solver stays positive (no NaN, ρ,p>0) | `test/fast/riemann-smoke` |
 | `NumericsSmoke` | all limiters × time schemes × recon × integration vars stay positive | `test/fast/numerics-smoke` |
+| `TimeIntegration`/`TimeControl` | second order in time with a time-dependent inlet (BC 402) for RK2 and RK3; a time table holds its first value before its first instant; `res-threshold` does not end a time-accurate run | `test/fast/time-integration/time-control` |
 | `Conservation` | closed slip-wall box conserves total mass to round-off | `test/fast/conservation` |
 | `OpenMPEquiv` | 1 vs 4 threads bit-identical: the Sod tube, and a block overset on another whose four chimera faces meet at its edges (Navier–Stokes) | `test/fast/openmp-equiv` |
 | `Connections`/`ChimeraFace` | the viscous stencil of chimera faces, one evaluation of the residual of a linear field on two blocks that overlap with their ghost cells on cells of the other block: with u = G y in 2-D and u = G (y + z) in 3-D the y and z momentum residual is zero also in the cells at the ends of the chimera faces; with a radial velocity on a 2-D wedge of 1 degree the momentum residual of every cell is that of the same mesh as one block (within 1e-9 of μ G / H) | `test/fast/connections/chimera-face` |
 | `Restart` | split + restart reproduces the uninterrupted run; at a restart a missing probe file is written again and an existing one is appended to, with the rows of the uninterrupted run | `test/fast/restart` |
-| `InputChecks`/`ExitCodes` | a run stopped on an error ends with a non-zero exit code and its message and writes no solution: the Sod tube as a viscous mixture of four species, without `schmidt` and `diffusion.dat`, stops at setup; so does a run with a probe of an unknown variable, with exit status 1 and the name of the variable; a steady run with a soot model, with and without Spalart–Allmaras, ends normally and its diagnostic output names every variable it writes; a steady single-species run with sol-variables = none stops with a message that names thermo or transport | `test/fast/input-checks/exit-codes` |
+| `InputChecks`/`ExitCodes` | a run stopped on an error ends with a non-zero exit code and its message and writes no solution: the Sod tube as a viscous mixture of four species, without `schmidt` and `diffusion.dat`, stops at setup; so does a run with a probe of an unknown variable, with exit status 1 and the name of the variable; a steady run with a soot model, with and without Spalart–Allmaras, ends normally and its diagnostic output names every variable it writes; the same state with `turbulence = SAcomp` stops at set-up with the message (a correction whose result depends on the units); a steady single-species run with sol-variables = none stops with a message that names thermo or transport | `test/fast/input-checks/exit-codes` |
+| `TimeIntegration`/`LocalTimeStep` | the step is stable at cfl 0.8 on square and on skewed 2-D cells and on cubic 3-D cells, in diffusion-dominated cells set by heat conduction and by species diffusion with the default cfl and vnn (Heun, RK3), and in the 1-D shock tube at cfl 0.99; on a periodic block of 8³ rhombohedra with every edge angle at 115°, where the viscous operator exceeds the rate 4 D sum_d |grad xi_d|^2 by 1.0365, heat conduction with Heun at vnn 0.5 decays over 600 steps | `test/fast/time-integration/local-time-step` |
+| `QCR2000Stress` | the quadratic constitutive relation QCR2000, called as the solver calls the stress (laminar viscosity, then eddy viscosity) on a 3-D velocity gradient, gives tau_QCR · n of the definition with the eddy viscosity alone and the laminar stress with the laminar viscosity alone | `test/unit/qcr2000_check.f90` |
+| `TimeIntegration`/`TurbulenceSources` | in time-accurate runs with Spalart–Allmaras and SST, nu~, k and omega converge in time with the order of Heun (≥ 1.8) and RK3 (≥ 2.7), and no stage makes them negative when near-wall turbulence decays faster than the transport acts; a time-accurate SST-RC run with no cfl-rise-threshold prints both the k-omega and the -RC start-up warnings; with Wilcox 2006, one step of a 3-D linear flow changes rho omega by the source with the vortex-stretching function f_beta of the specification, chi_w = W_ij W_jk S^_ki/(beta* omega)^3 with the off-diagonal part of S^; with omega-wall-bc = asymptotic, a channel at rest whose omega is the wall value 6 nu/(beta d^2) of the model (beta_0 for Wilcox 2006, beta_1 for SST) changes rho omega in the wall cells by the destruction alone | `test/fast/time-integration/turbulence-sources` |
+| `MMSResiduals` | on a constructed field with variable density and nu~, the right-hand side of the equation for rho nu~ converges with second order to the standard conservation form of Spalart–Allmaras; with SA-RC and SST-RC, the change of rho nu~ (rho k and rho omega) in one step of a 3-D flow with vorticity along x, y and z is the same as for the flow turned in space (x to y, y to z, z to x), cell by cell: the rotation tensor W_ij = (∂u_i/∂x_j − ∂u_j/∂x_i)/2 is a tensor; with SA-RC in a frame turning about z, a uniform shear changes rho nu~ by the production with the f_r1 of the specification, whose r~ takes the rotation of the frame, and a uniform flow, whose vorticity is zero, runs and keeps rho nu~; on air at rest next to a wall, and off the wall row of air flowing along it on cells stretched along the flow, SA-RC changes rho nu~ as SA does | `test/2D/viscous/mms/residuals` |
 
 A few heavier checks carry the `validation` (not `fast`) label because they
 need reference data or plotting — for example `ShuOsherConvergence`, a 4-grid
 Shu–Osher Richardson study (N=200/400/800/1600) that estimates a grid-independent
 solution by Richardson extrapolation, asserts a sane observed order and monotone
-L1 convergence against it, and regenerates the V&V figure. Run them with
-`ctest -L validation`.
+L1 convergence against it, and regenerates the V&V figure. `PointImplicitSteady`
+(`test/2D/viscous/point-implicit-steady`) is there for its
+cost, 14 000 iterations per model: the steady state of a short hypersonic plate
+with the point-implicit factor (Spalart–Allmaras, SST) does not depend on the
+time step, and implicit residual smoothing does not move it either (wall shear
+and heat flux to 1e-9). Run them with `ctest -L validation`.
 
 The broader plan — coverage map, remaining gaps, and the rationale behind
 the tiering — lives in
