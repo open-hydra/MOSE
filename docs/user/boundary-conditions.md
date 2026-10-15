@@ -148,6 +148,9 @@ and `J` give, and a zone with more values than they give (the line after the dat
 next one, with no blank line between). The zones must come in increasing time: a zone whose time no zone above it has
 must have a time greater than every time above it (the zones of other blocks at a time already given may come anywhere
 after it); otherwise the run stops at set-up, with the file, the zone, the line of its header and the two times.
+Each zone header must give `I=` and `J=` in upper case, with no blank around `=` (`I=3, J=2`): a header that gives no
+`I=` or no `J=` (for example `I = 3` or `i=3`) stops the run at set-up, with the file, the zone, the line of its header
+and the form to write.
 
 **Common fields:**
 

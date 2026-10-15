@@ -126,6 +126,10 @@
 #  those of the zone before, or the zones after it were read shifted; and it
 #  took the times of the zones in the order of the file, where the
 #  interpolation wants them increasing. The run went on.
+#  So does a zone header that gives no I= or no J=, the only form of I and J
+#  that the reader takes (upper case, with no blank before =): the same duct
+#  with I = 3, or j=2, in the header of the second zone. I or J kept its
+#  default, 2, without a word, and the run went on.
 #
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
@@ -642,8 +646,8 @@ run_q2d q2d-time Infinity 1.0E+05 \
 echo "-- a Q2D file of a face 410 that cannot be read stops the run at set-up --"
 # the file of run_q2d with finite values (zone 2 at 1 s), 19 lines (zone 1: lines 2 to 10, its header and the values of x, y,
 # z, rho(1), u, v, w, p; zone 2: lines 11 to 19), missing, cut before its last line (the value of p of zone 2), with a word for
-# the value of u of zone 2 (line 16), with I=two in the header of zone 2, with the line of p of zone 1 written twice, with the
-# time of zone 1 made 2 s (after that of zone 2)
+# the value of u of zone 2 (line 16), with I=two in the header of zone 2, with I = 3 or j=2 there (not the form I=, J= that the
+# reader takes), with the line of p of zone 1 written twice, with the time of zone 1 made 2 s (after that of zone 2)
 run_q2d q2d-missing 1.0 1.0E+05 "[ERROR] Q2D file q2d.dat cannot be opened" missing
 run_q2d q2d-short 1.0 1.0E+05 \
   "[ERROR] Q2D file q2d.dat, zone 2 (line 11): the values of p: the file ends before all the values that I and J give" \
@@ -654,6 +658,12 @@ run_q2d q2d-word 1.0 1.0E+05 \
 run_q2d q2d-header 1.0 1.0E+05 \
   "[ERROR] Q2D file q2d.dat, line 11 (zone 2): the value of I cannot be read: two" \
   'NR == 11 { sub(/I=2/, "I=two") } { print }'
+run_q2d q2d-header-blank 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat, line 11 (zone 2): no I= in the header; give the nodes as I=<n>, J=<n>, in upper case with no blank around =" \
+  'NR == 11 { sub(/I=2/, "I = 3") } { print }'
+run_q2d q2d-header-case 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat, line 11 (zone 2): no J= in the header; give the nodes as I=<n>, J=<n>, in upper case with no blank around =" \
+  'NR == 11 { sub(/J=2/, "j=2") } { print }'
 run_q2d q2d-long 1.0 1.0E+05 \
   "[ERROR] Q2D file q2d.dat, zone 1 (line 2): the line after its data is not the header of zone 2 (line 12)" \
   'NR == 10 { print } { print }'

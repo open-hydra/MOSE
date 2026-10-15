@@ -80,10 +80,12 @@ contains
   ! A file that cannot be read stops the run at set-up as well, with the file
   ! and, for a zone, the zone and the line of its header: a file that cannot
   ! be opened, with no VARIABLES line or no zone, a value of I, J,
-  ! SOLUTIONTIME or of the block number of the title that does not read, zone
-  ! data that end before the values that I and J give or hold a value that
-  ! is not a number, a line after the data of a zone that is not the header
-  ! of the next zone. A read that fails leaves its values undefined, or those
+  ! SOLUTIONTIME or of the block number of the title that does not read, a
+  ! zone header that gives no I= or no J= (parse_zone_header takes I and J
+  ! only so: upper case, with no blank before =), zone data that end before
+  ! the values that I and J give or hold a value that is not a number, a line
+  ! after the data of a zone that is not the header of the next zone. A read
+  ! that fails leaves its values undefined, or those
   ! of the zone before (the buffers are reused), and shifts the zones after
   ! it. The distinct times of the zones must increase down the file (the
   ! interpolation in time takes them in that order): a zone whose time no zone
@@ -127,6 +129,7 @@ contains
     character(len=64)  :: bad              ! the value of a zone header that does not read (parse_zone_header) ...
     character(len=100) :: badval           ! ... and its text
     character(len=16)  :: tnew, told       ! two times of zones, written for a message
+    logical :: has_I, has_J                ! the zone header gives I= and J= (parse_zone_header)
 
     ! --- Open file ---
     open(newunit=u, file=filename, status='old', iostat=ios, iomsg=iomsg, action='read')
@@ -190,11 +193,19 @@ contains
       if (Is_Zone_Record(line)) then
         iz = iz + 1
         call parse_zone_header(line, zone_block(iz), &
-                               zone_I(iz), zone_J(iz), zone_time(iz), bad, badval)
+                               zone_I(iz), zone_J(iz), zone_time(iz), bad, badval, has_I, has_J)
         zone_line(iz) = nl
         if (len_trim(bad) > 0) then
           write(msg,'(3A,I0,A,I0,4A)') '[ERROR] Q2D file ', trim(filename), ', line ', nl, ' (zone ', iz, &
             '): ', trim(bad), ' cannot be read: ', trim(badval)
+          call mpi_stop_all(trim(msg))
+        endif
+        if (.not. (has_I .and. has_J)) then
+          ! Without I= or J= parse_zone_header leaves I or J at 2, its default, and the values of the zone would be
+          ! read for that size
+          write(msg,'(3A,I0,A,I0,4A)') '[ERROR] Q2D file ', trim(filename), ', line ', nl, ' (zone ', iz, '): no ', &
+            merge('I=', 'J=', .not. has_I), ' in the header; give the nodes as I=<n>, J=<n>, ', &
+            'in upper case with no blank around ='
           call mpi_stop_all(trim(msg))
         endif
         if (Not_Finite(zone_time(iz))) then
@@ -519,14 +530,17 @@ contains
   ! Zone name format: T="B{block}_T{tidx}"
   ! bad names the first of these values whose text (badval) does not read,
   ! blank when they all read; a value not in the line keeps its default.
+  ! has_I and has_J tell whether the line gives I= and J=, the only form of
+  ! I and J read here (upper case, with no blank before =).
   ! ---------------------------------------------------------------------------
-  subroutine parse_zone_header(line, b_num, I_nodes, J_nodes, sol_time, bad, badval)
+  subroutine parse_zone_header(line, b_num, I_nodes, J_nodes, sol_time, bad, badval, has_I, has_J)
     use strings, only: parse, lowercase
     implicit none
     character(len=*), intent(in) :: line
     integer, intent(out) :: b_num, I_nodes, J_nodes
     real(R8), intent(out) :: sol_time
     character(len=*), intent(out) :: bad, badval
+    logical, intent(out) :: has_I, has_J
     ! Local
     integer :: i, pos, pos2, ios
     character(len=100) :: args(20), subargs(4)
@@ -534,6 +548,7 @@ contains
 
     b_num = 1; I_nodes = 2; J_nodes = 2; sol_time = 0.0_R8
     bad = ''; badval = ''
+    has_I = .false.; has_J = .false.
 
     ! Split line by commas
     call parse(line, ',', args)
@@ -568,6 +583,7 @@ contains
 
       ! I= (avoid matching STRANDID=)
       if (index(args(i), 'I=') > 0 .and. index(args(i), 'STRANDID') == 0) then
+        has_I = .true.
         call parse(args(i), '=', subargs)
         read(subargs(2), *, iostat=ios) I_nodes
         if (ios /= 0) call Mark_Bad('the value of I', subargs(2))
@@ -575,6 +591,7 @@ contains
 
       ! J=
       if (index(args(i), 'J=') > 0) then
+        has_J = .true.
         call parse(args(i), '=', subargs)
         read(subargs(2), *, iostat=ios) J_nodes
         if (ios /= 0) call Mark_Bad('the value of J', subargs(2))
