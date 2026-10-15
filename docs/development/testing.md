@@ -118,7 +118,7 @@ The key components are:
 ## Running Tests
 
 The validation cases are driven by **CTest** (see
-[Automated Test Tiers](#automated-test-tiers-ctest--ci) below for the full
+[Automated Test Tiers](#automated-test-tiers-ctest-ci) below for the full
 picture).  The quickest checks:
 
 ```bash
