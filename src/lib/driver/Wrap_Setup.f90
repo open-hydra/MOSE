@@ -87,6 +87,10 @@ contains
 
     ! Block count and ijk dimensions.  Cheap, and enough to partition on.
     call Setup_Data_Dimensions ( simulation%domain(1), simulation%IOfield(1) )
+    ! The numbers of exclude-blocks name blocks of this mesh (Setup_Chemistry has read them)
+    setup_error = .false.
+    if (mpi_is_root) call Check_Exclude_Blocks ( simulation%domain(1)%nb, setup_error )
+    call Stop_Together ( setup_error, 'input file error (see above)' )
     allocate(obj_sim_param%residuotot(nres))
 
     ! Allocating every block on every rank makes peak setup memory O(full
@@ -521,6 +525,28 @@ contains
       endif
 
     end subroutine Stop_Simulation
+
+
+    !> A number of exclude-blocks beyond the blocks of the mesh names no block: it used to be ignored, in silence.
+    subroutine Check_Exclude_Blocks ( nb, has_error )
+      implicit none
+      integer, intent(in)  :: nb
+      logical, intent(out) :: has_error
+      integer :: i
+
+      has_error = .false.
+      if (.not. allocated(obj_chemistry%no_chem_list)) return
+      do i = 1, size(obj_chemistry%no_chem_list)
+        if ( obj_chemistry%no_chem_list(i) > nb ) then
+          write(*,'(A,I0,A,I0,A)') ' [ERROR] input.ini, [MOSE-Chemistry] exclude-blocks = '// &
+            trim(adjustl(obj_chemistry%exclude_blocks_str))//': block ', obj_chemistry%no_chem_list(i), &
+            ' is not a block of the mesh (1 to ', nb, ')'
+          has_error = .true.
+          return
+        end if
+      end do
+
+    end subroutine Check_Exclude_Blocks
 
 
     !> A check of the set-up that runs on rank 0 alone writes what it finds there. Rank 0 broadcasts whether it found an

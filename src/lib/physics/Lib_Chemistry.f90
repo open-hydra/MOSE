@@ -18,11 +18,12 @@ contains
     use FLINT_CEA_setup,          only: CEA_initialize_global
     use oslo,                     only: Setup_ODEsolver
     use strings,                  only: parse
+    use MOSE_Parameters_m,        only: llen
     implicit none
     integer :: ios, i
     logical :: elements
-    character(len=4) :: args(100)
-    character(len=128) :: nochem_str
+    character(len=llen) :: args(llen/2 + 1)   ! the words of exclude-blocks: at most one in two characters of the value
+    character(len=llen) :: nochem_str
     integer :: nochem_blocks
 
 
@@ -66,26 +67,33 @@ contains
 
     endif
 
-    ! Parse exclude-blocks string
+    ! exclude-blocks: none, or the numbers of the blocks without chemistry, separated by blanks. Every word must be a
+    ! block number, digits only, read whole; any other word stops the run at set-up with the key, the value and the word
+    ! (Stop_Simulation, on every rank). The numbers beyond the mesh stop it once the mesh gives the count of its blocks
+    ! (Check_Exclude_Blocks in Wrap_Setup). A word that did not read used to empty the list with a warning, and the read of
+    ! the next word wrote beyond the emptied list; a number read with I3 kept its first three digits.
+    if (allocated(obj_chemistry%no_chem_list)) deallocate(obj_chemistry%no_chem_list)
     nochem_str = trim(adjustl(obj_chemistry%exclude_blocks_str))
-
-    if (nochem_str /= 'none') then
+    if (nochem_str == 'none') then
+      allocate(obj_chemistry%no_chem_list(0))
+    else
       call parse(nochem_str, ' ', args)
       nochem_blocks = count(args /= '')
-      if (nochem_blocks > 0) then
-        if (allocated(obj_chemistry%no_chem_list)) deallocate(obj_chemistry%no_chem_list)
-        allocate(obj_chemistry%no_chem_list(nochem_blocks))
-        do i = 1, nochem_blocks
-          read(args(i), '(I3)', iostat=ios) obj_chemistry%no_chem_list(i)
-          if (ios /= 0) then
-            obj_chemistry%warning_message = '[WARNING] No-chemistry blocks parsing failed. String: '//trim(nochem_str)
-            deallocate(obj_chemistry%no_chem_list)
-            allocate(obj_chemistry%no_chem_list(0))
-          end if
-        end do
-      end if
-    else
-      allocate(obj_chemistry%no_chem_list(0))
+      allocate(obj_chemistry%no_chem_list(nochem_blocks))
+      do i = 1, nochem_blocks
+        ios = 1
+        if (verify(trim(args(i)), '0123456789') == 0 .and. len_trim(args(i)) <= 9) &
+          read(args(i), *, iostat=ios) obj_chemistry%no_chem_list(i)
+        if (ios == 0) then
+          if (obj_chemistry%no_chem_list(i) < 1) ios = 1
+        end if
+        if (ios /= 0) then
+          if (index(obj_chemistry%error_message, 'ERROR') == 0) obj_chemistry%error_message = &
+            '[ERROR] input.ini, [MOSE-Chemistry] exclude-blocks = '//trim(nochem_str)//': "'//trim(args(i))// &
+            '" is not a block number'
+          exit
+        end if
+      end do
     end if
 
   end subroutine Setup_Chemistry

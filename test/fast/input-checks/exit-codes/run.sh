@@ -139,6 +139,12 @@
 #  was ever allocated: exit code 153 with ifx, "allocatable array or pointer
 #  is not allocated"). The air has no reaction (no mechanism file): the
 #  chemistry leaves the state as it is.
+#  exclude-blocks with a word that is not a block number (x 1, 1 x) or with a
+#  block beyond the mesh (1000) must stop the run at set-up with exit code 1
+#  and a message that names the key, the value and the word or the block,
+#  and write no solution: a word that did not read emptied the list with a
+#  warning, and a word after it was read beyond the emptied list (a run-time
+#  error with bounds checks); a block beyond the mesh named no block.
 #  exclude-blocks holds for chemistry = equilibrium too, on every multigrid
 #  level: the tube filled with steam far from equilibrium (0.2 % of hydrogen
 #  and 1.6 % of oxygen, at 1500 and 1200 K; the 13 C-H-O species of
@@ -692,6 +698,30 @@ else
   echo "  [FAIL] chem-excl: exit code $rc (required 0), block 1 $(grep -a -q -E 'Inactive blocks +1 *$' OUTPUT/chem-excl.log && echo listed || echo not listed) under Inactive blocks (see OUTPUT/chem-excl.log)"
   fail=1
 fi
+
+echo "-- exclude-blocks with a word that is not a block number, or a block beyond the mesh, stops at set-up --"
+for value in "x 1" "1 x" "1000"; do
+  tag="chem-excl-$(printf '%s' "$value" | tr ' ' '_')"
+  write_case "$tag" "equations = euler
+chemistry = finite-rate" "
+[MOSE-Chemistry]
+exclude-blocks = $value
+ode-solver = sdirk4b"
+  if [[ "$value" == 1000 ]]; then
+    message="[ERROR] input.ini, [MOSE-Chemistry] exclude-blocks = 1000: block 1000 is not a block of the mesh (1 to 1)"
+  else
+    message="[ERROR] input.ini, [MOSE-Chemistry] exclude-blocks = $value: \"x\" is not a block number"
+  fi
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  rc=$?
+  if [[ $rc -eq 1 ]] && grep -a -q -F -- "$message" "OUTPUT/$tag.log" && [[ ! -f OUTPUT/field.tec ]]; then
+    echo "  [ok  ] $tag: exit code 1, \"$message\""
+  else
+    echo "  [FAIL] $tag: exit code $rc (required 1), message \"$message\" $(grep -a -q -F -- "$message" "OUTPUT/$tag.log" && echo found || echo missing), solution $([[ -f OUTPUT/field.tec ]] && echo written || echo none) (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+done
 
 echo "-- exclude-blocks with chemistry = equilibrium: the excluded block keeps the bits of the run without chemistry --"
 # write_steam <chemistry line> <numerics lines> [other sections]: the tube of write_case holding steam far

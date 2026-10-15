@@ -134,8 +134,8 @@ and `vnn = 0.4` give 0.76 of it. The defaults stay `cfl = 0.5` and `vnn = 0.3`.
 level of a multigrid sequence, so their composition changes by transport only; the set-up summary
 lists them as inactive blocks. The value is `none`, the default, or the numbers of the blocks
 separated by blanks, for example `exclude-blocks = 2 5`, the blocks numbered from 1 in the order of
-the mesh. MOSE reads the first 128 characters of the value and the first three digits of each
-number, so the numbers go from 1 to 999.
+the mesh. A word that is not a block number, or a number beyond the blocks of the mesh, stops the
+run at set-up.
 
 ---
 
