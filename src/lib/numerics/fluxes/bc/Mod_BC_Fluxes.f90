@@ -31,7 +31,7 @@ contains
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
-    integer  :: f, lower, upper, i, b
+    integer  :: f, lower, upper, i, ii, b
     integer  :: error
     integer  :: Bm, Im, Jm, Km, Fm, Bs, Fs
     real(R8) :: T0, g, pstat, rhot(nsc), visct(1:nrans)
@@ -40,6 +40,7 @@ contains
     logical  :: ablating                             ! GSI walls: is the surface consuming material?
     real(R8) :: Tw_surface                           ! GSI walls: wall temperature for the inert fallback
     real(R8) :: Sc, Sct, Prt, Prl
+    real(R8) :: dR(nprim)                            ! Share of a face in the residual of its cell
 
     RSM = obj_rans%RSM
     Sc  = obj_sim_param%Sc
@@ -48,19 +49,27 @@ contains
     Prl = obj_sim_param%Prl
     soot_enabled = obj_soot%enabled
 
-    ! BC fluxes are computed in order of block and face type.
-    upper = 0
+    ! Connection faces (101, 201): one flux per face, for the two cells
+    call Connection_Fluxes ( domain, Sc, Sct, Prt, Prl, soot_enabled )
 
+    ! BC fluxes are computed block by block and, within a block, face by face, over the
+    ! records of the blocks this rank owns only (lists built once by build_local_bc_index):
+    ! no rank scans the records of the whole domain. The records of one face of one block
+    ! write distinct target cells (the periodic BC also writes the partner cell on the
+    ! opposite face, one per record), so one worksharing loop over them is race-free; its
+    ! implicit barrier keeps the face contributions of a corner cell summed in the order 1..6.
     blocks: do b = 1, domain % nb
+      if (.not. is_local_block(b)) cycle blocks
       faces: do f = 1, 6
 
-        lower = upper + 1                   ! Update lower bound
-        upper = upper + domain % n_bf(b,f)  ! Upper bound: add number of cells on face f of block b
+        lower = domain % local_bf_first(b,f)
+        upper = lower + domain % local_bf_count(b,f) - 1
 
-        !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, rhot, visct, T0, g, pstat, r_fc, ablating, Tw_surface)
-        do i = lower, upper
+        !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, rhot, visct, &
+        !$omp   T0, g, pstat, r_fc, ablating, Tw_surface, dR)
+        do ii = lower, upper
+          i  = domain % local_bf_idx(ii)
           Bm = domain % bc(i) % b
-          if (.not. is_local_block(Bm)) cycle
           Im = domain % bc(i) % i
           Jm = domain % bc(i) % j
           Km = domain % bc(i) % k
@@ -71,14 +80,24 @@ contains
               call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
               domain % blk(Bm) % R(:,Im,Jm,Km) = domain % blk(Bm) % R(:,Im,Jm,Km) + domain % bc(i) % ext_flux
 
-            case (101,102,201) ! connection & chimera (101=block connect, 102=chimera)
-              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
+            case (101,201) ! block connection, periodic connection: the share of the cell in the flux of the face
+              domain % blk(Bm) % R(:,Im,Jm,Km) = domain % blk(Bm) % R(:,Im,Jm,Km) + domain % bc(i) % Fc(:,1)
               if (model>0) &
+                domain % blk(Bm) % R(:,Im,Jm,Km) = domain % blk(Bm) % R(:,Im,Jm,Km) + domain % bc(i) % Fc(:,2)
+
+            case (102) ! chimera
+              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm), dR )
+              domain % blk(Bm) % R(:,Im,Jm,Km) = domain % blk(Bm) % R(:,Im,Jm,Km) + dR
+              if (model>0) then
                 call BC_Connection_Visc ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Mg(1), domain % bc(i) % Pg, &
-                                          Sc, Sct, Prt, Prl, soot_enabled )
+                                          Sc, Sct, Prt, Prl, soot_enabled, dR )
+                domain % blk(Bm) % R(:,Im,Jm,Km) = domain % blk(Bm) % R(:,Im,Jm,Km) + dR
+              end if
 
             case (200) ! periodic
               call BC_Rotational_Periodic_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
+              if (model>0) &
+                call BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, domain % blk(Bm), Sc, Sct, Prt, Prl, soot_enabled )
 
             case (300) ! symmetry
               call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
@@ -188,7 +207,8 @@ contains
               if (error == 1) call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
 
             case (410) ! Mapped BC: Riemann flux with Q2D-interpolated ghost cell
-              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm) )
+              call BC_Connection_Eul ( Im, Jm, Km, Fm, domain % blk(Bm), dR )
+              domain % blk(Bm) % R(:,Im,Jm,Km) = domain % blk(Bm) % R(:,Im,Jm,Km) + dR
 
             case(420) ! choked nozzle
               call BC_Inflow_Nozzle( Im, Jm, Km, Fm, domain % blk(Bm), &
@@ -286,5 +306,62 @@ contains
     enddo blocks
 
   end subroutine BC_Fluxes
+
+
+  !> One flux per connection face (101, 201). Computed by each block for its
+  !> own cell, the flux of a face between blocks was the same on the two sides
+  !> only when their inputs were: not with the shock sensor, where each side
+  !> took the switch of its own cell, nor with the preconditioned solver, where
+  !> the reference velocity of the ghost was zero. Here the record that owns the
+  !> face (Pair_Connections: the cell on the low-index side of the face, as on an
+  !> interior face) computes it, inviscid and viscous, for its cell, with the
+  !> shock sensor of its cell and the reference velocities of both cells (the
+  !> ghost carries that of the other block), and gives it with the opposite sign
+  !> to the record of the other cell: in the same process directly, between
+  !> processes through exchange_connection_flux. BC_Fluxes then adds to each
+  !> cell its share, in the order of the records, as before.
+  subroutine Connection_Fluxes ( domain, Sc, Sct, Prt, Prl, soot_enabled )
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m, only: model, nprim
+    use MOSE_Mod_MPI, only: mpi_size_
+    use MOSE_Mod_GhostExchange, only: exchange_connection_flux
+    use MOSE_Lib_BC_Fluxes_Connection
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    real(R8), intent(in) :: Sc, Sct, Prt, Prl
+    logical, intent(in)  :: soot_enabled
+    ! Local
+    integer  :: ii, i, p, Bm
+    real(R8) :: dR(nprim)
+
+    !$omp do schedule (dynamic, 64) private(ii, i, p, Bm, dR)
+    do ii = 1, domain % n_local_bc
+      i = domain % local_bc_idx(ii)
+      if (domain % bc(i) % type /= 101 .and. domain % bc(i) % type /= 201) cycle
+      if (.not. domain % bc(i) % owner) cycle
+      Bm = domain % bc(i) % b
+      p  = domain % bc(i) % partner
+      call BC_Connection_Eul ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, domain % bc(i) % f, &
+                               domain % blk(Bm), dR )
+      domain % bc(i) % Fc(:,1) = dR
+      domain % bc(p) % Fc(:,1) = -dR
+      if (model>0) then
+        call BC_Connection_Visc ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, domain % bc(i) % f, &
+                                  domain % blk(Bm), domain % bc(i) % Mg(1), domain % bc(i) % Pg, &
+                                  Sc, Sct, Prt, Prl, soot_enabled, dR )
+        domain % bc(i) % Fc(:,2) = dR
+        domain % bc(p) % Fc(:,2) = -dR
+      end if
+    enddo
+
+    ! Faces whose other cell is on another process (MPI calls from the primary thread)
+    if (mpi_size_ > 1) then
+      !$omp master
+      call exchange_connection_flux ( domain )
+      !$omp end master
+      !$omp barrier
+    end if
+
+  end subroutine Connection_Fluxes
 
 end module MOSE_Mod_BC_Fluxes

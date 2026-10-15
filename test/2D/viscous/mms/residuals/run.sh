@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Spalart-Allmaras: right-hand side on constructed fields (fast tier)
+#  Right-hand sides on constructed fields: Spalart-Allmaras and the viscous
+#  stress of the axisymmetric wedge (fast tier)
 #
 #  1. Variable density: a constructed periodic field at rest with variable
 #     temperature and nu~ and no wall (make_case.py): one explicit Euler step
@@ -42,6 +43,20 @@
 #     the 1e-40 of the velocity gradient alone; f_r1 must take the value 1
 #     there too (r~ = 0), and SA-RC must change rho nu~ in those rows as SA
 #     does, within 1e-12 of the largest change.
+#  4. Viscous stress on the 2-D axisymmetric wedge (k faces of type 200,
+#     1 degree, axis at j = 0; wedge_viscous.py): Homann's axisymmetric
+#     stagnation-point flow, an exact solution of the Navier-Stokes
+#     equations, divergence free, and a polynomial field with dilatation
+#     and swirl, u_x = b x^2, u_r = c r^3, u_theta = s r^3 (1 + x/L), with a
+#     closed-form viscous force. One explicit Euler step with local time
+#     stepping with the Navier-Stokes equations and one with the Euler
+#     equations, from the same state: the difference of the right-hand
+#     sides in OUTPUT/diagnostic.tec is the viscous force the solver
+#     evaluates. On 32 x 32 and 64 x 64 cells it must converge to the exact
+#     one with second order: homann, the radial (on the cells with r >= L/2;
+#     next to the axis it must match the hoop stress 2 mu u_r/r^2) and axial
+#     components, the azimuthal one staying zero; swirl, the radial and
+#     azimuthal components on the cells with r >= L/2, the axial one exact.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -215,6 +230,64 @@ for kind in rest stream; do
     echo "  [ok  ] $kind: SA-RC changes rho nu~ $where as SA does"
   else
     echo "  [FAIL] $kind: SA-RC does not change rho nu~ $where as SA does"
+    fail=1
+  fi
+done
+
+echo "-- 4. viscous stress on the 2-D axisymmetric wedge, 32 x 32 and 64 x 64 cells --"
+# wedge_ini <equations>: one explicit Euler step with local time stepping
+wedge_ini() {
+  cat > input.ini <<EOF
+[MOSE-Parameters]
+iter-threshold = 1
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = $1
+schmidt = 0.7
+
+[MOSE-Numerics]
+cfl = 0.5
+vnn = 0.3
+time-accurate = false
+time-scheme = euler
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+EOF
+}
+# wedge_step <equations> <tag>: run it, keep OUTPUT/diagnostic.tec as OUTPUT/diagnostic-<tag>.tec
+wedge_step() {
+  wedge_ini "$1"
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/$2.log" 2>&1
+  if [[ ! -f OUTPUT/diagnostic.tec ]] || grep -a -qE 'NaN|Integration failed' "OUTPUT/$2.log"; then
+    echo "  [FAIL] the $1 step did not complete (see OUTPUT/$2.log)"
+    echo "MMSResiduals: FAILED"
+    exit 1
+  fi
+  cp OUTPUT/diagnostic.tec "OUTPUT/diagnostic-$2.tec"
+}
+for field in homann swirl; do
+  errors=()
+  for n in 32 64; do
+    python3 -B wedge_viscous.py case "$field" "$n" || exit 1
+    wedge_step navier-stokes "$field-ns-n$n"
+    wedge_step euler "$field-eu-n$n"
+    errors+=("$(python3 -B wedge_viscous.py error "$field" "OUTPUT/diagnostic-$field-ns-n$n.tec" \
+                                                       "OUTPUT/diagnostic-$field-eu-n$n.tec")")
+  done
+  if [[ $field == homann ]]; then
+    echo "   Homann's stagnation-point flow"
+  else
+    echo "   a polynomial field with dilatation and swirl"
+  fi
+  if python3 -B wedge_viscous.py check "$field" "${errors[0]}" "${errors[1]}"; then
+    echo "  [ok  ] $field: second-order agreement"
+  else
+    echo "  [FAIL] $field: the viscous force on the wedge is not the Navier-Stokes one"
     fail=1
   fi
 done

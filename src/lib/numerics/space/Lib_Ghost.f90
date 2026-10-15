@@ -228,6 +228,10 @@ contains
       blkm % P(:,Ig,Jg,Kg) = blks % P (:, Is + guide(Fs,1)*(g-1), &
                                           Js + guide(Fs,2)*(g-1), &
                                           Ks + guide(Fs,3)*(g-1)  )
+      ! reference velocity of the preconditioner, read by the connection flux
+      blkm % Ur(Ig,Jg,Kg) = blks % Ur (Is + guide(Fs,1)*(g-1), &
+                                       Js + guide(Fs,2)*(g-1), &
+                                       Ks + guide(Fs,3)*(g-1)  )
       Pg (:,g) = blkm % P (:,Ig,Jg,Kg)
     enddo
 

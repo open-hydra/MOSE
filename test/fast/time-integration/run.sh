@@ -13,13 +13,15 @@
 #    LocalTimeStep (local-time-step): stability of the local time step
 #    TurbulenceSources (turbulence-sources): turbulence sources in
 #      time-accurate runs
+#    Quasi2DSymmetry (quasi2d-symmetry): symmetry faces of quasi-2-D and 1-D
+#      cases
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(time-control local-time-step turbulence-sources)
+PARTS=(time-control local-time-step turbulence-sources quasi2d-symmetry)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

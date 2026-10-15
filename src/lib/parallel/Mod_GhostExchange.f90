@@ -70,8 +70,10 @@ module MOSE_Mod_GhostExchange
     ! Pre-allocated MPI buffers (one contiguous buffer per rank group)
     real(R8), allocatable :: P_send_buf(:)   !< (nprim*gc * n_send)
     real(R8), allocatable :: P_recv_buf(:)   !< (nprim*gc * n_recv)
-    real(R8), allocatable :: Pg_send_buf(:)  !< (nprim*4  * n_send)
-    real(R8), allocatable :: Pg_recv_buf(:)  !< (nprim*4  * n_recv)
+    real(R8), allocatable :: Pg_send_buf(:)  !< ((nprim*4+1) * n_send): Pg(:,3:6) and Ur of the source cell
+    real(R8), allocatable :: Pg_recv_buf(:)  !< ((nprim*4+1) * n_recv)
+    real(R8), allocatable :: Fc_send_buf(:)  !< (nprim*2 * n_send): flux of the connection faces owned here
+    real(R8), allocatable :: Fc_recv_buf(:)  !< (nprim*2 * n_recv)
     integer, allocatable  :: send_req(:)     !< (n_send_ranks)
     integer, allocatable  :: recv_req(:)     !< (n_recv_ranks)
     integer, allocatable  :: mpi_stat(:,:)   !< (MPI_STATUS_SIZE, max(n_send_ranks, n_recv_ranks))
@@ -101,6 +103,17 @@ module MOSE_Mod_GhostExchange
   type(ghost_schedule_type), allocatable, target :: ghost_scheds(:)
   type(ghost_schedule_type), pointer, public :: ghost_sched => null()
 
+  ! Tags of the exchanges of a stage, one per exchange. Every receive names the
+  ! sender's rank, so a tag has only to tell apart the exchanges in flight
+  ! together (P and chimera). The gathers and scatters of the output, outside the
+  ! stages, use TAG_IO: one message per block, posted on both sides in increasing
+  ! block order, and the messages between two ranks with one tag are matched in
+  ! the order they were started (MPI 4.1, Sec. 3.7.4), so the k-th receive from a
+  ! rank takes the k-th block that rank sends. All are below 32767, the least
+  ! MPI_TAG_UB the MPI standard allows.
+  integer, parameter :: TAG_P = 0, TAG_PG = 1, TAG_CHIMERA = 2, TAG_R = 3, TAG_FC = 4
+  integer, parameter, public :: TAG_IO = 5
+
   public :: allocate_exchange_schedules, set_active_mg_level
 
   public :: build_ghost_schedule
@@ -112,6 +125,7 @@ module MOSE_Mod_GhostExchange
   public :: exchange_ghost_P_wait_send
   public :: exchange_ghost_R
   public :: exchange_ghost_Pg
+  public :: exchange_connection_flux
   public :: exchange_ghost_chimera_post_recv, exchange_ghost_chimera_pack
   public :: exchange_ghost_chimera_post_send, exchange_ghost_chimera_wait_recv
   public :: exchange_ghost_chimera_unpack, exchange_ghost_chimera_wait_send
@@ -251,8 +265,10 @@ contains
         max_ranks = max(ghost_sched%n_send_ranks, ghost_sched%n_recv_ranks, 1)
         allocate(ghost_sched%P_send_buf(nprim*gc * max(ns,1)))
         allocate(ghost_sched%P_recv_buf(nprim*gc * max(nr,1)))
-        allocate(ghost_sched%Pg_send_buf(nprim*4 * max(ns,1)))
-        allocate(ghost_sched%Pg_recv_buf(nprim*4 * max(nr,1)))
+        allocate(ghost_sched%Pg_send_buf((nprim*4+1) * max(ns,1)))
+        allocate(ghost_sched%Pg_recv_buf((nprim*4+1) * max(nr,1)))
+        allocate(ghost_sched%Fc_send_buf(nprim*2 * max(ns,1)))
+        allocate(ghost_sched%Fc_recv_buf(nprim*2 * max(nr,1)))
         allocate(ghost_sched%send_req(max(ghost_sched%n_send_ranks,1)))
         allocate(ghost_sched%recv_req(max(ghost_sched%n_recv_ranks,1)))
         allocate(ghost_sched%mpi_stat(MPI_STATUS_SIZE, max_ranks))
@@ -277,14 +293,15 @@ contains
 
 
   !> Build pre-filtered list of BC indices where Bm is local to this rank.
-  !> Avoids O(nbound) loop scanning in hot paths (Fill_Ghost_Cell, etc.).
+  !> Avoids O(nbound) loop scanning in hot paths (Fill_Ghost_Cell, BC_Fluxes, etc.).
   subroutine build_local_bc_index(domain)
     use MOSE_Advanced_Types_m
 
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
-    integer :: i, n, ns
+    integer :: i, n, ns, b, f
+    integer, allocatable :: next(:,:)
 
     ! Count local BC entries (Bm is local) and local source entries (Bs is local, type-1)
     n = 0; ns = 0
@@ -319,6 +336,42 @@ contains
         end if
       end if
     end do
+
+    ! Group the local entries by block, then face, keeping the file order within
+    ! a group (counting sort). BC_Fluxes runs one worksharing loop per group: the
+    ! records of one face of one block write distinct target cells, and the faces
+    ! of a corner cell are summed in the order 1..6 whatever the order of the BC file.
+    if (allocated(domain%local_bf_first)) deallocate(domain%local_bf_first)
+    if (allocated(domain%local_bf_count)) deallocate(domain%local_bf_count)
+    if (allocated(domain%local_bf_idx))   deallocate(domain%local_bf_idx)
+    allocate(domain%local_bf_first(domain%nb, 6), domain%local_bf_count(domain%nb, 6))
+    allocate(domain%local_bf_idx(domain%n_local_bc))
+
+    domain%local_bf_count = 0
+    do n = 1, domain%n_local_bc
+      i = domain%local_bc_idx(n)
+      b = domain%bc(i)%b
+      f = domain%bc(i)%f
+      domain%local_bf_count(b,f) = domain%local_bf_count(b,f) + 1
+    end do
+
+    n = 1
+    do b = 1, domain%nb
+      do f = 1, 6
+        domain%local_bf_first(b,f) = n
+        n = n + domain%local_bf_count(b,f)
+      end do
+    end do
+
+    allocate(next(domain%nb, 6))
+    next(:,:) = domain%local_bf_first(:,:)
+    do n = 1, domain%n_local_bc
+      i = domain%local_bc_idx(n)
+      b = domain%bc(i)%b
+      f = domain%bc(i)%f
+      domain%local_bf_idx(next(b,f)) = i
+      next(b,f) = next(b,f) + 1
+    end do
   end subroutine build_local_bc_index
 
 
@@ -346,7 +399,7 @@ contains
     use mpi
 
     implicit none
-    integer :: r, ierr, tag, buf_pos, entry_size
+    integer :: r, ierr, buf_pos, entry_size
 
     entry_size = nprim * gc
 
@@ -358,11 +411,10 @@ contains
     ! Initialize persistent receives
     do r = 1, ghost_sched%n_recv_ranks
       buf_pos = (ghost_sched%recv_groups(r)%offset - 1) * entry_size + 1
-      tag = ghost_sched%recv_groups(r)%rank
       call MPI_RECV_INIT(ghost_sched%P_recv_buf(buf_pos), &
                          ghost_sched%recv_groups(r)%count * entry_size, &
                          MPI_DOUBLE_PRECISION, &
-                         ghost_sched%recv_groups(r)%rank, tag, &
+                         ghost_sched%recv_groups(r)%rank, TAG_P, &
                          MPI_COMM_WORLD, ghost_sched%P_recv_req_pers(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -370,11 +422,10 @@ contains
     ! Initialize persistent sends
     do r = 1, ghost_sched%n_send_ranks
       buf_pos = (ghost_sched%send_groups(r)%offset - 1) * entry_size + 1
-      tag = mpi_rank_
       call MPI_SEND_INIT(ghost_sched%P_send_buf(buf_pos), &
                          ghost_sched%send_groups(r)%count * entry_size, &
                          MPI_DOUBLE_PRECISION, &
-                         ghost_sched%send_groups(r)%rank, tag, &
+                         ghost_sched%send_groups(r)%rank, TAG_P, &
                          MPI_COMM_WORLD, ghost_sched%P_send_req_pers(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -384,14 +435,13 @@ contains
 
 
   !> Initialize persistent MPI requests for R field exchange.
-  !> Reuses P_send_buf/P_recv_buf (same size). Uses distinct tags (offset 30000).
+  !> Reuses P_send_buf/P_recv_buf (same size), with a tag of its own.
   subroutine init_persistent_R_requests()
     use MOSE_Global_m, only: gc, nprim
     use mpi
 
     implicit none
-    integer :: r, ierr, tag, buf_pos, entry_size
-    integer, parameter :: TAG_OFFSET = 30000
+    integer :: r, ierr, buf_pos, entry_size
 
     entry_size = nprim * gc
 
@@ -403,11 +453,10 @@ contains
     ! Initialize persistent receives for R
     do r = 1, ghost_sched%n_recv_ranks
       buf_pos = (ghost_sched%recv_groups(r)%offset - 1) * entry_size + 1
-      tag = ghost_sched%recv_groups(r)%rank + TAG_OFFSET
       call MPI_RECV_INIT(ghost_sched%P_recv_buf(buf_pos), &
                          ghost_sched%recv_groups(r)%count * entry_size, &
                          MPI_DOUBLE_PRECISION, &
-                         ghost_sched%recv_groups(r)%rank, tag, &
+                         ghost_sched%recv_groups(r)%rank, TAG_R, &
                          MPI_COMM_WORLD, ghost_sched%R_recv_req_pers(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -415,11 +464,10 @@ contains
     ! Initialize persistent sends for R
     do r = 1, ghost_sched%n_send_ranks
       buf_pos = (ghost_sched%send_groups(r)%offset - 1) * entry_size + 1
-      tag = mpi_rank_ + TAG_OFFSET
       call MPI_SEND_INIT(ghost_sched%P_send_buf(buf_pos), &
                          ghost_sched%send_groups(r)%count * entry_size, &
                          MPI_DOUBLE_PRECISION, &
-                         ghost_sched%send_groups(r)%rank, tag, &
+                         ghost_sched%send_groups(r)%rank, TAG_R, &
                          MPI_COMM_WORLD, ghost_sched%R_send_req_pers(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -974,7 +1022,7 @@ contains
           if (.not. is_local_block(b)) then
             nreq = nreq + 1
             call MPI_IRECV(buf(blk_offset(b)+1), blk_ncells(b), MPI_DOUBLE_PRECISION, &
-                           block_owner(b), b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           block_owner(b), TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -989,7 +1037,7 @@ contains
               reshape(domain%blk(b)%P(:, 1:n1, 1:n2, 1:n3), [blk_ncells(b)])
             nreq = nreq + 1
             call MPI_ISEND(buf(blk_offset(b)+1), blk_ncells(b), MPI_DOUBLE_PRECISION, &
-                           0, b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           0, TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -1095,7 +1143,7 @@ contains
           if (.not. is_local_block(b)) then
             nreq = nreq + 1
             call MPI_IRECV(buf(blk_offset(b)+1), blk_size(b), MPI_DOUBLE_PRECISION, &
-                           block_owner(b), 1000+b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           block_owner(b), TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -1119,7 +1167,7 @@ contains
               reshape(domain%blk(b)%beta(1:n1, 1:n2, 1:n3), [ncells_dt])
             nreq = nreq + 1
             call MPI_ISEND(buf(blk_offset(b)+1), blk_size(b), MPI_DOUBLE_PRECISION, &
-                           0, 1000+b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           0, TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -1216,7 +1264,7 @@ contains
               reshape(domain%blk(b)%P(:, 1:n1, 1:n2, 1:n3), [blk_ncells(b)])
             nreq = nreq + 1
             call MPI_ISEND(buf(blk_offset(b)+1), blk_ncells(b), MPI_DOUBLE_PRECISION, &
-                           block_owner(b), b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           block_owner(b), TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -1226,7 +1274,7 @@ contains
           if (is_local_block(b)) then
             nreq = nreq + 1
             call MPI_IRECV(buf(blk_offset(b)+1), blk_ncells(b), MPI_DOUBLE_PRECISION, &
-                           0, b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           0, TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -1257,8 +1305,8 @@ contains
   end subroutine scatter_P_from_root
 
 
-  !> Exchange Pg(:,3:6) stencil data for inter-rank viscous connection BCs.
-  !> Messages are aggregated per remote rank.
+  !> Exchange, for the connection faces between ranks, the tangential stencil Pg(:,3:6) of the viscous flux and the
+  !> reference velocity Ur of the source cell, which the preconditioned flux reads. Messages are aggregated per remote rank.
   subroutine exchange_ghost_Pg(domain)
     use MOSE_Advanced_Types_m
     use MOSE_Global_m, only: nprim
@@ -1271,6 +1319,27 @@ contains
     call exchange_Pg_field(domain)
 #endif
   end subroutine exchange_ghost_Pg
+
+
+  !> Flux of the connection faces between ranks (BC 101, 201). The record that
+  !> owns a face (Pair_Connections) computes its flux for both cells; this sends
+  !> the share of the cell of the other block, bc(partner)%Fc, to the rank of
+  !> that block. Send and receive lists are those of the ghost exchange: the
+  !> sender takes its send entries (records of remote blocks whose source cell
+  !> is local) whose partner it owns, the receiver its receive entries that it
+  !> does not own, both in the order of the lists. Call from the primary thread.
+  subroutine exchange_connection_flux(domain)
+    use MOSE_Advanced_Types_m
+
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+
+    if (mpi_size_ <= 1) return
+    call set_active_mg_level(domain%mg_level)
+#ifdef USE_MPI
+    call exchange_Fc_field(domain)
+#endif
+  end subroutine exchange_connection_flux
 
 
   !> Chimera donor-cell exchange, split like the P exchange so that packing
@@ -1358,8 +1427,8 @@ contains
 
 
 #ifdef USE_MPI
-  !> Internal: exchange Pg(:,3:6) stencil using aggregated messaging.
-  subroutine exchange_Pg_field(domain)
+  !> Internal: the flux of the connection faces owned here, to the ranks of the cells of the other blocks.
+  subroutine exchange_Fc_field(domain)
     use MOSE_Advanced_Types_m
     use MOSE_Global_m, only: nprim
     use mpi
@@ -1367,7 +1436,82 @@ contains
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
-    integer :: ns, nr, i, r, ierr, tag, bc_idx, buf_pos
+    integer :: i, r, n, ierr, bc_idx, buf_pos, start, entry_size
+
+    if (ghost_sched%n_send == 0 .and. ghost_sched%n_recv == 0) return
+    entry_size = nprim * 2
+
+    ! Receives: the entries of each rank group whose face is owned by the other rank
+    start = 1
+    do r = 1, ghost_sched%n_recv_ranks
+      n = 0
+      do i = ghost_sched%recv_groups(r)%offset, &
+             ghost_sched%recv_groups(r)%offset + ghost_sched%recv_groups(r)%count - 1
+        if (.not. domain%bc(ghost_sched%recv_list(i)%bc_idx)%owner) n = n + 1
+      end do
+      call MPI_IRECV(ghost_sched%Fc_recv_buf(start), n * entry_size, MPI_DOUBLE_PRECISION, &
+                     ghost_sched%recv_groups(r)%rank, TAG_FC, MPI_COMM_WORLD, ghost_sched%recv_req(r), ierr)
+      call check_mpi_error(ierr)
+      start = start + n * entry_size
+    end do
+
+    ! Sends: the entries of each rank group whose face is owned here (by the partner record of the entry)
+    start = 1
+    do r = 1, ghost_sched%n_send_ranks
+      n = 0
+      do i = ghost_sched%send_groups(r)%offset, &
+             ghost_sched%send_groups(r)%offset + ghost_sched%send_groups(r)%count - 1
+        bc_idx = ghost_sched%send_list(i)%bc_idx
+        if (.not. domain%bc(domain%bc(bc_idx)%partner)%owner) cycle
+        buf_pos = start - 1 + n * entry_size
+        ghost_sched%Fc_send_buf(buf_pos+1       : buf_pos+  nprim) = domain%bc(bc_idx)%Fc(:,1)
+        ghost_sched%Fc_send_buf(buf_pos+nprim+1 : buf_pos+2*nprim) = domain%bc(bc_idx)%Fc(:,2)
+        n = n + 1
+      end do
+      call MPI_ISEND(ghost_sched%Fc_send_buf(start), n * entry_size, MPI_DOUBLE_PRECISION, &
+                     ghost_sched%send_groups(r)%rank, TAG_FC, MPI_COMM_WORLD, ghost_sched%send_req(r), ierr)
+      call check_mpi_error(ierr)
+      start = start + n * entry_size
+    end do
+
+    if (ghost_sched%n_recv_ranks > 0) then
+      call MPI_WAITALL(ghost_sched%n_recv_ranks, ghost_sched%recv_req, &
+                       ghost_sched%mpi_stat(:,1:ghost_sched%n_recv_ranks), ierr)
+      call check_mpi_error(ierr)
+    end if
+
+    ! Unpack, in the order of the receive list
+    buf_pos = 0
+    do r = 1, ghost_sched%n_recv_ranks
+      do i = ghost_sched%recv_groups(r)%offset, &
+             ghost_sched%recv_groups(r)%offset + ghost_sched%recv_groups(r)%count - 1
+        bc_idx = ghost_sched%recv_list(i)%bc_idx
+        if (domain%bc(bc_idx)%owner) cycle
+        domain%bc(bc_idx)%Fc(:,1) = ghost_sched%Fc_recv_buf(buf_pos+1       : buf_pos+  nprim)
+        domain%bc(bc_idx)%Fc(:,2) = ghost_sched%Fc_recv_buf(buf_pos+nprim+1 : buf_pos+2*nprim)
+        buf_pos = buf_pos + entry_size
+      end do
+    end do
+
+    if (ghost_sched%n_send_ranks > 0) then
+      call MPI_WAITALL(ghost_sched%n_send_ranks, ghost_sched%send_req, &
+                       ghost_sched%mpi_stat(:,1:ghost_sched%n_send_ranks), ierr)
+      call check_mpi_error(ierr)
+    end if
+  end subroutine exchange_Fc_field
+
+
+  !> Internal: exchange Pg(:,3:6) stencil using aggregated messaging.
+  subroutine exchange_Pg_field(domain)
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m, only: nprim
+    use MOSE_Parameters_m, only: guide
+    use mpi
+
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    ! Local
+    integer :: ns, nr, i, r, ierr, bc_idx, buf_pos
     integer :: entry_size
     integer, parameter :: PG_NCOLS = 4   ! Pg columns 3..6
 
@@ -1375,16 +1519,17 @@ contains
     nr = ghost_sched%n_recv
     if (ns == 0 .and. nr == 0) return
 
-    entry_size = nprim * PG_NCOLS
+    ! Pg(:,3:6) and the reference velocity Ur of the preconditioner of the source
+    ! cell, which the connection flux reads in the first ghost layer
+    entry_size = nprim * PG_NCOLS + 1
 
     ! Post one receive per remote rank (aggregated)
     do r = 1, ghost_sched%n_recv_ranks
       buf_pos = (ghost_sched%recv_groups(r)%offset - 1) * entry_size + 1
-      tag = ghost_sched%recv_groups(r)%rank + 10000  ! unique tag per rank for Pg
       call MPI_IRECV(ghost_sched%Pg_recv_buf(buf_pos), &
                      ghost_sched%recv_groups(r)%count * entry_size, &
                      MPI_DOUBLE_PRECISION, &
-                     ghost_sched%recv_groups(r)%rank, tag, &
+                     ghost_sched%recv_groups(r)%rank, TAG_PG, &
                      MPI_COMM_WORLD, ghost_sched%recv_req(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -1399,13 +1544,14 @@ contains
         ghost_sched%Pg_send_buf(buf_pos+  nprim+1   : buf_pos+2*nprim) = domain%bc(bc_idx)%Pg(:,4)
         ghost_sched%Pg_send_buf(buf_pos+2*nprim+1   : buf_pos+3*nprim) = domain%bc(bc_idx)%Pg(:,5)
         ghost_sched%Pg_send_buf(buf_pos+3*nprim+1   : buf_pos+4*nprim) = domain%bc(bc_idx)%Pg(:,6)
+        ghost_sched%Pg_send_buf(buf_pos+4*nprim+1) = domain%blk(domain%bc(bc_idx)%bs)%Ur( &
+          domain%bc(bc_idx)%is, domain%bc(bc_idx)%js, domain%bc(bc_idx)%ks)
       end do
       buf_pos = (ghost_sched%send_groups(r)%offset - 1) * entry_size + 1
-      tag = mpi_rank_ + 10000  ! sender's rank as tag for Pg
       call MPI_ISEND(ghost_sched%Pg_send_buf(buf_pos), &
                      ghost_sched%send_groups(r)%count * entry_size, &
                      MPI_DOUBLE_PRECISION, &
-                     ghost_sched%send_groups(r)%rank, tag, &
+                     ghost_sched%send_groups(r)%rank, TAG_PG, &
                      MPI_COMM_WORLD, ghost_sched%send_req(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -1425,6 +1571,10 @@ contains
       domain%bc(bc_idx)%Pg(:,4) = ghost_sched%Pg_recv_buf(buf_pos+  nprim+1   : buf_pos+2*nprim)
       domain%bc(bc_idx)%Pg(:,5) = ghost_sched%Pg_recv_buf(buf_pos+2*nprim+1   : buf_pos+3*nprim)
       domain%bc(bc_idx)%Pg(:,6) = ghost_sched%Pg_recv_buf(buf_pos+3*nprim+1   : buf_pos+4*nprim)
+      associate ( bc => domain%bc(bc_idx) )
+        domain%blk(bc%b)%Ur(bc%i - guide(bc%f,1), bc%j - guide(bc%f,2), bc%k - guide(bc%f,3)) = &
+          ghost_sched%Pg_recv_buf(buf_pos+4*nprim+1)
+      end associate
     end do
 
     ! Wait for all sends to complete
@@ -1442,18 +1592,16 @@ contains
     use mpi
     implicit none
     ! Local
-    integer :: r, ierr, tag, buf_pos
-    integer, parameter :: TAG_OFFSET = 20000
+    integer :: r, ierr, buf_pos
 
     if (ghost_sched%n_chim_send == 0 .and. ghost_sched%n_chim_recv == 0) return
 
     do r = 1, ghost_sched%n_chim_recv_ranks
       buf_pos = (ghost_sched%chim_recv_groups(r)%offset - 1) * nprim + 1
-      tag = ghost_sched%chim_recv_groups(r)%rank + TAG_OFFSET
       call MPI_IRECV(ghost_sched%chim_recv_buf(buf_pos), &
                      ghost_sched%chim_recv_groups(r)%count * nprim, &
                      MPI_DOUBLE_PRECISION, &
-                     ghost_sched%chim_recv_groups(r)%rank, tag, &
+                     ghost_sched%chim_recv_groups(r)%rank, TAG_CHIMERA, &
                      MPI_COMM_WORLD, ghost_sched%chim_recv_req(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -1487,18 +1635,16 @@ contains
     use mpi
     implicit none
     ! Local
-    integer :: r, ierr, tag, buf_pos
-    integer, parameter :: TAG_OFFSET = 20000
+    integer :: r, ierr, buf_pos
 
     if (ghost_sched%n_chim_send == 0 .and. ghost_sched%n_chim_recv == 0) return
 
     do r = 1, ghost_sched%n_chim_send_ranks
       buf_pos = (ghost_sched%chim_send_groups(r)%offset - 1) * nprim + 1
-      tag = mpi_rank_ + TAG_OFFSET
       call MPI_ISEND(ghost_sched%chim_send_buf(buf_pos), &
                      ghost_sched%chim_send_groups(r)%count * nprim, &
                      MPI_DOUBLE_PRECISION, &
-                     ghost_sched%chim_send_groups(r)%rank, tag, &
+                     ghost_sched%chim_send_groups(r)%rank, TAG_CHIMERA, &
                      MPI_COMM_WORLD, ghost_sched%chim_send_req(r), ierr)
       call check_mpi_error(ierr)
     end do

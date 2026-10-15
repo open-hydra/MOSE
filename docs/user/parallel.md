@@ -265,7 +265,7 @@ Parallel scalability is ultimately limited by several factors.
 
 **Memory consumption:** MOSE allocates some domain-wide structures on every MPI rank. Very large MPI rank counts can therefore exhaust memory before all available CPU cores are used. Increasing OpenMP parallelism is preferable when this becomes a limitation.
 
-**Mesh decomposition:** Increasing the number of MPI ranks can increase the number of ghost cells. If the rank count does not divide the number of mesh blocks, additional decomposition overhead can be introduced.
+**Mesh decomposition:** Increasing the number of MPI ranks can increase the number of ghost cells. Per Runge–Kutta stage, two ranks that share block connections exchange the two ghost layers of the connection faces, their tangential stencil with the preconditioning reference velocity, and the flux of each face to the rank of the cell that does not compute it. If the rank count does not divide the number of mesh blocks, additional decomposition overhead can be introduced.
 
 **Serial output:** Solution output is gathered through rank 0 and can become a significant bottleneck for large parallel jobs. Output frequency should therefore be kept low for large-scale runs.
 

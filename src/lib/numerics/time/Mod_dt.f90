@@ -17,6 +17,7 @@ contains
     use MOSE_Lib_RANS
     use MOSE_Config_Types_m, only: obj_time_scheme
     use MOSE_Mod_MPI, only: is_local_block, mpi_allreduce_min_r8
+    use MOSE_Lib_Metrics, only: delthe
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     real(R8), intent(in) :: cfl, vnn
@@ -24,7 +25,8 @@ contains
     ! Local
     integer  :: i, j, k, b
     real(R8) :: dtcell, dtglobal, dtglobal_mpi, dstiff
-    logical  :: explicit_sources
+    real(R8) :: rc, er(3), cen(3)
+    logical  :: explicit_sources, wedge
 
     dtglobal = domain % dtglobal
 
@@ -33,16 +35,34 @@ contains
     explicit_sources = obj_time_scheme%time_accurate .and. model == 2
     if ( explicit_sources ) call Turbulence_Stiffness ( domain )
 
+    ! 2-D axisymmetric wedge (type 200 on the k faces): the stress on the wedge faces enters the rows of u_r and u_theta
+    ! with terms that grow as 1/r^2 next to the axis, and the step must see them (compute, s_h). Same guard as the wedge
+    ! stress (Lib_BC_Fluxes_Rotational): delthe is negative on a right-handed mesh with the axis on the j = jm face.
+    ! delthe exactly zero written as two ordered comparisons (no real equality test).
+    wedge = ndir == 2 .and. .not. ( delthe >= 0d0 .and. delthe <= 0d0 ) .and. model > 0
+
     do b = 1, domain % nb ! loop over blocks
       if (.not. is_local_block(b)) cycle
       !$omp parallel
-      !$omp do collapse(3) private ( dtcell, dstiff ), reduction ( min : dtglobal )
+      !$omp do collapse(3) private ( dtcell, dstiff, rc, er, cen ), reduction ( min : dtglobal )
       do k = 1, domain % blk(b) % dim(3)
       do j = 1, domain % blk(b) % dim(2)
       do i = 1, domain % blk(b) % dim(1)
         
         dstiff = 0d0
         if ( explicit_sources ) dstiff = domain%blk(b)%stiff(i,j,k)
+
+        ! Wedge: distance of the cell centre (mean of the nodes) from the x axis and radial unit vector
+        rc = 0d0
+        er = 0d0
+        if ( wedge ) then
+          cen = 0.125d0 * ( domain%blk(b)%node(i  ,j  ,k  )%c + domain%blk(b)%node(i-1,j  ,k  )%c + &
+                            domain%blk(b)%node(i  ,j-1,k  )%c + domain%blk(b)%node(i-1,j-1,k  )%c + &
+                            domain%blk(b)%node(i  ,j  ,k-1)%c + domain%blk(b)%node(i-1,j  ,k-1)%c + &
+                            domain%blk(b)%node(i  ,j-1,k-1)%c + domain%blk(b)%node(i-1,j-1,k-1)%c )
+          rc = sqrt ( cen(2)**2 + cen(3)**2 )
+          if ( rc > 0d0 ) er = [ 0d0, cen(2), cen(3) ] / rc
+        end if
 
         ! Compute local cell dt according to CFL and VNN numbers
         call compute ( rhoi = domain%blk(b)%p(1:nsc,i,j,k), &
@@ -51,6 +71,7 @@ contains
                        p = domain%blk(b)%p(np,i,j,k), &
                        rans_ = domain%blk(b)%P(nt:nprim,i,j,k), &
                        met = domain%blk(b)%m(i,j,k)%c, &
+                       rc = rc, er = er, &
                        stiff = dstiff, &
                        dtmin = dtcell, &
                        cfl = cfl, &
@@ -86,11 +107,32 @@ contains
       ! worst cell Peclet number the additive law is exact). In 3-D, on a cell skewed in all three pairs of directions, the
       ! viscous rate takes the factor (2 + m + 1/m)/4 below, which bounds the excess of the spectral radius of the viscous
       ! operator over 4 D_max sum_d |grad xi_d|^2 there.
+      ! On the 2-D axisymmetric wedge (rc > 0: distance of the cell centre from the x axis, er the radial unit vector) the
+      ! stress on the wedge faces adds to the rows of u_r and u_theta diagonal terms and couplings to the neighbours,
+      ! per unit mass and with nu_e = (mu + mu_t)/rho, lambda = -2/3 mu, M(d,.) = grad xi_d:
+      !   u_r      -(4/3) nu_e/rc^2;  u_r of the neighbours d+-1: -+(2/3) nu_e M(d,.).er/(2 rc);
+      !            u_x of the neighbours d+-1: +-(2/3) nu_e M(d,x)/(2 rc)   (from lambda div u in tau_thetatheta);
+      !   u_theta  -nu_e/rc^2;  u_theta of the neighbours d+-1: +-nu_e M(d,.).er/(2 rc);   u_x: none.
+      ! They raise the Gershgorin row sum of the viscous operator by at most s_h = max(s_r, s_t),
+      !   s_r = nu_e [ (4/3)/rc^2 + (2/3) sum_d ( |M(d,x)| + |M(d,.).er| ) / rc ],
+      !   s_t = nu_e [ 1/rc^2 + sum_d |M(d,.).er| / rc ],
+      ! which enters the diffusive rate as s_h/4, so that dt (4 D_max sum_d |grad xi_d|^2 + s_h) = 4 vnn. Support of the
+      ! limits: away from the axis, on a uniform mesh of equal cells, the viscous operator has a real symmetric Fourier
+      ! symbol, so it is normal; its spectral radius is at most 4 D_max sum_d |grad xi_d|^2 in 2-D for any skew and aspect
+      ! ratio, and in 3-D where the cosines a, b, c between the grad xi_d give a^2 + b^2 + c^2 + 2abc <= 1, elsewhere within
+      ! the factor (2 + m + 1/m)/4 < 9/8 that the rate takes in 3-D; so vnn = 1/2 (Heun) and 0.62 (RK3) from their real
+      ! stability intervals (Hundsdorfer 2000, sec. 2.4, eq. 2.10, and sec. 3.3, pp. 25-28). Next to the axis, on equal
+      ! rectangular cells, the scalars are stable on every row (self-adjoint in the volume-weighted inner product, row sums
+      ! within the rate); the momentum operator is not self-adjoint, and its support is evidence (the operator of the code
+      ! for dx/dr 0.01 to 128; largest stable vnn measured on the case of test WedgeAxisStep, dx/dr 1 to 8: at least 0.50
+      ! with Heun and 0.63 with RK3).
+      ! The ghost cell of the axis counts with its modulus, so the bound holds whatever the condition on the axis; next to
+      ! the axis of square cells s_h = 8 nu/dr^2 (the folded exact sum is 20/3).
       ! With explicit turbulence sources (time-accurate RANS runs) the stiffness d of their destruction adds to the
       ! rates with the constant 1: 1/dt += d, so that dt d <= 1. A forward-Euler stage then keeps nu~, k and omega
       ! positive, and so do Heun and RK3, convex combinations of forward-Euler stages (Hundsdorfer 2000, sec. 6.2,
       ! theorem 6.4 and the explicit trapezoidal rule; C.-W. Shu, S. Osher, J. Comput. Phys. 77, 1988).
-      subroutine compute ( rhoi, Ur, vel, p, rans_, met, stiff, dtmin, cfl, vnn )
+      subroutine compute ( rhoi, Ur, vel, p, rans_, met, rc, er, stiff, dtmin, cfl, vnn )
         use MOSE_Global_m
         use MOSE_Config_Types_m, only: obj_prec, obj_sim_param, obj_rans
         use FLINT_Lib_Thermodynamic
@@ -98,6 +140,7 @@ contains
         implicit none
         real(R8), intent(in)  :: rhoi(nsc), vel(3), p, rans_(:)
         real(R8), intent(in)  :: met(3,3), cfl, vnn, Ur
+        real(R8), intent(in)  :: rc, er(3)  ! wedge: distance of the cell centre from the x axis (else 0), radial direction
         real(R8), intent(in)  :: stiff    ! stiffness of the explicit turbulence sources, 0 without them [1/s]
         real(R8), intent(out) :: dtmin
         ! Local
@@ -105,6 +148,7 @@ contains
         integer  :: d, T_i, Tint(2)
         real(R8) :: rho, Rgas, Sound, Alpha, Beta, c_star, gn, un, lambda
         real(R8) :: rate_c, rate_v, temperature, Tdiff, cp, cv, mil, kl, mie, Dmax
+        real(R8) :: nu_e, sum_x, sum_r, s_h
         real(R8) :: Dm(nsc), dummy(3,3)
         real(R8) :: cos12, cos13, cos23, ssum, qprod, mroot
 
@@ -196,7 +240,20 @@ contains
 
         if ( model==2 .and. nRANS==1 ) Dmax = max ( Dmax, ( mil + rans_(1) ) / ( sigma_SA * rho ) )
 
-        dtmin = 1d0 / ( rate_c / cfl + Dmax * rate_v / vnn )
+        ! Wedge: increase of the row sum from the stress on the wedge faces (see above)
+        s_h = 0d0
+        if ( rc > 0d0 ) then
+          nu_e  = ( mil + mie ) / rho
+          sum_x = 0d0
+          sum_r = 0d0
+          do d = 1, ndir
+            sum_x = sum_x + abs ( met(d,1) )
+            sum_r = sum_r + abs ( dot_product ( met(d,:), er ) )
+          enddo
+          s_h = nu_e * max ( 4d0/3d0 / rc**2 + 2d0/3d0 * ( sum_x + sum_r ) / rc, 1d0 / rc**2 + sum_r / rc )
+        end if
+
+        dtmin = 1d0 / ( rate_c / cfl + ( Dmax * rate_v + 0.25d0 * s_h ) / vnn )
 
         if ( stiff > 0d0 ) dtmin = 1d0 / ( 1d0 / dtmin + stiff )
 

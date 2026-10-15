@@ -10,13 +10,17 @@ module MOSE_Lib_BC_Fluxes_Connection
 
 contains
 
-  subroutine BC_Connection_Eul ( Im, Jm, Km, Fm, Blk )
+  !> Inviscid flux of a face between the cell (Im,Jm,Km) and its ghost across
+  !> face Fm, from the four-cell stencil across the face; returns the share of
+  !> the residual of the cell, dR (the caller adds it).
+  subroutine BC_Connection_Eul ( Im, Jm, Km, Fm, Blk, dR )
     use MOSE_Lib_Reconstruction, only : reconstruction
     use MOSE_Mod_Riemann
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
-    type(MOSE_block_type), intent(inout) :: Blk
+    type(MOSE_block_type), intent(in) :: Blk
+    real(R8), intent(out) :: dR(nprim)
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Dirm, Face_i, Face_j, Face_k
     integer :: I1, J1, K1, I2, J2, K2
@@ -98,13 +102,15 @@ contains
       Flux(np+1:nprim) = Fmass*(sel_L*Prim_L(np+1:nprim)/rho_L - sel_R*Prim_R(np+1:nprim)/rho_R)
     end if
 
-    ! Residual update
-    Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + Flux * modfm2
+    ! Share of the residual of the cell
+    dR = Flux * modfm2
 
   end subroutine BC_Connection_Eul
 
 
-  subroutine BC_Connection_Visc ( Im, Jm, Km, Fm, Blk, Mg, Pg, Sc, Sct, Prt, Prl, soot_enabled )
+  !> Viscous flux of a face between the cell (Im,Jm,Km) and its ghost across
+  !> face Fm; returns the share of the residual of the cell, dR (the caller adds it).
+  subroutine BC_Connection_Visc ( Im, Jm, Km, Fm, Blk, Mg, Pg, Sc, Sct, Prt, Prl, soot_enabled, dR )
     use MOSE_Lib_RANS
     use FLINT_Lib_Thermodynamic
     use MOSE_Lib_Diffusive
@@ -114,7 +120,8 @@ contains
     logical, intent(in)  :: soot_enabled
     type(MOSE_tensor_3D_type), intent(in) :: Mg
     real(R8), intent(in)              :: Pg(nprim,6)
-    type(MOSE_block_type), intent(inout)  :: Blk
+    type(MOSE_block_type), intent(in)     :: Blk
+    real(R8), intent(out)                 :: dR(nprim)
     ! Local
     integer :: dir, modfm2, Face_i, Face_j, Face_k
     integer :: Ig, Jg, Kg
@@ -197,8 +204,8 @@ contains
     call Compute_Diffusive_Flux ( Prim, Gradient_ghost, Area, Normal, Waldis, Rough, Flux_ghost, &
                                   Sc, Sct, Prt, Prl, soot_enabled )
 
-    ! Residual update
-    Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) - 0.5d0 * modfm2 * (Flux_loc + Flux_ghost)
+    ! Share of the residual of the cell
+    dR = - 0.5d0 * modfm2 * (Flux_loc + Flux_ghost)
 
     contains
 
