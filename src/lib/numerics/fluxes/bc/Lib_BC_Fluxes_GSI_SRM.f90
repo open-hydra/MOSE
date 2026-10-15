@@ -40,7 +40,7 @@ module MOSE_Lib_BC_Fluxes_GSI_SRM
   implicit none
   private
 
-  public :: BC_SRM
+  public :: BC_SRM, SRM_Wall_Turbulence
 
 contains
 
@@ -101,5 +101,51 @@ contains
                                 rans_wall_model=RANS_WALL_BLOWING, Ovar=Ovar )
 
   end subroutine BC_SRM
+
+
+  subroutine SRM_Wall_Turbulence ( Im, Jm, Km, Fm, Blk, aCoeff, n, pRef, Taf, y_af, rho_wall, rans_wall )
+    !< Wall values of the turbulence variables of face `Fm` of cell `(Im,Jm,Km)`, those that the boundary flux of the
+    !< grain takes in the same stage, for its ghost cells (Ghost_SRM_Turbulence in `MOSE_Lib_Ghost`): while the surface
+    !< burns, the blowing wall of `Ablation_Wall_Fluxes` (the wall state of `BC_SRM`, the stress of the blowing velocity
+    !< gradient, `RANS_Set_Blowing_Wall`); when it does not, the impermeable wall at the flame temperature that the caller
+    !< of `BC_SRM` closes the face with (`BC_Wall_Temperature`: `RANS_Set_Wall_Values`, smooth).
+    use MOSE_Lib_BC_Fluxes, only: Wall_State_Temperature
+    use MOSE_Lib_Fluid, only: Stress_Vector
+    use MOSE_Lib_RANS, only: RANS_Set_Blowing_Wall, RANS_Set_Wall_Values
+    implicit none
+    integer, intent(in) :: Im, Jm, Km, Fm
+    type(MOSE_block_type), intent(in) :: Blk
+    real(R8), intent(in) :: aCoeff, n, pRef, Taf      !< as in `BC_SRM`
+    real(R8), intent(in), dimension(1:nsc) :: y_af   !< mass fractions of the combustion products
+    real(R8), intent(out) :: rho_wall                !< density of the wall state
+    real(R8), intent(out) :: rans_wall(nrans)        !< turbulence variables at the wall, times rho_wall
+    ! Local
+    type(wall_face_t) :: face
+    real(R8) :: Prim(nprim), rho, Rgas, T_cell, roi_wall(nsc), mu_wall, k_wall, grad_T(3), q_conv, mdot
+    real(R8) :: Blowing(3), VelGrad(3,3), Stress(3)
+
+    call Get_Wall_Face ( Im, Jm, Km, Fm, Blk, face )
+    Prim = Blk % P(:,Im,Jm,Km)
+    call co_rotot_Rtot ( Prim(1:nsc), rho, Rgas )
+    T_cell = Prim(np) / ( rho * Rgas )
+    call Wall_Gas_State ( face, Prim, rho, Rgas, T_cell, Taf, &
+                          rho_wall, roi_wall, mu_wall, k_wall, grad_T, q_conv, y_wall = y_af )
+    mdot = aCoeff * ( Prim(np) / pRef )**n * (-face % modfm2)
+
+    if ( Surface_Is_Ablating ( face, mdot, Taf ) ) then
+      ! the operations of Ablation_Wall_Fluxes
+      Blowing = mdot / rho_wall * face % normal
+      VelGrad = 0d0
+      VelGrad(:,face % dir) = ( Prim(nu:nw) - Blowing ) * face % modfm3
+      VelGrad = matmul ( VelGrad, face % M )
+      Stress = Stress_Vector ( VelGrad, face % normal, mu_wall, 0d0, Prim(nt:) )
+      call RANS_Set_Blowing_Wall ( rho=rho_wall, mil=mu_wall, rans_variables=rans_wall, &
+                                   tau=Stress, mdot=mdot, dist=Blk % yn(Im,Jm,Km) )
+    else
+      call Wall_State_Temperature ( Prim, rho, Rgas, Taf, rho_wall, roi_wall, mu_wall, k_wall )
+      call RANS_Set_Wall_Values ( mu_wall, Prim(nt:nprim) * rho_wall / rho, rans_wall, Blk % yn(Im,Jm,Km), 0d0 )
+    end if
+
+  end subroutine SRM_Wall_Turbulence
 
 end module MOSE_Lib_BC_Fluxes_GSI_SRM

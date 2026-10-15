@@ -175,9 +175,11 @@ module MOSE_Config_Types_m
     character(len=llen) :: space_reconstruction ! Space reconstruction method
     character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction, as input.ini gives it
     character(len=llen) :: limiter_name = ''    ! Name of the limiter in use in the set-up summary (blank: first order)
-    character(len=llen) :: diffusive_metric     ! Face metric of the interior viscous fluxes (inverse-mean/mean)
+    character(len=llen) :: diffusive_metric     ! Face metric of the viscous fluxes (stencil/inverse-mean/mean)
     ! Useful variables
-    logical             :: inverse_metric = .true. ! diffusive_metric == inverse-mean
+    logical             :: inverse_metric = .false. ! diffusive_metric == inverse-mean
+    logical             :: stencil_metric = .true.  ! diffusive_metric == stencil
+    integer             :: metric_mode = 2          ! 0 mean, 1 inverse-mean, 2 stencil (MOSE_Lib_Stencil_Metrics)
   end type space_scheme_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------

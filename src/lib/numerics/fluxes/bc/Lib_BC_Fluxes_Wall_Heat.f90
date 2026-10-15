@@ -3,31 +3,37 @@ module MOSE_Lib_BC_Fluxes_Wall_Heat
   use MOSE_Advanced_Types_m
   use MOSE_Global_m
   use MOSE_Parameters_m
-  use MOSE_Lib_BC_Fluxes, only: Face_Index, Compute_Modfm, Compute_Wall_Properties
+  use MOSE_Lib_BC_Fluxes, only: Face_Index, Compute_Modfm, Compute_Wall_Properties, Wall_State_Heat
 
   implicit none
   public
 
 contains
 
-  subroutine BC_Wall_Heat ( Im, Jm, Km, Fm, Blk, Heat_Flux, Ovar, w_wall, k_rough )
+  subroutine BC_Wall_Heat ( Im, Jm, Km, Fm, Blk, Heat_Flux, Ovar, w_wall, k_rough, rec, w_grad )
+    use MOSE_Lib_Diffusive, only: Inverse3
     use MOSE_Lib_Fluid
     use MOSE_Lib_RANS
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     real(R8), intent(in) :: Heat_Flux
-    type(MOSE_block_type), intent(inout) :: Blk
+    type(MOSE_block_type), intent(inout), target :: Blk
     real(R8), optional, dimension(8), intent(inout) :: Ovar
     real(R8), optional, dimension(3), intent(in) :: w_wall
     real(R8), optional, intent(in) :: k_rough   ! sand-grain roughness of the face (absent = smooth)
+    ! the record of the face: its wall stencil (diffusive-metric = stencil)
+    type(MOSE_bc_type), optional, intent(in), target :: rec
+    real(R8), optional, dimension(3,3), intent(in) :: w_grad   ! with w_wall: its gradient, d w_wall(i) / d x(j)
     ! Local
-    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, Ig, Jg, Kg
-    real(R8) :: Normal(3), Area, Dist, M(3,3), Prim(nprim), rho, Rgas, temp, Gradient(nprim,3)
+    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, q
+    real(R8) :: Normal(3), Area, Dist, Mi(3,3), Prim(nprim), rho, Rgas, temp, Gradient(nprim,3)
     real(R8) :: mil, kl, Stress(3), Flux(nprim)
     integer  :: vgrad_i
     real(R8) :: gvec1, gvec2, gvec3, VelGrad(3,3), Prim_Wall(nprim), rho_wall, Twall, dl
-    real(R8) :: kr, mit
+    real(R8) :: kr, mit, dT
+    real(R8), pointer, contiguous :: M(:,:), Mc(:,:)   ! metrics of the face and of the cell, read in place
+    logical  :: wst
 
 
     kr = 0d0
@@ -40,33 +46,51 @@ contains
     Normal = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     Area = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
     Dist = 1d-20 ! since the flux is computed at the wall
-    M = Blk % M (Im,Jm,Km) % c
+    M => Blk % M (Im,Jm,Km) % c
+    Mc => M
+    ! diffusive-metric = stencil: velocity and turbulence take the metric of the wall face (Wall_Face_Stencils in
+    ! MOSE_Lib_Stencil_Metrics), with no difference of their wall values along the wall but for the velocity of a wall
+    ! that moves (below): the velocity of a no-slip wall is uniform along it, while the turbulence values that vary
+    ! along it (omega of the k-omega models, from the wall distance of the cell; nu~ on a rough wall) leave out their
+    ! derivative along the wall (docs/theory/numerics.md); the wall temperature below is estimated with the metric of
+    ! the cell, as before
+    wst = .false.
+    if ( present(rec) ) wst = rec % wstencil
+    if ( wst ) M => rec % wM
 
     ! boundary cell variables
     Prim = Blk % P(:,Im,Jm,Km)
     call co_rotot_Rtot ( Prim(1:nsc), rho, Rgas )
-    temp = EOS( p=prim(np), rho=rho, R=Rgas )
 
     ! Approximation: Twall==Tcell. Therefore, mil(wall) = mil(cell). The wall
-    ! temperature below is estimated with the laminar conductivity alone, also
-    ! on a rough wall: exact when adiabatic, and the energy flux is Heat_Flux regardless.
-    call co_k_mi_lam_Wilke ( Prim(1:nsc), rho, temp, mil, kl )
+    ! temperature is estimated with the laminar conductivity alone, also on a
+    ! rough wall: exact when adiabatic, and the energy flux is Heat_Flux regardless.
+    ! The same wall state as the ghost cells of the wall (Ghost_Wall in MOSE_Lib_Ghost).
+    call Wall_State_Heat ( Prim, rho, Rgas, Heat_Flux, Mc, normal, Dir, temp, mil, kl, dT, Twall, rho_wall )
 
     ! Initialization
     Gradient = 0d0
 
-    ! Difference in Across-face direction: symmetry; tangential direction: null
+    ! Difference in Across-face direction: symmetry; tangential direction: null (below: on a wall that moves, the
+    ! differences of its velocity)
     Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3                 ! Velocity
     if ( present(w_wall) ) then
       Gradient(nu:nw,Dir) = ( Prim(nu:nw) - w_wall ) * modfm3  ! Velocity relative to wall
     else
       Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3               ! Standard no-slip (w_wall=0)
     end if
-    Gradient(np,Dir) = -Heat_Flux / ( 2d0*kl*dot_product( M(Dir,:), normal ) ) * modfm2
+    ! A wall that moves with a velocity linear in x (a stationary face of a rotating frame): the differences of the wall
+    ! velocity along the position differences of the metric, the columns of M^-1 (the stencil of the wall face, or the
+    ! edges of the cell), from its gradient
+    if ( present(w_grad) ) then
+      Mi = Inverse3 ( M )                                       ! columns: the position differences of M
+      do q = 1, 3
+        if ( q /= Dir ) Gradient(nu:nw,q) = matmul ( w_grad, Mi(:,q) )
+      enddo
+    end if
+    Gradient(np,Dir) = dT
 
     ! Wall variables
-    Twall = temp - Gradient(np,Dir)
-    rho_wall = Prim(np)/( Rgas * Twall ) ! EOS
     Prim_wall(1:nsc) = Prim(1:nsc) * rho_wall / rho
 
     if (model==2)  then
@@ -104,7 +128,10 @@ contains
     ! Fluxes
     Flux = 0.0d0
     Flux(nu:nw) = Stress * Area
-    Flux(np) = Area * Heat_Flux
+    Flux(np) = Area * Heat_Flux * modfm2   ! k grad T . n: Heat_Flux on faces 2, 4, 6, -Heat_Flux on 1, 3, 5
+    ! A wall that moves: the work of the wall stress on the wall velocity, (tau . n) . w_wall, as a face between cells
+    ! carries (tau . n) . u of its velocity
+    if ( present(w_wall) ) Flux(np) = Flux(np) + Area * dot_product ( Stress, w_wall )
 
     if (model==2) then
       call RANS_Diffusive_Flux ( flux=Flux(nt:nprim), &
@@ -113,18 +140,17 @@ contains
                                  rans_gradient=Gradient(nt:nprim,:), &
                                  mul=mil, rho=rho_wall, &
                                  area=area, normal=normal, dist=dist )
-      ! Ghost-cell extrapolation of RANS variables
-      ig = im - guide(fm,1)
-      jg = jm - guide(fm,2)
-      kg = km - guide(fm,3)
-      call RANS_Extrapolate_Wall ( Prim(nt:nprim), Prim_Wall(nt:nprim), &
-                                   rho, rho_wall, Blk % P(nt:nprim,Ig,Jg,Kg) )
+      ! The ghost cells of the wall, turbulence variables included, are those of Fill_Ghost_Cell (Ghost_Wall), from the
+      ! same wall values: one set of ghost cells for the fluxes and the source terms
     endif
 
     ! Residual update
     Blk % r (:,Im,Jm,Km) = Blk % r (:,Im,Jm,Km) - modfm2 * Flux
 
-    if (present(Ovar)) call Compute_Wall_Properties(stress=Stress, pw=prim(np), qw=Heat_Flux, &
+    ! qw given as k grad T . n along the face normal of the solver, as the other walls (Heat_Flux is positive into the
+    ! gas): the wall output writes Heat_Flux itself on every face
+    if (present(Ovar)) call Compute_Wall_Properties(stress=Stress, pw=prim(np), into=-modfm2, &
+                                                    qw=modfm2 * Heat_Flux,                    &
                                                     y=blk%dl(im,jm,km)%c(dir)*0.5d0,          &
                                                     Tw=Twall, rhow=rho_wall, mu=mil, exit_array=Ovar)
 

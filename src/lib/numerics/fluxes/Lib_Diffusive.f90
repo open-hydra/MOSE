@@ -3,73 +3,72 @@ module MOSE_Lib_Diffusive
 
   implicit none
   private
-  public :: Diffusive_Flux, Compute_Diffusive_Flux, Face_Metric, Inverse3
+  public :: Diffusive_Flux, Compute_Diffusive_Flux, Face_Metric, Inverse3, Visc_State
 
 contains
 
-  subroutine Diffusive_Flux ( normal, area, waldis1, waldis2, kr1, kr2, Prim1, Prim2, Prim3, Prim4, Prim5, &
-                              Prim6, Prim7, Prim8, Prim9, Prim10, M1, M2, Res1, Res2, a, b, c, &
-                              Sc, Sct, Prt, Prl, soot_enabled, inverse_metric )
+  !> Viscous flux of the face between cells 1 and 2, along the normal from 1 to 2: the difference across the face (index
+  !> direction a) and the mean central differences of the two cells along the face (b: cells 3..6, c: cells 7..10) of
+  !> their viscous variables Visc1..Visc10 (Visc_State, which Viscous_Variables computes once per stage for every cell),
+  !> mapped to Cartesian components with the face metric Mf (MOSE_Lib_Stencil_Metrics: Viscous_Face_Metric); the state
+  !> of the face is the mean of the primitive variables Prim1 and Prim2 of the two cells. Res1 takes -flux, Res2 +flux.
+  !> With a wall ghost cell in the stencil, Mg: one face metric per group of quantities (1 species and scalars,
+  !> 2 temperature, 3 velocity, 4 turbulence variables), whose ghost values sit at different positions (Ghost_Wall).
+  subroutine Diffusive_Flux ( normal, area, waldis1, waldis2, kr1, kr2, Prim1, Prim2, Visc1, Visc2, Visc3, &
+                              Visc4, Visc5, Visc6, Visc7, Visc8, Visc9, Visc10, Mf, Res1, Res2, a, b, c, &
+                              Sc, Sct, Prt, Prl, soot_enabled, Mg )
     use MOSE_Global_m
-    use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in)  :: a, b, c
     logical, intent(in)  :: soot_enabled
-    logical, intent(in)  :: inverse_metric    ! M1, M2 are the cells' inverse metrics (diffusive-metric = inverse-mean)
     real(R8), intent(in) :: Sc, Sct, Prt, Prl
     real(R8), intent(in) :: normal(3), area, waldis1, waldis2
     real(R8), intent(in) :: kr1, kr2      ! nearest-wall roughness of the two cells
-    real(R8), intent(in), dimension(nprim) :: Prim1, Prim2, Prim3, Prim4, Prim5, Prim6
-    real(R8), intent(in), dimension(nprim) :: Prim7, Prim8, Prim9, Prim10
-    real(R8), intent(in), dimension(3,3) :: M1, M2   ! cell metrics, or their inverses (see inverse_metric)
+    real(R8), intent(in), dimension(nprim) :: Prim1, Prim2
+    real(R8), intent(in), dimension(nprim) :: Visc1, Visc2, Visc3, Visc4, Visc5, Visc6
+    real(R8), intent(in), dimension(nprim) :: Visc7, Visc8, Visc9, Visc10
+    real(R8), intent(in), dimension(3,3) :: Mf       ! face metric
+    real(R8), intent(in), optional :: Mg(3,3,4)      ! face metrics per group of quantities
     real(R8), intent(inout), dimension(nprim) :: Res1, Res2
     ! Local
-    real(R8) :: rho1, Rgas, T1, rho2, T2, Gradient(nprim,3), Prim(nprim), M(3,3), waldis, k_rough, Flux(nprim)
-    integer  :: v
+    real(R8) :: Gradient(nprim,3), Prim(nprim), waldis, k_rough, Flux(nprim)
+    integer  :: v, g
     real(R8) :: g1, g2, g3
 
-    ! Gradient in the same direction of the face: 1 and 2
-    call co_rotot_Rtot ( Prim1(1:nsc), rho1, Rgas )
-    T1 = Prim1(np) / ( rho1 * Rgas )
-    call co_rotot_Rtot ( Prim2(1:nsc), rho2, Rgas )
-    T2 = Prim2(np) / ( rho2 * Rgas )
-
-    Gradient ( 1:nsc, a ) = Prim2 ( 1:nsc ) / rho2 - Prim1 ( 1:nsc ) / rho1 ! concentration gradient
-    Gradient ( np, a ) = T2 - T1 ! temperature gradient
-    Gradient ( nu:nw, a ) = Prim2 ( nu:nw ) - Prim1 ( nu:nw ) ! velocity gradient
-      if (nprim>np) then
-      Gradient ( np+1:nprim, a ) = Prim2 ( np+1:nprim ) / rho2 - Prim1 ( np+1:nprim ) / rho1 ! RANS variable gradient
+    ! Gradient in the same direction of the face: 1 and 2 (mass fractions, velocity, temperature, turbulence variables)
+    Gradient ( :, a ) = Visc2 - Visc1
+    if (nprim>np) then
       waldis = 0.5d0 * ( waldis1 + waldis2 ) ! distance to nearest wall
       k_rough = 0.5d0 * ( kr1 + kr2 )        ! roughness of nearest wall
     end if
 
     ! Gradient in tangential directions: 3-10
-    call Tangential_Gradient ( Prim3, Prim4, Prim5, Prim6,  Gradient(:,b) )
-    call Tangential_Gradient ( Prim7, Prim8, Prim9, Prim10, Gradient(:,c) )
-
-    ! Metric tensor at the face.
-    ! inverse-mean: the mean of the two inverse metrics (cell edge vectors, stored
-    ! per cell in blk%Minv), inverted, so that the one-index difference across the
-    ! face is divided by the centre-to-centre distance.
-    ! mean: averaging M itself divides it by the mean of 1/h instead, which
-    ! overstates the gradient by (1+r)^2/(4r) for a cell-size ratio r across the
-    ! face (+4% at r = 1.5, +9% at 1.8), at any mesh resolution.
-    if ( inverse_metric ) then
-      M = Inverse3 ( 0.5d0 * ( M1 + M2 ) )
-    else
-      M = 0.5d0 * ( M1 + M2 )
-    end if
+    call Tangential_Gradient ( Visc3, Visc4, Visc5, Visc6,  Gradient(:,b) )
+    call Tangential_Gradient ( Visc7, Visc8, Visc9, Visc10, Gradient(:,c) )
 
     !> Transform the gradients from computational to physical space.
     !> Explicit loop, not `Gradient = matmul(Gradient,M)`: Gradient aliases
     !> itself there, so the compiler must build the whole (nprim,3) result in a
     !> temporary on every face.
-    do v = 1, nprim
-      g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
-      Gradient(v,1) = g1*M(1,1) + g2*M(2,1) + g3*M(3,1)
-      Gradient(v,2) = g1*M(1,2) + g2*M(2,2) + g3*M(3,2)
-      Gradient(v,3) = g1*M(1,3) + g2*M(2,3) + g3*M(3,3)
-    end do
+    if ( present(Mg) ) then
+      do v = 1, nprim
+        g = 1                                        ! species, soot and passive scalars
+        if ( v == np ) g = 2                         ! temperature
+        if ( v >= nu .and. v <= nw ) g = 3           ! velocity
+        if ( nrans > 0 .and. v >= nt ) g = 4         ! turbulence variables
+        g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
+        Gradient(v,1) = g1*Mg(1,1,g) + g2*Mg(2,1,g) + g3*Mg(3,1,g)
+        Gradient(v,2) = g1*Mg(1,2,g) + g2*Mg(2,2,g) + g3*Mg(3,2,g)
+        Gradient(v,3) = g1*Mg(1,3,g) + g2*Mg(2,3,g) + g3*Mg(3,3,g)
+      end do
+    else
+      do v = 1, nprim
+        g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
+        Gradient(v,1) = g1*Mf(1,1) + g2*Mf(2,1) + g3*Mf(3,1)
+        Gradient(v,2) = g1*Mf(1,2) + g2*Mf(2,2) + g3*Mf(3,2)
+        Gradient(v,3) = g1*Mf(1,3) + g2*Mf(2,3) + g3*Mf(3,3)
+      end do
+    end if
 
     Prim = 0.5d0 * ( Prim1 + Prim2 )
     call Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, k_rough, Flux, Sc, Sct, Prt, Prl, soot_enabled )
@@ -116,37 +115,38 @@ contains
   end function Inverse3
 
 
-  subroutine Tangential_Gradient ( Prim1, Prim2, Prim3, Prim4, Gradient )
+  !> Mean of the central differences of two cells along a tangential direction, from viscous variables: Visc1 and Visc2
+  !> the neighbours of the first cell (at -1 and +1), Visc3 and Visc4 those of the second
+  subroutine Tangential_Gradient ( Visc1, Visc2, Visc3, Visc4, Gradient )
     use MOSE_Global_m
-    use FLINT_Lib_Thermodynamic
     implicit none
-    real(R8), intent(in), dimension(nprim) :: Prim1, Prim2, Prim3, Prim4
+    real(R8), intent(in), dimension(nprim) :: Visc1, Visc2, Visc3, Visc4
     real(R8), intent(out), dimension(nprim) :: Gradient
-    ! Local
-    real(R8) :: rho1, rho2, rho3, rho4, T1, T2, T3, T4, Rgas
 
-    call co_rotot_Rtot ( Prim1(1:nsc), rho1, Rgas )
-    T1 = Prim1(np) / ( rho1 * Rgas )
-    call co_rotot_Rtot ( Prim2(1:nsc), rho2, Rgas )
-    T2 = Prim2(np) / ( rho2 * Rgas )
-    call co_rotot_Rtot ( Prim3(1:nsc), rho3, Rgas )
-    T3 = Prim3(np) / ( rho3 * Rgas )
-    call co_rotot_Rtot ( Prim4(1:nsc), rho4, Rgas )
-    T4 = Prim4(np) / ( rho4 * Rgas )
-
-    Gradient ( 1:nsc ) = ( Prim2 ( 1:nsc ) / rho2 - Prim1 ( 1:nsc ) / rho1 + &
-                            Prim4 ( 1:nsc ) / rho4 - Prim3 ( 1:nsc ) / rho3 ) * 0.25d0
-
-    Gradient ( np ) = ( T2 - T1 + T4 - T3 ) * 0.25d0
-
-    Gradient ( nu:nw ) = ( Prim2 ( nu:nw ) - Prim1 ( nu:nw ) + Prim4 ( nu:nw ) - Prim3 ( nu:nw ) ) * 0.25d0
-
-    if (nprim>np) then
-      Gradient ( np+1:nprim ) = ( Prim2 ( np+1:nprim ) / rho2 - Prim1 ( np+1:nprim ) / rho1 + &
-                                  Prim4 ( np+1:nprim ) / rho4 - Prim3 ( np+1:nprim ) / rho3 ) * 0.25d0
-    end if
+    Gradient = ( Visc2 - Visc1 + Visc4 - Visc3 ) * 0.25d0
 
   end subroutine Tangential_Gradient
+
+
+  !> Viscous variables of a cell of primitive variables P: mass fractions, velocity, temperature and turbulence
+  !> variables per unit mass, the quantities whose differences make the viscous gradients. Viscous_Variables computes
+  !> them once per stage for every cell (blk%Visc); the faces between blocks for the cells of the other block (bc%Pg).
+  subroutine Visc_State ( P, Visc )
+    use MOSE_Global_m
+    use FLINT_Lib_Thermodynamic, only: co_rotot_Rtot
+    implicit none
+    real(R8), intent(in)  :: P(nprim)
+    real(R8), intent(out) :: Visc(nprim)
+    ! Local
+    real(R8) :: rho, Rgas
+
+    call co_rotot_Rtot ( P(1:nsc), rho, Rgas )
+    Visc(1:nsc) = P(1:nsc) / rho
+    Visc(nu:nw) = P(nu:nw)
+    Visc(np) = P(np) / ( rho * Rgas )
+    if (nprim>np) Visc(np+1:nprim) = P(np+1:nprim) / rho
+
+  end subroutine Visc_State
 
 
   subroutine Compute_Diffusive_Flux ( Prim, Gradient, area, normal, waldis, k_rough, Flux, Sc, Sct, Prt, Prl, soot_enabled )

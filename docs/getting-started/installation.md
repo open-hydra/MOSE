@@ -15,6 +15,8 @@ Before attempting to build MOSE make sure your system provides the following ext
 - **C compiler** – needed when building SUNDIALS (optional).
 - **OpenMP** – needed for optional parallelization support.
 
+**ifx 2024.1 and IPO.** ifx 2024.1 (tested: 2024.1.0, build 20240308) compiles a loop of the ghost metrics of MOSE wrongly at `-O2` and `-O3` without interprocedural optimization: a minimal program in standard Fortran gives wrong values at `-O2` and `-O3`, also at the default level with no `-O` option, and the right ones at `-O0`, `-O1` and with `-ipo`. MOSE built so stops at set-up on the check of the ghost metrics, or runs with wrong ghost metrics. CMake therefore refuses ifx 2024.1 at `-O2` or above without IPO, with a message: a RELEASE build with `-DUSE_IPO=OFF` (`--no-ipo`), or whose toolchain cannot do IPO, and the TESTING build. The RELEASE build with IPO (the default) and the DEBUG build (`-O0`) configure as before. Other versions of ifx have not been tested.
+
 ### Git submodules
 
 MOSE depends on several repositories that are included as Git submodules.

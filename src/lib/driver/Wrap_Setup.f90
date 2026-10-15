@@ -14,6 +14,7 @@ contains
     use MOSE_Read_Ini,             only: Read_Inifile
     use MOSE_Load_ThermoTransport, only: Load_ThermoTransport
     use MOSE_Lib_Preconditioning,  only: update_derived_variables
+    use MOSE_Lib_SpalartShur,      only: Cell_Velocity_Gradient
     use MOSE_Load_Chemistry,       only: Load_Chemistry
     use MOSE_Assign_Setup,         only: Assign_Setup
     use MOSE_IO_Solution,          only: Read_IC, Setup_Output_Solution, Ic_Supports_Zone_Filter
@@ -22,6 +23,7 @@ contains
                                          blocks_needing_full_arrays
     use MOSE_Mod_Multigrid,        only: Setup_Multigrid, Restriction
     use MOSE_IO_BC,                only: Setup_BC
+    use MOSE_Lib_RotatingFrame,    only: Check_Stationary_Faces
     use MOSE_Mod_Metrics,          only: Setup_Metrics
     use MOSE_Mod_Fluxes,           only: Setup_Quasi2D_W
     use MOSE_IO_Probes,            only: Setup_Probes, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
@@ -128,6 +130,8 @@ contains
     setup_error = .false.
     if (mpi_is_root) call Check_BC ( setup_error )
     call Stop_Together ( setup_error, 'boundary condition error (see above)' )
+    ! The stationary faces of a rotating frame are walls 301 and 302 of the mesh (every rank, as the records)
+    call Check_Stationary_Faces ( simulation%domain(1) )
 
     ! MPI: partition blocks once on finest-level cell counts (restriction and
     ! prolongation are block-local, so a block must live on the same rank at
@@ -286,6 +290,9 @@ contains
                                 resume = .not. ( obj_io%restart%steady .and. obj_time_scheme%time_accurate ) )
         endif
         call Fill_Ghost_Cell ( simulation%domain(1) )
+        ! The velocity gradient of the cells, which the eddy viscosity of the reference velocity of the preconditioner
+        ! takes (Update_Derived_Variables); every stage computes it again (Explicit_Step)
+        if ( obj_prec%enabled .and. model == 2 ) call Cell_Velocity_Gradient ( simulation%domain(1) )
         call Update_Derived_Variables ( simulation%domain(1) )
 
         ! Interpolate initial solution on coarser domains

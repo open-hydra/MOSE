@@ -163,8 +163,8 @@ contains
 
 
   !> Compute wall BC properties on all ranks (local blocks only), reduce to root,
-  !> and fill IOwall on root. Collective — all ranks must call. The residual and
-  !> the ghost cells are left as they were: an output does not change the state.
+  !> and fill IOwall on root. Collective — all ranks must call. The residual is
+  !> left as it was: an output does not change the state.
   subroutine Extract_Properties_From_BC ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
@@ -174,6 +174,8 @@ contains
     use MOSE_Lib_BC_Fluxes_GSI_Melting
     use MOSE_Lib_BC_Fluxes_GSI_Pyrolysis
     use MOSE_Lib_BC_Fluxes_GSI_Reactions
+    use MOSE_Config_Types_m,    only: obj_rot
+    use MOSE_Lib_RotatingFrame, only: RF_Is_Stationary_Face, RF_Wall_Velocity, RF_Wall_Velocity_Gradient, RF_Face_Center
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
@@ -184,8 +186,8 @@ contains
     integer :: n_wall_total, wall_i, ii, nrec
     real(R8), allocatable :: wall_buf(:)
     integer, allocatable  :: order(:), first(:,:), next(:,:)
-    integer  :: Ig, Jg, Kg
-    real(R8) :: r_keep(nprim), g_keep(nprim)   ! residual of the wall cell and its ghost cell, before the call
+    real(R8) :: r_keep(nprim)   ! residual of the wall cell, before the call
+    real(R8) :: r_fc(3)         ! centre of a wall face that does not rotate with the frame
 
     ! Count total BC cells across all viscous faces
     n_wall_total = 0
@@ -238,25 +240,37 @@ contains
           Fm = domain % bc(i) % f
 
           ! The wall flux routines below are called for the wall properties (Ovar)
-          ! only, but they also add the wall flux to the residual of the wall cell
-          ! and rewrite the RANS variables of its ghost cell. The diagnostic output,
-          ! written next, prints that residual: keep both and put them back.
-          Ig = Im - guide(Fm,1)
-          Jg = Jm - guide(Fm,2)
-          Kg = Km - guide(Fm,3)
+          ! only, but they also add the wall flux to the residual of the wall cell.
+          ! The diagnostic output, written next, prints that residual: keep it and
+          ! put it back. (They write no ghost value: Fill_Ghost_Cell does.)
           r_keep = domain % blk(Bm) % r (:,Im,Jm,Km)
-          g_keep = domain % blk(Bm) % P (:,Ig,Jg,Kg)
 
           Ovar = 0d0
           select case ( domain % bc(i) % type )
 
+            ! A wall that does not rotate with the frame moves with -(Omega x r) in it: the wall velocity
+            ! and its gradient that BC_Fluxes gives it (RF_Wall_Velocity at the face centre)
             case (301) ! wall: prescribed heat flux
-              call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
-                                  k_rough = domain % bc(i) % k_rough )
+              if (obj_rot%enabled .and. RF_Is_Stationary_Face(Bm,Fm)) then
+                call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
+                call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
+                                    w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
+                                    rec = domain % bc(i), w_grad = RF_Wall_Velocity_Gradient() )
+              else
+                call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
+                                    k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
+              endif
 
             case (302) ! wall: prescribed temperature
-              call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
-                                         k_rough = domain % bc(i) % k_rough )
+              if (obj_rot%enabled .and. RF_Is_Stationary_Face(Bm,Fm)) then
+                call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
+                                           w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
+                                           rec = domain % bc(i), w_grad = RF_Wall_Velocity_Gradient() )
+              else
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
+                                           k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
+              endif
 
             ! Gas-surface interaction walls: when the surface is inert the GSI
             ! routine reports nothing, and the face is an ordinary wall at the
@@ -268,26 +282,25 @@ contains
                                                                        domain % bc(i) % qrad, domain % bc(i) % ci, Ovar, &
                                                                        ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
 
             case (504) ! GSI - pyrolysis
               call BC_Wall_Pyrolysis ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_pyro_model_id, &
                                        domain % bc(i) % qrad, domain % bc(i) % ci, Ovar, &
                                        ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
 
             case (505) ! GSI - surface reactions
               call BC_Wall_Reactions ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_surf_reac_id, &
                                        domain % bc(i) % qrad, Ovar, &
                                        ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
 
           end select
 
           domain % blk(Bm) % r (:,Im,Jm,Km) = r_keep
-          domain % blk(Bm) % P (:,Ig,Jg,Kg) = g_keep
 
           wall_buf(8*(wall_i-1)+1 : 8*wall_i) = Ovar
         enddo

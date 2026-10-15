@@ -109,11 +109,12 @@ $$
 \tilde\nu_\text{wall} = 0
 $$
 
-on the viscous walls (types `301`, `302`, `503`–`505`); the wall distance $y$ is measured from
-them and from the walls coupled to another solver (`103`, `104`). A slip wall (type `300`, which
-is also the symmetry plane) follows the standard model: the ghost cell copies the cell, a zero
-normal derivative of $\tilde\nu$, and the slip wall is not a wall for the distance («the free-slip
-wall points are not included in the search when $d$ is computed», P. R. Spalart, S. R. Allmaras,
+on the viscous walls and on the grain of a solid rocket motor (types `301`, `302`, `502`,
+`503`–`505`); the wall distance $y$ is measured from them and from the walls coupled to another
+solver (`103`, `104`). A slip wall (type `300`, which is also the symmetry plane) follows the
+standard model: the ghost cell copies the cell, a zero normal derivative of $\tilde\nu$, and the
+slip wall is not a wall for the distance («the free-slip wall points are not included in the search
+when $d$ is computed», P. R. Spalart, S. R. Allmaras,
 *La Recherche Aérospatiale* 1994(1), p. 21). Allmaras, Johnson and Spalart (ICCFD7-1902, §3.3)
 propose instead $\tilde\nu = 0$ on slip walls and their inclusion in the distance, as distinct
 from symmetry planes; MOSE, whose type `300` serves both, does not make that change.
@@ -243,6 +244,37 @@ S_{ij}/\partial x_k$ with its convective part only. Without the time term the co
 steady flows only: «Without the time term, the model is not correct in a time-dependent flowfield»
 (NASA Turbulence Modeling Resource, Spalart–Allmaras page, SA-RC). Time-accurate runs with the
 correction print a warning at start-up.
+
+MOSE takes $\partial S_{ij}/\partial x_k$ with central differences of the velocity gradients
+$G = \nabla\mathbf{u}$ of the cell and of its neighbours (`Compute_Velocity_Gradient`,
+`Compute_RC_Terms`), mapped to Cartesian components with a cell metric. Next to a block face the
+neighbour is the first ghost cell, and the difference is right when the ghost cell holds the value
+of a definite cell and the metric takes the position of that same cell: for $S_{ij}$ linear in
+space the difference is then exact (with `diffusive-metric = stencil`, the metric of the
+differences of these positions: [Cell gradients of the source terms](#cell-gradients-of-the-source-terms)).
+
+- Behind a face between blocks (`101`) or of a periodic pair (`201`) the ghost cell holds $G$ of the
+  cell across, the source cell of the record (from another MPI rank by message), and the metric
+  takes its centre, plus the translation of a periodic pair. $G$ is a tensor in Cartesian
+  components: it is copied whatever the orientation of the two blocks. The cell next to the face
+  then takes the central difference of the undivided mesh, and the result does not depend on how
+  the mesh is divided into blocks or among ranks.
+- Behind a face of rotational periodicity (`200`), the ghost cell holds $R\,G\,R^{\mathsf T}$, $G$ of
+  the image cell that the velocity takes there, turned by the same rotation $R$ about $x$: a flow
+  invariant under the turn, $\mathbf{u}(R\mathbf{x}) = R\,\mathbf{u}(\mathbf{x})$, has
+  $G(R\mathbf{x}) = R\,G(\mathbf{x})\,R^{\mathsf T}$. On a 3-D sector the image is the cell next to the
+  opposite face and the metric takes its position turned; on the 2-D wedge it is the cell itself,
+  and along $k$ the metric takes the edge of the cell, as for the velocity. With a zero sector angle
+  (a planar mesh, a translated sector) the ghost cell holds a copy of the cell, as below.
+- Behind the other faces (walls, symmetry, inflow, outflow, chimera, mapped faces) the ghost cell
+  holds a copy of the gradient of the cell and the metric takes the cell itself: the difference
+  across the boundary cell is one-sided, a choice of the model.
+
+Before, every ghost cell held the copy: next to a face between blocks the cell took the one-sided
+difference (the half difference $(S_{c+1} - S_c)/2$ with the cell metric of `mean` and
+`inverse-mean`) where the undivided mesh takes the central one, so the result depended on the
+division into blocks (in the two columns of cells next to the face, on a column with a shear
+flow whose strain rate varies across it).
 
 ---
 
@@ -620,19 +652,52 @@ $$
 Z_\text{ghost} = 2\,Z_\text{wall} - Z_\text{cell}, \qquad Z = \tilde\nu,\ k,\ \omega ,
 $$
 
-with the wall values of the models above (`RANS_Extrapolate_Wall`). It is the rule of CFL3D,
+with the wall values of the models above, here of the specific variables $Z = \tilde\nu, k, \omega$
+(the ghost value of $\rho Z$ is that times the density of the ghost cell). It is the rule of CFL3D,
 «the actual wall boundary conditions for the turbulence quantities (unlike the primitive variables)
 are applied at ghost cells» (S. L. Krist, R. T. Biedron, C. L. Rumsey, *CFL3D User's Manual
-(Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). The wall flux routines set these
-values; the source terms read them in the gradients of the wall cells: the $c_{b2}$ term of SA and
-its term $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST,
-the cross-diffusion of Wilcox 2006. They do so at every stage
-and in the stiffness pass of time-accurate runs (`Turbulence_Stiffness`), which calls the wall flux
-routines for this alone (`Wall_RANS_Ghosts`). With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$
-term of the wall cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell
-that copied the cell, as MOSE did before, gave $a/2$. The other primitive variables are copied into
-the wall ghost cells, with the velocity reversed (`Ghost_Wall_Extrapolation`); the fluxes through the
-first interior faces use the second-order extrapolation of `Fill_Ghost_Cell`.
+(Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). `Fill_Ghost_Cell` sets these
+values once per stage, from the wall values of the wall flux routines (the same wall state), with
+the other ghost values of the wall ([Numerics](numerics.md), *Ghost Cells of Walls and 400 Faces*):
+the fluxes through the first interior faces and the source terms read the same ghost cells, at every
+stage. The source terms read
+them in the gradients of the wall cells: the $c_{b2}$ term of SA and its term
+$-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST, the
+cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of the wall
+cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell that copied the cell,
+as MOSE did before, gave $a/2$. Before, the wall flux routines wrote these values after the fluxes,
+for the sources only, and the fluxes saw an extrapolation of $\rho Z$. An SRM grain (`502`) takes the
+same rule for its turbulence variables, with the wall values of its flux: those of the blowing wall while
+it burns, of the wall at the flame temperature when it does not.
+
+### Cell gradients of the source terms
+
+The source terms take, in every cell, the central differences of the values along the three index
+directions and map them to Cartesian components with a cell metric. With
+`diffusive-metric = stencil` the metric is $M_s = (J_c^{T})^{-1}$ with
+$J_c^{T}(:,d) = (\mathbf{x}_{c+e_d} - \mathbf{x}_{c-e_d})/2$, the same central differences of the
+cell centres (the mean of the eight nodes): the gradient of a linear field is exact on stretched,
+skewed and non-smooth cells (along an index direction with one cell, the edge of the cell and no
+difference). On a mesh of equal parallelograms these gradients are the reference gradient of [14]
+(Eq. 1), second order on smooth structured meshes. In a wall cell, for a field that is not linear,
+the reflected ghost value $2\phi_\text{wall} - \phi_\text{cell}$ makes the gradient first order, as
+the Green–Gauss gradient is in the boundary cells of [14] (Eq. 13).
+The ghost cells sit where their value is right: those of the fluxes, at the positions
+of the face metric ([Numerics](numerics.md)); behind a wall the position of the class of the
+quantity, one metric per group: the velocity, the density (whose ghost value follows the temperature:
+exact where the pressure and the composition do not vary across the wall cell), the turbulence
+variables (a metric of their own only next to `503`–`505`, where the velocity is extrapolated and they
+take their wall value). Behind a zero-gradient face (0, 401-407, 420), whose ghost cell copies the
+cell, the position is the cell itself, so the difference across the boundary cell is one-sided. The
+strain gradient of SA-RC takes, behind the faces between blocks and of a turned sector, the position
+of the cell whose velocity gradient the ghost cell holds, and the cell itself behind the other faces
+(see SA-RC above).
+The metrics are computed once at setup (`Cell_Source_Metrics`) and chosen in one place
+(`Source_Metrics`) by the source terms of SA, SA-RC, SST, Wilcox 2006 and SSG/LRR and by the eddy
+viscosity of the output. With `inverse-mean` and `mean` the metric is that of the cell, as before:
+the central difference across a cell next to a jump of size $r$ is then wrong by $(r-1)/4$, on a
+skewed wall cell a copied density takes a normal gradient it does not have (part 5 of `MMSResiduals`),
+and next to a zero-gradient face the normal component is half the one-sided difference.
 
 ### Blowing / wall-suction correction
 
@@ -663,7 +728,7 @@ $c_{w1} f_w (\tilde\nu/d)^2$ (a factor $\cos^2\theta$: 0.97, 0.88, 0.75,
 $\omega_w = 60\nu/(\beta_1 d_1^2)$ of SST. That distance is exact only on
 meshes orthogonal to the wall, with the cell centres above the face centres.
 
-- Each face of a wall boundary (types 301, 302, 503–505) is taken as the four
+- Each face of a wall boundary (types 301, 302, 502, 503–505) is taken as the four
   triangles between its centre and its sides, which are the face itself when
   the face is plane and convex, as on every 2-D and axisymmetric mesh (on a
   plane face that is not convex, a pathological cell, the centre can fall
@@ -882,16 +947,24 @@ the first cell $\omega \approx 6\nu/(\beta_1 y^2)$ gives $\Delta t\,d \approx 24
 $\Delta t\,d \approx 1.64\,f_w\,y_1^+$ at `vnn = 0.3` ($y_1^+$ the height of the first cell in wall units): it
 vanishes as the mesh is refined, but is of order one at the usual heights.
 The sources are explicit, like the fluxes, and the local time step of each cell
-([Time Integration](time-integration.md#local-time-step)) includes their stiffness:
+([Time Integration](time-integration.md#local-time-step)) includes a bound of their stiffness:
 
 $$
-\frac{1}{\Delta t_i} = \bigl(\text{convective and diffusive rates}\bigr) + d_i ,
-\qquad d_i = \max_q \frac{\partial D_q}{\partial q} ,
+\frac{1}{\Delta t_i} = \bigl(\text{convective and diffusive rates}\bigr) + \hat d_i ,
+\qquad \hat d_i \ge d_i = \max_q \frac{\partial D_q}{\partial q} ,
 $$
 
-with the rates $d$ of the table, evaluated on the state at the start of the step (one evaluation
-of the sources before the first stage, with the wall ghost cells of the turbulence variables set
-from the wall values as in the stages). Then $\Delta t\,d \le 1$: a forward-Euler stage cannot make
+with $\hat d$ a bound of the rates $d$ of the table that the state of the cell at the start of the step gives
+alone, without gradients or ghost cells:
+
+| Model | $\hat d$ | $\hat d / d$ |
+|-------|----------|--------------|
+| SST | $\max(\beta^\ast, 2\max(\beta_1, \beta_2))\,\omega$ | $\beta = F_1\beta_1 + (1 - F_1)\beta_2$, and $F_1$ takes gradients: $\beta_2/\beta_1 = 1.10$ where $F_1 = 1$ (next to walls), 1 where $F_1 = 0$ |
+| Wilcox 2006 | $\max(\beta^\ast, 2\beta_0)\,\omega$ | $\beta = \beta_0 f_\beta$, and $f_\beta \le 1$ takes the velocity gradient: $1/f_\beta$, 1 in 2-D ($\chi_\omega = 0$), at most $1/0.85$ |
+| SA | $2\,c_{w1}\,(1 + c_{w3}^6)^{1/6}\,\tilde\nu/y^2$ | $f_w = g\,[(1 + c_{w3}^6)/(g^6 + c_{w3}^6)]^{1/6}$ grows with $g \ge 0$ towards $(1 + c_{w3}^6)^{1/6} = 2.005$: $2.005/f_w$, 1 where $r$ reaches its cap of 10, about 2 where $r \approx 1$ (an equilibrium boundary layer, where the destruction is slow against the diffusion) |
+
+($y$ the wall distance of the source, moved below a rough wall.) Then
+$\Delta t\,d \le \Delta t\,\hat d \le 1$: a forward-Euler stage cannot make
 $\tilde\nu$, $k$ or $\omega$ negative through their destruction, and neither can Heun and RK3, whose
 stages are convex combinations of forward-Euler stages (W. Hundsdorfer, *Numerical Solution of
 Advection–Diffusion–Reaction Equations*, lecture notes, 2000, §6.2, Theorem 6.4; C.-W. Shu,
@@ -915,9 +988,10 @@ under one step restriction, for every state it is applied to (ICASE Report 87-33
 Proposition 2.1), while here the restriction depends on the state through $d$, and the rates are
 those of the state at the start of the step. A stage from a state where the rate is $d_s$ takes
 $q_s - \Delta t\,(d_s/2)\,q_s$ through a quadratic destruction, positive while $\Delta t\,d_s < 2$; with
-$\Delta t\,d \le 1$ this holds as long as $d_s < 2\,d$. The margin of 2 of $\tilde\nu$ and $\omega$ therefore
-covers a rate that grows within the step up to twice its value at the start, and no more; $k$, whose
-destruction is linear, keeps only the margin by which its rate $\beta^\ast\omega$ lies below $d$. An
+$\Delta t\,\hat d \le 1$ this holds as long as $d_s < 2\,\hat d$. The margin of 2 of $\tilde\nu$ and $\omega$
+therefore covers a rate that grows within the step up to twice the bound at the start (at least twice the rate),
+and no more; $k$, whose destruction is linear, keeps only the margin by which its rate $\beta^\ast\omega$ lies below
+$\hat d$. An
 impulsive start of a $k$–$\omega$ model from a state far from the wall value of $\omega$ goes beyond
 that: during the first step the wall condition raises $\omega$ in the wall cells by orders of
 magnitude, and with the full step the explicit destruction overshoots ($\omega < 0$, then the floor
@@ -989,3 +1063,7 @@ fallback when a model's destruction Jacobian is not readily available.
     Spalart–Allmaras Turbulence Model",
     https://turbmodels.larc.nasa.gov/spalart.html (TMBWG/turbmodels commit
     20a39f5, consulted 2026-09-29): minimum distance to the wall.
+14. A. Syrakos, S. Varchanis, Y. Dimakopoulos, A. Goulas, J. Tsamopoulos, "A
+    critical analysis of some popular methods for the discretisation of the
+    gradient operator in finite volume methods," *Phys. Fluids*, 29, 127103,
+    2017, doi:10.1063/1.4997682.

@@ -46,6 +46,24 @@ In MOSE the source is:
    a build variant of the standard solver whose external per-stage callback adds
    $-\mathbf{S}\,V$ to the residual of every cell.
 
+The driver carries three more fields for the verification on general meshes,
+chosen with the environment variable `MOSE_MMS_FIELD`: `periodic2d` (the
+default, the field of this page), `periodic3d` (the same field extended in $z$,
+periodic on $[0,1]^3$) and `wall2d`, `wall3d` (periodic in $x$, and in $z$ in
+3D, with no-slip walls of prescribed temperature $T_w(x,z)$ at $y=0$ and
+$y=1$). Their sources are
+derived and checked in the same way by `test/2D/viscous/mms/mms_gen_fields.py`;
+an unknown value stops the driver at start.
+
+For an equation whose total boundary flux is zero for any state (every
+equation with the periodic fields, the mass with `wall2d` and `wall3d`) the
+face fluxes cancel in pairs, so the discrete steady problem has a solution only
+if the discrete source $\sum_i \mathbf{S}(\mathbf{x}_i)\,V_i$ is zero; at the cell
+centres it is zero only to the accuracy of the midpoint rule. For those
+equations the driver removes the mean of the discrete source over the domain
+once at start (one mean per grid level) and writes it to the log; on the
+Cartesian meshes of this page the mean is at round-off level.
+
 ## Manufactured field
 
 A smooth, periodic field is prescribed on the unit square $[0,1]^2$ with

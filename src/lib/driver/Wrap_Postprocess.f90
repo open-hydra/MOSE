@@ -27,6 +27,7 @@ contains
     use MOSE_Mod_MPI,        only: mpi_is_root
     use MOSE_Mod_Timers,     only: timer_summary
     use MOSE_Lib_Newstate,   only: Report_Negative_Turbulence
+    use MOSE_Lib_Ghost,      only: Report_Wall_Ghosts
     use IR_precision
     implicit none
     type(MOSE_simulation_type), intent(inout) :: simulation
@@ -131,6 +132,9 @@ contains
 
       ! Negative turbulence variables after a stage, over the run (collective)
       call Report_Negative_Turbulence()
+
+      ! Cuts and floors of the ghost cells of walls and 400 faces, over the run (collective)
+      call Report_Wall_Ghosts()
 
       ! Write output solution (collective — all ranks participate in gather)
       call Write_Solution ( simulation%domain(1), simulation%IOfield(1), solfile )

@@ -57,6 +57,21 @@
 #     next to the axis it must match the hoop stress 2 mu u_r/r^2) and axial
 #     components, the azimuthal one staying zero; swirl, the radial and
 #     azimuthal components on the cells with r >= L/2, the axial one exact.
+#     Axis at r = 0 on the wedge: the faces of the wedge would get the hoop
+#     stress of the first row wrong, so a viscous run must stop at setup and
+#     say why, with diffusive-metric = stencil and inverse-mean; so must a
+#     viscous run on a 3-D sector closed by type 200 on its k faces (homann,
+#     four cells of 1 degree, wedge_viscous.py sector) with the axis at r = 0,
+#     where the faces of type 200 of the first row see half of d u_r/dr as
+#     on the wedge. Polar line of
+#     a 3-D mesh (360 degrees around the axis, axis at r = 0): with symmetry on
+#     the axis the viscous force of a linear velocity field must vanish to
+#     round-off, next to the axis too (diffusive-metric = stencil); with
+#     inverse-mean and mean, whose viscous force of the first row grows as the
+#     mesh is refined there, a viscous run must stop at setup and name stencil;
+#     with a wall on the axis the run must
+#     stop at setup with the message that names the face and the remedy
+#     (symmetry on the axis), without NaN before it.
 #  5. Spalart-Allmaras next to a wall (wall_gradient.py): a column of fluid
 #     at rest over an isothermal wall with nu~ = a y, chi below 1e-3: the
 #     linear profile is an equilibrium of the Spalart-Allmaras equation
@@ -66,6 +81,14 @@
 #     too: there the source terms must see grad nu~ = a, from the wall
 #     value nu~ = 0 (ghost cell -nu~), not a/2 from a ghost cell that
 #     copies the cell.
+#     The same with cells growing by 1.2 from the wall, and on skewed cells
+#     (2-D and 3-D) with the density linear along the wall, where the density
+#     of the ghost cell of the wall follows its temperature and the terms in
+#     grad rho must stay zero. SA-RC, on the uniform column with a shear flow
+#     whose strain rate varies along x: the column as two blocks, and as two
+#     blocks with the indices of the second permuted, gives the change of rho
+#     nu~ of one block to round-off (the ghost cells of the face between the
+#     blocks hold the velocity gradient of the cell across, at its position).
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -243,8 +266,7 @@ for kind in rest stream; do
   fi
 done
 
-echo "-- 4. viscous stress on the 2-D axisymmetric wedge, 32 x 32 and 64 x 64 cells --"
-# wedge_ini <equations>: one explicit Euler step with local time stepping
+# wedge_ini <equations> [diffusive-metric]: one explicit Euler step with local time stepping
 wedge_ini() {
   cat > input.ini <<EOF
 [MOSE-Parameters]
@@ -266,7 +288,9 @@ space-reconstruction = MUSCL
 flux-limiter = vanleer
 riemann-solver = HLLC
 EOF
+  if [[ -n ${2:-} ]]; then echo "diffusive-metric = $2" >> input.ini; fi
 }
+
 # wedge_step <equations> <tag>: run it, keep OUTPUT/diagnostic.tec as OUTPUT/diagnostic-<tag>.tec
 wedge_step() {
   wedge_ini "$1"
@@ -279,6 +303,8 @@ wedge_step() {
   fi
   cp OUTPUT/diagnostic.tec "OUTPUT/diagnostic-$2.tec"
 }
+
+echo "-- 4. viscous stress on the 2-D axisymmetric wedge, 32 x 32 and 64 x 64 cells --"
 for field in homann swirl; do
   errors=()
   for n in 32 64; do
@@ -286,22 +312,86 @@ for field in homann swirl; do
     wedge_step navier-stokes "$field-ns-n$n"
     wedge_step euler "$field-eu-n$n"
     errors+=("$(python3 -B wedge_viscous.py error "$field" "OUTPUT/diagnostic-$field-ns-n$n.tec" \
-                                                       "OUTPUT/diagnostic-$field-eu-n$n.tec")")
+                                                    "OUTPUT/diagnostic-$field-eu-n$n.tec")")
   done
+
   if [[ $field == homann ]]; then
-    echo "   Homann's stagnation-point flow"
+    echo "-- viscous force on Homann's stagnation-point flow, 2-D axisymmetric wedge --"
   else
-    echo "   a polynomial field with dilatation and swirl"
+    echo "-- viscous force on a polynomial field with dilatation and swirl, 2-D axisymmetric wedge --"
   fi
   if python3 -B wedge_viscous.py check "$field" "${errors[0]}" "${errors[1]}"; then
-    echo "  [ok  ] $field: second-order agreement"
+    echo "  [ok  ] second-order agreement"
   else
-    echo "  [FAIL] $field: the viscous force on the wedge is not the Navier-Stokes one"
+    echo "  [FAIL] the viscous force on the wedge is not the Navier-Stokes one"
     fail=1
   fi
 done
 
-echo "-- 5. Spalart-Allmaras next to a wall: right-hand side of rho nu~ for a linear profile --"
+echo "-- the axis at r = 0 on the wedge (homann, N = 32): a declared stop of the viscous runs --"
+python3 -B wedge_viscous.py case homann 32 axis0 || exit 1
+for metric in stencil inverse-mean; do
+  wedge_ini navier-stokes "$metric"
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/axis0-$metric.log" 2>&1
+  if python3 -B wedge_viscous.py axisstop "OUTPUT/axis0-$metric.log"; then
+    echo "  [ok  ] $metric: the run stops at setup and says why"
+  else
+    echo "  [FAIL] $metric: no stop with the message on the axis at r = 0 (see OUTPUT/axis0-$metric.log)"
+    fail=1
+  fi
+done
+
+echo "-- the axis at r = 0 on a 3-D sector (homann, N = 32, 4 cells of 1 degree): a declared stop of the viscous runs --"
+python3 -B wedge_viscous.py sector 32 axis0 || exit 1
+for metric in stencil inverse-mean; do
+  wedge_ini navier-stokes "$metric"
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/sector-axis0-$metric.log" 2>&1
+  if python3 -B wedge_viscous.py sectorstop "OUTPUT/sector-axis0-$metric.log"; then
+    echo "  [ok  ] $metric: the run stops at setup and says why"
+  else
+    echo "  [FAIL] $metric: no stop with the message on the axis at r = 0 of the sector (see OUTPUT/sector-axis0-$metric.log)"
+    fail=1
+  fi
+done
+
+echo "-- polar line of a 3-D mesh, symmetry on the axis: a linear velocity field --"
+python3 -B wedge_viscous.py polar 300 || exit 1
+wedge_step navier-stokes polar-300-ns
+wedge_step euler polar-300-eu
+if python3 -B wedge_viscous.py linear OUTPUT/diagnostic-polar-300-ns.tec OUTPUT/diagnostic-polar-300-eu.tec; then
+  echo "  [ok  ] no viscous force, next to the axis too"
+else
+  echo "  [FAIL] the viscous force of a linear field does not vanish on the polar mesh"
+  fail=1
+fi
+
+echo "-- polar line of a 3-D mesh, symmetry on the axis, inverse-mean and mean: a declared stop of the viscous runs --"
+for metric in inverse-mean mean; do
+  wedge_ini navier-stokes "$metric"
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/polar-300-$metric.log" 2>&1
+  if python3 -B wedge_viscous.py polarstop "OUTPUT/polar-300-$metric.log" "$metric"; then
+    echo "  [ok  ] $metric: the run stops at setup and names stencil"
+  else
+    echo "  [FAIL] $metric: no stop with the message on the polar line (see OUTPUT/polar-300-$metric.log)"
+    fail=1
+  fi
+done
+
+echo "-- polar line of a 3-D mesh, wall on the axis: a declared limit of the stencil metric --"
+python3 -B wedge_viscous.py polar 302 || exit 1
+wedge_ini navier-stokes
+rm -f OUTPUT/diagnostic.tec
+"$LOCAL" > OUTPUT/polar-302.log 2>&1
+if python3 -B wedge_viscous.py stopped OUTPUT/polar-302.log; then
+  echo "  [ok  ] the run stops at setup, names the face and the remedy"
+else
+  echo "  [FAIL] the run does not stop with the message on the wall faces of the axis (see OUTPUT/polar-302.log)"
+  fail=1
+fi
+
 cat > input.ini <<EOF
 [MOSE-Parameters]
 iter-threshold = 1
@@ -326,16 +416,74 @@ space-reconstruction = MUSCL
 flux-limiter = vanleer
 riemann-solver = HLLC
 EOF
-python3 -B wall_gradient.py case || exit 1
-rm -f OUTPUT/field.tec OUTPUT/diagnostic.tec
-"$LOCAL" > OUTPUT/wall-gradient.log 2>&1
-if [[ ! -f OUTPUT/field.tec || ! -f OUTPUT/diagnostic.tec ]] || grep -a -qE 'NaN|Integration failed' OUTPUT/wall-gradient.log; then
-  echo "  [FAIL] the run did not complete (see OUTPUT/wall-gradient.log)"
-  fail=1
-elif python3 -B wall_gradient.py check OUTPUT/field.tec OUTPUT/diagnostic.tec; then
+
+# solve <case> [uni]: one explicit step, outputs kept as OUTPUT/wall-{field,diagnostic}-<case>[-uni].tec
+solve() {
+  local tag="$1${2:+-$2}"
+  python3 -B wall_gradient.py case "$@" || exit 1
+  rm -f OUTPUT/field.tec OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/wall-run-$tag.log" 2>&1
+  if [[ ! -f OUTPUT/field.tec || ! -f OUTPUT/diagnostic.tec ]] || grep -a -qE 'NaN|Integration failed' "OUTPUT/wall-run-$tag.log"; then
+    echo "  [FAIL] the run $tag did not complete (see OUTPUT/wall-run-$tag.log)"
+    echo "MMSResiduals: FAILED"
+    exit 1
+  fi
+  mv OUTPUT/field.tec "OUTPUT/wall-field-$tag.tec"
+  mv OUTPUT/diagnostic.tec "OUTPUT/wall-diagnostic-$tag.tec"
+}
+
+echo "-- 5. Spalart-Allmaras next to a wall: right-hand side of rho nu~ for a linear profile --"
+solve uniform
+if python3 -B wall_gradient.py check OUTPUT/wall-field-uniform.tec OUTPUT/wall-diagnostic-uniform.tec; then
   echo "  [ok  ] the source terms see the wall value nu~ = 0 in the wall cells"
 else
-  echo "  [FAIL] the source terms of the wall cells see a wrong gradient of nu~"
+  echo "  [FAIL] the source terms of the wall cells see a wrong gradient of nu~"; fail=1
+fi
+
+echo "-- the same on cells growing by 1.2 from the wall --"
+solve stretched
+if python3 -B wall_gradient.py check OUTPUT/wall-field-stretched.tec OUTPUT/wall-diagnostic-stretched.tec stretched; then
+  echo "  [ok  ] the cell gradients take the differences of the cell centres"
+else
+  echo "  [FAIL] the cell gradients of the stretched cells are wrong"; fail=1
+fi
+
+echo "-- skewed cells, rho linear along the wall: the terms in grad rho (2-D and 3-D) --"
+for case in skewed skewed3d; do
+  solve "$case"
+  solve "$case" uni
+  if python3 -B wall_gradient.py checkdiff "$case" "OUTPUT/wall-field-$case.tec" "OUTPUT/wall-diagnostic-$case.tec" \
+       "OUTPUT/wall-field-$case-uni.tec" "OUTPUT/wall-diagnostic-$case-uni.tec"; then
+    echo "  [ok  ] $case: the density of the wall ghost cells sits where its value is right"
+  else
+    echo "  [FAIL] $case: grad rho of the wall cells takes a wrong normal component"; fail=1
+  fi
+done
+
+echo "-- SA-RC: the shear column as one block, as two blocks, with permuted indices --"
+sed -i 's/^turbulence = SA$/turbulence = SA-RC/' input.ini
+printf '\n[MOSE-IO]\nsol-format = vtk raw\n' >> input.ini
+# sarc <layout>: one explicit step, the field kept as OUTPUT/wall-sarc-<layout>/{field.vtm,vtk}
+sarc() {
+  python3 -B wall_gradient.py case shear "$1" || exit 1
+  rm -rf OUTPUT/field.vtm OUTPUT/vtk "OUTPUT/wall-sarc-$1"
+  mkdir -p OUTPUT/vtk "OUTPUT/wall-sarc-$1"
+  "$LOCAL" > "OUTPUT/wall-run-sarc-$1.log" 2>&1
+  if [[ ! -f OUTPUT/field.vtm ]] || grep -a -qE 'NaN|Integration failed|ABORT' "OUTPUT/wall-run-sarc-$1.log"; then
+    echo "  [FAIL] the SA-RC run $1 did not complete (see OUTPUT/wall-run-sarc-$1.log)"
+    return 1
+  fi
+  mv OUTPUT/field.vtm OUTPUT/vtk "OUTPUT/wall-sarc-$1/"
+}
+if sarc one; then
+  for layout in two permuted; do
+    if sarc "$layout" && python3 -B wall_gradient.py sarcsame OUTPUT/wall-sarc-one "OUTPUT/wall-sarc-$layout" "$layout"; then
+      echo "  [ok  ] $layout: the result of one block (the ghost cells of the cut hold the gradient of the cell across)"
+    else
+      echo "  [FAIL] $layout: the result depends on the division of the column into blocks"; fail=1
+    fi
+  done
+else
   fail=1
 fi
 

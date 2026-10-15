@@ -16,7 +16,9 @@ Cases, written into INPUT/ (one at a time) by `python3 -B make_case.py CASE`:
   pos-SST    SST with omega-wall-bc = practical, omega ten times the asymptotic value within 20 um of the wall;
              both on a mesh with cells of 2 um at the wall and no thin cells elsewhere: the turbulence decays near the
              wall faster than the transport acts, so without a step limit an explicit stage would make nu~, k or omega
-             negative.
+             negative. Their first step must be the rule of Compute_dt on the initial state with the bound of the
+             stiffness of the destruction that the state of each cell gives alone (first_step): SA 2 c_w1
+             (1 + c_w3^6)^(1/6) nu~/y^2, SST max(beta*, 2 max(beta_1, beta_2)) omega.
 The turbulence profiles fade out as exp(-(y/0.4 mm)^4): beyond 1 mm from the wall nu~, k and omega take uniform
 free-stream values (rho nu~ = rho k = 2e-10, twice the realizability floor; omega = 1e-2 1/s), so the turbulence and its
 stiffness vanish there and nothing diffuses into the thin cells at the symmetry plane.
@@ -68,6 +70,9 @@ DELTA_U = 2.0e-4
 UTAU = math.sqrt(NU * U / DELTA_U)  # from the wall shear of the tanh profile
 KAPPA, BETA1, BETASTAR = 0.41, 0.075, 0.09
 CV1, SIGMA = 7.1, 2.0 / 3.0         # Spalart-Allmaras
+CB1, CB2, CW3 = 0.1355, 0.622, 2.0
+CW1 = CB1 / KAPPA ** 2 + (1.0 + CB2) / SIGMA
+BETA2 = 0.0828                      # SST, outer beta
 NUT_INF = K_INF = 2.0e-10 / RHO0
 OMEGA_INF = 1.0e-2
 NW, DXW = 6, 2.0 ** -10             # case wilcox: cube of NW^3 cells of DXW m
@@ -256,6 +261,34 @@ def transport_step(case, cfl, vnn):
     return best
 
 
+def first_step(case, cfl, vnn):
+    """First global step of a time-accurate run of the case: the smallest local step of the initial state, the rule of
+    transport_step plus, as Compute_dt adds it, the bound of the stiffness of the destruction from the state of the cell
+    alone (RANS_Stiffness_Bound): SA 2 c_w1 (1 + c_w3^6)^(1/6) nu~/y^2, SST max(beta*, 2 max(beta_1, beta_2)) omega,
+    y the distance of the cell centre from the wall."""
+    y = nodes_y(case.split("-")[0])
+    yc = [0.5 * (y[j] + y[j + 1]) for j in range(len(y) - 1)]
+    u, rans = profiles(case, yc)
+    c = math.sqrt(CP / (CP - RGAS) * P0 / RHO0)
+    cv = CP - RGAS
+    best = math.inf
+    for j in range(len(yc)):
+        h = y[j + 1] - y[j]
+        if len(rans) == 1:
+            chi = rans[0][j] / MU
+            mut = rans[0][j] * chi ** 3 / (chi ** 3 + CV1 ** 3)
+            extra = (MU + rans[0][j]) / (SIGMA * RHO0)
+            stiff = 2.0 * CW1 * (1.0 + CW3 ** 6) ** (1.0 / 6.0) * (rans[0][j] / RHO0) / yc[j] ** 2
+        else:
+            mut = rans[0][j] / (rans[1][j] / RHO0)
+            extra = 0.0
+            stiff = max(BETASTAR, 2.0 * max(BETA1, BETA2)) * rans[1][j] / RHO0
+        dmax = max(4.0 / 3.0 * (MU + mut) / RHO0, (KL + mut * CP / PRT) / (RHO0 * cv), extra)
+        rate = ((abs(u[j]) + c) / DX + c / h) / cfl + dmax * (1.0 / DX ** 2 + 1.0 / h ** 2) / vnn + stiff
+        best = min(best, 1.0 / rate)
+    return best
+
+
 def omega_wall(model):
     """The asymptotic wall value of omega of a model at the centre of a wall cell, 6 nu/(beta d^2), d = DYW/2."""
     return 6.0 * NU / (BETA_WALL[model] * (0.5 * DYW) ** 2)
@@ -354,8 +387,9 @@ def order(model, scheme, f1, f2, f4):
 
 
 def pos(case, cfl, vnn, log):
-    """The run ends, the solver reports no negative turbulence value after a stage, and its step was limited by the
-    turbulence sources at some point (smallest step below half the transport step of the initial state)."""
+    """The run ends, the solver reports no negative turbulence value after a stage, its step was limited by the
+    turbulence sources at some point (smallest step below half the transport step of the initial state), and its first
+    step is the rule with the bound of the stiffness of each cell (first_step), within 1e-6."""
     text = open(log, errors="replace").read()
     ok = True
     m = re.search(r'Turbulence variables below zero after a stage[^\n]*?(\d+)\s*$', text, re.M)
@@ -373,6 +407,13 @@ def pos(case, cfl, vnn, log):
         print(f"    smallest step {min(steps):.4e} s, transport step of the initial state {tr:.4e} s, ratio {ratio:.3f}")
         if not ratio < 0.5:
             print("    [FAIL] the step was never limited by the turbulence sources: the case does not test them")
+            ok = False
+        want = first_step(case, cfl, vnn)
+        err = abs(steps[0] / want - 1.0)
+        print(f"    first step {steps[0]:.6e} s, rule with the bound of the stiffness of each cell {want:.6e} s, relative "
+              f"difference {err:.1e}")
+        if not err < 1.0e-6:
+            print("    [FAIL] the first step is not the rule with the bound of the stiffness of the cells")
             ok = False
     else:
         print("    [FAIL] no step in the solver output")

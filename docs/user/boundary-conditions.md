@@ -119,7 +119,8 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
     faces is applied as well ($-\tau_{\theta\theta}/r$ in the radial momentum, see
     [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge-bc-200)). Keep the wedge thin: the azimuthal
     derivatives carry an error of order $\delta^2$. With more than one cell in $k$, type `200` is a rotational
-    periodicity, inviscid flux only.
+    periodicity: faces 5 and 6 make one interior face of the whole annulus, with its inviscid and viscous fluxes (see
+    [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge-bc-200)).
 
 ### Inlet / Outlet
 
@@ -211,6 +212,13 @@ with fewer values than listed above or with an empty one.
 | `k_rough` | Sand-grain roughness height $k_s$ [m] (`0.0` for smooth wall). Modelled with SA only ([SA-rough](../theory/turbulence.md#rough-walls-sa-rough)) |
 | `eps_wall` | Wall emissivity (0–1) |
 
+The wall output, `OUTPUT/wall.tec`, writes the same quantities on every face of every wall, oriented into the gas: the
+stress `tauX`, `tauY`, `tauZ` is the traction of the gas on the wall, $\boldsymbol{\tau}\cdot\mathbf{n}$ with
+$\mathbf{n}$ the unit normal into the gas (along the flow under an attached boundary layer); the heat flux `qw` is
+positive into the gas, as `q_wall` (a `301` wall writes its `q_wall`, a `503` wall that melts minus the heat its surface
+absorbs, conducted and radiated, the other walls the heat they conduct into the gas); the mass flux `mdot` of the walls
+`503`–`505` is positive into the gas, the mass the surface blows in.
+
 ### Physical Models
 
 | Type | Name | Data line |
@@ -260,6 +268,15 @@ the surface reactions alone.
     ablation takes place.  The same fallback — an impermeable wall — is used
     whenever the flow cannot sustain the process; see
     [Inert surfaces](../theory/gsi.md#inert-surfaces).
+
+!!! note
+    With a RANS model (`turbulence` set) the gas a `502` grain injects carries
+    the turbulence values of a smooth wall: $\tilde\nu = 0$ (Spalart–Allmaras),
+    $k = 0$ and the wall value of $\omega$ (SST, Wilcox 2006), whose distance is
+    the wall distance of the cell. The grain is a wall for the wall distance of
+    the turbulence models, as the walls `301`, `302` and `503`–`505`. The ghost
+    cells behind the grain take these wall values, as behind a wall; a grain that
+    does not burn is a wall at the flame temperature.
 
 !!! warning
     Type `505` requires a thermodynamic table containing O₂, CO₂, CO, H₂O, H₂,

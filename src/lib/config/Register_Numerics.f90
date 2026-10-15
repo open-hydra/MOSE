@@ -81,10 +81,14 @@ contains
     call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, '', &
           'Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order)', &
           'vanalbada, minmod, superbee, vanleer, mc', .false. )
-    call reg%add( trim(section), 'diffusive-metric', obj_space_scheme%diffusive_metric, 'inverse-mean', &
-                  'Face metric of the interior viscous fluxes: inverse-mean is exact on stretched meshes, '// &
-                  'mean is faster but overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r', &
-                  'inverse-mean, mean', .false. )
+    call reg%add( trim(section), 'diffusive-metric', obj_space_scheme%diffusive_metric, 'stencil', &
+                  'Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of '// &
+                  'the cell centres as the face gradient, exact for a linear field on any mesh except at the k faces '// &
+                  'of type 200 and at the chimera faces (102), which take inverse-mean with every value; inverse-mean takes the '// &
+                  'mean edges of the two cells, exact on a stretching normal to the face only; mean also overstates '// &
+                  'the gradient by (1+r)^2/(4r) at a cell-size ratio r; inverse-mean and mean do not converge next to '// &
+                  'a symmetry plane (300) that bounds a sector of a polar mesh', &
+                  'stencil, inverse-mean, mean', .false. )
 
     ! Shock Detector ---------------------------------------
     obj_shock_detector%warning_message = 'none'

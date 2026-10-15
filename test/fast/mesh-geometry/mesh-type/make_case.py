@@ -2,10 +2,10 @@
 
 MOSE takes the type of the mesh from its nodes: 1-D, 2-D or 3-D from the number of cells in j and k, and on a 2-D mesh
 an axisymmetric wedge when the k = 1 node plane is the k = 0 plane turned about the x axis (the angle delthe of the
-wedge); on a 3-D mesh delthe is the angle of the sectors closed by the rotational periodicity (type 200).
-The nodes are checked relative to the thickness of the block, so that their
+wedge); on a 3-D mesh delthe is the angle of the sectors closed by the rotational periodicity (type 200). A cell folded
+at a corner stops the run at set-up. The nodes are checked relative to the thickness of the block, so that their
 round-off, with the digits they are written with, does not change the type: relative to the move of the nodes per cell in k
-(the thickness of a 2-D block). Ten cases:
+(the thickness of a 2-D block). Thirteen cases:
   slab      2-D plane slab, z from -0.5 to 0.5, y falling from 1 (j = 0) to 0.5 (j = NJ), wall (301) on the j = NJ face,
             symmetry (300) elsewhere. Its k = 1 plane is a translation of the k = 0 plane, not a rotation, so the mesh
             is plane. The wall distance, read back from the Spalart-Allmaras source (gas at rest, nu~ uniform, one
@@ -40,12 +40,23 @@ round-off, with the digits they are written with, does not change the type: rela
             k = NK plane being a translation of the k = 0 plane) and extrapolation (400) on the other faces; uniform
             flow (100, 50, 0) m/s. Five explicit steps must leave the flow uniform within 1e-12 of |u|; a rotation of
             the periodic images would turn v into w.
-Gas: test/common/Air-viscous (slab, flipwedge, at 300 K and 1 kPa with nu~ = nu) and test/common/Air (mixed, slab3d, at
-1 bar and 300 K).
+  folded    plane 2-D block of 4 x 4 unit cells, z from -0.05 to 0.05, with the interior node (2, 2) moved to (2.8, 2.8):
+            the cell (3, 3) is folded at that corner, where its edges along i and j are (0.2, -0.8) and (-0.8, 0.2),
+            Jacobian -0.6 dz, while the determinant of its mean edges stays +0.2 dz (the other cells at that node keep
+            positive Jacobians). The run must stop at set-up with a non-zero exit code and a message on the folded cell.
+  folded3d  the same in 3-D: 3 x 3 x 3 unit cells with the interior node (2, 2, 2) moved to (2.8, 2.8, 2.8); the cell
+            (3, 3, 3) has the Jacobian -1.4 at that corner and +0.40 from its mean edges.
+  folded-real  one cell of a real 3-D mesh, its eight nodes to 17 digits, as a block of its own: at its corner node
+            (1, 0, 0) e_i . (e_j x e_k) = -0.097 |e_i| |e_j| |e_k|, while the determinant of its mean edges is +0.70
+            times the product of their lengths. The run must stop as for folded.
+            The three with symmetry (300) on every face and the gas at rest.
+Gas: test/common/Air-viscous (slab, flipwedge, at 300 K and 1 kPa with nu~ = nu) and test/common/Air (mixed, slab3d, folded,
+folded3d, folded-real, at 1 bar and 300 K).
 
 Usage (from the test directory):
   python3 -B make_case.py case NAME          INPUT/ic.tec and INPUT/bc.txt of slab, flipwedge, wedge5, farslab,
-                                             coarsewedge, tiltslab, sectorshift100, sectorshift20, mixed or slab3d
+                                             coarsewedge, tiltslab, sectorshift100, sectorshift20, mixed, slab3d, folded,
+                                             folded3d or folded-real
   python3 -B make_case.py error NAME FILE    largest relative error of the distance read from FILE (a diagnostic.tec)
   python3 -B make_case.py uniform FILE       largest change of u, v, w over |u| in FILE (a field.tec), and of rho and p
 """
@@ -167,6 +178,32 @@ def slab3d_nodes():
             for k in range(nk + 1)]
 
 
+def folded_nodes():
+    n = 4
+    nodes = [[[(float(i), float(j), (-0.05, 0.05)[k]) for i in range(n + 1)] for j in range(n + 1)] for k in range(2)]
+    for k in range(2):
+        nodes[k][2][2] = (2.8, 2.8, nodes[k][2][2][2])
+    return nodes
+
+
+def folded3d_nodes():
+    n = 3
+    nodes = [[[(float(i), float(j), float(k)) for i in range(n + 1)] for j in range(n + 1)] for k in range(n + 1)]
+    nodes[2][2][2] = (2.8, 2.8, 2.8)
+    return nodes
+
+
+# A cell of a real 3-D mesh, folded at its corner node (1, 0, 0): x, y, z of the node (i, j, k) at [k][j][i]
+FOLDED_REAL = [[[(-0.050000000000000003, 0.0059886049610627734, 0.0062761889739857491),
+                 (-0.048648310718196912, 0.0058982035576106316, 0.0064574859741103486)],
+                [(-0.050000000000000003, 0.0062120597396578018, 0.0065369515269426363),
+                 (-0.048466262263265038, 0.0062443166654573435, 0.0065757628416202515)]],
+               [[(-0.050000000000000003, 0.0056361013459718182, 0.006454291036552812),
+                 (-0.048117931145821025, 0.0055251196707308122, 0.0063669197326277852)],
+                [(-0.050000000000000003, 0.0058289821330606319, 0.0066868137376362245),
+                 (-0.048629008991922289, 0.0057959456493892015, 0.0065895869946917766)]]]
+
+
 def write_ic(blocks, cellvalues, names, digits=17):
     """blocks: list of node arrays [k][j][i] of (x, y, z); cellvalues: per block, list of columns; the coordinates with
     the given number of significant digits."""
@@ -211,6 +248,20 @@ def faces_2d(b, ni, nj, types):
         for j in range(1, nj + 1):
             for i in range(1, ni + 1):
                 add(i, j, face, types[4])
+    return out
+
+
+def faces_3d(b, ni, nj, nk, t):
+    """Records of the six faces of a 3-D block, all of type t (not a wall)."""
+    out = []
+    for k in range(1, nk + 1):
+        for j in range(1, nj + 1):
+            out += [rec(b, 1, j, k, 1, t), rec(b, ni, j, k, 2, t)]
+        for i in range(1, ni + 1):
+            out += [rec(b, i, 1, k, 3, t), rec(b, i, nj, k, 4, t)]
+    for j in range(1, nj + 1):
+        for i in range(1, ni + 1):
+            out += [rec(b, i, j, 1, 5, t), rec(b, i, j, nk, 6, t)]
     return out
 
 
@@ -279,6 +330,15 @@ def write_case(name):
         for j in range(1, nj + 1):
             for i in range(1, ni + 1):
                 recs += [rec(1, i, j, 1, 5, 200), rec(1, i, j, nk, 6, 200)]
+    elif name == "folded":
+        write_ic([folded_nodes()], [eu], ["rho1", "u", "v", "w", "p"])
+        recs = faces_2d(1, 4, 4, (300, 300, 300, 300, 300))
+    elif name == "folded3d":
+        write_ic([folded3d_nodes()], [eu], ["rho1", "u", "v", "w", "p"])
+        recs = faces_3d(1, 3, 3, 3, 300)
+    elif name == "folded-real":
+        write_ic([FOLDED_REAL], [eu], ["rho1", "u", "v", "w", "p"])
+        recs = faces_3d(1, 1, 1, 1, 300)
     else:
         sys.exit(f"unknown case {name}")
     with open("INPUT/bc.txt", "w") as f:

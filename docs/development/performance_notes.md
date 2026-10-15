@@ -349,12 +349,66 @@ is therefore **bit-identical** to the old loop. With the records in any other
 order the solution is now the one of the sorted file, and deterministic; the
 old loop summed the faces of a corner cell in file order and, with more than
 one thread, could even give a different solution from run to run (two threads
-updating the same corner cell). The turbulence ghosts set by the time step
-(`Wall_RANS_Ghosts`) walk the same lists, and the wall output (`IO_Wall`) groups
-all the records by block and face before laying them out, so neither depends on
-the order of the file either. `test/mpi/boundary-records` checks ranks × threads
+updating the same corner cell). The wall output (`IO_Wall`) groups all the
+records by block and face before laying them out, so it does not depend on the
+order of the file either. `test/mpi/boundary-records` checks ranks × threads
 layouts and the reversed file with and without threads, the wall output and a
 Spalart–Allmaras run included.
+
+### 7. Viscous kernels compute each quantity once
+
+The viscous fluxes computed again, at every face that read them, quantities
+that do not change within a stage or at all. Four changes, each doing the same
+operations on the same values, once:
+
+- the metric of the faces of type `200` (the wedge faces of an axisymmetric
+  mesh and the faces that close a 3-D sector), three 3×3 inversions per face
+  and stage, is computed once at set-up (`Rotational_Periodic_Face_Metric`);
+- the cosine and sine of the periodicity angle, up to twenty calls per face of
+  type `200` and stage, are computed once when the mesh is read;
+- with `diffusive-metric = stencil` the stored metric of each viscous face is
+  read in place, not copied into a local 3×3 at every face and stage;
+- the viscous variables of each cell (mass fractions, velocity, temperature
+  and turbulence variables per unit mass) are computed once per stage
+  (`Viscous_Variables`, array `Visc`), not at every face that reads the cell:
+  up to 30 times per cell and stage in 3-D.
+
+Solver time per iteration (`Solver per iteration`, rule 5) on the axisymmetric
+nozzle of entry 6 (Navier–Stokes, RK3 time-accurate), ifx RELEASE
+(`-ipo -ffast-math`), OpenMP threads pinned to one socket of the node with its
+memory, the two builds interleaved on the same cores (rule 1): with
+Spalart–Allmaras and with SST the time per iteration is lower after the four
+changes, by more than the spread of the repetitions of each build. The other
+sockets of the node ran other jobs, the same for both builds. A control case, on
+inviscid flows that the four changes do not touch (PrandtlMeyer and the
+isentropic vortex), ran with the same builds and protocol and stayed within the
+spread of its runs: the gain comes from the viscous kernels the changes touch,
+not from a general effect of the build. A VTune hotspots profile of each build
+(rule 6: the breakdown within one binary) shows the work removed: in the build
+after, the viscous variables of the rotational faces, `viscous_face_metric` and
+`sincos` no longer appear, `inverse3` no longer runs per face, and
+`Viscous_Variables` appears, once per stage.
+
+Output (rules 2–4). Each of the four changes writes the same bits as its parent
+with gfortran (TESTING, the fast tier), and with ifx: the first one with the
+RELEASE flags already, the others built with `-fp-model=strict`, which is
+`-fp-model=precise` without contractions as rule 4 asks, and also enables
+`fenv_access` (the tests with viscous faces; the whole tier for the last
+change): the work is the same. With the ifx RELEASE flags (`-fp-model fast=2`)
+outputs of viscous tests differ at round-off, for the second, the third and the
+last change. For those, per variable, with the components of a vector against
+the scale of the vector:
+
+- fields: round-off of the scale;
+- wall output: round-off, except y+, in a patch test where the wall stress of
+  some faces is round-off and y+ takes its square root;
+- the binary `.vts` outputs, decoded: round-off;
+- the four largest outputs (the diagnostic files of the 64 × 64 cases of
+  parts 1 and 4 of `MMSResiduals`): round-off;
+- residuals (diagnostic files and residual histories): where a run has
+  converged or its gas is at rest they are round-off themselves, and differ by
+  up to their own size (the ω residual of `PointImplicitSteady`, a column of
+  the residual history of `AblatingWall`).
 
 ---
 

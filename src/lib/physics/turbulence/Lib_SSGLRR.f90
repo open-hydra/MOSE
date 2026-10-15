@@ -44,17 +44,21 @@ contains
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
     use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
+    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
     implicit none
-    type(MOSE_domain_type), intent(inout) :: domain
+    type(MOSE_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:), Mt(:,:,:)   ! cell metrics of the sources (Source_Metrics)
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
+      call Source_Metrics ( domain % blk(b), Mi, Mt=Mt )
       call SSGLRR_Blk ( domain % blk(b) % P,    &
                         domain % blk(b) % r,    &
-                        domain % blk(b) % M,    &
+                        Mi, Mt,                &
                         domain % blk(b) % vol,  &
                         domain % blk(b) % yn,   &
                         domain % blk(b) % dim   )
@@ -64,7 +68,7 @@ contains
   end subroutine SSGLRR_Source_Terms
 
   
-  subroutine SSGLRR_Blk ( Prim, Res, M, Volume, walldist, n )
+  subroutine SSGLRR_Blk ( Prim, Res, M, Mt, Volume, walldist, n )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use MOSE_Lib_Fluid
@@ -77,6 +81,7 @@ contains
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: walldist
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
+    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variables
     ! Local
     integer :: i, j, k, ii, jj, kk
     real(R8) :: rho, Rgas, mil, rhoRij(3,3), omega, kappa, rhoe, dist
@@ -130,7 +135,7 @@ contains
       Grad(8,1) = 0.5d0 * Sum ( Grad(1:3,1) )
       Grad(8,2) = 0.5d0 * Sum ( Grad(1:3,2) )
       Grad(8,3) = 0.5d0 * Sum ( Grad(1:3,3) )
-      Grad = Matmul ( Grad, M(i,j,k) % c )
+      Grad = Matmul ( Grad, Mt(i,j,k) % c )
 
       ! Strain tensor Sij, Sij*, and vorticity tensor Wij 
       Divel = Gradvel(1,1) + Gradvel(2,2) + Gradvel(3,3) 
@@ -283,6 +288,19 @@ contains
     rhok = 0.5d0 * Sum( var(1:3) )
     mi_t = rhok / w
   end subroutine SSGLRR_Eddy_Viscosity
+
+
+  !> The time step takes no stiffness of the sources of SSG/LRR (none was derived for them): 0.
+  pure function SSGLRR_Stiffness_Bound ( rans_variables, rho, walldist, k_rough ) result ( stiff )
+    use MOSE_Global_m
+    implicit none
+    real(R8), intent(in), dimension(nRANS) :: rans_variables
+    real(R8), intent(in)                   :: rho, walldist, k_rough
+    real(R8)                               :: stiff
+
+    stiff = 0d0
+
+  end function SSGLRR_Stiffness_Bound
 
 
   subroutine SSGLRR_RANS_Diffusive_Flux ( Flux, var, mi_l, vGrad, Grad, rho, Area, Normal, Dist )

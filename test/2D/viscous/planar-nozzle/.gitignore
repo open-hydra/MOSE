@@ -1,0 +1,6 @@
+bin/
+OUTPUT/
+INPUT/
+input.ini
+errors_file
+logfile

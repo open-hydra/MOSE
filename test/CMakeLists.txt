@@ -74,6 +74,8 @@ mose_add_test(NAME ShuOsher DIR 1D/Shu-Osher
 mose_add_test(NAME ShuOsherConvergence DIR 1D/Shu-Osher
               RUN "./MOSE.sh test" VERIFY convergence.py
               LABELS "validation;numerics;1D")
+#   the two run in the same folder and write OUTPUT/field.tec there: never at the same time (ctest -j)
+set_tests_properties(ShuOsher ShuOsherConvergence PROPERTIES RESOURCE_LOCK Shu-Osher)
 
 # 2-D steady Euler (analytic Prandtl-Meyer)
 mose_add_test(NAME PrandtlMeyer DIR 2D/euler/prandtl-meyer
@@ -90,6 +92,31 @@ mose_add_test(NAME IsentropicVortex DIR 2D/euler/isentropic-vortex
 # CTest is single-threaded, so it runs the fast 32/64 subset ("testfast"); the
 # full 32/64/128 study ("test") is used offline to make the V&V figure.
 mose_add_test(NAME MMSViscous DIR 2D/viscous/mms
+              RUN "./MOSE.sh testfast" VERIFY verify.py
+              LABELS "validation;numerics;2D"
+              TIMEOUT 900)
+
+# Manufactured solutions on general grids (validation tier): the fields of the
+# MOSE_mms driver (MOSE_MMS_FIELD) on two-block grid families whose blocks meet
+# with permuted indices, zigzag (every cell skewed, its neighbours the other
+# way) and iface (a cell-size jump of 1.5 and kinked grid lines): 2-D periodic
+# and with walls on N = 10, 20, 3-D zigzag on N = 8, 12 ("testfast"; the full
+# studies, "test", make the V&V figures).
+mose_add_test(NAME MMSViscousSkewed DIR 2D/viscous/mms/skewed
+              RUN "./MOSE.sh testfast" VERIFY verify.py
+              LABELS "validation;numerics;2D"
+              TIMEOUT 900)
+mose_add_test(NAME MMSViscous3D DIR 3D/viscous/mms
+              RUN "./MOSE.sh testfast" VERIFY verify.py
+              LABELS "validation;numerics;3D"
+              TIMEOUT 900)
+
+# Planar nozzle on grid families (validation tier): a turbulent converging-
+# diverging nozzle (Spalart-Allmaras, SST) on O and H grids whose four blocks
+# have different index orientations stays mirror-symmetric about its centre
+# line, and the zig-zag grid gives a finite flow ("testfast": 300 iterations on
+# the coarse level; the full study, "test", runs every family to convergence).
+mose_add_test(NAME PlanarNozzleGrids DIR 2D/viscous/planar-nozzle
               RUN "./MOSE.sh testfast" VERIFY verify.py
               LABELS "validation;numerics;2D"
               TIMEOUT 900)
@@ -131,10 +158,14 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # level of density and across a restart.
 # Local time step: stable on square and skewed 2-D cells, on cubic 3-D cells
 # and in diffusion-dominated cells (heat conduction, species), with Heun and RK3;
-# heat conduction on 3-D rhombohedra at 115 degrees with Heun at vnn 0.5.
+# heat conduction on 3-D rhombohedra at 115 degrees with Heun at vnn 0.5;
+# with integration-variables = prec, next to a wall with SST and Wilcox 2006,
+# the reference velocity of the step takes the eddy viscosity of the model at
+# the strain rate of the cell.
 # Turbulence sources in time-accurate runs: nu~, k and omega converge with the
-# order of Heun and RK3, and no stage makes them negative near a wall; SST-RC
-# prints the start-up warnings of k-omega models and of -RC; the
+# order of Heun and RK3, and no stage makes them negative near a wall, where
+# the step takes the bound of the stiffness of each cell; SST-RC prints the
+# start-up warnings of k-omega models and of -RC; the
 # vortex-stretching function of Wilcox 2006 on a 3-D flow; the asymptotic omega
 # wall value of Wilcox 2006 and SST.
 # Quasi-2D case with symmetry k faces: round-off in w must not grow.
@@ -154,7 +185,10 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # the run).
 # Rotating frame: stationary-face-1, -2, ... of [MOSE-Rotating-Frame] are read
 # and listed, and the run ends (the count of the keys used to loop forever).
-mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;1D;2D")
+# Sign of the wall heat flux: q_wall of a wall 301 is positive into the fluid on
+# every face (the same wall on both sides of a channel heats it alike), and the
+# wall output writes qw as k grad T . n along the face normal (301 and 302).
+mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;physics;1D;2D")
 
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
 mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")
@@ -179,7 +213,11 @@ mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D"
 # records give the same bits.
 # Sector radial: a 3-D sector closed by the rotational periodicity (type 200 on
 # the k faces) keeps a radial flow its own mirror image.
-mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;1D;2D;3D")
+# Sector viscous: the two k faces of a 3-D sector closed by type 200 are
+# interior faces of the annulus, and carry their viscous flux: the sector of
+# 90 degrees gives the viscous force of the same cells inside the sector of
+# 180 degrees, and the normal stress of symmetry planes on a radial flow.
+mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;physics;1D;2D;3D")
 
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
 # at a restart a missing probe file is written again, an existing one appended,
@@ -253,7 +291,9 @@ mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;numerics
 # rest next to a wall, or flowing along it on stretched cells, changes nu~ as
 # with SA.
 # Part 4: the viscous force on the axisymmetric wedge (Homann's flow and a field
-# with dilatation and swirl) converges to the Navier-Stokes one with second order.
+# with dilatation and swirl) converges to the Navier-Stokes one with second order;
+# a viscous run with the axis at r = 0 on the wedge or on a 3-D sector stops at setup,
+# and on the polar line of a 3-D mesh with diffusive-metric = inverse-mean or mean.
 # Part 5: next to a wall the Spalart-Allmaras sources see the gradient of nu~
 # that the wall value nu~ = 0 gives (linear profile at rest).
 mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")
@@ -275,6 +315,21 @@ if(TEST WedgeAxisStep)
     set_tests_properties(WedgeAxisStep PROPERTIES TIMEOUT 600)
 endif()
 
+# Patch test of the viscous fluxes (ViscousPatch): the parts below, each in
+# its folder of test/fast/viscous-patch, run one after the other by
+# test/fast/viscous-patch/run.sh.
+# Patch test of the viscous fluxes: a linear velocity and a linear temperature
+# have zero viscous force and heat conduction in every cell, so the face
+# gradients must give zero to round-off on meshes with nodes moved at random,
+# folds between blocks, a fan of index lines at a wall (the second layer of
+# extrapolated ghost cells turned over), points shared by 3 and 5 blocks, symmetry planes and
+# walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
+# against an independent replica of their formulas. ViscousWallPatch: the
+# cells next to walls of prescribed temperature varying along the wall.
+# Cost: 40 and 61 one-step solver runs, about 9 s and 13 s of CPU time at
+# one thread.
+mose_add_fast_script(ViscousPatch fast/viscous-patch "fast;numerics;2D;3D")
+
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
 # which is an exact steady solution, checked against its closed form. These
 # boundary conditions have no other coverage in the suite.
@@ -291,7 +346,8 @@ mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;phys
 # are much shorter than the mesh or nearly dependent, read back from the
 # Spalart-Allmaras source.
 # Mesh type: a plane 2-D mesh, an axisymmetric wedge and a 3-D slab periodic in
-# k are told apart by every node of every block; blocks that disagree stop.
+# k are told apart by every node of every block; blocks that disagree stop, and
+# so does a cell folded at a corner (2-D, 3-D, and a cell of a real 3-D mesh).
 mose_add_fast_script(MeshGeometry fast/mesh-geometry "fast;implementation;physics;2D")
 
 # Quadratic constitutive relation QCR2000: a unit check of the stress as the
@@ -337,6 +393,12 @@ if(USE_MPI)
     # bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads; with equilibrium
     # chemistry, the same bits on 1x1 and 2x1.
     mose_add_mpi_script(MPIVertexStencil mpi/vertex-stencil "needs-mpi;implementation;2D")
+
+    # The same output bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads: a
+    # 2x2-block box with walls, inlets and outlets, Spalart-Allmaras and SST
+    # steady with implicit residual smoothing, Spalart-Allmaras time-accurate,
+    # and the points shared by 3 and by 5 blocks of ViscousLinearPatch.
+    mose_add_mpi_script(MPIBitIdentity mpi/bit-identity "needs-mpi;implementation;2D;3D")
 
     # MPI calls only from the main thread (MPI_THREAD_FUNNELED): a probe
     # library preloaded into the solver counts the MPI calls made by any

@@ -218,6 +218,31 @@ An alternative **primitive-variable update** path is available, where
 the residual is scaled and applied directly in primitive space.  This
 path is faster per step but less conservative.
 
+### Reference velocity of the preconditioning
+
+With `integration-variables = prec` the update of a stage, the local time step (below) and the flux `HLLC-PC` take in
+every cell the reference velocity $U_r$ of the Weiss–Smith preconditioning. It is computed after the update of each
+stage from the new state of the cell, and the ghost cells of the faces between blocks receive it with the state at the
+start of the next stage. By default $U_r = \varepsilon a$ for $|\mathbf v| < \varepsilon a$, $a$ for
+$|\mathbf v| \ge a$ and $f\,|\mathbf v|$ otherwise ($\varepsilon$ = `preconditioning-eps-min`, $f$ =
+`preconditioning-Ur-factor`), then raised to the viscous floor
+
+$$
+U_{\text{visc}} = \max\Bigl( \frac{\mu + \mu_t}{\rho\,\Delta_{\min}},\;
+\frac{k + \mu_t\,c_p/\text{Pr}_t}{\rho\,c_p\,\Delta_{\min}} \Bigr),
+$$
+
+with $\Delta_{\min}$ the smallest width of the cell, and to `preconditioning-Ur-min`
+(`preconditioning-Uref` and `preconditioning-Mach` select the other modes). With a RANS model $\mu_t$ is the eddy
+viscosity of the model with the velocity gradient of the cell: SST takes $\mu_t = \rho a_1 k/\max(a_1\omega, S F_2)$
+and Wilcox 2006 $\mu_t = \rho k/\hat\omega$, $\hat\omega = \max\bigl(\omega, C_{\lim}\sqrt{2\bar S_{ij}\bar
+S_{ij}/\beta^*}\bigr)$, so the strain rate lowers it; Spalart–Allmaras does not use the gradient. The gradient is
+that of the state the stage starts from, computed after the ghost cells of the stage are filled, with the cell metric of
+the source terms, as the turbulence sources take it; the setup computes it from the initial state. After the update the
+ghost cells still hold the start of the stage: a gradient computed there would take, in a cell next to a face between
+blocks, the cell across the face at the start of the stage and the cells of its own block after the update, and $U_r$
+would depend on how the mesh is divided into blocks.
+
 ---
 
 ## Stability Conditions
@@ -416,9 +441,10 @@ $$
 $$
 
 In time-accurate RANS runs the turbulence sources are explicit, and each local step also includes
-their stiffness, the derivative $d_i$ of the destruction terms evaluated at the start of the step:
-$1/\Delta t_i$ gains the term $d_i$, so that $\Delta t\,d_i \le 1$ and no stage makes $\tilde\nu$, $k$ or
-$\omega$ negative through their destruction
+a bound $\hat d_i$ of their stiffness, the derivative $d_i$ of the destruction terms, from the state of the cell at
+the start of the step alone: $1/\Delta t_i$ gains the term $\hat d_i$, so that
+$\Delta t\,d_i \le \Delta t\,\hat d_i \le 1$ and no stage makes $\tilde\nu$, $k$ or $\omega$ negative through their
+destruction
 ([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)).
 
 !!! tip "CFL ramp-up"
