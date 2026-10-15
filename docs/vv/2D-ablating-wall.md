@@ -126,6 +126,14 @@ condition must fall back to an impermeable wall:
 | Wall heat flux | −1.17 × 10⁴ W/m² — the wall heats the gas |
 | Flow field | conduction layer developing, only weak expansion venting |
 
+### Default Schmidt number
+
+The `default-schmidt` configuration runs the `melting` column again, in its own directory, with no `schmidt` in
+`input.ini`.  The default, `schmidt = 0`, selects mixture-averaged multicomponent diffusion, which needs the binary
+diffusion table `INPUT/diffusion.dat` only when the gas has more than one species (see
+[thermodynamics](../theory/thermo.md)): a single species does not diffuse, so the run needs no table and gives
+the `melting` column, and every check of `verify.py` prints the same numbers as for `melting` in the table above.
+
 ---
 
 ## Running the test

@@ -135,7 +135,13 @@ contains
     Kg = Km - guide(Fm,3)
     Normal = blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     area = blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
-    M = 0.5d0 * ( Blk % M(Im,Jm,Km) % c + Blk % M(Ig,Jg,Kg) % c )
+    ! Metric tensor at the connection face: the mean of the two inverse metrics
+    ! (cell edge vectors), inverted, so that the one-index difference across the
+    ! face is divided by the centre-to-centre distance. Averaging M itself divides
+    ! it by the mean of 1/h instead: with a large size jump across the connection
+    ! (86:1 gives 22x) the normal gradient is far too steep and the explicit
+    ! diffusion number on the big cell exceeds 1, although its own dt is fine.
+    M = Face_Metric ( Blk % M(Im,Jm,Km) % c, Blk % M(Ig,Jg,Kg) % c )
     Waldis = 0.5d0 * ( Blk % yn(Im,Jm,Km) + Blk % yn(Ig,Jg,Kg) )
     Rough  = 0.5d0 * ( Blk % k_rough(Im,Jm,Km) + Blk % k_rough(Ig,Jg,Kg) )
 

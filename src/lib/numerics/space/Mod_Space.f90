@@ -32,6 +32,9 @@ contains
 
     call Assign_Limiter(obj_space_scheme%flux_limiter)
 
+    ! Face metric of the interior viscous fluxes (connection faces always use inverse-mean)
+    obj_space_scheme%inverse_metric = ( trim(obj_space_scheme%diffusive_metric) /= 'mean' )
+
   end subroutine Setup_Space_Scheme
 
 

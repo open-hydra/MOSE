@@ -25,6 +25,7 @@ contains
     real(R8) :: un1, un4, ut1, ut4, vt1, vt4, wt1, wt4
     real(R8) :: R2I, R1IV, z, p2, p3, u0, vel, dpr, dpl, a2, a3, vw1, vw2, vw3, vw4, dum, swl, swr
     real(R8) :: af, pf, df(nsc), rhof, uf, vf, wf
+    logical  :: shock_l, shock_r
 
     Rgasl = f_Rtot(dl)
     Rgasr = f_Rtot(dr)
@@ -61,13 +62,18 @@ contains
     p3 = 1d0
     p2 = 2d0*p3
     iter = 0
+    ! The waves of each side, shock or rarefaction, of the last iteration: the face state below takes their states and
+    ! speeds (p2, a2, swl or vw1, vw2; p3, a3, swr or vw3, vw4), which the velocity updated after them could place on the
+    ! other side of un1 or un4, where the speeds of the other wave were never computed in this call
     do while (dabs(1-(p2/p3))>=1d-5 .and. iter<=1000)
-      if (vel<un1) then
+      shock_l = vel<un1
+      if (shock_l) then
         call shockleft(un1,a1,p1,vel,a2,p2,dpr,swl,gam1)
       else
         call rareleft(p1,a1,un1,vel,p2,a2,dpr,vw1,vw2,gam1)
       endif
-      if (vel>un4) then
+      shock_r = vel>un4
+      if (shock_r) then
         call shockright(un4,a4,p4,vel,a3,p3,dpl,swr,gam4)
       else
         call rareright(p4,a4,un4,vel,p3,a3,dpl,vw3,vw4,gam4)
@@ -85,7 +91,7 @@ contains
       pf = p2
       Rgas = Rgasl
 
-      if (vel<=un1) then
+      if (shock_l) then
         if (swl>0.d0) then
           af = a1
           vel = un1
@@ -115,7 +121,7 @@ contains
       pf = p3
       Rgas = Rgasr
 
-      if (vel>=un4) then
+      if (shock_r) then
         if (swr<0.d0) then
           af = a4
           vel = un4

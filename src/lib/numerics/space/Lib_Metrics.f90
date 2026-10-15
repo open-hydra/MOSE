@@ -285,16 +285,16 @@ contains
         + A(1,3)*A(2,1)*A(3,2) - A(1,3)*A(2,2)*A(3,1)
 
     if ( abs(det) == 0d0 ) then
-      write(*,'(A90)') ' [ERROR] Metric tensor det=0. Should not happen, but going on with M==I'
+      ! Degenerate cell (zero volume): a mesh error, or ghost cells extrapolated from a
+      ! wall-thin first cell whose coordinates were read back in single precision.
+      ! stop 1, not mpi_abort_all: this can run inside OpenMP threads (MPI is FUNNELED).
+      write(*,'(A)') ' [ERROR] Metric tensor det=0: degenerate cell. Check the mesh, or the precision of the restart file'
+      write(*,'(A,3(1X,ES14.6))') ' [ERROR]   corner node N1:', N1 % c
+      write(*,'(A,3(1X,ES14.6))') ' [ERROR]   corner node N8:', N8 % c
       stop 1
 
-      M % c = 0d0
-      do h = 1, 3
-        M % c(h,h) = 1d0
-      enddo
-
     else
-      
+
       cofactor(1,1) =  (A(2,2)*A(3,3)-A(2,3)*A(3,2))
       cofactor(1,2) = -(A(2,1)*A(3,3)-A(2,3)*A(3,1))
       cofactor(1,3) =  (A(2,1)*A(3,2)-A(2,2)*A(3,1))
@@ -633,6 +633,27 @@ contains
     blkm % k_rough(Ig,Jg,Kg) = blks % k_rough(Is,Js,Ks)
 
   end subroutine Yn_Connection
+
+
+  subroutine Yn_Chimera ( Im, Jm, Km, Fm, blk )
+    implicit none
+    integer, intent(in) :: Im, Jm, Km, Fm
+    type(MOSE_block_type), intent(inout) :: blk
+    ! Local
+    integer :: Ig, Jg, Kg
+
+    ! Ghost cell coordinates
+    Ig = Im - guide(Fm,1)
+    Jg = Jm - guide(Fm,2)
+    Kg = Km - guide(Fm,3)
+
+    ! The chimera ghost cell extends the receiver grid (as its metrics do), so it
+    ! takes the wall distance and roughness of the adjacent receiver cell.
+    ! Zeroth order on purpose: linear extrapolation can reach yn <= 0 near walls.
+    blk % yn(Ig,Jg,Kg) = blk % yn(Im,Jm,Km)
+    blk % k_rough(Ig,Jg,Kg) = blk % k_rough(Im,Jm,Km)
+
+  end subroutine Yn_Chimera
 
 
   subroutine BC_Extrapolate_Metrics( Im, Jm, Km, Fm, blk, Mg, dlg, volg )

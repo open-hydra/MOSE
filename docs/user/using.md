@@ -213,6 +213,7 @@ After a run completes, the `OUTPUT/` directory contains:
 | `field.*` | Solution fields ($\rho$, $u$, $v$, $w$, $p$, $T$, …) |
 | `residual-history.dat` | Iteration-by-iteration residual norms |
 | `wall.tec` | Wall quantities (skin friction, heat flux) — viscous cases only |
+| `diagnostic.*` | Per-cell residuals of $\rho$, $\rho u$, $\rho v$, $\rho w$, $\rho E$, of the soot variables and of the RANS variables, local time step `dt`, shock-sensor flag `beta` — steady runs only; with a single species it needs `sol-variables` to name `thermo` (the default) or `transport`, and the run stops at its first solution output otherwise |
 | `<probe>.txt` | Time-history data at probe locations called <probe>|
 
 ### Input/Output Formats
@@ -246,6 +247,10 @@ variables = p T u
 dtime = 1e-4
 ```
 
-Each probe writes a text file named after the probe — here `OUTPUT/exit.txt` — with columns for time and the requested variables.
+Each probe writes a text file named after the probe — here `OUTPUT/exit.txt` — with columns for time (or the iteration, with `diter`) and the requested variables.
+
+Accepted variables: `rho(n)` (density of species `n`), `u`, `v`, `w`, `p`, `T`, `M` (Mach number) and, with a RANS model, `mi_tilde`, the first turbulence variable, which the solution files name `rhoNuTilde` (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model). An unknown name stops the run at set-up.
+
+A new run replaces the probe files; a restart appends to them, and creates any that are missing (for example a probe added before the restart).
 
 ---

@@ -74,6 +74,10 @@ contains
     obj_space_scheme%error_message   = 'none'
     call reg%add( trim(section), 'space-reconstruction', obj_space_scheme%space_reconstruction, '', 'Space reconstruction method', 'MUSCL, first-order', .true. )
     call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, '', 'Flux limiter for space reconstruction', 'vanalbada, minmod, superbee, vanleer, mc', .false. )
+    call reg%add( trim(section), 'diffusive-metric', obj_space_scheme%diffusive_metric, 'inverse-mean', &
+                  'Face metric of the interior viscous fluxes: inverse-mean is exact on stretched meshes, '// &
+                  'mean is faster but overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r', &
+                  'inverse-mean, mean', .false. )
 
     ! Shock Detector ---------------------------------------
     obj_shock_detector%warning_message = 'none'

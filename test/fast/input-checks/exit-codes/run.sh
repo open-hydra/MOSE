@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+#===============================================================================
+#  Exit codes of the error stops (fast tier)
+#
+#  A run that MOSE stops on an error must end with a non-zero exit code and
+#  its message, and write no solution. Reuses the inputs of the 100-cell Sod
+#  tube (test/1D/Sod79) and the gas of test/1D/diff1; no new mesh or IC data
+#  is stored here.
+#
+#  Unknown probe variable. A probe that asks for a variable MOSE does not
+#  know must stop the run at set-up with exit status 1 and a message naming
+#  the variable, not crash: the probe pointer stayed undefined and the run
+#  ended on a segmentation fault (exit status 139). The Sod tube of
+#  test/1D/Sod79 in air, one probe with variables "p foo".
+#
+#  Default Schmidt number. schmidt defaults to 0.0, i.e. mixture-averaged
+#  multicomponent diffusion, which needs the binary diffusion table
+#  INPUT/diffusion.dat when the gas has more than one species (one species
+#  does not diffuse: AblatingWall runs a single-species column without
+#  schmidt). The Sod tube as a viscous mixture of four species (those of
+#  test/1D/diff1, with the mass fractions of air), without schmidt and
+#  without a table, must stop at set-up with the diffusion-table error and
+#  write no solution.
+#
+#  Diagnostic output of a single species without thermo or transport. The
+#  diagnostic output of a steady run reuses the buffer of the solution
+#  output, which with a single species and sol-variables naming neither
+#  thermo nor transport is one variable short: the Sod tube in air, steady,
+#  with sol-variables = none, must stop at its first output with exit status
+#  1 and a message that says to name thermo or transport.
+#
+#  Diagnostic output with a soot model. A steady run with the soot model
+#  LL91 must end normally, and its diagnostic output must name every
+#  variable it writes, the residuals of rho, rho u, rho v, rho w, rho E, of
+#  the soot number density and of the turbulence variable, then dt and beta,
+#  with the local time step under dt (the one of the same run without soot,
+#  within 1e-6). Six species with the names the soot model looks for, in a
+#  uniform state on the mesh of the Sod tube (make_case.py soot), with type 0
+#  on its faces 3 and 4, with and without Spalart-Allmaras, two iterations.
+#  With Spalart-Allmaras the output filled the turbulence column from arrays
+#  of different sizes (a run-time error with bounds checking); without it,
+#  it named one variable fewer than it wrote and put the density of C(gr)
+#  under dt.
+#===============================================================================
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$HERE"
+
+MASTER=../../../../bin/MOSE
+LOCAL=./bin/MOSE
+SOD=../../../1D/Sod79/INPUT
+MIX=../../../1D/diff1/INPUT
+ERR='Sc<=0 (multicomponent diffusion) requires a binary diffusion table'
+
+ulimit -s unlimited 2>/dev/null || true
+export KMP_STACKSIZE=100M
+export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
+
+mkdir -p bin OUTPUT INPUT
+if [[ ! -x "$LOCAL" || "$MASTER" -nt "$LOCAL" ]]; then
+  cp "$MASTER" "$LOCAL"
+fi
+
+fail=0
+
+# check <status> <description>: status 0 = pass
+check() {
+  if [[ $1 -eq 0 ]]; then
+    echo "  [ok  ] $2"
+  else
+    echo "  [FAIL] $2"
+    fail=1
+  fi
+}
+
+echo "-- probe with an unknown variable --"
+rm -f INPUT/*
+ln -sf "../../../../common/Air/phase.txt" INPUT/phase.txt
+ln -sf "../../../../common/Air/thermo.dat" INPUT/thermo.dat
+ln -sf "../$SOD/ic_x1.tec" INPUT/ic.tec
+ln -sf "../$SOD/bc_x1.txt" INPUT/bc.txt
+cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 2
+newrun = true
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.9
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+
+[MOSE-Probes]
+probe1 = pA
+
+[pA]
+variables = p foo
+diter = 1
+position = 0.5 0.0 0.0
+EOI
+rm -f OUTPUT/field.tec OUTPUT/pA.txt
+"$LOCAL" > OUTPUT/probe-variable.log 2>&1
+rc=$?
+[[ $rc -ne 0 && $rc -lt 128 ]]
+check $? "the solver stops with an error, not a crash (exit status $rc)"
+grep -a -qF 'unknown probe variable "foo"' OUTPUT/probe-variable.log
+check $? "it names the unknown variable"
+[[ ! -f OUTPUT/field.tec ]]
+check $? "no solution is written"
+
+echo "-- default schmidt: four species, no diffusion table --"
+rm -f INPUT/*
+for f in phase.txt thermo.dat transport.dat; do
+  ln -sf "../$MIX/$f" "INPUT/$f"
+done
+ln -sf "../$SOD/bc_x1.txt" INPUT/bc.txt
+python3 -B make_case.py mixture "$SOD/ic_x1.tec" INPUT/ic.tec || exit 1
+cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 2
+newrun = true
+
+[MOSE-Physics]
+equations = navier-stokes
+
+[MOSE-Numerics]
+cfl = 0.5
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+EOI
+rm -f OUTPUT/field.tec
+"$LOCAL" > OUTPUT/schmidt-mixture.log 2>&1
+rc=$?
+[[ $rc -ne 0 ]]
+check $? "the solver stops with an error (exit status $rc)"
+grep -a -qF "$ERR" OUTPUT/schmidt-mixture.log
+check $? "it reports the missing diffusion table"
+[[ ! -f OUTPUT/field.tec ]]
+check $? "no solution is written"
+
+echo "-- single species, steady, sol-variables = none: the diagnostic output --"
+rm -f INPUT/*
+ln -sf "../../../../common/Air/phase.txt" INPUT/phase.txt
+ln -sf "../../../../common/Air/thermo.dat" INPUT/thermo.dat
+ln -sf "../$SOD/ic_x1.tec" INPUT/ic.tec
+ln -sf "../$SOD/bc_x1.txt" INPUT/bc.txt
+cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 2
+newrun = true
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.5
+time-accurate = false
+time-scheme = euler
+integration-variables = cons
+space-reconstruction = first-order
+riemann-solver = HLLC
+
+[MOSE-IO]
+sol-format = tecplot ascii
+sol-variables = none
+EOI
+"$LOCAL" > OUTPUT/diagnostic-single.log 2>&1
+rc=$?
+[[ $rc -ne 0 && $rc -lt 128 ]]
+check $? "the solver stops with an error, not a crash (exit status $rc)"
+grep -a -qF 'needs sol-variables to include thermo (the default) or transport' OUTPUT/diagnostic-single.log
+check $? "it says which sol-variables to set"
+
+echo "-- soot model LL91, steady, two iterations: the diagnostic output --"
+PREMIX=../../../1D/premixed-flame/INPUT
+# soot_run <kind: sa, soot, plain or sa-plain>: the run of make_case.py soot <kind>, its exit status in OUTPUT/soot-<kind>.rc
+soot_run() {
+  rm -f INPUT/*
+  python3 -B make_case.py soot "$PREMIX" "$SOD/ic_x1.tec" INPUT "$1" || exit 1
+  # faces 3 and 4 of the tube, one cell thick in j: a copy (type 0), not the extrapolation 400, which takes
+  # three cells and with one cell reads ghost cells that no record fills
+  awk '$5 == 3 || $5 == 4 { $6 = 0 } { print }' "$SOD/bc_x1.txt" > INPUT/bc.txt
+  local turb=none soot=LL91
+  [[ $1 == sa || $1 == sa-plain ]] && turb=SA
+  [[ $1 == plain || $1 == sa-plain ]] && soot=none
+  {
+    printf '%s\n' '[MOSE-Parameters]' 'iter-threshold = 2' 'newrun = true' ''
+    printf '%s\n' '[MOSE-Physics]' 'equations = navier-stokes' "turbulence = $turb" 'schmidt = 0.7' "soot-generation = $soot" ''
+    printf '%s\n' '[MOSE-Numerics]' 'cfl = 0.5' 'time-accurate = false' 'time-scheme = euler' \
+                  'integration-variables = cons' 'space-reconstruction = first-order' 'riemann-solver = HLLC' ''
+    printf '%s\n' '[MOSE-IO]' 'sol-format = tecplot ascii'
+  } > input.ini
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/soot-$1.log" 2>&1
+  echo $? > "OUTPUT/soot-$1.rc"
+  [[ -f OUTPUT/diagnostic.tec ]] && cp OUTPUT/diagnostic.tec "OUTPUT/diagnostic-$1.tec"
+}
+rm -f OUTPUT/diagnostic-*.tec
+# the references without soot: plain for the soot run, sa-plain (Spalart-Allmaras) for the sa run
+soot_run plain
+soot_run sa-plain
+for kind in sa soot; do
+  soot_run $kind
+  rc=$(cat "OUTPUT/soot-$kind.rc")
+  [[ $rc -eq 0 ]]
+  check $? "$kind: the run ends normally (exit status $rc)"
+  names="rho rhou rhov rhow rhoe rho*Np"
+  ref=OUTPUT/diagnostic-plain.tec
+  [[ $kind == sa ]] && names="$names rhoNuTilde" && ref=OUTPUT/diagnostic-sa-plain.tec
+  python3 -B make_case.py diagnostic-check "OUTPUT/diagnostic-$kind.tec" "$ref" $names dt beta
+  check $? "$kind: the diagnostic output names every variable it writes, dt under dt"
+done
+
+if [[ $fail -ne 0 ]]; then
+  echo "ExitCodes: FAILED"
+  exit 1
+fi
+echo "ExitCodes: all checks passed"
+exit 0

@@ -6,8 +6,6 @@ module MOSE_Mod_Diagnostic
   private
   public :: Compute_Residual, Write_Diagnostic
 
-  character(len=llen), private :: Dvarnames = '"rho" "rhou" "rhov" "rhow" "rhoe" "dt" "beta"'
-
 contains
 
   subroutine Compute_Residual ( new, old, dt, n, average, total )
@@ -56,9 +54,10 @@ contains
     use Lib_ORION_data
     use Lib_VTK
     use Lib_Tecplot
-    use MOSE_Mod_MPI, only: mpi_is_root
+    use MOSE_Mod_MPI, only: mpi_is_root, mpi_abort_all
     use MOSE_Mod_GhostExchange, only: gather_diagnostic_to_root, mpi_io_barrier
     use strings, only: parse
+    use IR_Precision, only: str
     implicit none
     type(MOSE_domain_type), intent(inout)  :: domain
     type(ORION_data), intent(inout)        :: IOfield
@@ -66,8 +65,20 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    integer             :: E_IO, b, i, j, k
+    character(len=hlen) :: varnames
+    integer             :: E_IO, b, i, j, k, ndiag
     character(len=clen) :: format(2), extension
+
+    ! Residuals of rho, rho*u, rho*v, rho*w, rho*E and of the variables that follow the energy in r: soot, passive
+    ! scalars, RANS (named as in the solution files, Setup_Output_Solution), then dt and beta
+    ndiag    = nres + 2
+    varnames = '"rho" "rhou" "rhov" "rhow" "rhoe"'
+    if ( nsoot == 1 ) varnames = trim(varnames)//' "rho*Np"'
+    if ( nsoot == 2 ) varnames = trim(varnames)//' "rho*Yp" "rho*Np"'
+    do i = 1, npass
+      varnames = trim(varnames)//' "Pass('//trim(str(.true.,i))//')"'
+    enddo
+    varnames = trim(varnames)//trim(obj_io%ORANSname)//' "dt" "beta"'
 
     ! Gather R, dtlocal, beta from all ranks to root (collective)
     call gather_diagnostic_to_root(domain)
@@ -77,20 +88,28 @@ contains
 
       call parse(obj_io%sol_format,' ', format)
 
+      ! The diagnostic reuses the solution-output buffer: nprim+1 slots, two more with thermo, two or three more with
+      ! transport. It needs nres+2 = nprim-nsc+3 slots, which are missing only with a single species and neither
+      ! thermo nor transport in sol-variables.
+      if (size(IOfield%block(1)%vars,1) < ndiag) &
+        call mpi_abort_all('the diagnostic output of a steady run with a single species needs sol-variables to '// &
+                           'include thermo (the default) or transport')
+
       ! Update IOfield variables with domain residuals
       do b = 1, size(IOfield%block)
         IOfield%block(b)%vars(1,:,:,:) = sum(domain%blk(b)%r(1:nsc,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk), dim=1)
         IOfield%block(b)%vars(2:5,:,:,:) = domain%blk(b)%r(nu:np,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk)
-        !if ( nrans > 0 ) then ! turbulence variables
-        !  IOfield%block(b)%vars(6:6+nrans-1,:,:,:) = domain%blk(b)%r(nt:nprim,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk)
-        !end if
+        if ( nres > 5 ) then ! soot, passive scalars and turbulence variables, in the order of r
+          IOfield%block(b)%vars(6:nres,:,:,:) = &
+            domain%blk(b)%r(np+1:nprim,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk)
+        end if
         ! Auxiliary variables: dt
         do k = 1, IOfield%block(b)%Nk ; do j = 1, IOfield%block(b)%Nj ; do i = 1, IOfield%block(b)%Ni
-              IOfield%block(b)%vars(6,i,j,k) = domain%blk(b)%dtlocal(i,j,k)
+              IOfield%block(b)%vars(nres+1,i,j,k) = domain%blk(b)%dtlocal(i,j,k)
         enddo; enddo; enddo
         ! Auxiliary variables: beta
         do k = 1, IOfield%block(b)%Nk ; do j = 1, IOfield%block(b)%Nj ; do i = 1, IOfield%block(b)%Ni
-              IOfield%block(b)%vars(7,i,j,k) = domain%blk(b)%beta(i,j,k)
+              IOfield%block(b)%vars(nres+2,i,j,k) = domain%blk(b)%beta(i,j,k)
         enddo; enddo; enddo
       enddo
 
@@ -101,14 +120,14 @@ contains
         localpath_vtk = trim(path)//'/vtk'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
         E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=Dvarnames,time=domain%time)
+                                                             vtmpath=trim(path)//trim(file),varnames=varnames,time=domain%time)
       case('tecplot')
         if (format(2)=='binary') then
           extension = '.szplt'
         else
           extension = '.tec'
         end if
-        E_IO = tec_write_structured_multiblock(Nvars=nres+2,orion=IOfield,varnames=Dvarnames,filename=trim(path)//trim(file)//trim(extension))
+        E_IO = tec_write_structured_multiblock(Nvars=ndiag,orion=IOfield,varnames=varnames,filename=trim(path)//trim(file)//trim(extension))
       end select
     end if
 
