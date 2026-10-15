@@ -7,7 +7,7 @@ module MOSE_IO_Probes
 
   implicit none
   private
-  public :: Setup_Probes, Write_Probes_Data, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
+  public :: Setup_Probes, Write_Probes_Data, Close_Probes, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
 
   type :: real_ptr
     real(R8), pointer :: p
@@ -354,6 +354,12 @@ contains
   end subroutine End_With_Newline
 
 
+  !> \brief Write the probe rows due at this iteration.
+  !> \details Each rank writes the rows of the probes it owns, and passes each row to the file system
+  !>          when it writes it (flush): a run that stops before its end (killed, stopped at the time
+  !>          limit of a queue, aborted) leaves in the files every row it wrote, as a restart from its
+  !>          last solution expects (Drop_Rows_After); the rows held in the buffer of the unit would be
+  !>          lost with the process.
   subroutine Write_Probes_Data( iter, time )
     use MOSE_Mod_MPI, only: is_local_block
 
@@ -368,14 +374,35 @@ contains
       if (mod(iter,probe(i)%diter)==0) then
         call probe(i)%update
         write(probe(i)%unit,*) iter, (probe(i)%variables(v)%p,v=1,probe(i)%nvar)
+        flush(probe(i)%unit)
       elseif (time >= probe(i)%dtime*probe(i)%ntime) then
         call probe(i)%update
         write(probe(i)%unit,*) time, (probe(i)%variables(v)%p,v=1,probe(i)%nvar)
+        flush(probe(i)%unit)
         probe(i)%ntime = probe(i)%ntime+1
       endif
     enddo
 
   end subroutine Write_Probes_Data
+
+
+  !> \brief Close the probe files at the end of the run.
+  !> \details Each rank closes the files of the probes it owns, which Setup_Probes or Drop_Probe_Rows
+  !>          opened, before the ranks finalize MPI: a unit left open is closed by the Fortran run-time
+  !>          library only when the process ends, after MPI_FINALIZE.
+  subroutine Close_Probes ()
+    use MOSE_Mod_MPI, only: is_local_block
+
+    implicit none
+    ! Local
+    integer :: i
+
+    do i = 1, nprobes
+      if (.not. is_local_block(probe(i)%ilocation(1))) cycle
+      close(probe(i)%unit)
+    enddo
+
+  end subroutine Close_Probes
 
 
 end module MOSE_IO_Probes

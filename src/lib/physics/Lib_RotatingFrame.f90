@@ -96,6 +96,11 @@ module MOSE_Lib_RotatingFrame
   use MOSE_Config_Types_m, only : obj_rot
   implicit none
 
+  ! OUTPUT/torque.dat: open on the root from the first row of the run (RF_Torque_Walls) to the end of
+  ! the run (RF_Close_Torque_File)
+  integer, private :: unit_torque
+  logical, private :: torque_open = .false.
+
 contains
 
 
@@ -589,7 +594,6 @@ contains
     integer,  intent(in) :: iter
     real(R8), intent(in) :: time
     ! Local
-    integer,  save :: unit_torque = -1
     logical,  save :: first_call  = .true.
     logical  :: exists
     integer  :: i, b, Bm, Im, Jm, Km, Fm, Dir, Fi, Fj, Fk
@@ -683,6 +687,7 @@ contains
           open(newunit=unit_torque, file='OUTPUT/torque.dat', &
                status='old', position='append', form='formatted')
         end if
+        torque_open = .true.
         first_call = .false.
       end if
 
@@ -691,6 +696,20 @@ contains
     end if
 
   end subroutine RF_Torque_Walls
+
+
+  !> Close OUTPUT/torque.dat at the end of the run, on the root that opened it, before the ranks
+  !> finalize MPI: a unit left open is closed by the Fortran run-time library only when the process
+  !> ends, after MPI_FINALIZE. Every row is already in the file (RF_Torque_Walls flushes it).
+  subroutine RF_Close_Torque_File()
+    implicit none
+
+    if (torque_open) then
+      close(unit_torque)
+      torque_open = .false.
+    end if
+
+  end subroutine RF_Close_Torque_File
 
 
 end module MOSE_Lib_RotatingFrame

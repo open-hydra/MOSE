@@ -62,6 +62,18 @@
 #              20, p2.txt with the first characters of its next row ("2" of
 #              24). The restart drops the broken row, ends each file with a
 #              newline and goes on as the run in one go of probes.
+#   probes-killed  the first part of probes as a run that a queue kills at
+#              its time limit: 50 iterations asked, the process killed
+#              (SIGKILL) as it starts its third numbered solution, at
+#              iteration 30, by a mkdir put first on PATH (Write_Solution
+#              makes the vtk folder with mkdir -p before each vtk
+#              solution). residual-history.dat must hold the rows of
+#              iterations 1 to 30, every row written before the kill, and
+#              the restart from field2 (iteration 20), 30 iterations,
+#              must give the files of the run in one go of probes. The
+#              rows waited in the buffers of the files, written out only
+#              when the process ended normally: the killed run left the
+#              history and the probe files empty.
 #   torque     time-accurate, a solution every 10 iterations, with the
 #              rotating frame on (rigid-body, omega = 1 rad/s about x):
 #              OUTPUT/torque.dat gets a header line and a row at every
@@ -443,6 +455,47 @@ write_ini runs/probes-cut/split probes 30 false;  solve runs/probes-cut/split re
 python3 -B "$CHECK" runs/probes/full/OUTPUT runs/probes-cut/split/OUTPUT > runs/probes-cut/compare.log 2>&1 || status=1
 sed "s/^Restart (vtk raw)/  probes-cut/" runs/probes-cut/compare.log
 
+# probes-killed: the first part of probes killed with SIGKILL as it starts its third numbered solution (iteration 30),
+# as a queue kills a run at its time limit, by a mkdir put first on PATH for that run: Write_Solution makes the vtk
+# folder with mkdir -p before each vtk solution, and the third call kills the solver, the process named MOSE above it.
+# field1 and field2 are written, field3 and the final solution are not. residual-history.dat must hold the rows of
+# iterations 1 to 30, and the restart from field2 must give the files of the run in one go of probes.
+prepare runs/probes-killed/split
+write_ini runs/probes-killed/split probes 50 true
+mkdir -p runs/probes-killed/shim
+REAL_MKDIR=$(command -v mkdir)
+cat > runs/probes-killed/shim/mkdir <<EOF
+#!/usr/bin/env bash
+n=\$(( \$(cat mkdir_calls 2>/dev/null || echo 0) + 1 )); echo \$n > mkdir_calls
+if (( n == 3 )); then
+  p=\$PPID
+  while [[ \$p -gt 1 && "\$(ps -o comm= -p \$p)" != MOSE ]]; do p=\$(ps -o ppid= -p \$p | tr -d ' '); done
+  [[ \$p -gt 1 ]] && kill -KILL \$p
+  exit 1
+fi
+exec "$REAL_MKDIR" "\$@"
+EOF
+chmod +x runs/probes-killed/shim/mkdir
+( cd runs/probes-killed/split && PATH="$PWD/../shim:$PATH" "../../../$LOCAL" > solve_first.log 2>&1 )
+rc=$?
+killed=no
+[[ $rc -eq 137 && -f runs/probes-killed/split/OUTPUT/field2.vtm && ! -e runs/probes-killed/split/OUTPUT/field3.vtm && \
+   ! -e runs/probes-killed/split/OUTPUT/field.vtm ]] && killed=yes
+nres=$(command grep -c . runs/probes-killed/split/OUTPUT/residual-history.dat 2>/dev/null)
+rm -f runs/probes-killed/split/mkdir_calls
+write_ini runs/probes-killed/split probes 30 false;  solve runs/probes-killed/split restart
+python3 -B "$CHECK" runs/probes/full/OUTPUT runs/probes-killed/split/OUTPUT > runs/probes-killed/compare.log 2>&1
+same=$?
+sed "s/^Restart (vtk raw)/  probes-killed/" runs/probes-killed/compare.log
+if [[ $killed == yes && ${nres:-0} -eq 30 && $same -eq 0 ]]; then
+  echo "  probes-killed: killed at iteration 30 (exit status 137), residual-history.dat with its 30 rows, then the files of the run in one go"
+else
+  echo "  [FAIL] probes-killed: exit status $rc of the first part (137 expected, field2 and no field3: $killed)," \
+       "residual-history.dat ${nres:-0} rows at the kill (30 expected), files of the run in one go after the restart:" \
+       "$([[ $same -eq 0 ]] && echo yes || echo no)"
+  status=1
+fi
+
 # torque: the rotating frame writes OUTPUT/torque.dat, a header line and a row per residual row. 25 iterations, then
 # the restart from the solution of iteration 20 (field.vtm removed, as in probes): torque.dat, compared with the other
 # outputs, must be that of the run in one go, which must hold the header and the rows of iterations 1 to 50
@@ -471,5 +524,5 @@ EOF
 if [[ $status -ne 0 ]]; then
   fail "a restart does not carry on the counters"
 fi
-echo "RestartCounters: ok — steady, dtime, multigrid, probes and rotating-frame (torque.dat) restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline and from a first part that ends on an output iteration (by iteration and by time), a transient from a steady solution starts at t = 0 and a steady restart from a solution with TIME only goes on from |TIME|"
+echo "RestartCounters: ok — steady, dtime, multigrid, probes and rotating-frame (torque.dat) restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline, from a first part killed at its time limit and from a first part that ends on an output iteration (by iteration and by time), a transient from a steady solution starts at t = 0 and a steady restart from a solution with TIME only goes on from |TIME|"
 exit 0

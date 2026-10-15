@@ -189,7 +189,8 @@ mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;
 # Tecplot goes on with the global iteration count; a time-accurate restart from a
 # steady solution starts at t = 0; a restart from an older solution keeps no
 # residual-history or probe row twice; a first part that ends on an output
-# iteration writes the solution and the probe row due there.
+# iteration writes the solution and the probe row due there; a first part
+# killed at its time limit leaves in the history files every row it wrote.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
 
 # Output files (OutputFiles): the parts below, each in its folder of

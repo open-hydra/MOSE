@@ -20,8 +20,8 @@ contains
     use MOSE_IO_Wall,        only: IOwall, Write_Wall_Solution
     use MOSE_IO_Solution,    only: Write_Solution
     use MOSE_Mod_Diagnostic, only: Write_Diagnostic
-    use MOSE_IO_Probes,      only: Write_Probes_Data
-    use MOSE_Lib_RotatingFrame, only: RF_Torque_Walls
+    use MOSE_IO_Probes,      only: Write_Probes_Data, Close_Probes
+    use MOSE_Lib_RotatingFrame, only: RF_Torque_Walls, RF_Close_Torque_File
     use MOSE_Mod_Multigrid,  only: Prolongation
     use MOSE_Read_Ini,       only: Read_Inifile_Runtime
     use MOSE_Mod_MPI,        only: mpi_is_root
@@ -72,6 +72,7 @@ contains
         ! Residual history
         if ( mod (simulation%domain(1) % iter, obj_io%res_diter) == 0d0 ) then
           write (obj_io%unitRES,trim(obj_io%unitRES_format)) obj_sim_param%iter_general, simulation%domain(1)%time, obj_sim_param%residuotot
+          flush(obj_io%unitRES)
         endif
       end if
 
@@ -135,6 +136,12 @@ contains
       call Write_Solution ( simulation%domain(1), simulation%IOfield(1), solfile )
       if (obj_io % write_wall) call Write_Wall_Solution( simulation%domain(1), wallfile )
       if (.not. obj_time_scheme%time_accurate) call Write_Diagnostic ( simulation%domain(1), simulation%IOfield(1), dgsfile )
+
+      ! The history files hold their last rows: close them before the ranks finalize MPI (a unit left
+      ! open is closed by the Fortran run-time library only when the process ends, after MPI_FINALIZE)
+      call Close_Probes()
+      if (mpi_is_root) close(obj_io%unitRES)
+      call RF_Close_Torque_File()
     
 
     ! INTERMEDIATE SOLUTION EVALUATION
@@ -152,6 +159,7 @@ contains
       if (mpi_is_root) then
         if ( mod(simulation%domain(level) % iter, obj_io%res_diter) == 0d0 ) then
           write (obj_io%unitRES,trim(obj_io%unitRES_format)) obj_sim_param%iter_general, simulation%domain(level)%time, obj_sim_param%residuotot
+          flush(obj_io%unitRES)
         endif
       end if
 
@@ -243,6 +251,7 @@ contains
       if (mpi_is_root) then
         if ( mod (simulation%domain(level) % iter, obj_io%res_diter) == 0d0 ) then
           write (obj_io%unitRES,trim(obj_io%unitRES_format)) obj_sim_param%iter_general, simulation%domain(level)%time, obj_sim_param%residuotot
+          flush(obj_io%unitRES)
         end if
       end if
 

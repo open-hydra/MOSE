@@ -126,7 +126,10 @@ nightly/local tier.
   and the rows of `torque.dat` of the rotating frame in the same restart. A first part that
   ends on an output iteration (by iteration, also with `sol-overwrite = true` and with two
   grid levels, and by time) writes there the solution and the probe row due, and the restart
-  in the same folder writes the files of the uninterrupted run.
+  in the same folder writes the files of the uninterrupted run. A first part killed with
+  SIGKILL at its third numbered solution, as a queue kills a run at its time limit, leaves in
+  `residual-history.dat` and in the probe files every row it wrote, and the restart from its
+  last solution writes the files of the uninterrupted run.
 - ☑ **I4 — Conservation invariant**: closed slip-wall box, shock-tube IC; total mass
   conserved to round-off (~2e-13). *Done:* `test/fast/conservation`. (Energy invariant
   is a possible future addition.)
