@@ -257,10 +257,11 @@ contains
       blk % P (1:nu,Ig,Jg,Kg) = blk % P (1:nu,Im,Jm,Km)
       blk % P (np:nprim,Ig,Jg,Kg) = blk % P (np:nprim,Im,Jm,Km)
     else
-      ! cell is connected with opposite K-face, with v/w rotated of +-delthe
+      ! The cell next to the opposite k face, turned about x by -guide(Fm,3)*delthe: back by the
+      ! sector angle behind face 5, forward behind face 6 (the same turn as the 2-D branch above)
       Ks = blk % dim(3) - Km + 1
       blk % P (nv,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * cos(delthe) + guide(Fm,3) * blk % P (nw,Im,Jm,Ks) * sin(delthe)
-      blk % P (nw,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * sin(delthe) - guide(Fm,3) * blk % P (nw,Im,Jm,Ks) * cos(delthe)
+      blk % P (nw,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * sin(delthe) * (-guide(Fm,3)) + blk % P (nw,Im,Jm,Ks) * cos(delthe)
       blk % P (1:nu,Ig,Jg,Kg) = blk % P (1:nu,Im,Jm,Ks)
       blk % P (np:nprim,Ig,Jg,Kg) = blk % P (np:nprim,Im,Jm,Ks)
     endif

@@ -10,7 +10,8 @@ module MOSE_Lib_Metrics
 
   ! Wall faces of Compute_Yn, read by Wall_Face_Distance while the k-d tree is queried: for face n, wall_corner(:,1:4,n)
   ! are its corners in cyclic order and wall_corner(:,0,n) their mean; on an axisymmetric wedge (wall_meridional) the
-  ! corners are in the meridional plane (x, r, 0), where corners 1 and 2 are the ends of the trace of the face.
+  ! corners are in the meridional plane (x, r, 0), where corners 1 and 2 are the ends of the trace of the face. Across
+  ! periodic boundaries each face is moved, whole, by a periodic translation (Wall_Images).
   real(R8), allocatable :: wall_corner(:,:,:)
   logical               :: wall_meridional = .false.
   private :: wall_corner, wall_meridional
@@ -546,10 +547,13 @@ contains
     logical, dimension(nb) :: needs_yn
     type(kdtree_t) :: wall_tree
     ! Periodic images of the wall: image n is the wall turned about the x axis by img_angle(n), then translated by
-    ! img_shift(:,n); wall_box(:,1:2) are the low and high corners of the box around the wall faces
-    integer               :: nimg
+    ! img_shift(:,n); wall_box(:,1:2) are the low and high corners of the box around the wall faces. Lattice of the
+    ! periodic translations: basis(:,1:nv) and its dual basis dual(:,1:nv) (dual(:,i) . basis(:,j) = 1 if i = j, 0
+    ! otherwise); the wall faces, and each cell centre before its search, are moved into the cell of the lattice
+    ! around anchor (Wall_Images, Reduced_Point)
+    integer               :: nimg, nv
     real(R8), allocatable :: img_shift(:,:), img_angle(:)
-    real(R8)              :: wall_box(3,2)
+    real(R8)              :: wall_box(3,2), basis(3,3), dual(3,3), anchor(3)
 
     ! Validation switch: checks every yn against a brute-force scan, roughly
     ! doubling setup cost.  Keep .false. in production.
@@ -653,6 +657,9 @@ contains
     ! the rotational periodicity of a 3-D sector (200 on faces 5-6) it goes on turned by
     ! delthe about the x axis: the wall nearest to a cell can be an image of the wall
     ! across those boundaries, and the distance is the minimum over the images too.
+    ! The wall faces are moved into one cell of the lattice of the translations, and
+    ! so is each cell centre before its search: a few images then suffice, whatever
+    ! the size of the mesh against its periods.
     call Wall_Images ( )
 
     ! One k-d tree over the wall-face centres, with the face radii, shared by every
@@ -697,17 +704,17 @@ contains
       subroutine Report_Twist ( )
         implicit none
         ! Local
-        integer  :: l, n, k, worst(4)
+        integer  :: l, k, worst(4)
         real(R8) :: c(3,4), t(3), nrm(3), bound, ratio, rmax
         logical  :: convex
 
         rmax = 0d0
         worst = 0
-        n = 0
         do l = 1, nbound
           if ( .not. Is_Wall(bc(l) % type) ) cycle
-          n = n + 1
-          c = wall_corner(:,1:4,n)
+          ! The corners of the face in the mesh, not as Wall_Images moves them: the threshold below is the resolution
+          ! of the coordinates of the mesh
+          c = Face_Corners ( blk(bc(l)%b), bc(l)%i, bc(l)%j, bc(l)%k, bc(l)%f )
           t = c(:,1) - c(:,2) + c(:,3) - c(:,4)
           bound = norm2 ( t ) / 16d0
           nrm = Cross3 ( c(:,3) - c(:,1), c(:,4) - c(:,2) )
@@ -800,59 +807,76 @@ contains
       end function Face_Corners
 
 
-      !> Images of the wall across the periodic boundaries (img_shift, img_angle, nimg) and the box around the wall.
+      !> Thickness of cell (Im, Jm, Km) of a block across its face Fm: the distance from the centre of the face to the
+      !> centre of the opposite face of the cell, along the normal of the face (the cross product of its diagonals), or
+      !> the distance between the two centres when the face has no normal.
+      function Cell_Across ( blk, Im, Jm, Km, Fm ) result ( h )
+        implicit none
+        type(MOSE_block_type), intent(in) :: blk
+        integer, intent(in)               :: Im, Jm, Km, Fm
+        real(R8)                          :: h
+        ! Local
+        real(R8) :: c(3,4), o(3,4), d(3), nrm(3)
+
+        c = Face_Corners ( blk, Im, Jm, Km, Fm )
+        o = Face_Corners ( blk, Im, Jm, Km, merge ( Fm + 1, Fm - 1, mod ( Fm, 2 ) == 1 ) )
+        d = 0.25d0 * ( sum ( o, dim=2 ) - sum ( c, dim=2 ) )
+        nrm = Cross3 ( c(:,3) - c(:,1), c(:,4) - c(:,2) )
+        if ( norm2 ( nrm ) > 0d0 ) then
+          h = abs ( dot_product ( d, nrm ) ) / norm2 ( nrm )
+        else
+          h = norm2 ( d )
+        end if
+
+      end function Cell_Across
+
+
+      !> Images of the wall across the periodic boundaries (img_shift, img_angle, nimg), the lattice of the periodic
+      !> translations (nv, basis, dual), the wall faces moved into one cell of it (around anchor), and their box.
       !>  - Translations: each periodic connection (201) gives the vector from its source face to its own face (the
       !>    difference of the face centres), in the meridional plane on a wedge, where it must lie along x. On a 3-D mesh
       !>    without sectors (delthe = 0) so does each block whose k faces are closed by type 200: its last k node plane
       !>    is the first one translated (Check_Mesh_Type), and the cells next to face 5 go on in those next to face 6
-      !>    (Ghost_Axysimmetry). The two sides of a periodic boundary match only to within the precision of the mesh
-      !>    file, so vectors that differ by less than MATCH times the size of the coordinates are the same (the tolerance
-      !>    of Check_Mesh_Type). The distinct vectors, shortest first, are reduced to a basis of the lattice they
-      !>    generate; a vector that is not an integer combination of the basis, within that tolerance times the number
-      !>    of vectors combined, stops the run. Images: the integer combinations sum k_i B_i with |k_i| <= 2 D |B*_i|,
-      !>    D the diagonal of the box around the nodes and B* the dual basis: a farther image is farther than D from
-      !>    every cell, beyond the wall of the mesh itself.
+      !>    (Ghost_Axysimmetry). The two sides of a periodic boundary match only to the round-off of the coordinates in
+      !>    the mesh file, so vectors that differ by at most ETA of the thinnest cell across the periodic boundaries are
+      !>    the same: the rule of Check_Mesh_Type, relative to the cells and not to the size of the coordinates, whose
+      !>    round-off grows with their distance from the origin (at 1e-6 of the size of the coordinates, a periodic
+      !>    channel turned by 30 degrees and written with 5 significant digits stops the run). The thickness of a cell
+      !>    across a periodic face is the distance from the centre of the face to the centre of the opposite face of
+      !>    the cell, along the normal of the face (Cell_Across); for a block closed in k by type 200, the move of its
+      !>    nodes per cell in k (Check_Mesh_Type). The distinct vectors, shortest first, are reduced to a basis of the
+      !>    lattice they generate; a vector that is not an integer combination of the basis, within that tolerance
+      !>    times the number of vectors combined, stops the run. The basis is then reduced pairwise (Lagrange) and,
+      !>    with three translations, by threes (Reduce_By_Two): the same lattice, with shorter vectors.
+      !>  - Every wall face is moved, whole, by the vector of the lattice that brings its centre into the cell of the
+      !>    lattice around anchor, the centre of the first wall face, where |B*_i . (x - anchor)| <= 1/2 (B* the dual
+      !>    basis); Reduced_Point moves each cell centre the same way. The periodic wall is the same set.
+      !>  - Images: the integer combinations sum k_i B_i with |k_i| <= floor(1 + rho_i + beta_i), rho_i the largest
+      !>    |B*_i . (corner - centre)| of a face and beta_i = (1/2) sum_j |(G^-1)_ij| G_jj, G the Gram matrix of the
+      !>    basis. The image that holds the point p of a face nearest to a moved cell centre c is a lattice vector
+      !>    closest to v = c - p: v less that image is nearer to 0 than to any +-B_j, so its coordinates along B* are
+      !>    at most beta_i in size, and those of v at most 1 + rho_i (docs/theory/turbulence.md). The bound does not
+      !>    depend on the size of the mesh against its periods.
       !>  - Rotations: on a 3-D mesh whose sectors are closed by type 200 on faces 5-6 (delthe /= 0), the turns by
-      !>    m delthe, |m delthe| <= pi; then every translation must lie along x, the axis of the turns.
-      !>  - More than NIMG_MAX images stop the run: the translations would be nearly parallel, or tiny against the mesh.
+      !>    m delthe, |m delthe| <= pi; then every translation must lie along x, the axis of the turns, which keep the
+      !>    coordinates along x.
+      !>  - A number of images that a default integer cannot hold stops the run.
       subroutine Wall_Images ( )
         implicit none
         ! Local
         integer, parameter    :: MAXV = 3
-        real(R8), parameter   :: MATCH = 1d-6, NIMG_MAX = 1d5
+        real(R8), parameter   :: ETA = 1d-2, PI = 3.141592653589793d0
         real(R8), allocatable :: raw(:,:), cand(:,:), clen(:)
         integer,  allocatable :: order(:)
         logical,  allocatable :: closed(:)
-        real(R8)              :: basis(3,MAXV), ginv(MAXV,MAXV), coef(MAXV), rhs(MAXV)
-        real(R8)              :: t(3), lo(3), hi(3), cface(3,4), diag, scale, tol, lim, bound, nimg_r
-        integer               :: nraw, nc, nv, kmax(MAXV), mrot, i, j, m, n, l, b, k1, k2, k3, kk(MAXV)
-        logical               :: sector, span
-        character(len=256)    :: msg
-
-        ! Box around the wall faces, and around every node, for the bound on the images
-        wall_box(:,1) = minval ( reshape ( wall_corner(:,1:4,1:nwall), [3, 4*nwall] ), dim=2 )
-        wall_box(:,2) = maxval ( reshape ( wall_corner(:,1:4,1:nwall), [3, 4*nwall] ), dim=2 )
-        lo = huge(1d0)
-        hi = -huge(1d0)
-        do b = 1, nb
-          do n = 1, 3
-            lo(n) = min ( lo(n), minval ( blk(b) % node(:,:,:) % c(n) ) )
-            hi(n) = max ( hi(n), maxval ( blk(b) % node(:,:,:) % c(n) ) )
-          enddo
-        enddo
-        scale = maxval ( max ( abs(lo), abs(hi) ) )
-        if ( wall_meridional ) then
-          ! (x, r): r runs from 0 to the largest |(y, z)|
-          hi(2) = sqrt ( max ( lo(2)**2, hi(2)**2 ) + max ( lo(3)**2, hi(3)**2 ) )
-          lo(2) = 0d0
-          lo(3) = 0d0
-          hi(3) = 0d0
-        end if
-        diag = norm2 ( hi - lo )
-        tol  = MATCH * scale
+        real(R8)              :: ginv(MAXV,MAXV), coef(MAXV), rhs(MAXV), rho(MAXV), beta(MAXV)
+        real(R8)              :: t(3), cface(3,4), hmin, thick, tol, lim, mr, images
+        integer               :: nraw, nc, kmax(MAXV), mrot, i, j, m, n, l, b, k1, k2, k3, kk(MAXV)
+        logical               :: sector, span, changed
+        character(len=512)    :: msg
 
         ! Translations: of the periodic connections, and of the blocks closed in k by type 200 on a 3-D mesh without
-        ! sectors
+        ! sectors; hmin, the thinnest cell across them
         span = ndir == 3 .and. delthe >= 0d0 .and. delthe <= 0d0
         nraw = 0
         do l = 1, nbound
@@ -861,6 +885,7 @@ contains
         if ( span ) nraw = nraw + nb
         allocate ( raw(3, max(nraw,1)), cand(3, max(nraw,1)), clen(max(nraw,1)), order(max(nraw,1)) )
         nraw = 0
+        hmin = huge(1d0)
         do l = 1, nbound
           if ( bc(l) % type /= 201 ) cycle
           cface = Face_Corners ( blk(bc(l)%b), bc(l)%i, bc(l)%j, bc(l)%k, bc(l)%f )
@@ -868,6 +893,8 @@ contains
           cface = Face_Corners ( blk(bc(l)%bs), bc(l)%is, bc(l)%js, bc(l)%ks, bc(l)%fs )
           nraw = nraw + 1
           raw(:,nraw) = t - 0.25d0 * sum ( cface, dim=2 )
+          hmin = min ( hmin, Cell_Across ( blk(bc(l)%b), bc(l)%i, bc(l)%j, bc(l)%k, bc(l)%f ), &
+                             Cell_Across ( blk(bc(l)%bs), bc(l)%is, bc(l)%js, bc(l)%ks, bc(l)%fs ) )
         enddo
         if ( span ) then
           allocate ( closed(nb) )
@@ -879,9 +906,19 @@ contains
             if ( .not. closed(b) ) cycle
             nraw = nraw + 1
             raw(:,nraw) = blk(b) % node(0,0,blk(b)%dim(3)) % c - blk(b) % node(0,0,0) % c
+            ! The move of the nodes per cell in k, as Check_Mesh_Type takes it
+            thick = 0d0
+            do j = 0, blk(b) % dim(2)
+              do i = 0, blk(b) % dim(1)
+                thick = max ( thick, maxval ( abs ( blk(b) % node(i,j,blk(b)%dim(3)) % c - blk(b) % node(i,j,0) % c ) ) )
+              enddo
+            enddo
+            hmin = min ( hmin, thick / blk(b) % dim(3) )
           enddo
           deallocate ( closed )
         end if
+        tol = 0d0
+        if ( nraw > 0 ) tol = ETA * hmin
         nc = 0
         do l = 1, nraw
           t = raw(:,l)
@@ -934,12 +971,19 @@ contains
             if ( norm2 ( t - matmul ( basis(:,1:nv), anint ( coef(1:nv) ) ) ) <= lim ) cycle
             ! In the span of the basis, between its integer combinations: the periodic boundaries disagree
             if ( norm2 ( t - matmul ( basis(:,1:nv), coef(1:nv) ) ) <= lim ) then
-              write(msg,'(A,3ES12.4,A)') '[ERROR] Wall distance: the periodic translation (', t, &
-                ') is not an integer combination of the others'
+              write(msg,'(A,3ES12.4,A,ES8.2,A)') '[ERROR] Wall distance: the periodic translation (', t, &
+                ') is not an integer combination of the others, to 1e-2 of the thinnest cell across the periodic'// &
+                ' boundaries (', hmin, '): the two sides of each periodic boundary must match to that, with the node'// &
+                ' coordinates written with enough significant digits'
               call mpi_abort_all ( trim(msg) )
             end if
           end if
-          if ( nv == MAXV ) call mpi_abort_all ( '[ERROR] Wall distance: more than three independent periodic translations' )
+          if ( nv == MAXV ) then
+            write(msg,'(A,ES8.2,A)') '[ERROR] Wall distance: more than three independent periodic translations, to'// &
+              ' 1e-2 of the thinnest cell across the periodic boundaries (', hmin, '): the two sides of each periodic'// &
+              ' boundary must match to that, with the node coordinates written with enough significant digits'
+            call mpi_abort_all ( trim(msg) )
+          end if
           nv = nv + 1
           basis(:,nv) = t
         enddo
@@ -959,31 +1003,100 @@ contains
           enddo
         end if
 
-        ! Bounds of the integer coefficients, |k_i| <= 2 D |B*_i| with |B*_i|^2 = (G^-1)_ii, and of the turns, and the
-        ! number of images (in reals: no integer overflow before the check)
-        kmax = 0
-        mrot = 0
-        nimg_r = 1d0
+        ! Pairwise (Lagrange) reduction of the basis: B_j <- B_j - m B_i, m the integer nearest to B_i.B_j / B_i.B_i,
+        ! while that shortens B_j by a factor below 1 - 1e-12 (so it ends). With three translations, when no pair
+        ! shortens, also by threes: B_l <- B_l - m_i B_i - m_j B_j (Reduce_By_Two), which finds a short combination
+        ! of all three that no pair gives, as B_1 + B_2 + B_3 of three nearly dependent translations. Unimodular
+        ! steps: the same lattice
+        changed = nv > 1
+        do while ( changed )
+          changed = .false.
+          do i = 1, nv
+            do j = 1, nv
+              if ( i == j ) cycle
+              mr = anint ( dot_product ( basis(:,i), basis(:,j) ) / dot_product ( basis(:,i), basis(:,i) ) )
+              if ( abs ( mr ) < 0.5d0 ) cycle
+              t = basis(:,j) - mr * basis(:,i)
+              if ( norm2 ( t ) < ( 1d0 - 1d-12 ) * norm2 ( basis(:,j) ) ) then
+                basis(:,j) = t
+                changed = .true.
+              end if
+            enddo
+          enddo
+          if ( nv == 3 .and. .not. changed ) then
+            do l = 1, 3
+              t = Reduce_By_Two ( basis(:,l), basis(:,mod(l,3)+1), basis(:,mod(l+1,3)+1) )
+              if ( norm2 ( t ) < ( 1d0 - 1d-12 ) * norm2 ( basis(:,l) ) ) then
+                basis(:,l) = t
+                changed = .true.
+              end if
+            enddo
+          end if
+        enddo
+
+        ! Dual basis, B*_i = sum_j (G^-1)_ij B_j, and beta_i = (1/2) sum_j |(G^-1)_ij| G_jj, bound on the coordinates
+        ! along B*_i of a vector nearer to 0 than to any +-B_j (1/2 on an orthogonal basis)
+        if ( nv > 0 ) call Invert_Gram ( basis, nv, ginv )
+        do i = 1, nv
+          dual(:,i) = 0d0
+          beta(i) = 0d0
+          do j = 1, nv
+            dual(:,i) = dual(:,i) + ginv(i,j) * basis(:,j)
+            beta(i) = beta(i) + 0.5d0 * abs ( ginv(i,j) ) * dot_product ( basis(:,j), basis(:,j) )
+          enddo
+        enddo
+
+        ! Every wall face moved, whole, by the vector of the lattice that brings its centre into the cell of the lattice
+        ! around the anchor, the centre of the first wall face; a moved face takes its radius again from its moved
+        ! corners. rho_i: the largest |B*_i . (corner - centre)| of a face
+        anchor = wall_corner(:,0,1)
+        rho = 0d0
         if ( nv > 0 ) then
-          call Invert_Gram ( basis, nv, ginv )
-          do m = 1, nv
-            bound = 2d0 * diag * sqrt ( ginv(m,m) )
-            if ( .not. ( bound <= NIMG_MAX ) ) bound = NIMG_MAX   ! too large, or not a number (Gram matrix singular)
-            kmax(m) = floor ( bound ) + 1
-            nimg_r = nimg_r * ( 2 * kmax(m) + 1 )
+          do n = 1, nwall
+            t = Lattice_Shift ( wall_corner(:,0,n) )
+            if ( any ( abs ( t ) > 0d0 ) ) then
+              do m = 0, 4
+                wall_corner(:,m,n) = wall_corner(:,m,n) - t
+              enddo
+              facex(n) = wall_corner(1,0,n)
+              facey(n) = wall_corner(2,0,n)
+              facez(n) = wall_corner(3,0,n)
+              facer(n) = 0d0
+              do m = 1, 4
+                facer(n) = max ( facer(n), norm2 ( wall_corner(:,m,n) - wall_corner(:,0,n) ) )
+              enddo
+              facer(n) = facer(n) * ( 1d0 + 1d-10 )
+            end if
+            do i = 1, nv
+              do m = 1, 4
+                rho(i) = max ( rho(i), abs ( dot_product ( dual(:,i), wall_corner(:,m,n) - wall_corner(:,0,n) ) ) )
+              enddo
+            enddo
           enddo
         end if
-        if ( sector ) then
-          bound = 3.141592653589793d0 / abs ( delthe )
-          if ( .not. ( bound <= NIMG_MAX ) ) bound = NIMG_MAX
-          mrot = ceiling ( bound )
-          nimg_r = nimg_r * ( 2 * mrot + 1 )
-        end if
-        if ( nimg_r - 1d0 > NIMG_MAX ) then
-          write(msg,'(A,ES10.3,A)') '[ERROR] Wall distance: ', nimg_r - 1d0, ' periodic images of the wall: the periodic'// &
-            ' translations are nearly parallel, or tiny against the mesh (do the two sides of the periodic boundaries match?)'
+
+        ! Box around the wall faces, as moved
+        wall_box(:,1) = minval ( reshape ( wall_corner(:,1:4,1:nwall), [3, 4*nwall] ), dim=2 )
+        wall_box(:,2) = maxval ( reshape ( wall_corner(:,1:4,1:nwall), [3, 4*nwall] ), dim=2 )
+
+        ! Bounds of the integer coefficients, |k_i| <= floor(1 + rho_i + beta_i), and of the turns, |m delthe| <= pi;
+        ! first the number of images in reals (an upper bound), which a default integer must hold
+        images = 1d0
+        do i = 1, nv
+          images = images * ( 2d0 * aint ( 1d0 + rho(i) + beta(i) ) + 1d0 )
+        enddo
+        if ( sector ) images = images * ( 2d0 * aint ( PI / abs ( delthe ) + 1d0 ) + 1d0 )
+        if ( .not. ( images - 1d0 < real ( huge(nimg), R8 ) ) ) then
+          write(msg,'(A,ES10.3,A)') '[ERROR] Wall distance: ', images - 1d0, ' periodic images of the wall, more'// &
+            ' than an integer holds'
           call mpi_abort_all ( trim(msg) )
         end if
+        kmax = 0
+        mrot = 0
+        do i = 1, nv
+          kmax(i) = floor ( 1d0 + rho(i) + beta(i) )
+        enddo
+        if ( sector ) mrot = ceiling ( PI / abs ( delthe ) )
 
         ! The images, all but the identity
         nimg = product ( 2*kmax + 1 ) * ( 2*mrot + 1 ) - 1
@@ -1053,6 +1166,36 @@ contains
       end subroutine Invert_Gram
 
 
+      !> One step of the reduction by threes of Wall_Images: the shortest of bk - m_i bi - m_j bj over the integers
+      !> m_i, m_j nearest to the least-squares coefficients of bk on bi, bj and next to them (bk itself when none is
+      !> shorter).
+      pure function Reduce_By_Two ( bk, bi, bj ) result ( best )
+        implicit none
+        real(R8), intent(in) :: bk(3), bi(3), bj(3)
+        real(R8)             :: best(3)
+        ! Local
+        real(R8) :: gii, gij, gjj, ri, rj, det, ci, cj, t(3)
+        integer  :: a, b
+
+        gii = dot_product ( bi, bi )
+        gij = dot_product ( bi, bj )
+        gjj = dot_product ( bj, bj )
+        ri  = dot_product ( bi, bk )
+        rj  = dot_product ( bj, bk )
+        det = gii * gjj - gij * gij
+        ci  = anint ( ( gjj * ri - gij * rj ) / det )
+        cj  = anint ( ( gii * rj - gij * ri ) / det )
+        best = bk
+        do a = -1, 1
+          do b = -1, 1
+            t = bk - ( ci + a ) * bi - ( cj + b ) * bj
+            if ( norm2 ( t ) < norm2 ( best ) ) best = t
+          enddo
+        enddo
+
+      end function Reduce_By_Two
+
+
       !> Distance from p to the box wall_box (0 inside).
       pure function Box_Distance ( p ) result ( d )
         implicit none
@@ -1084,6 +1227,35 @@ contains
       end function Image_Point
 
 
+      !> The vector of the lattice of the periodic translations that brings the point p into the cell of the lattice
+      !> around anchor: sum_i k_i B_i, k_i the integer nearest to B*_i . (p - anchor); zero without translations.
+      pure function Lattice_Shift ( p ) result ( s )
+        implicit none
+        real(R8), intent(in) :: p(3)
+        real(R8)             :: s(3)
+        ! Local
+        integer :: i
+
+        s = 0d0
+        do i = 1, nv
+          s = s + anint ( dot_product ( dual(:,i), p - anchor ) ) * basis(:,i)
+        enddo
+
+      end function Lattice_Shift
+
+
+      !> The point p moved into the cell of the lattice of the periodic translations around anchor, where Wall_Images
+      !> moves the wall faces; p itself without translations.
+      pure function Reduced_Point ( p ) result ( q )
+        implicit none
+        real(R8), intent(in) :: p(3)
+        real(R8)             :: q(3)
+
+        q = p - Lattice_Shift ( p )
+
+      end function Reduced_Point
+
+
       subroutine Wall_Distance_Blk ( blk, tree, face_kr )
         use MOSE_Lib_KDTree, only: kdtree_t, kdtree_nearest_object
         implicit none
@@ -1100,7 +1272,8 @@ contains
         do j = 1, blk % dim(2)
         do i = 1, blk % dim(1)
 
-          center = Cell_Centre ( blk, i, j, k )
+          ! The cell centre, moved into the cell of the lattice of the periodic translations that holds the wall faces
+          center = Reduced_Point ( Cell_Centre ( blk, i, j, k ) )
 
           ! Nearest wall face via the k-d tree, exact point-face distance.
           call kdtree_nearest_object ( tree, center(1), center(2), center(3), Wall_Face_Distance, dist, iface )
@@ -1145,7 +1318,7 @@ contains
         do j = 1, blk % dim(2)
         do i = 1, blk % dim(1)
 
-          center = Cell_Centre ( blk, i, j, k )
+          center = Reduced_Point ( Cell_Centre ( blk, i, j, k ) )
 
           dbrute = 1d8
           do n = 0, nimg

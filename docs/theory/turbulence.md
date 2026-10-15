@@ -650,6 +650,19 @@ or face centre, which differs from it wherever the grid lines are not normal
 to the wall; next to a convex corner or at the end of a wall it is the
 distance to the corner or the end.
 
+The distance to the centre of the nearest wall face is wrong by a fixed
+fraction in the first cell of a skewed mesh. With the grid lines at an angle
+$\theta$ to the wall normal, the centre of the first cell, at the height
+$d_1$, lies $d_1\tan\theta$ along the wall from the centre of its wall face,
+the nearest face centre while $d_1\tan\theta$ is at most half the face, at
+the distance $d_1/\cos\theta$. The relative error,
+$1/\cos\theta - 1$, does not fall with refinement: 1.5 % at 10°, 6.4 % at 20°,
+15.5 % at 30°, 41 % at 45°. It enters squared the destruction of SA,
+$c_{w1} f_w (\tilde\nu/d)^2$ (a factor $\cos^2\theta$: 0.97, 0.88, 0.75,
+0.50), and the arguments of $F_1$ and $F_2$ and the wall value
+$\omega_w = 60\nu/(\beta_1 d_1^2)$ of SST. That distance is exact only on
+meshes orthogonal to the wall, with the cell centres above the face centres.
+
 - Each face of a wall boundary (types 301, 302, 503–505) is taken as the four
   triangles between its centre and its sides, which are the face itself when
   the face is plane and convex, as on every 2-D and axisymmetric mesh (on a
@@ -669,16 +682,63 @@ distance to the corner or the end.
   the periodic images of the wall too. A periodic connection (type 201) gives
   the translation from its source face to its own face, and on a 3-D mesh
   without sectors so does a block closed in $k$ by type `200` (its last node
-  plane is the first one translated); the images are the integer combinations
-  of these translations (along $x$ on an axisymmetric wedge). The two sides of
-  a periodic boundary match only to the precision of the mesh file:
-  translations that differ by less than $10^{-6}$ of the size of the
-  coordinates are the same. On a 3-D mesh whose sectors are closed by the
-  rotational periodicity (type `200` on faces 5–6) the images are also the
-  turns by multiples of the sector angle about the $x$ axis. An image is
-  searched only when the box around the wall, seen from the cell moved back
-  by the image, is not farther than the distance found so far, so a mesh
-  without periodic boundaries costs nothing more.
+  plane is the first one translated). The distinct translations are reduced
+  to a basis $B_1 \ldots B_n$ of the lattice they generate, shortest first,
+  and then pairwise (Lagrange: $B_j$ becomes $B_j - m B_i$, $m$ the integer
+  nearest to $B_i\cdot B_j / B_i\cdot B_i$, while that shortens it) and, with
+  three translations, by threes ($B_l$ becomes $B_l - m_i B_i - m_j B_j$, with
+  $m_i, m_j$ the integers nearest to the least-squares coefficients of $B_l$ on
+  $B_i, B_j$ or next to them, while that shortens it). Three nearly dependent
+  translations can be reduced pair by pair (no pairwise step shortens them)
+  and still have a short sum: $B_1 = (1, 0, 0)$,
+  $B_2 = (-\tfrac12, \tfrac{\sqrt3}{2}, 0)$,
+  $B_3 = (-\tfrac12, -\tfrac{\sqrt3}{2}, \varepsilon)$ give
+  $B_1 + B_2 + B_3 = (0, 0, \varepsilon)$, which only the step by threes finds.
+  Each step adds to a vector an integer combination of the others, so the
+  lattice is the same, and the bound below holds for any basis of it: the
+  reduction only keeps the number of images small. The
+  images are the integer combinations $\sum_i k_i B_i$ of the basis (along $x$
+  on an axisymmetric wedge). The two sides of a periodic boundary match only
+  to the round-off of the coordinates in the mesh file: translations that
+  differ by at most $10^{-2}$ of the thinnest cell across the periodic
+  boundaries are the same, as in the type of the mesh. The thickness of a
+  cell across a periodic face is the distance from the centre of the face to
+  the centre of the opposite face of the cell, along the normal of the face;
+  for a block closed in $k$ by type `200`, the move of its nodes per cell in
+  $k$. The round-off of a coordinate grows with its size, so a tolerance
+  relative to the size of the coordinates would depend on where the mesh
+  lies; relative to the cells it does not. On a 3-D mesh whose
+  sectors are closed by the rotational periodicity (type `200` on faces 5–6)
+  the images are also the turns by multiples of the sector angle about the
+  $x$ axis, up to half a turn either way.
+- Only a bounded set of images can hold the nearest wall, whatever the size of
+  the mesh against its periods. Let $B^*_i$ be the dual basis
+  ($B^*_i\cdot B_j = \delta_{ij}$), $G_{ij} = B_i\cdot B_j$ the Gram matrix,
+  and $w_i = B^*_i\cdot w$ the coordinates of a vector $w$. Every wall face
+  is moved, whole, by the lattice vector that brings its centre $m$ to
+  $|(m - a)_i| \le 1/2$, $a$ the centre of the first wall face, and so is the
+  centre $c$ of every cell before its search: the periodic wall is the same
+  set. Let $p$ be the point of a face nearest to $c$ over all the images, and
+  $s$ the image that holds it: $s$ is a lattice vector closest to $v = c - p$
+  (another one would bring a point of the same face nearer), so $u = v - s$ is
+  not farther from 0 than from $\pm B_j$, $|u\cdot B_j| \le G_{jj}/2$, and
+  since $u_i = \sum_j (G^{-1})_{ij}\, u\cdot B_j$,
+  $|u_i| \le \beta_i = \tfrac12 \sum_j |(G^{-1})_{ij}|\, G_{jj}$ ($1/2$ on
+  an orthogonal basis). A face is the four triangles between its centre $m$
+  and its sides, so $|(p - m)_i| \le \rho_i$, $\rho_i$ the largest
+  $|(q - m)_i|$ of a corner $q$ of a face, and
+  $|v_i| \le |(c - a)_i| + |(m - a)_i| + |(p - m)_i| \le 1 + \rho_i$. The
+  coefficients of $s$ are $k_i = v_i - u_i$: the images searched are
+  $|k_i| \le \lfloor 1 + \rho_i + \beta_i \rfloor$, one on each side
+  ($|k_i| \le 1$) when $\rho_i < 1/2$ on an orthogonal lattice. On a sector
+  every translation lies along $x$, and the turns keep the coordinate along
+  $x$, so the same bound holds for each turn. An image is searched only when
+  the box around the moved wall, seen from the cell moved back by the image,
+  is not farther than the distance found so far, so a mesh without periodic
+  boundaries costs nothing more. Translations that do not form a lattice stop
+  the run: one that is not an integer combination of the others, more than
+  three independent ones, or one not along $x$ on a wedge or with sectors; so
+  does a number of images too large for an integer.
 - Each cell takes the sand-grain roughness $k_s$ of the face that gives the
   minimum distance; between faces at the same distance, the first one in the
   boundary file.

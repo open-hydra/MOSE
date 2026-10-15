@@ -125,15 +125,35 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 | `410` | Assigned state (time-varying file) | `filename  [periodic]` |
 | `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  r_throat,  rel_fac,  [massf],  [turb]` |
 
+Type `409` (a forced outlet named in the reader of the boundary file) is not implemented: a record of type `409`, or of any
+type not listed on this page, gets no flux, and this version does not stop on it. Type `410` reads its data on the finest
+grid level only: do not use it with a sequence of grid levels.
+
 **Common fields:**
 
 | Field | Description |
 |-------|-------------|
 | `alpha` | In-plane flow angle [rad] or the token `normal` (face-normal inflow) |
 | `beta` | Out-of-plane flow angle [rad] or `normal` |
-| `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation) |
+| `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation); no effect on `401`, `402` and `407` |
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
 | `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |
+
+**Inlets at total conditions (`401`, `402`, `407`).** The gas enters when $p_0$ is above
+$p_\text{stop} = p\,\bigl(1 + \tfrac{\gamma-1}{2}\,w/a\bigr)^{2\gamma/(\gamma-1)}$, the pressure that the gas of
+the boundary cell (pressure $p$, speed of sound $a$, velocity $w$ along the outward normal) reaches when the outgoing
+acoustic wave brings it to rest: a cell at rest takes the inflow as soon as $p_0 > p$, and a cell moving out takes it
+when $p_0$ is high enough to turn the flow back. The face state then follows from $T_0$, $p_0$, the flow direction
+and the invariant $a + \tfrac{\gamma-1}{2}\,w$ that reaches the face from inside. When that state would be supersonic
+across the face, the invariant can no longer reach it and the face is choked: normal Mach number 1, with the total
+temperature and pressure of the reservoir (with the direction normal, the critical state $a_0\sqrt{2/(\gamma+1)}$, the
+largest mass flux the reservoir can give). When the gas does not enter, `401` and
+`402` make the face a slip wall: they let no gas out, and reflect a wave that reaches them with a stagnation pressure
+above $p_0$. `407` is then an outlet at `p_back`: with the gas of the cell at rest or moving out, the outlet treatment of
+`406`; with the gas moving in, the face takes the state that the outgoing wave gives at the pressure
+$\min(p_\text{back}, p_\text{stop})$, where its velocity points out (at $p_\text{stop}$ the gas is at rest at the face), and
+it has no flux when the gas moves in at $2a/(\gamma-1)$ or faster. `rel_fac` has no effect on these three types: when the gas
+enters, the face state exists with $p_0$ as given.
 
 **Time-varying data (`402`, `410`).** The `p0_file` of type `402` lists
 `time  p0` pairs, one per line, with `p0` in bar; a first line containing
@@ -166,6 +186,9 @@ Runge–Kutta stage (see
 |:----:|------|-----------|
 | `501` | Manifold connection | `bs  fs` |
 
+Type `501` does not work in this version: MOSE computes the mean state of the connected face and does not use it, so the face
+gets no flux. Do not use it.
+
 ### Gas–Surface Interaction
 
 Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.md) for the models and their limitations.
@@ -176,6 +199,9 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 | `503` | Melting            | `cp_wall, T_wall, Ti_wall, dh_wall, q_rad, eps_wall, [massf_1 … massf_ns]` |
 | `504` | Pyrolysis          | `pyro_id, q_rad, eps_wall, [massf_1 … massf_ns]`                           |
 | `505` | Surface reactions  | `reac_id, q_rad`                                                           |
+
+Type `506` is read but not applied in this version: the face gets no flux. Do not use it; `504` and `505` are the pyrolysis and
+the surface reactions alone.
 
 
 | Field       | Description                                                                                       |
