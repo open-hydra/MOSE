@@ -36,20 +36,61 @@ nightly/local tier.
 |---|---|---|---|
 | Equations | euler, navier-stokes | both | — |
 | Time scheme | euler, RK2, RK3 | RK3 only | RK2, forward-euler untested |
-| Integration vars | cons, prim, prec | cons (+ prec in Gresho) | `prim` untested |
+| Integration vars | cons, prim, prec | cons, prim (`NumericsSmoke`); prec with HLLC-PC (`Connections`/`ConnectionFlux`, `TimeIntegration`/`LocalTimeStep`) | no accuracy check of `prim` and `prec` |
 | Space recon | first-order, MUSCL | both (first-order: Noh87, LimiterDefaults) | — |
 | Limiters | vanleer, vanalbada, minmod, superbee, mc | vanleer (mostly) | 4 of 5 never smoke-tested |
-| Riemann solvers | ~14 | ~6 in V&V | half never executed in CI |
-| Low-Mach (Mco) | floor | Gresho | ok |
+| Riemann solvers | 15 | 13: 11 in `RiemannSmoke` (no NaN, ρ, p > 0), HLLC+Chen and HLLC-PC in `Connections`/`ConnectionFlux` | LMRoe only in the Gresho vortex, outside CTest; MiczekRoe in no test |
+| Low-Mach (Mco) | floor | HLLC+Chen and HLLC-PC in `Connections`/`ConnectionFlux` (two blocks against one, conservation); the Gresho vortex is outside CTest | no CTest check of low-Mach accuracy |
 | IRS / multigrid / CFL-ramp | yes | implicit only | no dedicated check |
-| Turbulence | SA(+R/RC/comp), SST, Wilcox2006 | SA, SST, Wilcox2006 (flat plate) | RC/comp variants untested |
-| Chemistry | frozen, finite-rate, equilibrium | all (needs Cantera/Sundials) | can't run in CI |
+| Turbulence | SA(+R/RC/comp), SST, Wilcox2006 | SA, SA-RC, SST, SST-RC and Wilcox2006 in checks of sources, right-hand sides and invariants (`TimeIntegration`/`TurbulenceSources`, `MMSResiduals`, `PointImplicitSteady`, `PlanarNozzleGrids`); the turbulent flat plate is outside CTest | no CTest check against a reference solution; SA-R untested; SAcomp refused at set-up |
+| Chemistry | frozen, finite-rate, equilibrium | finite-rate and equilibrium runs that must end, stop at set-up or keep the bits of a run without chemistry (`InputChecks`/`ExitCodes`; with MPI, equilibrium in `MPIVertexStencil`); the reactive cases are outside CTest | no CTest check of reactive results against a reference |
 | Multi-block | core feature | faces between blocks: one block against two and records sorted against reversed, bit for bit (`Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder`; with MPI `MPIConnectionFlux`, `MPIConnectionOrder`) | 3-D faces with permuted index directions, connections with multigrid and with RANS untested |
 | Ablative wall BCs (503/504/505) | melting, pyrolysis, surface reactions | 503/504 vs closed form (`AblatingWall`) | 505 needs a CO/CO2 thermo table |
 | Restart | core feature | every format bit for bit, counters included (`Restart`, `Restart`/`RestartCounters`, `MPIRestart`; `tecplot binary` with TecIO) | `MPIRestart` in `vtk raw` only |
 | I/O formats | tec ascii/bin, vtk ascii/raw | ascii; `vtk raw` files are well-formed XML with the right names, the field, wall and diagnostic outputs of a steady run carry minus the global iteration count as their time in `vtk raw`, `vtk ascii` and Tecplot ASCII (`OutputFiles`/`VtkNames`), and `vtk raw` files hold raw appended data (`OutputFiles`/`VtkRawFormat`) | round-trip untested |
-| Parallelism | OpenMP, MPI | 1 vs 4 threads (`OpenMPEquiv`); MPI ranks × threads bit-identical in the `needs-mpi` tier (`test/mpi/`) | MPI tier runs only in MPI builds, not on the CI runner |
+| Parallelism | OpenMP, MPI | 1 vs 4 threads (`OpenMPEquiv`); MPI ranks × threads bit-identical in the `needs-mpi` tier (`test/mpi/`) | MPI tier runs only in MPI builds: the second CI job, `test-mpi` (gfortran, Open MPI) |
 | 3D | full | source terms only | no 3D NS verification |
+
+Cases of [`docs/vv`](../docs/vv/index.md) count as tested in this map only when CTest runs them. For every case
+folder: its CTest test, which fails when the criterion fails, or outside CTest; the reference data; the criterion
+of the case:
+
+| Case (`test/`) | Page (`docs/vv/`) | CTest | Reference | Criterion |
+|---|---|---|---|---|
+| `1D/Sod79` | `1D.md` | `Sod79` | analytic solution (Sod 1978) | `check.py` |
+| `1D/Ein91` | `1D.md` | `Einfeldt91` | analytic solution (ExactPack) | `verify.py` |
+| `1D/Noh87` | `1D.md` | `Noh87` | analytic solution (ExactPack) | `verify.py` |
+| `1D/Tor99` | `1D.md` | `Toro99` | analytic solution (ExactPack) | `verify.py` |
+| `1D/Shu-Osher` | `1D.md` | `ShuOsher`, `ShuOsherConvergence` | MOSE solution on N = 1600 (`reference/`) | `verify.py`, `convergence.py` (F8, P5) |
+| `2D/euler/prandtl-meyer` | — | `PrandtlMeyer` | analytic Prandtl–Meyer expansion | `check.py` |
+| `2D/euler/isentropic-vortex` | `2D-isentropic-vortex.md` | `IsentropicVortex` | exact solution | `verify.py` (N1) |
+| `2D/viscous/mms` | `2D-mms.md` | `MMSViscous` | manufactured solution | `verify.py` (N2) |
+| `2D/viscous/mms/skewed` | `2D-mms-skewed.md` | `MMSViscousSkewed` | manufactured solutions | `verify.py` (N2) |
+| `3D/viscous/mms` | `3D-mms.md` | `MMSViscous3D` | manufactured solutions | `verify.py` (N2) |
+| `2D/viscous/planar-nozzle` | `2D-planar-nozzle-grids.md` | `PlanarNozzleGrids` | mirror symmetry of O and H grids | `verify.py` (N8) |
+| `2D/viscous/ablating-wall` | `2D-ablating-wall.md` | `AblatingWall` | closed form of the wall state | `run.sh` (P1) |
+| `1D/Fer14` | `1D-fer14.md` | outside | digitized velocity and temperature profiles (`reference/*.csv`) | none: `verify.py` plots |
+| `1D/diff1` | `1D-diffusion.md` | outside | Cantera (`reference/reference_unity_lewis.py`); MOSE fields in `reference/` | none: no verifier in the folder |
+| `1D/diff2` | `1D-multicomponent-diffusion.md` | outside | Cantera (`reference/reference_multicomponent.py`); MOSE fields in `reference/` | none: no verifier in the folder |
+| `1D/premixed-flame` | `1D-premixed-flame.md` | outside | Cantera free flame (`reference/flame_phi_1.0.csv`) | none: `verify.py` prints and plots |
+| `2D/euler/chang-nozzle` | — | outside | Mach on the axis and at the wall (`reference/ref1.dat`, `ref2.dat`) | none: `verify.py` plots |
+| `2D/euler/gresho-vortex` | `2D-gresho-vortex.md` | outside | the initial vortex, a steady solution | none: `verify.py` prints and plots |
+| `2D/euler/hypersonic-cylinder` | `2D-hypersonic-cylinder.md` | outside | normal-shock relations at the stagnation line | none: `verify.py` prints and plots |
+| `2D/euler/oblique-shock` | `2D-oblique-shock.md` | outside | oblique-shock relations | `verify.py`: p2/p1, T2/T1, ρ2/ρ1 and M2 within 1.5 % for each solver |
+| `2D/euler/ramp-channel` | — | outside | oblique-shock relations | none: `verify.py` plots |
+| `2D/euler/rocket-nozzle/frozen` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`); `reference/field.tec` | none: `../verify.py` plots |
+| `2D/euler/rocket-nozzle/finite-rate` | `2D-nozzle.md` | outside | `reference/field.tec` | `verify.py`: p, ρ, u, v and γ at the throat within a relative 1e-3 |
+| `2D/euler/rocket-nozzle/equilibrium` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`); `reference/field.tec` | none: `../verify.py` plots |
+| `2D/euler/supersonic-forward-step` | `2D-woodward-colella.md` | outside | OpenFOAM solution (`reference/OpenFOAM/`) | none: `verify.py` prints L2 and L∞ differences |
+| `2D/viscous/flat-plate-laminar` | `2D-flat-plate-laminar.md` | outside | Blasius solution, computed by `verify.py` | `verify.py` prints PASS for an RMS c_f error below 2.5 % at x ≥ 0.05 m; its exit code is 0 either way |
+| `2D/viscous/flat-plate-turbulent/SA` | `2D-flat-plate-turbulent.md` | outside | c_f of CFL3D (`reference/cf.dat`) | `verify.py`: RMS c_f error below 5 % |
+| `2D/viscous/flat-plate-turbulent/SST` | `2D-flat-plate-turbulent.md` | outside | c_f of FUN3D (`reference/cf.dat`) | `verify.py`: RMS c_f error below 8 % |
+| `2D/viscous/flat-plate-turbulent/Wilcox2006` | `2D-flat-plate-turbulent.md` | outside | c_f of CFL3D (`reference/cf.dat`) | `verify.py`: RMS c_f error below 8 % |
+| `2D/viscous/swbli/SA` | `2D-swbli.md` | outside | Schülein experiment; SU2, Wind-US, OpenFOAM (`reference/`) | none: no verifier; its initial condition is a binary Tecplot file (TecIO) |
+| `2D/viscous/swbli/SST` | `2D-swbli.md` | outside | as SA | as SA |
+| `3D/coriolis-channel` | `rotating-frame.md` | outside | — | none: no verifier |
+| `3D/pressure-centrifugal` | `rotating-frame.md` | outside | closed-form isentropic solution of the page | none: no verifier |
+| `3D/hyshotII` | `3D-hyshotII.md` | outside | wall pressure of the experiment and of TAU with SA (`reference/`) | none: no verifier; mesh and initial condition in binary Tecplot (TecIO) |
 
 ---
 
@@ -102,9 +143,10 @@ nightly/local tier.
   and pressure. The full form runs every family on three levels to convergence.
 
 ### Physics
-- ☑ **Turbulent flat plate, SA / SST / Wilcox2006** — already covered, one case per
-  model under `test/2D/viscous/flat-plate-turbulent/{SA,SST,Wilcox2006}/`, each
-  vs NASA CFL3D/FUN3D reference Cf. *No further turbulent flat-plate tests needed.*
+- ☑ **Turbulent flat plate, SA / SST / Wilcox2006** — one case per model under
+  `test/2D/viscous/flat-plate-turbulent/{SA,SST,Wilcox2006}/`, each vs NASA CFL3D/FUN3D
+  reference Cf, outside CTest (200 000 iterations with SA, 100 000 with SST and
+  Wilcox 2006; see §2). *No further turbulent flat-plate cases needed.*
 - ☐ **P3 — Couette / Poiseuille** (2D viscous, analytic): clean fast laminar-NS check
   independent of Blasius subtleties.
 - ☐ **P4 — 3D Euler verification**: 3D isentropic vortex or manufactured case (3D is
@@ -314,4 +356,4 @@ The current blocker is that only 2 cases are in CTest. Restructure before adding
 3. F5–F7, then N3/N4 (cheap, high coverage of numerics paths).
 4. N1/N2 order-of-accuracy (multi-grid, slower → tier 1).
 5. P3–P5 physics validation (tier 1/2). (Turbulent flat plate SA/SST/Wilcox2006
-   already exist; remaining turbulence gap is the SA RC/comp variants.)
+   exist as cases outside CTest: see §2 and §3.)
