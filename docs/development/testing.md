@@ -287,6 +287,13 @@ Run the tier from the build directory of an MPI build:
 ctest -L needs-mpi --output-on-failure
 ```
 
+The tests take a run as failed on a missing output and on the lines that MOSE writes on an error (`[ERROR]` lines,
+the stop of a diverging run, the stops of every rank, the run-time errors of the compilers); the lines that the MPI
+launcher adds to the same log are not MOSE's and do not count. With Open MPI 4.1.4 (the version of these checks),
+`mpiexec` declares a process "exiting improperly" and exits with 1 also when the process called `MPI_FINALIZE`, if it
+handles the end synchronization of that process after the 2 s that `PMIx_Finalize` waits for it; the message is from
+`mpiexec`, not from MOSE.
+
 The broader plan — coverage map, remaining gaps, and the rationale behind
 the tiering — lives in
 [`test/TESTING-PLAN.md`](https://github.com/open-hydra/MOSE/blob/main/test/TESTING-PLAN.md).
