@@ -11,6 +11,8 @@
 #
 #  PR CI runs everything except the heavy-dependency labels:
 #    ctest -LE "needs-cantera|needs-sundials|needs-mpi"
+#  and, in a second job built with USE_MPI=ON (gfortran, Open MPI), the MPI tier:
+#    ctest -L needs-mpi
 # ---------------------------------------------------------------------------
 
 # Common environment for all solver tests
@@ -172,6 +174,13 @@ mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;
 # with the probe rows of the uninterrupted run.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
 
+# Output files (OutputFiles): the parts below, each in its folder of
+# test/fast/output-files, run one after the other by
+# test/fast/output-files/run.sh.
+# Wall output: a vtk raw run with no-slip walls ends, and every wall file has
+# the extent and the points of its face.
+mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
+
 # Input checks (InputChecks): the parts below, each in its folder of
 # test/fast/input-checks, run one after the other by
 # test/fast/input-checks/run.sh.
@@ -244,7 +253,7 @@ set_tests_properties(QCR2000Stress PROPERTIES LABELS "fast;physics;unit" TIMEOUT
 #  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
 #  Each test generates its own small multi-block case and launches the solver
 #  itself through the MPI launcher CMake found, with at most 4 ranks; it
-#  asserts bit-for-bit invariants of the parallel run.
+#  asserts an invariant of the parallel run.
 # ===========================================================================
 if(USE_MPI)
     function(mose_add_mpi_script NAME DIR)
@@ -266,6 +275,25 @@ if(USE_MPI)
     # Boundary records: the boundary-flux loop gives the same bits on any
     # ranks x threads layout and for any order of the records in bc.txt.
     mose_add_mpi_script(MPIBoundaryRecords mpi/boundary-records "needs-mpi;implementation;2D")
+
+    # Viscous connection stencil at a vertex shared by four blocks: the same
+    # bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads; with equilibrium
+    # chemistry, the same bits on 1x1 and 2x1.
+    mose_add_mpi_script(MPIVertexStencil mpi/vertex-stencil "needs-mpi;implementation;2D")
+
+    # MPI calls only from the main thread (MPI_THREAD_FUNNELED): a probe
+    # library preloaded into the solver counts the MPI calls made by any
+    # other thread; it must count none on 2x2, 2x4 and 2x2 with IRS (steady).
+    find_package(Threads REQUIRED)
+    add_library(mpi_thread_probe MODULE mpi/thread-funnel/mpi_thread_probe.c)
+    target_link_libraries(mpi_thread_probe PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+    set_target_properties(mpi_thread_probe PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    mose_add_mpi_script(MPIThreadFunnel mpi/thread-funnel "needs-mpi;implementation;2D")
+    if(TEST MPIThreadFunnel)
+        set_property(TEST MPIThreadFunnel APPEND PROPERTY
+            ENVIRONMENT "MOSE_MPI_THREAD_PROBE=$<TARGET_FILE:mpi_thread_probe>")
+    endif()
 
     # Faces between ranks: the two-block cases of ConnectionFlux with one block
     # per rank give the one-rank and the one-block bits, and conserve.

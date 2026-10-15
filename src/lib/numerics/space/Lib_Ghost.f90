@@ -27,20 +27,27 @@ contains
     logical :: mpi_on
 
     ! On a single rank the exchange has nothing to do, and running it anyway
-    ! costs a chain of empty !$omp single regions, each one a barrier.  The
-    ! test is uniform over the team, so the worksharing constructs it guards
-    ! are still encountered by every thread.
+    ! costs a chain of empty master blocks, each one followed by a barrier.  The
+    ! test is uniform over the team, so the worksharing constructs and barriers
+    ! it guards are still encountered by every thread.
     mpi_on = mpi_size_ > 1
 
     if (mpi_on) then
       ! MPI: post persistent receives, pack buffer in parallel, then post sends
       ! Chimera donor cells travel in their own non-blocking exchange, started
       ! here so it overlaps with the local BC processing below.
-      !$omp single
+      ! MPI is initialised with MPI_THREAD_FUNNELED: every MPI call is made by
+      ! the primary thread, in a master construct (named masked since OpenMP
+      ! 5.1; master is kept because older compilers lack masked), followed by
+      ! an explicit barrier wherever the other threads need its result. A
+      ! single construct would let any thread make the call, which FUNNELED
+      ! forbids.
+      !$omp master
       call set_active_mg_level(domain%mg_level)
       call exchange_ghost_P_post_recv(domain)
       call exchange_ghost_chimera_post_recv(domain)
-      !$omp end single
+      !$omp end master
+      !$omp barrier
 
       ! Pack send buffers in parallel: P over face groups, chimera over donor cells
       !$omp do schedule(static) private(fg)
@@ -54,10 +61,10 @@ contains
       end do
 
       ! Post sends (must wait for all packing to complete — implicit barrier from !$omp do)
-      !$omp single
+      !$omp master
       call exchange_ghost_P_post_send(domain)
       call exchange_ghost_chimera_post_send(domain)
-      !$omp end single nowait
+      !$omp end master
     end if
 
     ! Process LOCAL BC entries while MPI communication is in flight
@@ -123,12 +130,13 @@ contains
     ! the communication the local BC work did not hide, plus the wait on
     ! slower neighbours.
     if (mpi_on) then
-      !$omp single
+      !$omp master
       call timer_comm_begin()
       call exchange_ghost_P_wait_unpack(domain)
       call exchange_ghost_chimera_wait_recv(domain)
       call timer_comm_end()
-      !$omp end single
+      !$omp end master
+      !$omp barrier
 
       ! Chimera donor cells are distinct, so the unpack has no write conflicts
       !$omp do schedule(static) private(ii)
@@ -201,11 +209,12 @@ contains
       enddo
 
       ! Wait for P sends to complete before reusing buffers
-      !$omp single
+      !$omp master
       call exchange_ghost_P_wait_send(domain)
       call exchange_ghost_chimera_wait_send(domain)
       call exchange_ghost_Pg(domain)
-      !$omp end single
+      !$omp end master
+      !$omp barrier
     end if
 
   end subroutine Fill_Ghost_Cell

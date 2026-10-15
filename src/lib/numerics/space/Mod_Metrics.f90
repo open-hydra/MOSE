@@ -16,7 +16,7 @@ contains
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
-    integer :: b, i, j, k
+    integer :: b, i, j, k, g
     logical :: inverse_metric
     integer :: Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s
     type(MOSE_vector_3D_type) :: N1, N2, N3, N4, N5, N6, N7, N8
@@ -97,8 +97,8 @@ contains
       !$omp end parallel
     endif
     
-    !$omp parallel
-    ! Create the nodes for gc layers of ghost cell
+    !$omp parallel private(g)
+    ! Create the nodes for gc layers of ghost cell (of the symmetry faces the first layer only: below)
     !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
     do i = 1, domain % nbound
       Bm = domain % bc(i) % b
@@ -126,11 +126,27 @@ contains
                                     periodic = (domain % bc(i) % type == 201) )
         case(300) ! symmetry
           call BC_Symmetry_Metrics ( Im, Jm, Km, Fm, domain % blk(Bm), &
-                                     domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg )
+                                     domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg, 1 )
         case default  ! Rientra qui anche chimera
           call BC_Extrapolate_Metrics ( Im, Jm, Km, Fm, domain % blk(Bm), &
                                         domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg )
       end select
+    enddo
+    !$omp end do
+    ! The further layers of the symmetry faces copy the cells g - 1 behind the face, which in a direction with fewer
+    ! cells than g are ghost cells of the opposite face: one layer at a time, after every face has written the previous
+    ! one (the barrier at the end of each loop), so that no face reads a ghost cell that another one is writing
+    do g = 2, gc
+      !$omp do schedule (dynamic, 64) private(i, Bm)
+      do i = 1, domain % nbound
+        if ( domain % bc(i) % type /= 300 ) cycle
+        Bm = domain % bc(i) % b
+        if (.not. is_local_block(Bm)) cycle
+        call BC_Symmetry_Metrics ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, &
+                                   domain % bc(i) % f, domain % blk(Bm), &
+                                   domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg, g )
+      enddo
+      !$omp end do
     enddo
     !$omp end parallel
 
