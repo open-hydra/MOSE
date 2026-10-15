@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+#===============================================================================
+#  input.ini read again during a run (fast tier)
+#
+#  Every ini-diter iterations MOSE reads input.ini again and takes its values.
+#  They must keep to the rules of the registry, as at setup: a value out of
+#  its rule stops the run with the message of the rule.
+#  A steady viscous run on a 2x2-block box (the case of VtkNames,
+#  ../../../mpi/make_case.py), 48 x 48 cells per block, ini-diter = 20, 40
+#  iterations, numbered vtk raw solutions every 10 iterations:
+#  1. control: a run that starts with cfl = -1 stops at setup with the
+#     message "cfl must be > 0";
+#  2. a run that starts with cfl = 0.5 gets cfl = -1 in input.ini once its
+#     solution of iteration 10 is written: it must stop when it reads
+#     input.ini again, at iteration 20, with the same message, instead of
+#     going on with a negative CFL number.
+#  The change must come before the run writes its solution of iteration 20;
+#  if it does not (a host too slow to poll), the test says so and fails.
+#  3. the keys of input.ini keep their values when it is read again
+#     unchanged: on the same box, a run whose input.ini holds the required
+#     keys only (every other key takes its default), and a run whose
+#     input.ini also writes integration-variables = prim, riemann-solver =
+#     HLLE and flux-limiter = minmod, each read again every 5 iterations,
+#     must reach iteration 10, end normally and write the residual history
+#     of the same run without readings, byte for byte. The setup used to
+#     turn some values into names (integration-variables cons into
+#     Conservative, riemann-solver HLLC into HLLC Batten, flux-limiter
+#     vanleer into Van Leer), which the check after each reading found out
+#     of the rules: the run with the required keys only stopped at its
+#     first reading.
+#  4. a comment line that holds "=" in [MOSE-Numerics], before cfl, is
+#     skipped: with cfl = 0.4, the run with the line writes the residual
+#     history of the same run without it, byte for byte, and the setup names
+#     no key as not read (FiNeR before 2.1.0 ended the section at that line:
+#     cfl and the keys after it kept their defaults).
+#===============================================================================
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$HERE"
+
+MASTER=../../../../bin/MOSE
+LOCAL=./bin/MOSE
+COMMON=../../../common/Air-viscous
+SOLVER="$HERE/bin/MOSE"
+
+ulimit -s unlimited 2>/dev/null || true
+export KMP_STACKSIZE=100M
+export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
+
+mkdir -p bin INPUT
+if [[ ! -x "$LOCAL" || "$MASTER" -nt "$LOCAL" ]]; then
+  cp "$MASTER" "$LOCAL"
+fi
+ln -sf "../$COMMON/phase.txt"     INPUT/phase.txt
+ln -sf "../$COMMON/thermo.dat"    INPUT/thermo.dat
+ln -sf "../$COMMON/transport.dat" INPUT/transport.dat
+python3 -B ../../../mpi/make_case.py --layout 2x2 --cells 48 48 --bc box --zfaces 300 > /dev/null \
+  || { echo "RuntimeInput: FAIL — case generation"; exit 1; }
+
+write_ini() {  # <directory> <cfl>: input.ini written whole, then moved in place
+  cat > "$1/input.ini.new" <<EOF
+[MOSE-Parameters]
+iter-threshold = 40
+res-threshold  = 1e-300
+newrun         = true
+
+[MOSE-Physics]
+equations = navier-stokes
+schmidt   = 1.0
+
+[MOSE-Numerics]
+cfl                   = $2
+time-accurate         = false
+time-scheme           = RK3
+integration-variables = cons
+space-reconstruction  = MUSCL
+flux-limiter          = vanleer
+riemann-solver        = HLLC
+
+[MOSE-IO]
+sol-format    = vtk raw
+sol-diter     = 10
+sol-overwrite = false
+ini-diter     = 20
+shell-diter   = 1000000000
+EOF
+  mv "$1/input.ini.new" "$1/input.ini"
+}
+
+prepare() {  # <directory>
+  rm -rf "$1"; mkdir -p "$1/INPUT" "$1/OUTPUT"
+  for f in phase.txt thermo.dat transport.dat ic.tec bc.txt; do
+    ln -s "../../../INPUT/$f" "$1/INPUT/$f"
+  done
+}
+
+write_short() {  # <directory> <ini-diter, or empty> [key = value ...]: the required keys and the keys given, 10 iterations
+  local dir=$1 diter=$2
+  shift 2
+  {
+    printf '%s\n' '[MOSE-Parameters]' 'iter-threshold = 10' ''
+    printf '%s\n' '[MOSE-Physics]' 'equations = navier-stokes' ''
+    printf '%s\n' '[MOSE-Numerics]' 'time-scheme = RK3' 'cfl = 0.5' 'time-accurate = false' 'space-reconstruction = MUSCL' "$@"
+    if [[ -n $diter ]]; then printf '\n%s\n' '[MOSE-IO]' "ini-diter = $diter"; fi
+  } > "$dir/input.ini"
+}
+
+stopped_on_cfl() {  # <log>: the run stopped with the message of the rule of cfl
+  command grep -q 'ERROR\] cfl must be > 0' "$1" && command grep -q -E '(ABORT|STOP): ' "$1" \
+    && ! command grep -q -E 'NaN|Program received signal' "$1"
+}
+
+status=0
+echo "-- 1. cfl = -1 from the start: the run stops at setup --"
+d=runs/setup
+prepare "$d"; write_ini "$d" -1
+( cd "$d" && "$SOLVER" > solve.log 2>&1 )
+if stopped_on_cfl "$d/solve.log"; then
+  echo "  ok — $(command grep -m1 'ERROR\]' "$d/solve.log" | sed 's/^ *//')"
+else
+  echo "  FAIL — the run did not stop at setup with the message (see $d/solve.log)"; status=1
+fi
+
+echo "-- 2. cfl = -1 written during the run: the run stops when it reads input.ini again --"
+d=runs/during
+prepare "$d"; write_ini "$d" 0.5
+( cd "$d" && exec "$SOLVER" > solve.log 2>&1 ) &
+pid=$!
+for ((n = 0; n < 6000; n++)); do
+  [[ -f $d/OUTPUT/field1.vtm ]] && break
+  kill -0 "$pid" 2>/dev/null || break
+  sleep 0.05
+done
+first=no; late=no
+[[ -f $d/OUTPUT/field1.vtm ]] && first=yes
+[[ -f $d/OUTPUT/field2.vtm ]] && late=yes
+write_ini "$d" -1
+wait "$pid"
+last=$(awk 'NF {n = $1} END {print n}' "$d/OUTPUT/residual-history.dat" 2>/dev/null)
+echo "  solution of iteration 10 written before the change: $first; solution of iteration 20 written before it: $late;" \
+     "last row of residual-history.dat: ${last:-none}"
+if [[ $first != yes ]]; then
+  echo "  FAIL — the run ended before its solution of iteration 10 (see $d/solve.log)"; status=1
+elif [[ $late == yes ]]; then
+  echo "  FAIL — input.ini changed after the run had passed iteration 20: the test cannot tell (host too slow to poll)"; status=1
+elif stopped_on_cfl "$d/solve.log" && [[ $last == 20 ]] && command grep -q 'read again' "$d/solve.log"; then
+  echo "  ok — the run stopped at iteration 20: $(command grep -m1 'ERROR\]' "$d/solve.log" | sed 's/^ *//')"
+else
+  echo "  FAIL — the run did not stop with the message at iteration 20 (see $d/solve.log)"; status=1
+fi
+
+echo "-- 3. input.ini read again unchanged every 5 iterations: the keys left out and the keys written keep their values --"
+for c in minimal written; do
+  keys=()
+  [[ $c == written ]] && keys=('integration-variables = prim' 'riemann-solver = HLLE' 'flux-limiter = minmod')
+  d=runs/$c-once
+  prepare "$d"; write_short "$d" "" ${keys[@]+"${keys[@]}"}
+  ( cd "$d" && "$SOLVER" > solve.log 2>&1 )
+  d=runs/$c
+  prepare "$d"; write_short "$d" 5 ${keys[@]+"${keys[@]}"}
+  ( cd "$d" && "$SOLVER" > solve.log 2>&1 )
+  rc=$?
+  last=$(awk 'NF {n = $1} END {print n}' "$d/OUTPUT/residual-history.dat" 2>/dev/null)
+  same=no
+  cmp -s "runs/$c-once/OUTPUT/residual-history.dat" "$d/OUTPUT/residual-history.dat" && same=yes
+  if [[ $rc -eq 0 && $last == 10 && $same == yes ]] && ! command grep -q -E 'read again|ERROR|ABORT' "$d/solve.log"; then
+    echo "  ok — $c keys: the run reached iteration 10 (exit code 0), with the residual history of the run without readings"
+  else
+    echo "  FAIL — $c keys: the run stopped at iteration ${last:-none} with exit code $rc, residual history as without" \
+         "readings: $same: $(command grep -m1 -E 'ERROR\]|must be' "$d/solve.log" | sed 's/^ *//') (see $d/solve.log)"; status=1
+  fi
+done
+
+echo "-- 4. a comment line with \"=\" before cfl is skipped: cfl is read, no key is named as not read --"
+for v in plain comment; do
+  d=runs/comment-$v
+  prepare "$d"; write_ini "$d" 0.4
+  sed -i 's/^iter-threshold = 40$/iter-threshold = 3/' "$d/input.ini"
+  if [[ $v == comment ]]; then
+    sed -i 's/^\[MOSE-Numerics\]$/[MOSE-Numerics]\n; a slower start: cfl = 0.1/' "$d/input.ini"
+  fi
+  ( cd "$d" && "$SOLVER" > solve.log 2>&1 )
+done
+if [[ -s runs/comment-plain/OUTPUT/residual-history.dat ]] \
+   && cmp -s runs/comment-plain/OUTPUT/residual-history.dat runs/comment-comment/OUTPUT/residual-history.dat \
+   && ! command grep -q 'is not read' runs/comment-comment/solve.log; then
+  echo "  ok — with the comment line the run writes the residual history of the run without it, no key named as not read"
+else
+  echo "  FAIL — with the comment line: residual history not that of the run without it, or a key named as not read:" \
+       "$(command grep -m1 'is not read' runs/comment-comment/solve.log | cut -c1-80) (see runs/comment-*/solve.log)"; status=1
+fi
+
+if [[ $status -eq 0 ]]; then
+  echo "RuntimeInput: all checks passed"
+  exit 0
+fi
+echo "RuntimeInput: FAILED"
+exit 1

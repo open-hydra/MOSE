@@ -84,6 +84,21 @@ variables (`mi_t`, `mi_tilde`, and `kappa` with its `omega`) are accepted, and a
 other name, such as the specific `nuTilde` or `k`, or the eddy viscosity `mut`,
 stops the run.
 
+Every value that MOSE takes from the file must be finite: the coordinates of the
+nodes and the variables of the cells that it reads by position (the variables after
+them, such as the `T` that MOSE writes in its solutions, are not used). A NaN or an
+infinity stops the run at setup, in every build, with exit code 1 and the place of
+the value, for example
+
+```
+ [ERROR] INPUT/ic.tec holds a value that is not finite (NaN or infinity): variable 2 (u) of block 1, cell i, j, k = 50, 1, 1
+```
+
+the variable by its position after the coordinates, with its name when the reader
+gives the names (Tecplot ASCII), or the coordinate (`x`, `y`, `z`) of a node, whose
+indices start from 0. The same holds for the solution that a restart reads; with MPI
+every rank stops, also when one rank alone holds the value.
+
 ---
 
 ## Restart

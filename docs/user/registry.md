@@ -51,9 +51,9 @@
 | vnn | 0.3 | > 0 |  no | Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62) |
 | cfl-rise-threshold | 0 | >= 0 |  no | CFL rise threshold |
 | time-accurate | .false. | logical | yes | Time accurate switch |
-| integration-variables | cons | cons ,  prim , prec |  no | Integration variables (cons/prim/prec) |
-| irs | .false. | logical |  no | Implicit Residual Smoothing |
-| irs-beta | 0.0 | >= 0 |  no | IRS beta parameter |
+| integration-variables | cons | cons, prim, prec |  no | Integration variables (cons/prim/prec) |
+| irs | .false. | logical |  no | Implicit Residual Smoothing (steady runs only) |
+| irs-beta | 0.0 | >= 0 |  no | IRS beta parameter (> 0 also enables IRS; steady runs only) |
 | preconditioning-Uref | 0.0 | >= 0 |  no | Reference velocity for preconditioning |
 | preconditioning-Mach | 0.0 | >= 0 |  no | Mach target for preconditioning |
 | preconditioning-eps-min | 0.05 | in (0, 1) |  no | Low-Mach cutoff for Ur |
@@ -61,7 +61,7 @@
 | preconditioning-Ur-factor | 1.0 | > 0 |  no | Weiss-Smith multiplicative factor |
 | preconditioning-Ur-smooth | 0 | >= 0 |  no | Ur max-smoothing passes |
 | space-reconstruction |  | MUSCL, first-order | yes | Space reconstruction method |
-| flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | Flux limiter for space reconstruction |
+| flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order) |
 | diffusive-metric | inverse-mean | inverse-mean, mean |  no | Face metric of the interior viscous fluxes: inverse-mean is exact on stretched meshes, mean is faster but overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r |
 | shock-detector |  | Tramel, Chen |  no | Shock detector method |
 | riemann-solver | HLLC | HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact |  no | Riemann solver |
@@ -90,7 +90,7 @@
 
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
-| exclude-blocks | none |  |  no | Blocks to exclude from chemistry |
+| exclude-blocks | none |  |  no | Blocks to exclude from chemistry (finite-rate and equilibrium, on every multigrid level) |
 | ode-solver | H-radau5 | H-radau5, H-rodas, H-sdirk4, H-dopri5, radau2a, lobatto3c, gauss, radau1a, ros2, ros3, ros4, rodas3, rodas4, sdirk2a, sdirk2b, sdirk3a, sdirk4a, sdirk4b, dodesol, cvode |  no | ODE solver for chemistry |
 | ode-max-steps | 100000 | > 0 |  no | Maximum ODE integration steps |
 | ode-analytical-jacobian | .false. | logical |  no | Use the mechanism analytical Jacobian instead of finite differences |

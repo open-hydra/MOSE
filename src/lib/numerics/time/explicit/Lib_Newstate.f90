@@ -1,5 +1,6 @@
 module MOSE_Lib_Newstate
   use iso_fortran_env, only: I4 => int32, I8 => int64, R8 => real64
+  use MOSE_Finite_m,   only: Not_Finite
 
   implicit none
   private
@@ -461,12 +462,13 @@ contains
     integer, intent(in) :: b, i, j, k
     integer :: s
 
-    ! Bail out on NaN or negative pressure (product trick is expensive; use
-    ! any(isnan()) + separate pressure check instead)
-    if ( any( isnan(prim(1:nprim)) ) .or. prim(np) < 0d0 ) then
+    ! Bail out on a value that is not finite (NaN or infinity) or on a negative pressure. STOP 1, not
+    ! mpi_abort_all: this runs inside OpenMP threads and MPI is initialised FUNNELED; the non-zero exit code makes
+    ! the launcher end the other ranks.
+    if ( any( Not_Finite(prim(1:nprim)) ) .or. prim(np) < 0d0 ) then
       write(*,'(A,4I4)') "Integration failed at b, i, j, k:", b, i, j, k
       write(*,*) prim(1:nprim)
-      write(*,'(A)') "NaN or p<0 detected"
+      write(*,'(A)') "NaN, infinity or p<0 detected"
       stop 1
     endif
 

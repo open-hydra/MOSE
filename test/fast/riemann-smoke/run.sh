@@ -10,7 +10,11 @@
 #  tube moved by u = +3, where the flux of every face is that of its left state
 #  (S_L >= 0), and its mirror image moved by u = -3, where it is that of its
 #  right state (S_R <= 0); the second must be the mirror image of the first
-#  (mirror_sod.py).
+#  (mirror_sod.py). The key shock-detector turns the shock sensor on: with
+#  shock-detector = Tramel, a value of its rule, the set-up summary names the
+#  sensor with HLLC, and HLLC+Tramel, which takes that sensor without the key,
+#  gives the same field.tec, byte for byte, as without it (the setup compared
+#  the key with "tramel" and "chen": the sensor stayed off).
 #===============================================================================
 set -uo pipefail
 
@@ -111,9 +115,34 @@ if [[ -f OUTPUT/field-plus.tec && -f OUTPUT/field-minus.tec ]]; then
   python3 -B mirror_sod.py compare OUTPUT/field-plus.tec OUTPUT/field-minus.tec || fail=1
 fi
 
+# --- shock-detector: the key turns the sensor on --------------------------------
+echo "  [shock-detector] HLLC+Tramel without and with shock-detector = Tramel, HLLC with it"
+rm -f OUTPUT/field-sd-*.tec OUTPUT/solve_sd_*.log
+# sd_run <tag> <riemann-solver> [shock-detector]: the Sod tube with that solver and key; field.tec kept as field-sd-<tag>.tec
+sd_run() {
+  sed -e '/^shock-detector/d' -e "s/^riemann-solver = .*/riemann-solver = $2/" input.ini > input-sd.ini
+  [[ -n ${3:-} ]] && sed -i "s/^riemann-solver = .*/&\nshock-detector = $3/" input-sd.ini
+  mv input-sd.ini input.ini
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/solve_sd_$1.log" 2>&1 && [[ -f OUTPUT/field.tec ]] && cp OUTPUT/field.tec "OUTPUT/field-sd-$1.tec"
+}
+sd_run tramel HLLC+Tramel
+sd_run tramel-key HLLC+Tramel Tramel
+sd_run hllc-key HLLC Tramel
+for t in tramel tramel-key hllc-key; do
+  if ! grep -a -q -E 'Shock sensor +Tramel' "OUTPUT/solve_sd_$t.log"; then
+    echo "  [shock-detector] FAIL: $t: the set-up summary names no shock sensor (OUTPUT/solve_sd_$t.log)"
+    fail=1
+  fi
+done
+if ! cmp -s OUTPUT/field-sd-tramel.tec OUTPUT/field-sd-tramel-key.tec; then
+  echo "  [shock-detector] FAIL: HLLC+Tramel with shock-detector = Tramel gives another field.tec than without it"
+  fail=1
+fi
+
 if [[ $fail -ne 0 ]]; then
   echo "RiemannSmoke: FAILED"
   exit 1
 fi
-echo "RiemannSmoke: all $(( ${#SOLVERS[@]} )) solvers passed; HLLC gives the mirror image on its two outer branches"
+echo "RiemannSmoke: all $(( ${#SOLVERS[@]} )) solvers passed; HLLC gives the mirror image on its two outer branches; shock-detector turns the sensor on"
 exit 0

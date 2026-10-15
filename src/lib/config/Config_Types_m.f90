@@ -100,7 +100,8 @@ module MOSE_Config_Types_m
     integer             :: rampa_cfl_iter   ! Numero di iterazioni per rampa di cfl
     logical             :: time_accurate    ! Flag per integrazione time-accurate
     integer             :: n_RK
-    character(len=llen) :: integration_variables ! Integration variables (cons/prim)
+    character(len=llen) :: integration_variables ! Integration variables (cons/prim/prec), as input.ini gives them
+    character(len=llen) :: integration_name = '' ! Their name in the set-up summary
     ! Useful variables
     ! ...
   end type time_scheme_t
@@ -151,7 +152,8 @@ module MOSE_Config_Types_m
     character(len=llen) :: description
     ! USER-DEFINED INPUTS
     character(len=llen) :: space_reconstruction ! Space reconstruction method
-    character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction
+    character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction, as input.ini gives it
+    character(len=llen) :: limiter_name = ''    ! Name of the limiter in use in the set-up summary (blank: first order)
     character(len=llen) :: diffusive_metric     ! Face metric of the interior viscous fluxes (inverse-mean/mean)
     ! Useful variables
     logical             :: inverse_metric = .true. ! diffusive_metric == inverse-mean
@@ -165,7 +167,8 @@ module MOSE_Config_Types_m
   type :: riemann_t
     character(len=llen) :: warning_message
     character(len=llen) :: error_message
-    character(len=llen) :: description
+    character(len=llen) :: description          ! The solver as input.ini gives it (riemann-solver)
+    character(len=llen) :: name = ''            ! Its name in the set-up summary
     ! USER-DEFINED INPUTS
     real(R8) :: Mco
     ! Useful variables

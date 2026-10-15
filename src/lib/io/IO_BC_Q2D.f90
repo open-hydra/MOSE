@@ -17,11 +17,13 @@ contains
   subroutine Setup_Q2D_BC_Data ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
+    use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: i, nq2d_count, nfiles, ifile
     character(len=256), allocatable :: file_list(:)
+    character(len=128) :: msg
     logical :: found
 
     ! Count type 410 BCs
@@ -37,8 +39,8 @@ contains
     do i = 1, domain%nbound
       if (domain%bc(i)%type /= 410) cycle
       if (len_trim(domain%bc(i)%q2d_file) == 0) then
-        write(*,*) '[ERROR] BC type 410 entry', i, 'has no Q2D file specified in bc.txt'
-        error stop
+        write(msg,'(A,I0,A)') '[ERROR] BC type 410 entry ', i, ' has no Q2D file specified in bc.txt'
+        call mpi_stop_all(trim(msg))
       endif
       found = .false.
       do ifile = 1, nfiles
@@ -69,10 +71,33 @@ contains
   ! Two-pass reading:
   !   Pass 1 — scan VARIABLES line + all ZONE headers (no data read)
   !   Pass 2 — rewind, read zone data and distribute to matching BCs
+  ! The time of a zone, and every value that goes to a type 410 BC, must be
+  ! finite: one that is not (NaN or infinity) stops the run at set-up, with the
+  ! file, the zone and the line of its header (Not_Finite reads the bits:
+  ! every comparison with a NaN is false, and a build that traps the invalid
+  ! operations stops on it). The values that the reader skips (coordinates,
+  ! variables that map to no primitive, cells of no 410 face) are not used.
+  ! A file that cannot be read stops the run at set-up as well, with the file
+  ! and, for a zone, the zone and the line of its header: a file that cannot
+  ! be opened, with no VARIABLES line or no zone, a value of I, J,
+  ! SOLUTIONTIME or of the block number of the title that does not read, a
+  ! zone header that gives no I= or no J= (parse_zone_header takes I and J
+  ! only so: upper case, with no blank before =), zone data that end before
+  ! the values that I and J give or hold a value that is not a number, a line
+  ! after the data of a zone that is not the header of the next zone. A read
+  ! that fails leaves its values undefined, or those
+  ! of the zone before (the buffers are reused), and shifts the zones after
+  ! it. The distinct times of the zones must increase down the file (the
+  ! interpolation in time takes them in that order): a zone whose time no zone
+  ! above it has, less than the last such time, stops the run too. Every rank
+  ! reads the whole file (Setup_BC runs before the blocks are given to the
+  ! ranks), so every rank stops on the same error (mpi_stop_all).
   ! ---------------------------------------------------------------------------
   subroutine Read_Q2D_Tecplot ( domain, filename )
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
+    use MOSE_Finite_m, only: Not_Finite
+    use MOSE_Mod_MPI,  only: mpi_stop_all
     use strings, only: lowercase
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
@@ -97,23 +122,25 @@ contains
     real(R8), allocatable :: unique_times(:)
     integer :: bc_i1, bc_i2
     logical :: found
+    integer :: nl                          ! lines of the file read in the pass over the zone headers
+    integer, allocatable :: zone_line(:)   ! line of the header of each zone
+    character(len=512) :: msg
+    character(len=256) :: iomsg
+    character(len=64)  :: bad              ! the value of a zone header that does not read (parse_zone_header) ...
+    character(len=100) :: badval           ! ... and its text
+    character(len=16)  :: tnew, told       ! two times of zones, written for a message
+    logical :: has_I, has_J                ! the zone header gives I= and J= (parse_zone_header)
 
     ! --- Open file ---
-    open(newunit=u, file=filename, status='old', iostat=ios, action='read')
-    if (ios /= 0) then
-      write(*,*) '[ERROR] Cannot open Q2D file: ', trim(filename)
-      error stop
-    endif
+    open(newunit=u, file=filename, status='old', iostat=ios, iomsg=iomsg, action='read')
+    if (ios /= 0) call mpi_stop_all('[ERROR] Q2D file '//trim(filename)//' cannot be opened: '//trim(iomsg))
 
     ! --- Pass 1: VARIABLES line + all ZONE headers ---
 
     ! Read the VARIABLES list: from the VARIABLES line up to the first ZONE record
     do
       read(u, '(A)', iostat=ios) line
-      if (ios /= 0) then
-        write(*,*) '[ERROR] Could not find VARIABLES line in Q2D file'
-        error stop
-      endif
+      if (ios /= 0) call mpi_stop_all('[ERROR] Q2D file '//trim(filename)//': could not find the VARIABLES line')
       if (index(lowercase(line), 'variables') > 0) exit
     enddo
     header = trim(line(index(line, '=')+1:))
@@ -128,17 +155,14 @@ contains
     enddo
     call Parse_Variable_Names(header, tmp_names, ncount, names_ok)
     if (.not. names_ok) then
-      write(*,*) '[ERROR] Q2D file: unreadable VARIABLES list (unclosed quote or more than ', &
-                 size(tmp_names), ' names)'
-      error stop
+      write(msg,'(3A,I0,A)') '[ERROR] Q2D file ', trim(filename), ': unreadable VARIABLES list (unclosed quote or more than ', &
+        size(tmp_names), ' names)'
+      call mpi_stop_all(trim(msg))
     endif
     nvar_total = ncount
     nvar_file = nvar_total - 3  ! subtract x, y, z
 
-    if (nvar_file < 1) then
-      write(*,*) '[ERROR] Q2D file has no solution variables (only coordinates)'
-      error stop
-    endif
+    if (nvar_file < 1) call mpi_stop_all('[ERROR] Q2D file '//trim(filename)//' has no solution variables (only coordinates)')
 
     ! Build variable name mapping
     allocate(varmap(nvar_file))
@@ -152,25 +176,43 @@ contains
       if (Is_Zone_Record(line)) nzones_total = nzones_total + 1
     enddo
 
-    if (nzones_total == 0) then
-      write(*,*) '[ERROR] Q2D file has no zones'
-      error stop
-    endif
+    if (nzones_total == 0) call mpi_stop_all('[ERROR] Q2D file '//trim(filename)//' has no zones')
 
     allocate(zone_block(nzones_total), zone_tidx(nzones_total))
-    allocate(zone_time(nzones_total), zone_I(nzones_total), zone_J(nzones_total))
+    allocate(zone_time(nzones_total), zone_I(nzones_total), zone_J(nzones_total), zone_line(nzones_total))
     allocate(unique_times_tmp(nzones_total))
 
     ! Rewind once: parse zone headers
     rewind(u)
     iz = 0
+    nl = 0
     do
       read(u, '(A)', iostat=ios) line
       if (ios /= 0) exit
+      nl = nl + 1
       if (Is_Zone_Record(line)) then
         iz = iz + 1
         call parse_zone_header(line, zone_block(iz), &
-                               zone_I(iz), zone_J(iz), zone_time(iz))
+                               zone_I(iz), zone_J(iz), zone_time(iz), bad, badval, has_I, has_J)
+        zone_line(iz) = nl
+        if (len_trim(bad) > 0) then
+          write(msg,'(3A,I0,A,I0,4A)') '[ERROR] Q2D file ', trim(filename), ', line ', nl, ' (zone ', iz, &
+            '): ', trim(bad), ' cannot be read: ', trim(badval)
+          call mpi_stop_all(trim(msg))
+        endif
+        if (.not. (has_I .and. has_J)) then
+          ! Without I= or J= parse_zone_header leaves I or J at 2, its default, and the values of the zone would be
+          ! read for that size
+          write(msg,'(3A,I0,A,I0,4A)') '[ERROR] Q2D file ', trim(filename), ', line ', nl, ' (zone ', iz, '): no ', &
+            merge('I=', 'J=', .not. has_I), ' in the header; give the nodes as I=<n>, J=<n>, ', &
+            'in upper case with no blank around ='
+          call mpi_stop_all(trim(msg))
+        endif
+        if (Not_Finite(zone_time(iz))) then
+          write(msg,'(3A,I0,A,I0,A)') '[ERROR] Q2D file ', trim(filename), ', line ', nl, ' (zone ', iz, &
+            '): SOLUTIONTIME is not finite (NaN or infinity)'
+          call mpi_stop_all(trim(msg))
+        endif
       endif
     enddo
 
@@ -184,6 +226,18 @@ contains
         endif
       enddo
       if (.not. found) then
+        ! The distinct times must increase in the order of the file: the interpolation in time (Ghost_Q2D_Mapped and
+        ! the update of the time series) takes them so. The times are finite here (tested above), so the comparison holds
+        if (ntimes > 0) then
+          if (zone_time(iz) < unique_times_tmp(ntimes)) then
+            write(tnew,'(ES12.5)') zone_time(iz)
+            write(told,'(ES12.5)') unique_times_tmp(ntimes)
+            write(msg,'(3A,I0,A,I0,5A)') '[ERROR] Q2D file ', trim(filename), ', line ', zone_line(iz), ' (zone ', iz, &
+              '): SOLUTIONTIME ', trim(adjustl(tnew)), ' is less than ', trim(adjustl(told)), &
+              ', the time of a zone above it: the zones must come in increasing time'
+            call mpi_stop_all(trim(msg))
+          endif
+        endif
         ntimes = ntimes + 1
         unique_times_tmp(ntimes) = zone_time(iz)
         zone_tidx(iz) = ntimes
@@ -238,10 +292,7 @@ contains
     ! Skip to first ZONE line
     do
       read(u, '(A)', iostat=ios) line
-      if (ios /= 0) then
-        write(*,*) '[ERROR] Q2D file: no ZONE found in data pass'
-        error stop
-      endif
+      if (ios /= 0) call mpi_stop_all('[ERROR] Q2D file '//trim(filename)//': no ZONE found in the data pass')
       if (Is_Zone_Record(line)) exit
     enddo
 
@@ -256,14 +307,18 @@ contains
       b_zone = zone_block(iz)
       t_zone = zone_tidx(iz)
 
-      ! Read and skip node coordinates (3 * n_nodes values)
+      ! Read and skip node coordinates (3 * n_nodes values); a read that fails stops the run
       read(u, *, iostat=ios) node_buf(1:n_nodes)  ! x
+      if (ios /= 0) call Q2D_Read_Error(filename, iz, zone_line(iz), tmp_names(1), ios)
       read(u, *, iostat=ios) node_buf(1:n_nodes)  ! y
+      if (ios /= 0) call Q2D_Read_Error(filename, iz, zone_line(iz), tmp_names(2), ios)
       read(u, *, iostat=ios) node_buf(1:n_nodes)  ! z
+      if (ios /= 0) call Q2D_Read_Error(filename, iz, zone_line(iz), tmp_names(3), ios)
 
       ! Read cell-centered variables: nvar_file blocks of n_cells values
       do iv = 1, nvar_file
         read(u, *, iostat=ios) ((cell_buf(iv, i1, i2), i1=1,n1), i2=1,n2)
+        if (ios /= 0) call Q2D_Read_Error(filename, iz, zone_line(iz), tmp_names(3+iv), ios)
       enddo
 
       ! Distribute to matching type 410 BCs
@@ -289,20 +344,61 @@ contains
         ! Map file variables to MOSE primitives
         do iv = 1, nvar_file
           if (varmap(iv) > 0) then
+            if (Not_Finite(cell_buf(iv, bc_i1, bc_i2))) then
+              write(msg,'(3A,I0,A,I0,3A,I0,A,I0,A)') '[ERROR] Q2D file ', trim(filename), ', zone ', iz, ' (line ', &
+                zone_line(iz), '), variable ', trim(tmp_names(3+iv)), ', cell ', bc_i1, ', ', bc_i2, &
+                ': a value that is not finite (NaN or infinity)'
+              call mpi_stop_all(trim(msg))
+            endif
             domain%bc(ibc)%q2d_map(varmap(iv))%var(t_zone) = cell_buf(iv, bc_i1, bc_i2)
           endif
         enddo
       enddo
 
-      ! Read next zone header (if not the last zone)
-      if (iz < nzones_total) read(u, '(A)', iostat=ios) line
+      ! Read next zone header (if not the last zone): the line after the data of a zone must be the header of the next
+      ! zone, or the zones after it would be read shifted (a zone with more values than I and J give, a blank line)
+      if (iz < nzones_total) then
+        read(u, '(A)', iostat=ios) line
+        if (ios /= 0) line = ''
+        if (.not. Is_Zone_Record(line)) then
+          write(msg,'(3A,I0,A,I0,A,I0,A,I0,A)') '[ERROR] Q2D file ', trim(filename), ', zone ', iz, ' (line ', &
+            zone_line(iz), '): the line after its data is not the header of zone ', iz + 1, ' (line ', &
+            zone_line(iz + 1), '): more values than I and J give, or a blank line'
+          call mpi_stop_all(trim(msg))
+        endif
+      endif
     enddo
 
     close(u)
     deallocate(node_buf, cell_buf)
-    deallocate(varmap, zone_block, zone_tidx, zone_time, zone_I, zone_J, unique_times)
+    deallocate(varmap, zone_block, zone_tidx, zone_time, zone_I, zone_J, zone_line, unique_times)
 
   end subroutine Read_Q2D_Tecplot
+
+
+  ! ---------------------------------------------------------------------------
+  ! Stop the run on a read of the data of a zone that failed (ios /= 0): the
+  ! file ends before all the values that I and J give, or a value is not a
+  ! number (also the header of the next zone, met where values were due).
+  ! ---------------------------------------------------------------------------
+  subroutine Q2D_Read_Error ( filename, iz, nline, name, ios )
+    use MOSE_Mod_MPI, only: mpi_stop_all
+    implicit none
+    character(len=*), intent(in) :: filename, name
+    integer, intent(in) :: iz, nline, ios
+    ! Local
+    character(len=640) :: msg
+
+    if (is_iostat_end(ios)) then
+      write(msg,'(3A,I0,A,I0,3A)') '[ERROR] Q2D file ', trim(filename), ', zone ', iz, ' (line ', nline, &
+        '): the values of ', trim(name), ': the file ends before all the values that I and J give'
+    else
+      write(msg,'(3A,I0,A,I0,3A)') '[ERROR] Q2D file ', trim(filename), ', zone ', iz, ' (line ', nline, &
+        '): the values of ', trim(name), ': a value that is not a number, or fewer values than I and J give'
+    endif
+    call mpi_stop_all(trim(msg))
+
+  end subroutine Q2D_Read_Error
 
 
   ! ---------------------------------------------------------------------------
@@ -432,19 +528,27 @@ contains
   ! Parse a Tecplot ZONE header line to extract block number,
   ! I (node count), J (node count), and SOLUTIONTIME.
   ! Zone name format: T="B{block}_T{tidx}"
+  ! bad names the first of these values whose text (badval) does not read,
+  ! blank when they all read; a value not in the line keeps its default.
+  ! has_I and has_J tell whether the line gives I= and J=, the only form of
+  ! I and J read here (upper case, with no blank before =).
   ! ---------------------------------------------------------------------------
-  subroutine parse_zone_header(line, b_num, I_nodes, J_nodes, sol_time)
+  subroutine parse_zone_header(line, b_num, I_nodes, J_nodes, sol_time, bad, badval, has_I, has_J)
     use strings, only: parse, lowercase
     implicit none
     character(len=*), intent(in) :: line
     integer, intent(out) :: b_num, I_nodes, J_nodes
     real(R8), intent(out) :: sol_time
+    character(len=*), intent(out) :: bad, badval
+    logical, intent(out) :: has_I, has_J
     ! Local
     integer :: i, pos, pos2, ios
     character(len=100) :: args(20), subargs(4)
     character(len=256) :: zone_title
 
     b_num = 1; I_nodes = 2; J_nodes = 2; sol_time = 0.0_R8
+    bad = ''; badval = ''
+    has_I = .false.; has_J = .false.
 
     ! Split line by commas
     call parse(line, ',', args)
@@ -469,29 +573,47 @@ contains
           pos = index(zone_title, 'B')
           if (pos > 0) then
             pos2 = index(zone_title(pos+1:), '_')
-            if (pos2 > 0) read(zone_title(pos+1:pos+pos2-1), *, iostat=ios) b_num
+            if (pos2 > 0) then
+              read(zone_title(pos+1:pos+pos2-1), *, iostat=ios) b_num
+              if (ios /= 0) call Mark_Bad('the block number of the title', zone_title(pos+1:pos+pos2-1))
+            endif
           endif
         endif
       endif
 
       ! I= (avoid matching STRANDID=)
       if (index(args(i), 'I=') > 0 .and. index(args(i), 'STRANDID') == 0) then
+        has_I = .true.
         call parse(args(i), '=', subargs)
         read(subargs(2), *, iostat=ios) I_nodes
+        if (ios /= 0) call Mark_Bad('the value of I', subargs(2))
       endif
 
       ! J=
       if (index(args(i), 'J=') > 0) then
+        has_J = .true.
         call parse(args(i), '=', subargs)
         read(subargs(2), *, iostat=ios) J_nodes
+        if (ios /= 0) call Mark_Bad('the value of J', subargs(2))
       endif
 
       ! SOLUTIONTIME=
       if (index(lowercase(args(i)), 'solutiontime') > 0) then
         call parse(args(i), '=', subargs)
         read(subargs(2), *, iostat=ios) sol_time
+        if (ios /= 0) call Mark_Bad('the value of SOLUTIONTIME', subargs(2))
       endif
     enddo
+
+  contains
+
+    subroutine Mark_Bad ( what, text )
+      character(len=*), intent(in) :: what, text
+      if (len_trim(bad) == 0) then
+        bad = what
+        badval = adjustl(text)
+      endif
+    end subroutine Mark_Bad
 
   end subroutine parse_zone_header
 

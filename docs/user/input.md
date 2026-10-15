@@ -32,7 +32,22 @@ space-reconstruction = MUSCL
     If a parameter is not specified, the **default value** is used silently.
 
 !!! warning "Parameter names are case-sensitive"
-    Incorrect names or values are ignored and the default is used instead. Check the [Parameter Registry](registry.md) for the exact spelling.
+    Incorrect names are ignored and the default is used instead. Check the [Parameter Registry](registry.md) for the exact spelling.
+
+!!! warning "Keys that are not read"
+    MOSE warns at the start for every line `key = value` of `input.ini` whose key the reader does not give in its section, with its line: such a key is an error in the input, and the run goes on with the default of its parameter in place of the value written. A parameter of the registry written with no value is named here, and stops the run (below). Comment lines (lines that start with `!`, `;` or `#`) are skipped, also when they hold `=`.
+
+!!! warning "An input.ini that cannot be read stops the run"
+    If `input.ini` cannot be opened (missing, or without read permission), holds no line that is not blank, or the INI reader returns an error while it loads the file (a file with no section, a line it cannot parse, which the reader names on its error output), the run stops with the reason and exit code 1: at the start, and when MOSE reads `input.ini` again during the run. With MPI every rank stops. Without the stop the parameters would keep their defaults, or the values of the previous reading, in silence.
+
+!!! warning "Values outside their rules stop the run"
+    A value outside the rule of its parameter (column Allowed of the [Parameter Registry](registry.md): a bound such as `> 0`, an interval such as `in (0, 1)`, where `(` and `)` leave the end out and `[` and `]` take it in, each held by every value of a list of numbers; a list of names; `logical`) stops the run with a message: at the start, and when MOSE reads `input.ini` again during the run, every `ini-diter` iterations (10000 by default), to take the values changed meanwhile. The parameters that `input.ini` leaves out keep their values.
+
+!!! warning "Values that do not read stop the run"
+    A parameter of the [Parameter Registry](registry.md) whose value in `input.ini` does not read as its type stops the run with a message that gives the file, the section, the key and the value as written: a number that is not one (a word, `NaN`, `Infinity`, a decimal comma such as `0,5`), an integer written with a decimal point or an exponent (`2.0`, `1e3`: one compiler refuses it, another cuts the fraction), a logical that does not start with `T` or `F` after an optional period (`yes`, `1`; a word that starts with one of them reads as true or false), a list with more values than its parameter holds, a key with no value. So does a real read as an infinity (gfortran reads a number too large for a real, such as `1e999`, as one), with a rule or without: a bound such as `> 0` let it through. This holds at the start and when MOSE reads `input.ini` again during the run; `levels` of `[MOSE-Multigrid]`, which MOSE reads at the start only, stops the run as well. Before, such a value left its parameter at the default, or at the value of the previous reading, in silence. A value of `axis` or `origin` of the rotating frame that is not finite (NaN or infinity) stops the run at the start, with a message that names the key.
+
+!!! warning "What a reading during the run changes"
+    When MOSE reads `input.ini` again during the run, only the parameters that the solver reads at every step take the new values, such as `cfl`, `vnn` and the intervals of the outputs. The choices that the set-up makes once from the input are not made again, nor are its checks between keys: a new value of `equations`, `turbulence`, `chemistry`, `space-reconstruction`, `flux-limiter`, `riemann-solver`, `shock-detector` or `time-scheme` is checked against its rule and leaves the run as it was. Do not turn residual smoothing on during a run (`irs = true`): its work arrays exist only when it was on at the start, and the run stops with a segmentation fault.
 
 ---
 
@@ -49,6 +64,12 @@ space-reconstruction = MUSCL
 | `[MOSE-Chemistry]` | ODE solver and tolerances for finite-rate chemistry | [→](registry.md#mose-chemistry) |
 | `[MOSE-Turbulence]` | Turbulent Prandtl/Schmidt numbers | [→](registry.md#mose-turbulence) |
 | `[MOSE-Rotating-Frame]` | Rotating reference frame parameters | [→](registry.md#mose-rotating-frame) |
+
+`levels` in `[MOSE-Multigrid]` is the number of grid levels, 1 (a single grid) by default; it is not
+in the registry. MOSE reads it at set-up as an integer: a value that is not an integer, or no value,
+stops the run, and a value below 1 counts as 1. With `levels = n` the number of cells of every block
+must be a multiple of 2^(n−1) in i, and in j and k unless it is 1, or the run stops at set-up.
+`level1-iter`, `level2-iter`, ... give the iterations of each level.
 
 ---
 
@@ -106,6 +127,18 @@ and `vnn = 0.4` give 0.76 of it. The defaults stay `cfl = 0.5` and `vnn = 0.3`.
 
 ---
 
+## Blocks without chemistry: `exclude-blocks`
+
+`exclude-blocks` in `[MOSE-Chemistry]` lists the blocks that take no chemistry. With
+`chemistry = finite-rate` or `chemistry = equilibrium` the chemistry step skips them, on every grid
+level of a multigrid sequence, so their composition changes by transport only; the set-up summary
+lists them as inactive blocks. The value is `none`, the default, or the numbers of the blocks
+separated by blanks, for example `exclude-blocks = 2 5`, the blocks numbered from 1 in the order of
+the mesh. A word that is not a block number, or a number beyond the blocks of the mesh, stops the
+run at set-up.
+
+---
+
 ## Parameter Registry
 
-The complete list of all parameters, defaults, and allowed values is in the **[Parameter Registry](registry.md)**. It is generated automatically from the source code at every release — do not edit it manually.
+The **[Parameter Registry](registry.md)** lists the parameters with their defaults and allowed values. It is generated automatically from the source code at every release — do not edit it manually. Three kinds of keys are read at set-up before the registry is built, and the page shows them only in part: `levels` of `[MOSE-Multigrid]`, which it does not list (see [Sections](#sections)); `probe1`, `probe2`, ... of `[MOSE-Probes]`, which it shows as `probe1` with the section of one probe ([Probes](using.md#probes)); `stationary-face-1`, `stationary-face-2`, ... of `[MOSE-Rotating-Frame]`, which it does not list ([Wall Boundaries](../theory/rotating-frame.md#wall-boundaries)).

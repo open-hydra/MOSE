@@ -85,9 +85,11 @@ if [[ $1 == solve ]]; then
   if [[ "$MASTER" -nt "$LOCAL" ]]; then
     cp $MASTER $LOCAL
   fi
-  # Run the solver
+  # Run the solver, with no probe output of an earlier run left behind (check.py reads OUTPUT/exit.txt)
+  rm -f OUTPUT/exit.txt
   if [[ $BG == 0 ]]; then
     $LOCAL
+    [[ -f OUTPUT/exit.txt ]] || { echo "MOSE.sh: the run wrote no OUTPUT/exit.txt"; exit 1; }
   else
     $LOCAL 2>errors_file >logfile &
     echo $! > .ID

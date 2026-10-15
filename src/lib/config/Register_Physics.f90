@@ -35,7 +35,9 @@ contains
     !! ------------------------------------------------------
     section = trim(codename)//'-Chemistry'
     ! Exclude blocks from chemistry
-    call reg%add(section, 'exclude-blocks', obj_chemistry%exclude_blocks_str, 'none', 'Blocks to exclude from chemistry', '', .false.)
+    call reg%add(section, 'exclude-blocks', obj_chemistry%exclude_blocks_str, 'none', &
+                 'Blocks to exclude from chemistry (finite-rate and equilibrium, on every multigrid level)', &
+                 '', .false.)
     ! ODE solver selection
     ! Every integrator OSLO's setup_odesolver knows. cvode needs OSLO built with
     ! USE_SUNDIALS; H-dopri5 is explicit and only suited to non-stiff mechanisms.

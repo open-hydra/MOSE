@@ -13,10 +13,13 @@ When multigrid is enabled, one BC file per grid level is required:
 
 | File | Level |
 |------|-------|
-| `INPUT/bc_x1.txt` | Finest grid |
-| `INPUT/bc_x2.txt` | 2× coarser |
-| `INPUT/bc_x4.txt` | 4× coarser |
-| `INPUT/bc_x8.txt` | 8× coarser |
+| `INPUT/bc.txt` | 1, the finest grid |
+| `INPUT/bc2.txt` | 2, 2× coarser |
+| `INPUT/bc3.txt` | 3, 4× coarser |
+| `INPUT/bc4.txt` | 4, 8× coarser |
+
+Level $n$ has half the cells of level $n-1$ in each direction, and `INPUT/bc<n>.txt` lists its boundary cells; a direction
+of one cell (j or k of a 1-D or 2-D case) keeps one cell.
 
 For single-grid cases the file is simply `INPUT/bc.txt`.
 
@@ -73,6 +76,14 @@ order gives the same solution and the same wall output).
 
 Some BC types carry additional data on the second line (see [BC Types](#bc-types)). For types that carry no data (symmetry, extrapolation, axisymmetry), the second line is **absent**.
 
+Every value of the data line is required, except those with a default value: `k_rough` and `eps_wall` (0), `cp_wall`,
+`Ti_wall` and `dh_wall` (0), `pyro_id` and `reac_id` (0), `rho_grain` (0), `SF_geo` (1), `p_sub` and `p_sup` (0). An
+empty value (two commas with nothing between them) keeps that default; an empty required value stops the run at set-up,
+with the line of `bc.txt`, the record, its type and the name of the value. So does a line short of a value, or with a
+value that is not a number, and a value that is not finite (NaN or infinity), required or with a default, the flow
+directions `alpha` and `beta` included. Blank lines between records are skipped. On a coarse level of a multigrid run the
+messages name the file of that level.
+
 ## BC Types
 
 The following table lists all numeric BC type codes used in `bc.txt`, their physical meaning, and the format of the required data line.
@@ -123,18 +134,31 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 | `407` | Ambient ($T_0$, $p_0$, $p_\text{back}$) | `T0,  p0,  p_back,  alpha,  beta,  rel_fac,  [massf],  [turb]` |
 | `408` | Inlet — velocity + $T$ static | `T,   un,  alpha,  beta,  rel_fac,  [massf],  [turb]` |
 | `410` | Assigned state (time-varying file) | `filename  [periodic]` |
-| `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  r_throat,  rel_fac,  [massf],  [turb]` |
+| `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  g,  rel_fac,  [massf],  [turb]` |
 
 Type `409` (a forced outlet named in the reader of the boundary file) is not implemented: a record of type `409`, or of any
 type not listed on this page, gets no flux, and this version does not stop on it. Type `410` reads its data on the finest
-grid level only: do not use it with a sequence of grid levels.
+grid level only: do not use it with a sequence of grid levels. Its file (Tecplot ASCII, one zone per block and time) must
+hold finite values: a zone whose `SOLUTIONTIME` is not finite (NaN or infinity), or whose value for a face of type `410` is
+not, stops the run at set-up, with the file, the zone, the line of its header, and the variable and the cell of the value.
+So does a file that cannot be read, with the file and, for a zone, the zone and the line of its header: a file that cannot
+be opened or holds no `VARIABLES` line or no zone, a zone header whose `I`, `J`, `SOLUTIONTIME` or block number of the title
+(`T="B<block>_T<n>"`) does not read, zone data with a value that is not a number or that end before the values that `I`
+and `J` give, and a zone with more values than they give (the line after the data of a zone must be the header of the
+next one, with no blank line between). The zones must come in increasing time: a zone whose time no zone above it has
+must have a time greater than every time above it (the zones of other blocks at a time already given may come anywhere
+after it); otherwise the run stops at set-up, with the file, the zone, the line of its header and the two times.
+Each zone header must give `I=` and `J=` in upper case, with no blank around `=` (`I=3, J=2`): a header that gives no
+`I=` or no `J=` (for example `I = 3` or `i=3`) stops the run at set-up, with the file, the zone, the line of its header
+and the form to write.
 
 **Common fields:**
 
 | Field | Description |
 |-------|-------------|
-| `alpha` | In-plane flow angle [rad] or the token `normal` (face-normal inflow) |
-| `beta` | Out-of-plane flow angle [rad] or `normal` |
+| `alpha` | In-plane flow angle [rad] or the token `normal` (face-normal inflow); anything else stops the run |
+| `beta` | Out-of-plane flow angle [rad] or `normal`; anything else stops the run |
+| `g` | Mass flux through the face [kg/(m²·s)] (types `403`, `404`, `420`) |
 | `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation); no effect on `401`, `402` and `407` |
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
 | `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |
@@ -166,6 +190,13 @@ runs the data of `402` and `410` are evaluated at the time of each
 Runge–Kutta stage (see
 [Time Integration](../theory/time-integration.md#stage-times-and-time-dependent-boundary-data)).
 
+The `p0_file` of an inlet `402` is a text file of pairs `time [s]  p0 [bar]`, one per line, in increasing time (two
+equal times make a jump); a first line `periodic` makes the table repeat. The name is taken as written on the line,
+directories included (for example `INPUT/p0.dat`, relative to the directory of the run), up to 256 characters; a name with
+blanks goes in quotes. A table that cannot be opened, holds no pair, holds a time or a value that is not finite (NaN or
+infinity: the message gives its line and column) or has decreasing times stops the run at set-up, and so does a `402` line
+with fewer values than listed above or with an empty one.
+
 ### Viscous Walls
 
 | Type | Name | Data line (comma-separated) |
@@ -195,10 +226,11 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 
 |  Type | Name               | Data line                                                                  |
 | :---: | ------------------ | -------------------------------------------------------------------------- |
-| `502` | SRM grain boundary | `T_af, a, n, p_ref, rho_grain, SF_geo`                                     |
+| `502` | SRM grain boundary | `T_af, a, n, p_ref, rho_grain, SF_geo, [massf_1 … massf_ns]`               |
 | `503` | Melting            | `cp_wall, T_wall, Ti_wall, dh_wall, q_rad, eps_wall, [massf_1 … massf_ns]` |
 | `504` | Pyrolysis          | `pyro_id, q_rad, eps_wall, [massf_1 … massf_ns]`                           |
 | `505` | Surface reactions  | `reac_id, q_rad`                                                           |
+| `506` | Surface reactions and pyrolysis | `pyro_id, reac_id, q_rad, eps_wall, [massf_1 … massf_ns]`     |
 
 Type `506` is read but not applied in this version: the face gets no flux. Do not use it; `504` and `505` are the pyrolysis and
 the surface reactions alone.

@@ -85,9 +85,11 @@ if [[ $1 == solve ]]; then
   if [[ "$MASTER" -nt "$LOCAL" ]]; then
     cp $MASTER $LOCAL
   fi
-  # Run the solver
+  # Run the solver, with no field of an earlier run left behind
+  rm -f OUTPUT/field.tec
   if [[ $BG == 0 ]]; then
     $LOCAL
+    [[ -f OUTPUT/field.tec ]] || { echo "MOSE.sh: the run wrote no OUTPUT/field.tec"; exit 1; }
   else
     $LOCAL 2>errors_file >logfile &
     echo $! > .ID

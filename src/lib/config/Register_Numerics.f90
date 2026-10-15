@@ -41,15 +41,17 @@ contains
     call reg%add( trim(section), 'time-accurate', obj_time_scheme%time_accurate, '.false.', 'Time accurate switch', 'logical', .true. )
 
     ! New state
-    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'cons', 'Integration variables (cons/prim/prec)', 'cons ,  prim , prec', .false. )
+    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'cons', 'Integration variables (cons/prim/prec)', 'cons, prim, prec', .false. )
 
 
     ! Implicit residual smoothing --------------------------
     obj_irs%description     = 'none'
     obj_irs%warning_message = 'none'
     obj_irs%error_message   = 'none'
-    call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', 'Implicit Residual Smoothing', 'logical', .false. )
-    call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', 'IRS beta parameter', '>= 0', .false. )
+    call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', &
+          'Implicit Residual Smoothing (steady runs only)', 'logical', .false. )
+    call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
+          'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false. )
 
     ! Preconditioning controls (used when integration-variables = prec)
     obj_prec%description     = 'none'
@@ -76,7 +78,9 @@ contains
     obj_space_scheme%warning_message = 'none'
     obj_space_scheme%error_message   = 'none'
     call reg%add( trim(section), 'space-reconstruction', obj_space_scheme%space_reconstruction, '', 'Space reconstruction method', 'MUSCL, first-order', .true. )
-    call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, '', 'Flux limiter for space reconstruction', 'vanalbada, minmod, superbee, vanleer, mc', .false. )
+    call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, '', &
+          'Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order)', &
+          'vanalbada, minmod, superbee, vanleer, mc', .false. )
     call reg%add( trim(section), 'diffusive-metric', obj_space_scheme%diffusive_metric, 'inverse-mean', &
                   'Face metric of the interior viscous fluxes: inverse-mean is exact on stretched meshes, '// &
                   'mean is faster but overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r', &
