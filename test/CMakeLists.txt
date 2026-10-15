@@ -131,6 +131,14 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # Quasi-2D case with symmetry k faces: round-off in w must not grow.
 mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;3D")
 
+# Boundary conditions (BoundaryConditions): the parts below, each in its
+# folder of test/fast/boundary-conditions, run one after the other by
+# test/fast/boundary-conditions/run.sh.
+# Inlet boundary conditions: the far-field inlet (407) with the flow direction
+# normal gives the field of the equivalent angles, to the bit, with no
+# transverse velocity.
+mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;2D")
+
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
 mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")
 
@@ -180,6 +188,8 @@ mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
 # with SA.
 # Part 4: the viscous force on the axisymmetric wedge (Homann's flow and a field
 # with dilatation and swirl) converges to the Navier-Stokes one with second order.
+# Part 5: next to a wall the Spalart-Allmaras sources see the gradient of nu~
+# that the wall value nu~ = 0 gives (linear profile at rest).
 mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")
 
 # Steady state with the point-implicit factor: it must not depend on the time
@@ -205,6 +215,16 @@ endif()
 # The melting column also runs without schmidt: the default, 0, needs no
 # diffusion table with a single species.
 mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;physics;2D")
+
+# Mesh geometry (MeshGeometry): the parts below, each in its folder of
+# test/fast/mesh-geometry, run one after the other by
+# test/fast/mesh-geometry/run.sh.
+# Wall distance: the distance to the wall of the turbulence models is the
+# minimum distance to the wall surface (convex corner, curved wall, nozzle lip
+# on an axisymmetric wedge), read back from the Spalart-Allmaras source.
+# Mesh type: a plane 2-D mesh, an axisymmetric wedge and a 3-D slab periodic in
+# k are told apart by every node of every block; blocks that disagree stop.
+mose_add_fast_script(MeshGeometry fast/mesh-geometry "fast;implementation;physics;2D")
 
 # Quadratic constitutive relation QCR2000: a unit check of the stress as the
 # solver calls it (laminar viscosity, then eddy viscosity), against the

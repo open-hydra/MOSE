@@ -57,6 +57,15 @@
 #     next to the axis it must match the hoop stress 2 mu u_r/r^2) and axial
 #     components, the azimuthal one staying zero; swirl, the radial and
 #     azimuthal components on the cells with r >= L/2, the axial one exact.
+#  5. Spalart-Allmaras next to a wall (wall_gradient.py): a column of fluid
+#     at rest over an isothermal wall with nu~ = a y, chi below 1e-3: the
+#     linear profile is an equilibrium of the Spalart-Allmaras equation
+#     (cw1 = cb1/kappa^2 + (1 + cb2)/sigma). One explicit Euler step with
+#     local time stepping; the change of rho nu~ over the step is the
+#     right-hand side, which must vanish in every cell next to the wall
+#     too: there the source terms must see grad nu~ = a, from the wall
+#     value nu~ = 0 (ghost cell -nu~), not a/2 from a ghost cell that
+#     copies the cell.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -291,6 +300,44 @@ for field in homann swirl; do
     fail=1
   fi
 done
+
+echo "-- 5. Spalart-Allmaras next to a wall: right-hand side of rho nu~ for a linear profile --"
+cat > input.ini <<EOF
+[MOSE-Parameters]
+iter-threshold = 1
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = navier-stokes
+turbulence = SA
+schmidt = 0.7
+
+[MOSE-Turbulence]
+point-implicit = false
+
+[MOSE-Numerics]
+cfl = 0.5
+vnn = 0.1
+time-accurate = false
+time-scheme = euler
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+EOF
+python3 -B wall_gradient.py case || exit 1
+rm -f OUTPUT/field.tec OUTPUT/diagnostic.tec
+"$LOCAL" > OUTPUT/wall-gradient.log 2>&1
+if [[ ! -f OUTPUT/field.tec || ! -f OUTPUT/diagnostic.tec ]] || grep -a -qE 'NaN|Integration failed' OUTPUT/wall-gradient.log; then
+  echo "  [FAIL] the run did not complete (see OUTPUT/wall-gradient.log)"
+  fail=1
+elif python3 -B wall_gradient.py check OUTPUT/field.tec OUTPUT/diagnostic.tec; then
+  echo "  [ok  ] the source terms see the wall value nu~ = 0 in the wall cells"
+else
+  echo "  [FAIL] the source terms of the wall cells see a wrong gradient of nu~"
+  fail=1
+fi
 
 if [[ $fail -ne 0 ]]; then
   echo "MMSResiduals: FAILED"

@@ -37,6 +37,8 @@ For a block with $n_i \times n_j \times n_k$ cells the six faces are labelled:
 
 For 2-D cases (`nk = 1`), faces 5 and 6 are degenerate. They should be set to the null type (`type = 0`) or symmetry (`300`).
 The null type has no flux through the k faces. In a planar case (not an axisymmetric wedge) with symmetry on all the k faces MOSE sets the z velocity to zero and does not integrate the z momentum. The two mirror planes one cell apart would otherwise give $w$ the mode $dw/dt = -2\,a\,w/\Delta z$ ($a$ the speed of sound, $\Delta z$ the thickness of the layer), which the explicit schemes cannot follow at the time step of the in-plane cells: round-off in $w$ would grow until the run fails. MOSE does so only when every k face is a plane normal to z (the x and y components of its unit normal at most $10^{-10}$). Where the k faces are not normal to z, as in a layer between parallel planes inclined to z, symmetry on them asks the gas to move along them, across the layer, and setting $w$ to zero would change the flow (the mass flow, the pressure): there MOSE integrates the z momentum, with a warning, and the mode above limits the time step. Heun follows it for time steps up to $\Delta z/a$ and RK3 up to $1.26\,\Delta z/a$: with the time step of the in-plane cells, about $\text{cfl}\,\Delta x/a$, layers thinner than about $\text{cfl}\,\Delta x$ (Heun) or $0.8\,\text{cfl}\,\Delta x$ (RK3) make the run fail.
+In a 1-D case (one cell in j and one in k) the same holds in both directions: with symmetry on all the k faces MOSE sets $w$ to zero and does not integrate it, and with symmetry on all the j faces it does the same for $v$, whose mode is $dv/dt = -2\,a\,v/\Delta y$, with the same condition: every j face a plane normal to y for $v$, every k face a plane normal to z for $w$. A channel whose section varies along x, one cell across with its faces along the walls, has faces that are not, and the velocity across is integrated, with a warning; cells thinner across than about $\text{cfl}\,\Delta x$ (Heun) or $0.8\,\text{cfl}\,\Delta x$ (RK3) then make the run fail.
+With symmetry on only one of the two faces and extrapolation (`400`) on the other, the velocity across keeps half that mode, $dv/dt = -a\,v/\Delta y$, and is integrated, since the extrapolation face lets the gas through. Heun follows that mode for time steps up to $2\,\Delta y/a$ and RK3 up to $2.51\,\Delta y/a$; as the time step of a 1-D case is about $\text{cfl}\,\Delta x/a$, cells thinner across than about $\text{cfl}\,\Delta x/2$ (Heun) or $0.4\,\text{cfl}\,\Delta x$ (RK3) make the run fail. Give both faces the same type.
 
 An axisymmetric case is a wedge, symmetric about the plane $z = 0$, with faces 5 and 6 of type `200` (see [Euler Boundaries](#euler-boundaries)).
 
@@ -64,8 +66,8 @@ The format is as follows:
 | `face` | Face index of that cell (1–6, see [Face Numbering](#face-numbering)) |
 | `type` | Numeric BC type code (see table below) |
 
-All boundary cells are listed — one entry per face cell, face by face, block by block. MOSE needs this order
-for the wall output; the solution does not depend on it.
+All boundary cells are listed — one entry per face cell, face by face, block by block, as ATLAS writes them (another
+order gives the same solution and the same wall output).
 
 **Line 2 — BC data (type-dependent):**
 

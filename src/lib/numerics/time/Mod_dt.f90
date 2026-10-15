@@ -264,20 +264,24 @@ contains
 
   !> Stiffness of the turbulence sources of every cell on the current state of the domain: blk%stiff = d, the
   !> derivative of the destruction (Spalart-Allmaras 2 c_w1 f_w nu~/y^2; SST and Wilcox 2006 max(beta* omega,
-  !> 2 beta omega)), written by the source routines. It fills the ghost cells and evaluates the turbulence sources as
-  !> the first stage of a step does, without the fluxes, so it is collective (MPI ghost exchange) and must be called
-  !> outside OpenMP parallel regions, by all processes. It leaves in blk%r a residual that nobody may use: the next stage
-  !> starts by zeroing the residuals, and its own ghost fill replaces the ghost values set here. Compute_dt calls it in
-  !> time-accurate RANS runs; call it alone only when the stiffness is needed without the step.
+  !> 2 beta omega)), written by the source routines. It fills the ghost cells, sets the ghost values of the turbulence
+  !> variables behind the walls from their wall values as the boundary fluxes of a stage do (Wall_RANS_Ghosts), and
+  !> evaluates the turbulence sources as the first stage of a step does, without the fluxes. It is collective (MPI ghost
+  !> exchange) and must be called outside OpenMP parallel regions, by all processes. It leaves in blk%r a residual that
+  !> nobody may use: the next stage starts by zeroing the residuals, and its own ghost fill replaces the ghost values set
+  !> here. Compute_dt calls it in time-accurate RANS runs; call it alone only when the stiffness is needed without the
+  !> step.
   subroutine Turbulence_Stiffness ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Lib_Ghost, only: Fill_Ghost_Cell, Ghost_Wall_Extrapolation
+    use MOSE_Mod_BC_Fluxes, only: Wall_RANS_Ghosts
     use MOSE_Lib_RANS,  only: RANS_Source_Terms
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
 
     !$omp parallel
     call Fill_Ghost_Cell ( domain )
+    call Wall_RANS_Ghosts ( domain )
     call Ghost_Wall_Extrapolation ( domain )
     call RANS_Source_Terms ( domain )
     !$omp end parallel

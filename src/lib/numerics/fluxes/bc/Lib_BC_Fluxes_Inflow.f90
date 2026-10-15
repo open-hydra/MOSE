@@ -9,7 +9,7 @@ module MOSE_Lib_BC_Fluxes_Inflow
   private
 
   public :: BC_Inlet_StagnCond, BC_Inlet_MassFlux_T0, BC_Inlet_MassFlux_T, BC_Inlet_Supersonic_Static, BC_Inlet_un_T
-  public :: Stagn_Inflow, setup_inflow_geometry
+  public :: Stagn_Inflow, setup_inflow_geometry, Compute_Inflow_Direction
 
 contains
 

@@ -17,10 +17,18 @@ interval of Heun, [-2, 0], and inside that of RK3, [-2.51, 0] (a thinner layer
 leaves that of RK3 too). W0 must not grow. A larger W0 (1 m/s: a field restarted from a run
 already hit by the mode, or from a 3-D field) must not spoil p, u and v either.
 
+1-D tube (ic1d, bc1d, check1d): NX cells along x, one cell in y and one in z, both LZ thick; the same
+gas and wave, and y and z velocities V0 = 1e-8 m/s. With symmetry planes on all the j faces v obeys
+dv/dt = -2 a v / LZ, and with symmetry planes on all the k faces w obeys dw/dt = -2 a w / LZ: neither
+may grow. Extrapolation (400) on the j faces and null k faces are the control.
+
 Usage (from the test directory):
   python3 -B make_case.py ic [W0]            INPUT/ic.tec (W0 = 1e-8 m/s if omitted)
   python3 -B make_case.py bc KTYPE           INPUT/bc.txt with type KTYPE (300 or 0) on the k faces
   python3 -B make_case.py check FILE [W0]    compare a solution file with the uniform state
+  python3 -B make_case.py ic1d               INPUT/ic.tec of the 1-D tube
+  python3 -B make_case.py bc1d JTYPE KTYPE   INPUT/bc.txt of the 1-D tube (JTYPE 300 or 400, KTYPE 300 or 0)
+  python3 -B make_case.py check1d FILE       compare a solution file of the 1-D tube with the uniform state
   python3 -B make_case.py channel KIND        INPUT/ic.tec and INPUT/bc.txt of the channel of variable section
                                              (KIND layer: quasi-2-D, KIND cd1d: 1-D)
   python3 -B make_case.py checkchannel FILE KIND  compare a solution file with the quasi-1-D isentropic flow
@@ -70,14 +78,60 @@ def write_bc(ktype, path="INPUT/bc.txt"):
                     f.write(f"       1     {i:3d}     {j:3d}       1       {face}     {ktype:3d}\n")
 
 
-def read_field(path):
+def write_ic_1d(path="INPUT/ic.tec"):
+    """1-D tube: NX cells along x, one cell of LZ in y and in z; v = w = W0."""
+    import math
+    rho0 = P / (RGAS * T)
+    rho = [rho0 * (1.0 + A * math.sin(2.0 * math.pi * (i + 0.5) / NX)) for i in range(NX)]
+    with open(path, "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
+        f.write(f" ZONE  T = B1-IG, I={NX + 1}, J=2, K=2, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for axis in range(3):
+            for k in range(2):
+                for j in range(2):
+                    for i in range(NX + 1):
+                        f.write(f" {(LX * i / NX, LZ * j, LZ * k)[axis]:.15E}\n")
+        f.write("".join(f" {r:.15E}\n" for r in rho))
+        for value in (U, W0, W0, P):
+            f.write(f" {value:.15E}\n" * NX)
+
+
+def write_bc_1d(jtype, ktype, path="INPUT/bc.txt"):
+    """One line per boundary cell face of the 1-D tube, face by face."""
+    with open(path, "w") as f:
+        for face, i in ((1, 1), (2, NX)):
+            f.write(f"       1     {i:3d}       1       1       {face}     400\n")
+        for face, t in ((3, jtype), (4, jtype), (5, ktype), (6, ktype)):
+            for i in range(1, NX + 1):
+                f.write(f"       1     {i:3d}       1       1       {face}     {t:3d}\n")
+
+
+def check_1d(path):
+    """Exit status 0 when p and u are still uniform and neither v nor w has grown."""
+    field = read_field(path, NX, 1)
+    worst = {
+        "u": max(abs(u / U - 1.0) for u in field["u"]),
+        "p": max(abs(p / P - 1.0) for p in field["p"]),
+    }
+    vmax = max(abs(v) for v in field["v"])
+    wmax = max(abs(w) for w in field["w"])
+    print("    largest relative deviation of p, u from the uniform state: " +
+          ", ".join(f"{k} {v:.2e}" for k, v in worst.items()) + f"; max |v| = {vmax:.3e}, max |w| = {wmax:.3e} m/s")
+    ok = all(v < 1.0e-12 for v in worst.values()) and vmax <= 2.0 * W0 and wmax <= 2.0 * W0
+    sys.exit(0 if ok else 1)
+
+
+def read_field(path, nx=None, ny=None):
     """Cell values of a one-zone MOSE ASCII field (BLOCK packing), names quoted or not."""
+    nx = NX if nx is None else nx
+    ny = NY if ny is None else ny
     import re
     with open(path) as f:
         lines = f.read().splitlines()
     names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s,"]+)', lines[0].split('=', 1)[1])]
     values = [float(v) for v in " ".join(lines[2:]).split()]
-    nn, nc, out, pos = (NX + 1) * (NY + 1) * 2, NX * NY, {}, 0
+    nn, nc, out, pos = (nx + 1) * (ny + 1) * 2, nx * ny, {}, 0
     for k, name in enumerate(names):
         cnt = nn if k < 3 else nc
         out[name] = values[pos:pos + cnt]
@@ -208,6 +262,12 @@ def main():
         write_bc(int(sys.argv[2]))
     elif what == "check":
         check(sys.argv[2], float(sys.argv[3]) if len(sys.argv) > 3 else W0)
+    elif what == "ic1d":
+        write_ic_1d()
+    elif what == "bc1d":
+        write_bc_1d(int(sys.argv[2]), int(sys.argv[3]))
+    elif what == "check1d":
+        check_1d(sys.argv[2])
     elif what == "channel":
         write_channel(sys.argv[2])
     elif what == "checkchannel":

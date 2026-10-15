@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Builds with `USE_MPI=ON` register a `needs-mpi` test tier (`ctest -L needs-mpi`). Each of its tests writes its own small
   multi-block case, runs the solver through the MPI launcher that CMake finds (`MPIEXEC_EXECUTABLE`, at most four ranks) and
   compares output files byte by byte. The CI build has no MPI and does not run this tier.
+- At start-up the root process reports how far the wall distance can be from exact on twisted 3-D wall faces: the largest
+  bound, min(|T|/16, |T_n|/2), over the distance of the cell next to the face, with that cell (T is the twist of the corners
+  of the face, T_n its part along the normal of the face). It is a warning above 1 %. 2-D and axisymmetric meshes have plane
+  wall faces and print nothing. The distances do not change.
 
 ### Changed
 
@@ -166,7 +170,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   unspecified; every rank also read every boundary record of the mesh at every stage. The records of the local blocks are now
   grouped by block and face, keeping the file order within a face, with one loop per face of a block. A `bc.txt` sorted by
   block and face, as the guide lists the records, gives the same solution bit for bit; any other order gives the solution of
-  the sorted file. The wall output still needs the records in the order of the guide.
+  the sorted file.
 - A face between two blocks (block cut `101`, periodic connection `201`) is computed once, and its flux is given with opposite
   signs to the cells on its two sides. Each block computed the face for its own cell with its own inputs, the shock sensor of
   its own cell and, with HLLC-PC, a reference velocity of zero in the ghost cell. The two shares then differed: mass, momentum
@@ -203,3 +207,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   increase of the largest row sum of the viscous operator that the stress brings; nothing changes off the wedge. The local
   step is smaller next to the axis: in the wedge cases of the tests by up to 20.4 % and 25.5 % of the largest step, on 32×32
   and 64×64 cells.
+- The source terms of the turbulence models in the cells next to a wall of type 301, 302 or 503–505 see the ghost values set from
+  the wall values, ghost = 2 wall − cell (CFL3D User's Manual 5.0, NASA/TM-1998-208444, eq. H-186). The ghost update that
+  precedes the source terms copied the cell over them, so with Spalart–Allmaras the c_b2 term of a wall cell kept a quarter of
+  its value (∇ν̃ = a/2 instead of a for ν̃ = a y). In the fast tests the Spalart–Allmaras and SST fields next to a wall change.
+  The walls coupled to another solver (103, 104), which have no such ghost values, keep the copy of the cell.
+- The wall output takes the records of each face of each block whatever the order of `bc.txt`. With records not sorted by
+  block and face, the wall faces took the records of other faces and the wall output wrote 0 for their wall values (320 of
+  the 856 values of `wall.tec` in a four-block case, laminar and Spalart–Allmaras). A sorted file gives the same wall output
+  as before.
+- An ambient boundary (`407`) whose flow direction is given as `normal` lets the gas in along the face normal. It took the
+  sentinel value of the token for an angle (tan(huge) = −4.96e-3), so the gas entered with a spurious transverse component
+  (1.21e-3 of the normal velocity in a test duct) and the closure of the inflow used a wrong coefficient. Results change
+  wherever a `407` record gives `normal`; records with angles are unchanged.
+- A 1-D case (one cell in j and in k) with symmetry (`300`) on all its j faces, or on all its k faces, no longer fails on
+  round-off in v or w: the two mirror planes one cell apart give v the mode dv/dt = −2av/Δy, outside the stability region of
+  the explicit schemes at the step of the x cells (three such cases stopped with `NaN or p<0` after 14 and 15 steps). Such a
+  velocity is now set to zero at set-up and not integrated, with a warning that names the faces, when those faces are planes
+  normal to its axis (a tube of constant section); in a channel of variable section it is integrated as before, with a
+  warning, and thin cells can still stop the run. Results change only in these 1-D cases.
+- The wall distance of the turbulence models is the exact minimum distance from the cell centre to the wall surface, a wall face
+  being the four triangles between its centre and its sides, and on a 2-D axisymmetric wedge the distance in the meridional
+  plane. It was the distance to the nearest wall-face centre, too large wherever the grid lines are not normal to the wall and
+  next to convex corners and the ends of walls (up to 10.9 %, 16.3 % and 15.9 % in three test geometries). Results change
+  wherever the distance changes, and at round-off where the grid lines are normal to a plane wall. Equal distances go to the
+  lowest face index, so the roughness a cell inherits is the same on every rank and thread. With a turbulence model, a wall on
+  faces 5–6 of a wedge stops the run.
+- The type of the mesh (plane, axisymmetric wedge, 3-D sector closed by type `200`, slab translated in k) is taken from every
+  node of every block, to within 1 % of the move of the nodes per cell in k, no longer from two probe nodes of block 1. A plane
+  2-D mesh whose j index runs towards the x axis was taken for a wedge (wall distance off by 27 % in a test), and so was a plane
+  slab far from the x axis; the periodic images of a 3-D slab periodic in k were turned, a mesh with a wedge block and a plane
+  block ran as one of the two, and a 3-D mesh with a thin block 1 was taken for a 2-D one. A mesh whose blocks disagree, a 2-D
+  block whose k planes fit neither a turn nor a translation to that tolerance (too few digits, or k planes that are not
+  parallel), and a 3-D block closed by type `200` whose last k node plane is neither the first one turned nor translated, now
+  stop at set-up; the set-up summary names the type. Meshes recognised right keep their wedge angle to the bit.
+- The wall distance is the minimum over the images of the wall across periodic boundaries too (periodic connections `201`, slabs
+  closed in k by type `200`, rotational periodicity of 3-D sectors). It was measured to the wall inside the mesh only, so near
+  the end of a period it could be several times too large (by 9.8 times the exact distance in a test channel). A mesh without
+  periodic boundaries costs nothing more. With a turbulence model, periodic translations that cannot be the images of one wall
+  stop the run with a message: not integer combinations of each other, more than three independent ones, more than 1e5 images, or not along x on a
+  wedge or with sectors.

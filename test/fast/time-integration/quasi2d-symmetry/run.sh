@@ -18,6 +18,17 @@
 #       300): here w is not set to zero, as symmetry on the inclined k faces
 #       asks w = c v; steady subsonic flow from a reservoir, p must follow the
 #       quasi-1-D isentropic flow of the same section within 0.03 p0.
+#  The same in a 1-D tube, one cell in j and one in k, both 1 mm thick against
+#  x cells of 5 mm, with y and z velocities of 1e-8 m/s: symmetry on all the j
+#  faces gives v the mode dv/dt = -2 a v / dy, on all the k faces w the mode
+#  dw/dt = -2 a w / dz. p and u must stay uniform and v and w must not grow,
+#    4. with Heun and with RK3, j and k faces 300;
+#    5. with Heun, j faces 300 and null k faces;
+#    6. with Heun, extrapolation (400) j faces and null k faces: the control.
+#    7. a channel whose section varies along x, one cell in y with the top j
+#       face inclined (j faces 300, null k faces), steady subsonic flow from a
+#       reservoir: here v is not set to zero; p must follow the quasi-1-D
+#       isentropic flow within 0.03 p0.
 #  Box, inputs and checks: make_case.py; gas of test/common/Air.
 #===============================================================================
 set -uo pipefail
@@ -138,6 +149,53 @@ EOF
 }
 
 solve_channel layer layer "k faces that are not planes normal to z"
+
+# solve1d <tag> <j-face type> <k-face type> <time scheme>: the same N steps on the 1-D tube
+solve1d() {
+  local tag="$1"
+  python3 -B make_case.py ic1d || return 1
+  python3 -B make_case.py bc1d "$2" "$3" || return 1
+  cat > input.ini <<EOF
+[MOSE-Parameters]
+iter-threshold = $N
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.5
+time-accurate = true
+time-scheme = $4
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+EOF
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  echo "-- 1-D tube, j faces $2, k faces $3, $4, initial v and w 1e-8 m/s, $N steps --"
+  if [[ ! -f OUTPUT/field.tec ]]; then
+    echo "  [FAIL] no solution written (see OUTPUT/$tag.log)"
+    fail=1
+    return 1
+  fi
+  cp OUTPUT/field.tec "OUTPUT/$tag.tec"
+  python3 -B make_case.py check1d "OUTPUT/$tag.tec"
+  if [[ $? -eq 0 ]]; then
+    echo "  [ok  ] p, u stay uniform and v, w do not grow"
+  else
+    echo "  [FAIL] p, u do not stay uniform or v, w grow"
+    fail=1
+  fi
+}
+
+solve1d sym1d-RK2     300 300 RK2
+solve1d sym1d-RK3     300 300 RK3
+solve1d jsym1d-RK2    300 0   RK2
+solve1d null1d-RK2    400 0   RK2
+solve_channel cd1d cd1d "j faces that are not planes normal to y"
 
 if [[ $fail -ne 0 ]]; then
   echo "Quasi2DSymmetry: FAILED"
