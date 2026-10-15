@@ -187,7 +187,7 @@ ctest
 # Just the fast pre-push tier
 ctest -L fast
 
-# Everything except heavy-dependency cases (what PR CI runs)
+# Everything except heavy-dependency cases (what the first job of PR CI runs)
 ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi"
 ```
 
@@ -196,13 +196,14 @@ ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi"
 | Tier | Trigger | Selector |
 |------|---------|----------|
 | **Fast** | `git push` (pre-push hook, [`.githooks/pre-push`](https://github.com/open-hydra/MOSE/blob/main/.githooks/pre-push)) | `ctest -L fast` |
-| **PR CI** | pull request to `main` ([`ctest.yml`](https://github.com/open-hydra/MOSE/blob/main/.github/workflows/ctest.yml)) | `ctest --label-exclude "needs-*"` |
+| **PR CI** | pull request to `main` ([`ctest.yml`](https://github.com/open-hydra/MOSE/blob/main/.github/workflows/ctest.yml)) | `ctest --label-exclude "needs-*"`; in a second job built with MPI, `ctest -L needs-mpi` |
 | **Nightly / dispatch** | scheduled / manual | full suite with Cantera + Sundials + MPI |
 
-The CI build is deliberately minimal (`USE_MPI=OFF`, `USE_TECIO=OFF`,
+The first CI job builds MOSE deliberately minimal (`USE_MPI=OFF`, `USE_TECIO=OFF`,
 `USE_SUNDIALS=OFF`, `USE_CANTERA=OFF`), so finite-rate chemistry,
-equilibrium, MPI and binary-Tecplot cases cannot run there — they live in
-the nightly tier.
+equilibrium and binary-Tecplot cases cannot run there — they live in
+the nightly tier. The second job, `test-mpi`, builds MOSE with gfortran, the
+Open MPI of Ubuntu and `USE_MPI=ON`, and runs the `needs-mpi` tier.
 
 To enable the pre-push hook locally:
 

@@ -11,6 +11,8 @@
 #
 #  PR CI runs everything except the heavy-dependency labels:
 #    ctest -LE "needs-cantera|needs-sundials|needs-mpi"
+#  and, in a second job built with USE_MPI=ON (gfortran, Open MPI), the MPI tier:
+#    ctest -L needs-mpi
 # ---------------------------------------------------------------------------
 
 # Common environment for all solver tests

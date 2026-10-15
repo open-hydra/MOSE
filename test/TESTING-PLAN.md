@@ -16,14 +16,17 @@ running on GitHub's CI runner.
   case's `MOSE.sh`.
 - **The pre-push hook** ([`.githooks/pre-push`](../.githooks/pre-push)) runs the fast
   tier (`ctest -L fast`); **PR CI** ([`ctest.yml`](../.github/workflows/ctest.yml))
-  runs everything except the `needs-*` heavy-dependency labels.
+  runs everything except the `needs-*` heavy-dependency labels and, in a second job
+  (`test-mpi`), the `needs-mpi` tier.
 - **CI build is minimal** ([`.github/workflows/ctest.yml`](../.github/workflows/ctest.yml)):
-  `USE_MPI=OFF`, `USE_TECIO=OFF`, `USE_SUNDIALS=OFF`, `USE_CANTERA=OFF`.
+  `USE_MPI=OFF`, `USE_TECIO=OFF`, `USE_SUNDIALS=OFF`, `USE_CANTERA=OFF`; the second
+  job builds with `USE_MPI=ON` (gfortran and the Open MPI of Ubuntu).
 
 ### Hard constraint for anything on GitHub's runner
 The minimal CI build means **no finite-rate chemistry, no equilibrium (Cantera/CEA),
-no MPI, no binary Tecplot (TecIO)**. Every flame / reactive / MPI / equilibrium case
-is therefore off-limits for pre-push and PR CI — those belong in a nightly/local tier.
+no binary Tecplot (TecIO)**, and MPI only in the second job. Every flame / reactive /
+equilibrium case is therefore off-limits for pre-push and PR CI — those belong in a
+nightly/local tier.
 
 ---
 
@@ -206,7 +209,8 @@ The current blocker is that only 2 cases are in CTest. Restructure before adding
    on failure (most 2-D/viscous cases) and the `needs-*` heavy cases.
 2. ☑ **Pre-push hook** → `ctest -L fast` ([`.githooks/pre-push`](../.githooks/pre-push)).
 3. ☑ **PR CI** → `ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi"`
-   ([`ctest.yml`](../.github/workflows/ctest.yml)).
+   ([`ctest.yml`](../.github/workflows/ctest.yml)); a second job with `USE_MPI=ON`
+   → `ctest -L needs-mpi`.
 4. ☐ **Nightly / `workflow_dispatch`** → full suite with Cantera+Sundials+MPI enabled.
 5. ☐ Standardize on one verifier name (currently both `check.py` and `verify.py`) and a
    common exit-code contract (0 = pass, non-zero = fail) — needed before the remaining
@@ -219,7 +223,7 @@ The current blocker is that only 2 cases are in CTest. Restructure before adding
 | Tier | Trigger | Selector | Contents |
 |---|---|---|---|
 | 0 — fast | pre-push hook | `ctest -L fast` | F1–F7 |
-| 1 — PR CI | PR to `main` | `ctest -LE needs-*` | fast + dependency-free validation |
+| 1 — PR CI | PR to `main` | `ctest -LE needs-*`; `ctest -L needs-mpi` (second job, MPI build) | fast + dependency-free validation; MPI tier |
 | 2 — nightly | schedule / dispatch | full | flames, reactive, equilibrium, MPI, parallel-equivalence |
 
 ---
