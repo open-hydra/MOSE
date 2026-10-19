@@ -357,6 +357,24 @@ add_fortran_executable(qcr2000_check unit/qcr2000_check.f90)
 add_test(NAME QCR2000Stress COMMAND qcr2000_check)
 set_tests_properties(QCR2000Stress PROPERTIES LABELS "fast;physics;unit" TIMEOUT 60)
 
+# Cell volume (CellVolume): a unit check of the volume of Compute_Metric_Tensor,
+# the integral of det J of the trilinear cell, against its exact value on cells
+# with twisted faces, a non-convex cell, a collapsed edge, 2-D, wedge and
+# left-handed cells, and on a twisted mesh against the volume enclosed by its
+# boundary faces; a cell whose volume has not the sign of det A at its centre
+# raises the flag of degenerate or inverted cells.
+add_fortran_executable(cell_volume_check unit/cell_volume_check.f90)
+add_test(NAME CellVolume COMMAND cell_volume_check)
+set_tests_properties(CellVolume PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
+
+# Order of rounding (VolatileOrder): a difference stored in a VOLATILE variable
+# and read back is rounded as written, also with -ffast-math, which lets the
+# compiler evaluate (q - c1) - (c2 - c1) as q - c2; Compute_Metric_Tensor takes
+# its node differences so. The values come from the command line (no folding).
+add_fortran_executable(volatile_order_check unit/volatile_order_check.f90)
+add_test(NAME VolatileOrder COMMAND volatile_order_check 1 18014398509481984 3)
+set_tests_properties(VolatileOrder PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
+
 # ===========================================================================
 #  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
 #  Each test generates its own small multi-block case and launches the solver

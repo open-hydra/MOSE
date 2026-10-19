@@ -97,14 +97,23 @@ def centres(x, y, z):
 
 
 def volumes(x, y, z):
-    """Cell volumes with the five tetrahedra of the solver's metrics (absolute values)."""
+    """Cell volumes as the solver takes them (Compute_Metric_Tensor): the integral of det J of the trilinear cell,
+    1/6 sum_d e_d . (S_d- + S_d+), e_d the mean edge of direction d and S_d-, S_d+ the area vectors (diagonal x diagonal)/2
+    of the two faces of direction d, along +d (docs/theory/numerics.md, Cell volume); in absolute value."""
     X = np.stack([x, y, z], axis=-1)
-
-    def tv(a, b, c, d):
-        return np.abs(np.einsum('...i,...i->...', b - a, np.cross(c - a, d - a))) / 6.0
     n1, n2, n3, n4 = X[:-1, :-1, :-1], X[:-1, :-1, 1:], X[:-1, 1:, :-1], X[:-1, 1:, 1:]
     n5, n6, n7, n8 = X[1:, :-1, :-1], X[1:, :-1, 1:], X[1:, 1:, :-1], X[1:, 1:, 1:]
-    return (tv(n1, n5, n3, n2) + tv(n5, n7, n3, n8) + tv(n2, n8, n6, n5) + tv(n2, n4, n8, n3) + tv(n2, n8, n5, n3))
+    r2, r3, r4, r5, r6, r7, r8 = (n - n1 for n in (n2, n3, n4, n5, n6, n7, n8))
+
+    def dot(a, b):
+        return np.einsum('...i,...i->...', a, b)
+    e1 = 0.25 * (r5 + (r6 - r2) + (r7 - r3) + (r8 - r4))
+    e2 = 0.25 * (r3 + (r4 - r2) + (r7 - r5) + (r8 - r6))
+    e3 = 0.25 * (r2 + (r4 - r3) + (r6 - r5) + (r8 - r7))
+    v = (dot(e1, np.cross(r4, r2 - r3) + np.cross(r8 - r5, r6 - r7))
+         + dot(e2, np.cross(r6, r5 - r2) + np.cross(r8 - r3, r7 - r4))
+         + dot(e3, np.cross(r7, r3 - r5) + np.cross(r8 - r2, r4 - r6)))
+    return np.abs(v) / 12.0
 
 
 def conserved(rho, u, v, w, p):

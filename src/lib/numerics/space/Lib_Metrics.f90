@@ -451,8 +451,9 @@ contains
     ! Local
     integer  :: h
     real(R8) :: det, A(3,3), cofactor(3,3), scale
-    logical  :: bad, first
-    real(R8) :: vx(8), vy(8), vz(8)
+    logical  :: bad, first, check_vol
+    real(R8) :: r(3,8), ea(3,3), v
+    real(R8), volatile :: rv(3,8)   ! the nodes relative to N1, rounded once as written (the volume, below)
 
     ! Compute average cell dimension. A is M^-1, inverse of metric tensor.
     ! M1 = [ xcs, ycs, zcs ; xet, yet, zet ; xzi, yzi, zzi ].
@@ -479,6 +480,37 @@ contains
         - A(1,2)*A(2,1)*A(3,3) + A(1,2)*A(2,3)*A(3,1)  &
         + A(1,3)*A(2,1)*A(3,2) - A(1,3)*A(2,2)*A(3,1)
 
+    ! Volume of the cell: the integral of det J of the trilinear map of its nodes, whose faces are the bilinear faces of
+    ! Compute_Norm_Area, shared with the cells next door (docs/theory/numerics.md, Cell volume):
+    !   V = 1/6 sum_d e_d . (S_d- + S_d+),
+    ! e_d the mean edge of direction d and S_d-, S_d+ the area vectors, (diagonal x diagonal)/2, of the two faces of
+    ! direction d, both along +d. It is exact on every cell, twisted faces included, and the volumes of the cells sum to the
+    ! volume enclosed by the boundary faces. Signed: negative on a left-handed cell, stored in absolute value below.
+    ! Only differences of nodes enter, so the rounding is that of the size of the cell, not of its coordinates, as long as
+    ! the compiler rounds the differences as written. With -ffast-math (gfortran -fassociative-math, ifx -fp-model fast) it
+    ! may rewrite a difference of differences across statements, (q - c1) - (c2 - c1) as q - c2: both compilers do it with
+    ! the release flags of MOSE (test/unit/volatile_order_check.f90). A VOLATILE object is defined and referenced each time
+    ! as the program says (Fortran 2018, 8.5.19), so the nodes relative to N1 are stored in rv and read back into r, and every
+    ! later expression has terms of the size of the cell only. A pure procedure cannot hold VOLATILE locals (C1589).
+    rv(:,1) = 0d0
+    rv(:,2) = N2 % c - N1 % c
+    rv(:,3) = N3 % c - N1 % c
+    rv(:,4) = N4 % c - N1 % c
+    rv(:,5) = N5 % c - N1 % c
+    rv(:,6) = N6 % c - N1 % c
+    rv(:,7) = N7 % c - N1 % c
+    rv(:,8) = N8 % c - N1 % c
+    r = rv
+    ea(:,1) = 0.25d0 * ( r(:,5) + ( r(:,6) - r(:,2) ) + ( r(:,7) - r(:,3) ) + ( r(:,8) - r(:,4) ) )
+    ea(:,2) = 0.25d0 * ( r(:,3) + ( r(:,4) - r(:,2) ) + ( r(:,7) - r(:,5) ) + ( r(:,8) - r(:,6) ) )
+    ea(:,3) = 0.25d0 * ( r(:,2) + ( r(:,4) - r(:,3) ) + ( r(:,6) - r(:,5) ) + ( r(:,8) - r(:,7) ) )
+    ! The faces, corners in the cyclic order that turns about +d: i N1 N3 N4 N2 and N5 N7 N8 N6, j N1 N2 N6 N5 and
+    ! N3 N4 N8 N7, k N1 N5 N7 N3 and N2 N6 N8 N4; twice their area vectors are (3rd - 1st) x (4th - 2nd)
+    v =     dot_product ( ea(:,1), Cross3 ( r(:,4), r(:,2) - r(:,3) ) + Cross3 ( r(:,8) - r(:,5), r(:,6) - r(:,7) ) )
+    v = v + dot_product ( ea(:,2), Cross3 ( r(:,6), r(:,5) - r(:,2) ) + Cross3 ( r(:,8) - r(:,3), r(:,7) - r(:,4) ) )
+    v = v + dot_product ( ea(:,3), Cross3 ( r(:,7), r(:,3) - r(:,5) ) + Cross3 ( r(:,8) - r(:,2), r(:,4) - r(:,6) ) )
+    v = v / 12d0
+
     ! Degenerate cell: |det| against the product of the lengths of the rows of A, its bound (Hadamard's inequality:
     ! equal for an orthogonal cell, whatever its stretching), as Face_Inverse does for the stencil. A ghost cell of the
     ! first layer must also keep the sign and the size of det of the first cell, to 1e-12 (a block may be left-handed:
@@ -493,6 +525,13 @@ contains
     if ( present(det1) ) then
       if ( det1 /= 0d0 ) bad = bad .or. .not. ( det * det1 > 1d-12 * det1**2 )
     end if
+    ! The volume has the sign of det: det J has the sign of the block in every point of a cell that is not turned over,
+    ! and so has its integral. A cell turned over away from its centre can keep det at the centre and give a volume of
+    ! the other sign or zero. Not checked where det1 = 0 (the second ghost layer, and behind a face of zero area), whose
+    ! size alone is checked.
+    check_vol = .true.
+    if ( present(det1) ) check_vol = det1 /= 0d0
+    if ( check_vol ) bad = bad .or. .not. ( v * det > 0d0 )
     first = .false.
     if ( bad ) then
       first = First_Bad_Metric ( )
@@ -515,6 +554,7 @@ contains
         write(*,'(A)') ' [ERROR] Metric tensor: degenerate or inverted cell'
       end if
       write(*,'(A,ES12.4,A,ES12.4,A)') ' [ERROR]   det = ', det, ', |A1| |A2| |A3| = ', scale, ' (equal for an orthogonal cell)'
+      write(*,'(A,ES12.4,A)') ' [ERROR]   volume = ', v, ' (the integral of det J, of the sign of det on a cell not turned over)'
       if ( present(det1) ) then
         if ( det1 /= 0d0 ) write(*,'(A,ES12.4)') ' [ERROR]   det of the first cell next to the face: ', det1
         write(*,'(A)') ' [ERROR]   The ghost cells take the edge across the face of the first cell, and their edges along the'
@@ -548,66 +588,8 @@ contains
       dl % c(h) = sqrt( A(h,1)**2 + A(h,2)**2 + A(h,3)**2 )
     enddo
 
-    ! Cell volume computation
-    vx(1) = N1%c(1)
-    vy(1) = N1%c(2)
-    vz(1) = N1%c(3)
+    vol = abs ( v )
 
-    vx(2) = N5%c(1)
-    vy(2) = N5%c(2)
-    vz(2) = N5%c(3)
-
-    vx(3) = N3%c(1)
-    vy(3) = N3%c(2)
-    vz(3) = N3%c(3)
-
-    vx(4) = N7%c(1)
-    vy(4) = N7%c(2)
-    vz(4) = N7%c(3)
-  
-    vx(5) = N2%c(1)
-    vy(5) = N2%c(2)
-    vz(5) = N2%c(3)
-
-    vx(6) = N6%c(1)
-    vy(6) = N6%c(2)
-    vz(6) = N6%c(3)
-
-    vx(7) = N4%c(1)
-    vy(7) = N4%c(2)
-    vz(7) = N4%c(3)
-  
-    vx(8) = N8%c(1)
-    vy(8) = N8%c(2)
-    vz(8) = N8%c(3)
-  
-    vol = tvol(vx,vy,vz,1,2,3,5) + tvol(vx,vy,vz,2,4,3,8) &
-        + tvol(vx,vy,vz,5,8,6,2) + tvol(vx,vy,vz,5,7,8,3) &
-        + tvol(vx,vy,vz,5,8,2,3)
-  
-    if ( vol <= 0d0 .and. .not. bad ) then
-      write(*,'(A90)') ' [ERROR] Negative volume'
-      stop 1
-    endif
-
-    contains
-  
-      pure function tvol(vx, vy, vz, i1, i2, i3, i4) result(volume)
-        implicit none
-        real(R8), intent(in) :: vx(8), vy(8), vz(8)
-        integer, intent(in)  :: i1, i2, i3, i4
-        real(R8)             :: volume
-  
-        volume = abs(((vx(i2)-vx(i1))* &
-          ((vy(i3)-vy(i1))*(vz(i4)-vz(i1))-(vy(i4)-vy(i1))*(vz(i3)-vz(i1)))+ &
-                                  (vy(i2)-vy(i1))* &
-          ((vx(i4)-vx(i1))*(vz(i3)-vz(i1))-(vx(i3)-vx(i1))*(vz(i4)-vz(i1)))+ &
-                                  (vz(i2)-vz(i1))* &
-          ((vx(i3)-vx(i1))*(vy(i4)-vy(i1))-(vx(i4)-vx(i1))*(vy(i3)-vy(i1)))) &
-          /6.d0)
-  
-      end function tvol
-  
   end subroutine Compute_Metric_Tensor
 
   

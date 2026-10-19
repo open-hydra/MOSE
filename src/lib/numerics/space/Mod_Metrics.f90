@@ -286,8 +286,9 @@ contains
   !> cell, which gives the block no orientation, stops the run there, as that determinant check would. A corner with an
   !> edge of zero length (nodes that coincide on an axis) is not checked. On a 2-D mesh, plane or a wedge whose nodes are
   !> off the axis, the corners decide for the whole cell; in 3-D they are a necessary condition (docs/theory/numerics.md).
-  !> The volume of a cell, a sum of tetrahedra in absolute value, does not see a fold. Setup_Metrics calls this on every
-  !> multigrid level, whose nodes are every other node of the level above: a stop there names the level.
+  !> The volume of a cell, the integral of that Jacobian, has the sign of the block when the cell is not turned over, and
+  !> Compute_Metric_Tensor stops a cell whose volume has not the sign of the determinant at its centre. Setup_Metrics calls
+  !> this on every multigrid level, whose nodes are every other node of the level above: a stop there names the level.
   subroutine Check_Folded_Cells ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Mod_MPI, only: is_local_block, mpi_abort_all

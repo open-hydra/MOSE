@@ -404,17 +404,21 @@ def cell_faces(X, sgn, i, j, k):
     return out
 
 
-def tvol(v, i1, i2, i3, i4):
-    a, b, c, d = v[i1], v[i2], v[i3], v[i4]
-    return abs(np.dot(b - a, np.cross(c - a, d - a))) / 6.0
-
-
 def cell_volume(X, i, j, k):
-    """Compute_Metric_Tensor: five tetrahedra on the nodes N1..N8."""
+    """Compute_Metric_Tensor: the volume of the cell, the integral of det J of the trilinear map of its nodes N1..N8,
+    1/6 sum_d e_d . (S_d- + S_d+), e_d the mean edge of direction d and S_d-, S_d+ the area vectors (diagonal x diagonal)/2
+    of the two faces of direction d, along +d; the same formula as the solver (docs/theory/numerics.md, Cell volume), in
+    absolute value as the solver stores it."""
     N = [X[i - 1, j - 1, k - 1], X[i - 1, j - 1, k], X[i - 1, j, k - 1], X[i - 1, j, k],
          X[i, j - 1, k - 1], X[i, j - 1, k], X[i, j, k - 1], X[i, j, k]]
-    v = [None, N[0], N[4], N[2], N[6], N[1], N[5], N[3], N[7]]    # vx(1..8) = N1, N5, N3, N7, N2, N6, N4, N8
-    return (tvol(v, 1, 2, 3, 5) + tvol(v, 2, 4, 3, 8) + tvol(v, 5, 8, 6, 2) + tvol(v, 5, 7, 8, 3) + tvol(v, 5, 8, 2, 3))
+    r = [p - N[0] for p in N]                                       # r[m] = N(m+1) - N1
+    e1 = 0.25 * (r[4] + (r[5] - r[1]) + (r[6] - r[2]) + (r[7] - r[3]))
+    e2 = 0.25 * (r[2] + (r[3] - r[1]) + (r[6] - r[4]) + (r[7] - r[5]))
+    e3 = 0.25 * (r[1] + (r[3] - r[2]) + (r[5] - r[4]) + (r[7] - r[6]))
+    v = (np.dot(e1, np.cross(r[3], r[1] - r[2]) + np.cross(r[7] - r[4], r[5] - r[6]))
+         + np.dot(e2, np.cross(r[5], r[4] - r[1]) + np.cross(r[7] - r[2], r[6] - r[3]))
+         + np.dot(e3, np.cross(r[6], r[2] - r[4]) + np.cross(r[7] - r[1], r[3] - r[5])))
+    return abs(float(v)) / 12.0
 
 
 # ----------------------------------------------------------------------------------------------------------------------

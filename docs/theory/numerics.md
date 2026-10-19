@@ -40,6 +40,51 @@ of each hexahedral cell. The numerical algorithm consists of the following steps
   computed at each face with a 10-point stencil and mapped to Cartesian
   coordinates using the face metric tensor.
 
+### Cell volume
+
+A cell is the image of the unit cube by the trilinear map
+$\mathbf{x}(\xi,\eta,\zeta)$ of its eight nodes. Each face is the bilinear
+(doubly ruled) surface through its four nodes, the same for the two cells that
+share it, and its area vector, the one the fluxes take, is half the cross
+product of its diagonals [8, pp. 15–16]. The volume of the cell is the integral
+of the Jacobian of the map,
+
+$$
+V = \int_0^1\!\!\int_0^1\!\!\int_0^1 \det J\,\mathrm{d}\xi\,\mathrm{d}\eta\,\mathrm{d}\zeta
+  = \frac{1}{6}\sum_{d=1}^{3}\bar{\mathbf{e}}_d\cdot\left(\mathbf{S}_d^{-}+\mathbf{S}_d^{+}\right),
+$$
+
+with $\bar{\mathbf{e}}_d$ the mean of the four edges of the cell along index $d$
+and $\mathbf{S}_d^{\mp}$ the area vectors of the two faces across index $d$,
+both along $+d$: an identity of polynomials in the 24 coordinates, since
+$\det J$ has degree at most two in each of $\xi$, $\eta$, $\zeta$. It is also
+$\frac13\sum_f\bar{\mathbf{x}}_f\cdot\mathbf{S}_f$ over the six faces, outward,
+with $\bar{\mathbf{x}}_f$ the mean of the nodes of the face: the divergence
+theorem for $\nabla\cdot\mathbf{x} = 3$, with
+$\int_f\mathbf{x}\cdot\mathrm{d}\mathbf{S} = \bar{\mathbf{x}}_f\cdot\mathbf{S}_f$ on a
+bilinear face. So the discrete divergence of a field that grows as $\mathbf{x}$
+is exact on every cell and, as two neighbours share their face, the volumes of
+the cells sum to the volume enclosed by the boundary faces, with no overlap and
+no gap [8, p. 16]. On a cell with plane faces (a 2-D mesh, the wedge, a 3-D
+mesh of plane faces) it is the volume of the polyhedron. A sum of tetrahedra,
+each face cut along a diagonal, gives that volume only where the faces are
+plane: the two cells that share a twisted face cut it along different
+diagonals, and each volume misses or counts twice
+$\mathbf{T}\cdot\mathbf{S}_f/12$, with
+$\mathbf{T} = \mathbf{x}_1 - \mathbf{x}_2 + \mathbf{x}_3 - \mathbf{x}_4$ the
+twist of the face.
+
+The volume has the sign of the block (negative on a left-handed cell) and is
+stored in absolute value. A cell whose volume has not the sign of the
+determinant at its centre is turned over somewhere and stops the run at setup
+(see the checks of the cells under *Gradient Computation for Diffusive
+Fluxes*). The volume is computed from differences of the nodes, rounded once
+as written, so its rounding is that of the size of the cell, not that of its
+coordinates: the differences pass through `VOLATILE` variables, because with
+`-ffast-math` the compiler may otherwise evaluate
+$(\mathbf{q} - \mathbf{c}_1) - (\mathbf{c}_2 - \mathbf{c}_1)$ as
+$\mathbf{q} - \mathbf{c}_2$ (test `VolatileOrder`).
+
 ### Rotational periodicity (type 200)
 
 Type 200 on the $k$ faces closes a mesh that turns about the $x$ axis: an
@@ -292,8 +337,10 @@ $\mathbf{d}\times\mathbf{d} = 0$, so its sign in the cell is decided at the
 corners. On the 2-D wedge $J = R\,\sin\delta\; j_m(\xi, \eta)$, with $R > 0$ the
 bilinear radius when no node is on the axis and $j_m$ the Jacobian of the
 meridional section, affine as above: the corners decide again. In 3-D the corners
-are a necessary condition only. The volume of a cell, a sum of five tetrahedra
-taken in absolute value, does not see a fold. The check runs on every multigrid
+are a necessary condition only; a cell whose volume (*Cell volume*) has not the
+sign of the determinant at its centre is turned over somewhere, and stops the
+run at setup as well ($\det J$ has the sign of the block in every point of a
+cell that is not turned over, and so has its integral). The check runs on every multigrid
 level too, whose nodes are every other node of the level above, and a stop there
 names the level. Behind a face of zero
 area (an axis) the ghost cells are the reflection of the first cell through the
@@ -844,7 +891,11 @@ of the records or of the threads.
    T. Rabczuk, arXiv:2010.05682v1, Eq. (7) with β₀ = 2, β = 1, whose Table 8
    gives f''(0) = 1.31194.
 8. M. Vinokur, "An analysis of finite-difference and finite-volume formulations
-   of conservation laws," NASA CR-177416, 1986: p. 26, Eq. (101) ("the two
+   of conservation laws," NASA CR-177416, 1986: pp. 15–16, Eq. (60a) (the
+   area vector of a face of a hexahedron as half the cross product of its
+   diagonals; the shape of each face "precisely defined and consistently used
+   by the two neighboring cells" so that the volumes sum to the total volume;
+   the doubly ruled face); p. 26, Eq. (101) ("the two
    difference approximations must be the same"); p. 23, Eq. (90)–(91) (the
    transport terms on an auxiliary cell, with means of four cells along the
    face); p. 40, Eq. (153) (the difference across a wall). Journal version:

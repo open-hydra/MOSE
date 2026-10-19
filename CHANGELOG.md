@@ -363,6 +363,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   velocity is now set to zero at set-up and not integrated, with a warning that names the faces, when those faces are planes
   normal to its axis (a tube of constant section); in a channel of variable section it is integrated as before, with a
   warning, and thin cells can still stop the run. Results change only in these 1-D cases.
+- The volume of a cell is the integral of det J of the trilinear cell, whose faces are the bilinear faces of their four nodes,
+  those of the area vectors of the fluxes: V = 1/6 sum_d e_d · (S_d⁻ + S_d⁺), e_d the mean edge of direction d and S_d⁻, S_d⁺
+  the area vectors of its two faces of that direction. It was a sum of five tetrahedra in absolute value, which cut each face
+  along one diagonal while the cell next door cuts it along the other: on a twisted face the two cells missed or counted twice
+  T · S_f/12 (T = c1 − c2 + c3 − c4, the twist of the face), so the volume of a cell was not the volume its faces enclose
+  (6.7 % and 18.5 % too large on cubes with one twisted face, T_n/h = 1 and 5) and the volumes of a mesh did not sum to its
+  volume (4.0e-3 short on a twisted mesh of 8³ cells). On cells with plane faces (2-D and axisymmetric meshes, 3-D meshes of
+  plane faces) the two are equal in exact arithmetic: results change in their last bits. A cell whose volume has not the sign
+  of its block, a cell turned over away from its centre, stops the run at set-up with its block and cell.
 - The wall distance of the turbulence models is the exact minimum distance from the cell centre to the wall surface, a wall face
   being the four triangles between its centre and its sides, and on a 2-D axisymmetric wedge the distance in the meridional
   plane. It was the distance to the nearest wall-face centre, too large wherever the grid lines are not normal to the wall and
@@ -642,7 +651,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   O(r − 1) where the cells are stretched across them.
 - A cell folded at one of its corners, or turned against the orientation of its block, stops the run at set-up, naming block,
   cell, corner node, the Jacobian there and the bound; the coarse levels of a sequence of grids are checked too. Such a cell
-  passed in silence: the volume of a cell is a sum of tetrahedra taken in absolute value, and the cell check looked at the
+  passed in silence: the volume of a cell was a sum of tetrahedra taken in absolute value, and the cell check looked at the
   determinant of the mean edges only. On a valid mesh nothing changes, bit for bit.
 - The two k faces of a 3-D sector closed by type `200`, one interior face of the whole annulus, carry its viscous flux (viscous
   stress, heat flux, diffusion of species and turbulence variables), computed once between the cell next to face 6 and the
