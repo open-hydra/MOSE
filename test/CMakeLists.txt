@@ -430,11 +430,25 @@ if(USE_MPI)
 
     # Exit codes under MPI: an input error that rank 0 finds at set-up stops both
     # ranks of a 2-rank run within 60 s, with exit code 1 and the STOP line of both
-    # ranks; an input.ini that every rank finds it cannot read stops them within 60 s,
-    # with exit code 1 to 128; a value out of its rule in input.ini read
-    # again by rank 1 alone (each rank in its own folder) stops both ranks with exit code 1.
+    # ranks; an input.ini that rank 0 cannot read, whose outcome rank 0 passes to
+    # every rank, stops them within 60 s, with exit code 1 to 128; a value out of
+    # its rule written during the run in the input.ini of rank 0, which rank 0
+    # reads again and passes to every rank (each rank in its own folder), stops
+    # both ranks with exit code 1.
     # A value of the initial condition that is not finite stops both ranks with exit
     # code 1, also when rank 1 alone holds it; so does an initial condition that
     # rank 1 alone cannot read (two folders).
     mose_add_mpi_script(MPIExitCodes mpi/exit-codes "needs-mpi;implementation;1D")
+    # input.ini read again during the run: rank 0 reads it and every rank parses
+    # its text. sol-diter = 7 written in the input.ini of rank 0 alone (each
+    # rank in its own folder, an MPMD launch) gives every rank the solutions of
+    # iterations 21, 28 and 35; sol-diter, res-diter, ini-diter and cfl written
+    # in the input.ini of rank 1 alone change nothing: exit code 0 within 60 s
+    # and the files of the run without the change, byte for byte. A run whose
+    # ranks took different values would hang in its collectives: the test stops
+    # at the first case that fails, and its own TIMEOUT stops it in 120 s.
+    mose_add_mpi_script(MPIRuntimeInput mpi/runtime-input "needs-mpi;implementation;2D")
+    if(TEST MPIRuntimeInput)
+        set_tests_properties(MPIRuntimeInput PROPERTIES TIMEOUT 120)
+    endif()
 endif()

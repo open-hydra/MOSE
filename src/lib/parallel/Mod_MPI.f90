@@ -33,7 +33,7 @@ module MOSE_Mod_MPI
   public :: mpi_allreduce_sum_r8_array
   public :: mpi_reduce_sum_r8, mpi_reduce_sum_r8_array
   public :: mpi_allreduce_norm2
-  public :: mpi_bcast_logical, mpi_bcast_integer
+  public :: mpi_bcast_logical, mpi_bcast_integer, mpi_bcast_chars
   public :: mpi_abort_all, mpi_stop_all
   public :: check_mpi_error
 
@@ -589,6 +589,31 @@ contains
   end subroutine mpi_bcast_integer
 
 
+  !> Broadcast a character string from root (rank 0) to all ranks: its length first, then its characters, so that every
+  !> rank passes MPI_BCAST the count of root (MPI-4.1, section 6.4: the type signature must be the same on every
+  !> process). The other ranks receive the string allocated to that length.
+  subroutine mpi_bcast_chars(text)
+    character(len=:), allocatable, intent(inout) :: text
+    integer :: n
+#ifdef USE_MPI
+    integer :: ierr
+#endif
+    n = 0
+    if (mpi_is_root .and. allocated(text)) n = len(text)
+    call mpi_bcast_integer(n)
+    if (.not. mpi_is_root) then
+      if (allocated(text)) deallocate(text)
+      allocate(character(len=n) :: text)
+    end if
+#ifdef USE_MPI
+    if (n > 0) then
+      call MPI_BCAST(text, n, MPI_CHARACTER, 0, MPI_COMM_WORLD, ierr)
+      call check_mpi_error(ierr)
+    end if
+#endif
+  end subroutine mpi_bcast_chars
+
+
   !> Check MPI return code. Abort all ranks on error.
   subroutine check_mpi_error(ierr)
     integer, intent(in) :: ierr
@@ -617,11 +642,12 @@ contains
 
 
   !> Stop of every rank on an error that every rank has found, a decision taken
-  !> on all ranks (the outcome of reading the decomposition map, which rank 0
-  !> broadcasts; a file that every rank reads): each rank prints the message and
-  !> flushes its output, the ranks wait for each other, so that what any rank
-  !> printed before (rank 0 the explanation of the error) is out before any rank
-  !> ends, then the ranks finalize MPI and end with exit code 1. MPI_ABORT
+  !> on all ranks (the outcome of reading the decomposition map or input.ini,
+  !> which rank 0 broadcasts; a file that every rank reads, such as bc.txt):
+  !> each rank prints the message and flushes its output, the ranks wait for
+  !> each other, so that what any rank printed before (rank 0 the explanation of
+  !> the error) is out before any rank ends, then the ranks finalize MPI and end
+  !> with exit code 1. MPI_ABORT
   !> (mpi_abort_all) makes only a "best attempt" to abort the processes
   !> (MPI-4.1, section 11.4.2): with Intel MPI 2021.12 the launcher at times
   !> ended before writing out what the ranks printed (measured), and the first
@@ -630,10 +656,10 @@ contains
   !> exit code (MPI-4.1, section 11.2.2).
   !> Precondition: every rank must reach this call on the same error, from the
   !> same data (files that every rank reads at set-up, the outcome of a
-  !> broadcast). A decision that can differ between ranks, such as one on a file
-  !> read again during the run, which the user can rewrite while the ranks read
-  !> it, must be reduced first (mpi_allreduce_max_r8 of a flag); else the ranks
-  !> that do not stop wait in their next collective call and the run hangs.
+  !> broadcast). A decision that can differ between ranks, such as one on the
+  !> initial condition, which each rank reads itself (Check_IC in Wrap_Setup),
+  !> must be reduced first (mpi_allreduce_max_r8 of a flag); else the ranks that
+  !> do not stop wait in their next collective call and the run hangs.
   subroutine mpi_stop_all(message)
     character(len=*), intent(in) :: message
 #ifdef USE_MPI

@@ -148,7 +148,8 @@ contains
     read(obj_rot%axis_str, *)   obj_rot%axis
     read(obj_rot%origin_str, *) obj_rot%origin
     ! A value that is not finite stops the run: the test of the length below compares, and every comparison with a NaN
-    ! is false. The test reads the bits (Not_Finite). Every rank reads the same input.ini at set-up
+    ! is false. The test reads the bits (Not_Finite). Every rank parses the text of input.ini that rank 0 read
+    ! (Load_Input_File in Read_Ini), so every rank takes the same decision
     if ( any(Not_Finite(obj_rot%axis)) ) &
       call mpi_stop_all ( '[ERROR] Rotating frame: a value of axis in input.ini is not finite (NaN or infinity)' )
     if ( any(Not_Finite(obj_rot%origin)) ) &
@@ -183,8 +184,8 @@ contains
   !> of rotational-frame, or of the number or the faces of the stationary-face-<k> keys (n_file of them in the file read
   !> again), stops the run. So does a value of axis or origin that is not finite: read as a number, it would enter every
   !> term of the frame, and the test of the length of the axis compares, which a NaN passes as false (Not_Finite reads the
-  !> bits). Every rank reads input.ini again on its own, and a file rewritten while the ranks read it can
-  !> give them different contents: the ranks take the decision to stop together (the largest of a flag), so that every
+  !> bits). Every rank checks the values that rank 0 read again and passed to it (Load_Input_File in Read_Ini), the
+  !> same on every rank; the ranks still take the decision to stop together (the largest of a flag), so that every
   !> rank stops, or none (a rank that stopped alone would wait for the others in mpi_stop_all).
   subroutine Reload_RotatingFrame ( n_file )
     use MOSE_Finite_m, only: Not_Finite
