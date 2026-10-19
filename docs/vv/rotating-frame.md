@@ -55,9 +55,9 @@ A full annulus of quiescent air rotates about its axis. With $\boldsymbol{w}=\bo
 |---|---|---|---|
 | 1, 2 | axial ends ($x = 0,\,0.02$ m) | symmetry | axially homogeneous closure |
 | 3, 4 | radial ends ($r_\perp = 0.05$ and $0.15$ m) | symmetry | inviscid wall (slip) at hub and shroud |
-| 5, 6 | azimuthal periodic pair ($\theta = 0$) | periodic | closes the full ring via `src/lib/numerics/fluxes/bc/Lib_BC_Fluxes_Rotational.f90` since the domain is a curved rectangle. |
+| 5, 6 | azimuthal periodic pair ($\theta = 0$) | periodic | closes the full ring: the two faces coincide, so the pair is a connection of the block with itself (type 201, no rotation; `src/lib/numerics/fluxes/bc/Mod_BC_Fluxes.f90`). |
 
-**Solver.** Euler, RK3 with local time stepping, CFL $= 2.0$, MUSCL/minmod, HLLC.
+**Solver.** Euler, RK3 with local time stepping, CFL $= 2.0$ with implicit residual smoothing (`irs-beta = 0.5`), MUSCL/minmod, HLLC.
 
 **Closed-form reference.** For inviscid steady rigid-body rotation with no heat transfer, the equilibrium is **isentropic** ($p/\rho^\gamma$ uniform). Combining $\nabla p = \rho\omega^2 \boldsymbol{r}_\perp$ with the isentropic relation gives
 

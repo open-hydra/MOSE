@@ -128,9 +128,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   was taken as one not given: its parameter kept the default, or the value of the previous reading, in silence.
 - MOSE builds with FiNeR v2.3.0 instead of v2.0.6. FiNeR v2.1.0 and later skip a comment line also when it holds `=` or a
   bracket, and report the failures of their parser: with v2.0.6 such a line ended the reading of its section, and the keys
-  after it kept their defaults, so such an `input.ini` now gives the values written after the line. The five libraries that
-  FiNeR v2.0.7 and later no longer carry (PENF, FACE, FLAP, BeFoR64 and StringiFor) are submodules of MOSE under
-  `lib/third_party/`, at their release tags (v2.0.1, v1.1.17, v2.5.3, v1.2.4 and v1.8.0), and CMake adds them before FiNeR
+  after it kept their defaults, so such an `input.ini` now gives the values written after the line. With v2.0.6 the last line
+  of an `input.ini` that does not end with a newline was lost too, without a message; v2.3.0 reads it. In the test cases such
+  a last line holds only keys that MOSE does not read (inputs of the ATLAS tools), so no run of the test suite changes. The
+  five libraries that FiNeR v2.0.7 and later no longer carry (PENF, FACE, FLAP, BeFoR64 and StringiFor) are submodules of MOSE
+  under `lib/third_party/`, at their release tags (v2.0.1, v1.1.17, v2.5.3, v1.2.4 and v1.8.0), and CMake adds them before FiNeR
   from `FINER_DEPS_PATH` (`lib/third_party/` by default): a build needs neither FoBiS nor a download besides the submodules.
   After pulling this change into an existing clone, run `git submodule update --init --recursive`: CMake initializes a
   missing submodule, but does not update one that is checked out at an older commit, and stops with this command when

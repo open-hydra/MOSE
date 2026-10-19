@@ -13,13 +13,19 @@ multigrid strategy.
 
 MOSE provides three explicit time integration schemes, all formulated in
 the unified **Shu–Osher convex-combination** form.  The active scheme is
-selected at run time via `n_RK` (1, 2, or 3):
+selected at run time via `n_RK` (1, 2, or 3), set by the key `time-scheme`
+of `[MOSE-Numerics]` (`euler`, `RK2` or `RK3`):
 
 | Scheme | Order | SSP coefficient |
 |--------|:-----:|:---------:|
 | Forward Euler | 1 | 1 |
 | 2-stage SSP Runge–Kutta (Heun) | 2 | 1 |
 | 3-stage SSP Runge–Kutta (Shu–Osher) | 3 | 1 |
+
+`time-scheme` is a required key: a run without it stops at set-up with
+`[ERROR] Required parameter not set: time-scheme`. The Default column of the
+[input parameters](../user/registry.md) lists `euler` for it, a placeholder
+that a required key never uses.
 
 All three are **strong-stability preserving (SSP)**: each stage is a
 convex combination of forward-Euler steps, so the positivity and TVD
@@ -61,7 +67,7 @@ Second-order accurate, two residual evaluations per step.
 
 ### 3-stage SSP Runge–Kutta (`n_RK = 3`)
 
-The **Shu–Osher RK3** method — the default integrator:
+The **Shu–Osher RK3** method:
 
 $$
 \begin{aligned}
@@ -543,11 +549,12 @@ refuses it because its time-accurate targets include moving shocks.
 ## Multigrid Acceleration
 
 MOSE supports **geometric multigrid** with a $2\!:\!1$ coarsening ratio
-in each spatial direction to accelerate convergence to steady state.
+in each spatial direction, to start the fine-grid iterations from a
+coarse-grid solution.
 
 ### Grid hierarchy
 
-- **Number of levels**: user-specified (`MGL`).
+- **Number of levels**: the key `levels` of `[MOSE-Multigrid]` (`MGL` below).
 - **Coarsening rule**: each coarse cell corresponds to $2^d$ fine cells
   ($d$ = number of active spatial dimensions).
 - **Compatibility**: the fine-grid dimensions must be divisible by
@@ -600,7 +607,7 @@ fine-grid temperature as the initial guess.
 
 ### Prolongation (coarse → fine)
 
-The coarse-grid correction is transferred to the fine grid with
+The coarse-grid solution is transferred to the next finer grid with
 **cubic interpolation** (3-D), **biquadratic interpolation** (2-D, in the
 $i\!-\!j$ plane), or **linear interpolation** (1-D, along $i$).
 
@@ -625,14 +632,19 @@ Each fine cell receives a weighted contribution from its parent coarse
 cell and the surrounding neighbours, with the weight determined by the
 fine cell's position within the coarse cell.
 
-### Cycle structure
+### Level sequence
 
-- **V-cycle** (default): one pre-smoothing sweep, restriction,
-  coarse-grid solve, prolongation, one post-smoothing sweep.
-- **W-cycle**: supported through recursive calling of the multigrid
-  driver.
-- Multigrid can also be used for **transient** problems to accelerate
-  the convergence of each physical time step.
+MOSE runs the levels once each, from the coarsest to the finest (grid
+sequencing). At set-up the initial solution is restricted to the coarse
+levels; each coarse level $N$ runs `levelN-iter` iterations (for example
+`level2-iter`), and its solution is prolongated to the next finer level,
+down to level 1, which runs `level1-iter` iterations: with more than one
+level, `iter-threshold` does not set the iterations of level 1. The residual
+criterion of a steady run and `time-threshold` also end a level. The
+iteration count starts again from zero on each level, and each level advances
+its own time from the initial time of the run (zero in a new run). There are
+no V or W cycles, no coarse-grid correction and no dual time stepping: the
+coarse levels only provide the starting solution of the finer ones.
 
 ---
 

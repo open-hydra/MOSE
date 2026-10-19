@@ -20,7 +20,7 @@ schemes, turbulence closures, and the thermochemistry framework.
 
     ---
 
-    Cell-centred finite volume method, MUSCL reconstruction, seven flux limiters, Jameson shock detection
+    Cell-centred finite volume method, MUSCL reconstruction, five flux limiters, Jameson shock detection
 
     [:octicons-arrow-right-24: Spatial discretization](numerics.md)
 

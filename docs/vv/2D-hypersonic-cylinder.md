@@ -28,11 +28,11 @@ The test verifies that numerical predictions of total pressure $p_0$ and total t
 | CFL | 0.5 |
 | Space reconstruction | MUSCL |
 | Flux limiter | Van Albada |
-| **Riemann solvers tested** | **HLLC, HLLC+, HLLE, SLAU** |
+| **Riemann solvers tested** | **HLLC, HLLC+Tramel, HLLE, SLAU** |
 
 ## Grid structure
 
-The mesh is composed of a structured grid around the cylindrical body with 160 cells in the circumferential direction and 80 cells in the radial direction, extending from the cylinder surface to a far-field boundary located at 1.5 cylinder radii.
+The mesh is composed of a structured grid around the cylindrical body with 160 cells in the circumferential direction and 40 cells in the radial direction, extending from the cylinder surface to a far-field boundary located at 1.5 cylinder radii.
 
 !!! note
     The grid is built to trigger the unstable behaviour of some Riemann solvers. In fact, there is not any refinement in the shock layer or the employment of cells with a high aspect ratio to avoid the carbuncle phenomenon.
@@ -43,7 +43,7 @@ Boundary conditions:
 - Cylinder surface: slip wall (symmetry)
 - Far-field boundaries: zero-gradient extrapolation
 
-The test probes are positioned at the stagnation streamline to measure post-shock total quantities.
+The test reads no probe: `verify.py` takes the post-shock total quantities in the field cell next to the cylinder surface and to the stagnation streamline (indices 80 and 0 of the field, counted from 0).
 
 ## Results and verification
 

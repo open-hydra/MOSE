@@ -35,10 +35,10 @@ nightly/local tier.
 | Capability | Registered options | Tested today | Gap |
 |---|---|---|---|
 | Equations | euler, navier-stokes | both | — |
-| Time scheme | euler, RK2, RK3 | RK3 only | RK2, forward-euler untested |
+| Time scheme | euler, RK2, RK3 | all three: order in time of RK2 and RK3 with a time-dependent inlet (`TimeIntegration`/`TimeControl`) and with the turbulence sources (`TimeIntegration`/`TurbulenceSources`); positivity (no NaN, ρ and p > 0) with euler, RK2 and RK3 (`NumericsSmoke`) | no order check of forward Euler |
 | Integration vars | cons, prim, prec | cons, prim (`NumericsSmoke`); prec with HLLC-PC (`Connections`/`ConnectionFlux`, `TimeIntegration`/`LocalTimeStep`) | no accuracy check of `prim` and `prec` |
 | Space recon | first-order, MUSCL | both (first-order: Noh87, LimiterDefaults) | — |
-| Limiters | vanleer, vanalbada, minmod, superbee, mc | vanleer (mostly) | 4 of 5 never smoke-tested |
+| Limiters | vanleer, vanalbada, minmod, superbee, mc | all five: positivity (no NaN, ρ and p > 0) on the Sod tube (`NumericsSmoke`); accuracy with vanleer (`IsentropicVortex`, observed order) and mc (`Sod79`, against the exact solution) | no accuracy check with vanalbada, minmod or superbee |
 | Riemann solvers | 15 | 13: 11 in `RiemannSmoke` (no NaN, ρ, p > 0), HLLC+Chen and HLLC-PC in `Connections`/`ConnectionFlux` | LMRoe only in the Gresho vortex, outside CTest; MiczekRoe in no test |
 | Low-Mach (Mco) | floor | HLLC+Chen and HLLC-PC in `Connections`/`ConnectionFlux` (two blocks against one, conservation); the Gresho vortex is outside CTest | no CTest check of low-Mach accuracy |
 | IRS / multigrid / CFL-ramp | yes | implicit only | no dedicated check |

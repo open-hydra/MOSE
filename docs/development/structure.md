@@ -178,7 +178,7 @@ The convective flux at each cell interface is computed in five stages
 from a 4-point stencil:
 
 1. **Shock detection** — Jameson sensor flags cells near discontinuities.
-2. **MUSCL reconstruction** — extrapolation to the interface using one of 7 flux limiters.
+2. **MUSCL reconstruction** — extrapolation to the interface using one of 5 flux limiters.
 3. **Interface states** — left and right primitive-variable states at the face.
 4. **Riemann solver** — one of 14 selectable solvers resolves the jump.
 5. **Numerical flux** — result multiplied by the interface area vector F · A.

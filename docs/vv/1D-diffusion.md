@@ -128,5 +128,5 @@ about $1\%$ throughout:
 
 | $t$ [ms] | $T$ centre (MOSE / Cantera) [K] | $Y_{\mathrm{CH_4}}$ centre (MOSE / Cantera) |
 |---:|---:|---:|
-| 50  | 742 / 742 | 0.123 / 0.124 |
+| 50  | 745 / 742 | 0.123 / 0.124 |
 | 200 | 556 / 555 | 0.164 / 0.164 |

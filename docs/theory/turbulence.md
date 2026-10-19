@@ -313,15 +313,15 @@ $$
 \frac{\partial(\rho k)}{\partial t}
 + \nabla\!\cdot\!(\rho\,\mathbf{v}\,k)
 = P_k - \beta^\ast\,\rho\,\omega\,k
-+ \nabla\!\cdot\!\bigl[(\mu + \mu_t/\sigma_{k})\,\nabla k\bigr]
++ \nabla\!\cdot\!\bigl[(\mu + \sigma_{k}\,\mu_t)\,\nabla k\bigr]
 $$
 
 $$
 \frac{\partial(\rho\omega)}{\partial t}
 + \nabla\!\cdot\!(\rho\,\mathbf{v}\,\omega)
-= \gamma\,\frac{\rho\,P_k}{k} - \beta\,\rho\,\omega^2
-+ \nabla\!\cdot\!\bigl[(\mu + \mu_t/\sigma_{\omega})\,\nabla\omega\bigr]
-+ 2(1 - F_1)\frac{\rho}{\sigma_{\omega 2}\,\omega}\,\nabla k\!\cdot\!\nabla\omega
+= \frac{\gamma\,\rho}{\mu_t}\,P_k - \beta\,\rho\,\omega^2
++ \nabla\!\cdot\!\bigl[(\mu + \sigma_{\omega}\,\mu_t)\,\nabla\omega\bigr]
++ 2(1 - F_1)\,\frac{\rho\,\sigma_{\omega 2}}{\omega}\,\nabla k\!\cdot\!\nabla\omega
 $$
 
 The last term is the **cross-diffusion** term, active only in the
@@ -444,7 +444,9 @@ $$
 F_1 = \tanh\!\bigl(\arg_1^4\bigr), \qquad
 \arg_1 = \min\!\left(
   \max\!\left(\frac{\sqrt{k}}{0.09\,\omega\,y},\;
-              \frac{500\,\nu}{\omega\,y^2}\right),\;100\right)
+              \frac{500\,\nu}{\omega\,y^2}\right),\;
+  \frac{4\,\rho\,\sigma_{\omega 2}\,k}{CD_{k\omega}\,y^2}\right), \qquad
+CD_{k\omega} = \max\!\bigl(2\,\rho\,\sigma_{\omega 2}\,\omega^{-1}\,\nabla k\!\cdot\!\nabla\omega,\;10^{-10}\bigr)
 $$
 
 $$

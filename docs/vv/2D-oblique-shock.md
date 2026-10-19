@@ -1,6 +1,6 @@
 # Oblique Shock
 
-A Mach 4.0 supersonic flow encountering a wedge ramp at 30° deflection angle. This configuration generates a single oblique shock whose properties are governed by the oblique shock relations from inviscid shock theory. The test verifies that numerical solutions across different Riemann solvers accurately satisfy these theoretical shock jump conditions.
+A Mach 4.0 supersonic flow encountering a wedge ramp at 33.0° deflection angle. This configuration generates a single oblique shock whose properties are governed by the oblique shock relations from inviscid shock theory. The test verifies that numerical solutions across different Riemann solvers accurately satisfy these theoretical shock jump conditions.
 
 **Reference**: standard oblique shock relations (_e.g._ Anderson, _Modern Compressible Flow_, McGraw-Hill).
 
@@ -8,9 +8,9 @@ A Mach 4.0 supersonic flow encountering a wedge ramp at 30° deflection angle. T
 
 ## Problem setup
 
-Uniform Mach 4 flow enters from the left at unit pressure and temperature. The flow encounters a sharp ramp deflection angle $\delta$. The oblique shock is uniquely determined by the shock angle $\beta$ through the theta-beta-Mach relation:
+Uniform Mach 4 flow enters from the left at unit pressure and temperature. The flow encounters a sharp ramp deflection angle $\delta$. The oblique shock is uniquely determined by the shock angle $\beta$ through the theta-beta-Mach relation (Ames Research Staff, _Equations, Tables, and Charts for Compressible Flow_, NACA Report 1135, p. 621, eqs. (139a)–(139b)):
 
-$$\tan(\delta) = 2\cot(\beta) \frac{\sin^2(\beta) - M_1^{-2} \sin^2(\delta)}{\sin(2\beta) + M_1^2 \sin^2(\delta)}$$
+$$\tan(\delta) = 2\cot(\beta) \frac{M_1^2 \sin^2(\beta) - 1}{M_1^2 \left(\gamma + \cos(2\beta)\right) + 2}$$
 
 Post-shock properties (pressure ratio, temperature ratio, density ratio, exit Mach) are uniform. 
 
@@ -19,17 +19,17 @@ Post-shock properties (pressure ratio, temperature ratio, density ratio, exit Ma
 | Parameter | Value |
 |---|---|
 | Time scheme | RK3 |
-| CFL | 0.8 |
+| CFL | 0.9 |
 | Space reconstruction | MUSCL |
-| Flux limiter | Van Leer |
-| **Riemann solvers tested** | **HLLC, HLLC+, HLLE, SLAU** |
+| Flux limiter | Van Albada |
+| **Riemann solvers tested** | **HLLC, HLLC+Tramel, HLLE, SLAU** |
 
 ## Grid structure
 
 The mesh is composed of two structured blocks:
 
-- **Block 1** (pre-shock): $48 \times 16$ cells over $[0, 0.6] \times [0, 0.2]$
-- **Block 2** (post-shock): $240 \times 64$ cells over $[0, 3.0] \times [0.2, 1.0]$
+- **Block 1** (pre-shock): $20 \times 218$ cells over $[0, 0.1] \times [0, 0.15]$
+- **Block 2** (post-shock): $38 \times 218$ cells over the parallelogram between $x = 0.1$ and $x = 0.3$, $0.15$ high, whose lower side is the ramp
 
 !!! note
     The grid is built to trigger the unstable behaviour of some Riemann solvers.

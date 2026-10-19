@@ -152,7 +152,10 @@ MOSE prints diagnostic information to the console during loading and iteration. 
     do a value of `input.ini` read again out of its rule, an initial condition that cannot be read, also when one rank
     alone finds it, and an error that rank 0 alone finds at set-up (in the thermodynamic, transport or chemistry data,
     in the rules of `input.ini`, in the boundary conditions), which rank 0 writes and then passes to every rank: each rank writes its
-    message, the ranks finalize MPI and end with exit code 1. A divergence is caught on any value that is not finite
+    message, the ranks finalize MPI and end with exit code 1. A `stop` or `error stop` outside these collective stops (a
+    divergence, for instance) ends only its own rank, without finalizing MPI: the MPI launcher then ends the run with an
+    exit code of its own, 255 with the `mpiexec` of Intel MPI 2021.12 (measured on a divergence with two ranks). A
+    divergence is caught on any value that is not finite
     (NaN, infinity) or on a negative pressure, also in RELEASE builds with fast math; a value of the initial condition
     that is not finite stops the run at set-up, in every build ([Initial Conditions](initial-conditions.md#required-variables)).
 
