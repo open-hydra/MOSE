@@ -78,11 +78,51 @@ exact field at the cell centres.
 - **Short form** (`MMSViscousSkewed`, validation tier of CTest): passes its
   checks on every case: the four on the case with walls, checks 1, 2 and 4 on
   the two periodic ones.
-- **Full form** (`./MOSE.sh test`): the refinement study of the three cases;
-  `verify.py` then gives the errors and the observed orders of every case and
-  the figures `OUTPUT/mms-skewed-grids.svg` (the coarsest grid of each family)
-  and `OUTPUT/mms-skewed-<case>.svg` (the $L_2$ and $L_\infty$ errors against
-  $N$).
+- **Full form** (`./MOSE.sh test`): the refinement study of the three cases on
+  $N = 20, 40, 80$; `verify.py` passes every check of every case, gives the
+  errors and the observed orders below and draws the figures
+  `OUTPUT/mms-skewed-grids.svg` (the coarsest grid of each family) and
+  `OUTPUT/mms-skewed-<case>.svg` (the $L_2$ and $L_\infty$ errors against $N$).
+
+The coarsest grid of each family, the two blocks in two colours:
+
+<figure>
+  {% include "vv/images/mms-skewed-grids.svg" %}
+</figure>
+
+**Normalised $L_2$ error (%) of the full form**
+
+| Case | Variable | $N = 20$ | $N = 40$ | $N = 80$ | order $20\!\to\!40$ | order $40\!\to\!80$ |
+|---|---|---|---|---|---|---|
+| zigzag, periodic | $\rho$ | 0.406 | 0.191 | 0.0978 | 1.08 | 0.97 |
+| | $u$ | 0.298 | 0.111 | 0.0518 | 1.43 | 1.10 |
+| | $v$ | 0.253 | 0.0973 | 0.0455 | 1.38 | 1.10 |
+| | $p$ | 0.436 | 0.198 | 0.0984 | 1.14 | 1.01 |
+| iface, periodic | $\rho$ | 0.271 | 0.0801 | 0.0254 | 1.76 | 1.65 |
+| | $u$ | 0.190 | 0.0326 | 0.00606 | 2.55 | 2.43 |
+| | $v$ | 0.261 | 0.0596 | 0.0142 | 2.13 | 2.07 |
+| | $p$ | 0.241 | 0.0733 | 0.0241 | 1.72 | 1.60 |
+| iface, walls | $\rho$ | 0.183 | 0.0576 | 0.0210 | 1.67 | 1.45 |
+| | $u$ | 0.286 | 0.0706 | 0.0163 | 2.02 | 2.12 |
+| | $v$ | 1.70 | 0.341 | 0.0807 | 2.32 | 2.08 |
+| | $p$ | 0.184 | 0.0584 | 0.0218 | 1.65 | 1.42 |
+
+With walls, the heat flux integrated over the wall $y = 0$ differs from the
+exact one by 0.213 %, 0.0468 % and 0.00609 % (orders 2.19 and 2.94). On the finest
+pair the $L_2$ orders are 0.97 to 1.10 on zigzag, as the note at the top of the
+page explains, and 1.42 to 2.43 on iface.
+
+<figure>
+  {% include "vv/images/mms-skewed-zigzag.svg" %}
+</figure>
+
+<figure>
+  {% include "vv/images/mms-skewed-iface.svg" %}
+</figure>
+
+<figure>
+  {% include "vv/images/mms-skewed-iface-walls.svg" %}
+</figure>
 
 ## Running the case
 

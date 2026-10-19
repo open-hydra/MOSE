@@ -52,7 +52,12 @@ then grow by 1.2 per coarse cell up to a cap; O and H have 48 cells from each wa
 to the centre line on the coarse grid, ZZ and SB2 44 below and 56 above. The grid
 is split into four blocks (convergent and divergent, lower and upper half) with
 different index orientations. `make_case.py` in the test folder builds the mesh,
-the initial field and the boundary records.
+the initial field and the boundary records; `plot_grids.py` draws the four families on
+the coarse level, each block in its own colour:
+
+<figure>
+  {% include "vv/images/planar-nozzle-grids.svg" %}
+</figure>
 
 ## Setup
 
@@ -89,4 +94,5 @@ the initial field and the boundary records.
 cd test/2D/viscous/planar-nozzle
 ./MOSE.sh testfast        # or: ./MOSE.sh -p <threads> test (full form, long)
 python verify.py
+python plot_grids.py      # the figure of the grid families (no run needed)
 ```
