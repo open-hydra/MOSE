@@ -349,10 +349,9 @@ def main():
             T_w = exact(a.field, *c)[5]
             return 302, '    %.17E,    0.000000E+00,    0.000000E+00,' % float(T_w)
         if walls and np.all(np.abs(P[:, 1] - 1.0) < 1e-12):
-            # heat flux of the 301 wall as MOSE applies it: k grad T . n_g, with n_g the face normal oriented towards
-            # increasing index; on the plane wall y = 1 it is +e_y on the faces 2, 4, 6 and -e_y on 1, 3, 5
-            ng = 1.0 if face % 2 == 0 else -1.0
-            q = KCOND * float(dTdy(a.field, *c)) * ng
+            # q_wall of a 301 wall is the heat flux into the fluid on every face (BC_Wall_Heat): k grad T . n with n the
+            # normal out of the fluid, +e_y on the plane wall y = 1 whatever the face of the block
+            q = KCOND * float(dTdy(a.field, *c))
             return 301, '    %.17E,    0.000000E+00,    0.000000E+00,' % q
         raise ValueError('boundary face not classified: %s' % ((b, face, i, j, k),))
 

@@ -27,9 +27,9 @@ $i$ and $k$ exchanged; on iface a $j$ face meets a $k$ face).
 | iface, periodic | `periodic3d` | periodic on every side | full form $N = 20, 30, 45$ |
 | iface, walls | `wall3d` | periodic in $x$ and $z$; no-slip walls at $y = 0$ (`302`, $T = T_w(x, z)$) and $y = 1$ (`301`, the exact heat flux) | full form $N = 20, 30, 45$ |
 
-The short form, run by CTest, leaves out the iface grids: on its small grids the
-case with walls is not yet in the asymptotic range, and its convergence costs much
-more than the zigzag pair.
+The short form, run by CTest, leaves out the iface grids: on $N = 10, 15$ the case
+with walls passes the checks below, but its convergence costs twenty to
+twenty-five times the zigzag pair in CPU time.
 
 ## Setup
 

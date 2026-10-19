@@ -12,10 +12,9 @@ zigzag on N = 16, 24, 36, iface with and without walls on N = 20, 30, 45):
   iface,  wall3d      the same grid with walls: no slip at y = 0 (type 302,
                       T = T_w(x, z)) and y = 1 (type 301, the exact heat flux).
 The two blocks of each grid meet with permuted and reversed indices.  The
-short form leaves out the iface grids: on N = 10, 15 the grid with walls is
-not yet in the asymptotic range (observed L2 orders between 0 and 0.4) and
-its convergence costs more than twenty times the zigzag pair; the full form
-runs it on N = 20, 30, 45.
+short form leaves out the iface grids: on N = 10, 15 the grid with walls
+passes the checks below, but its convergence costs twenty to twenty-five
+times the zigzag pair in CPU time; the full form runs it on N = 20, 30, 45.
 On the zigzag family the MUSCL reconstruction of the convective fluxes, taken
 along the grid lines, is not exact for linear fields, so the observed order
 drops to about 1; on the iface family it stays close to 2 in L2.
@@ -173,7 +172,8 @@ def zone_titles(path):
 
 
 def wall_flux(path, field):
-    """Heat flux integrated over the wall y = 0, numerical and exact (|sum q A|; the sign of q follows the face)."""
+    """Heat flux integrated over the wall y = 0, numerical and exact, compared in absolute value: qw of the wall output
+    is the heat flux into the gas on every face, -k dT/dy on this wall, and the exact flux is integrated as k dT/dy."""
     xb, yb, zb, vb, names = read_TEC(path)
     iq = names.index("qw") - 3
     num = ex = 0.0

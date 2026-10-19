@@ -146,7 +146,8 @@ def zone_titles(path):
 
 
 def wall_flux(path, field):
-    """Heat flux integrated over the wall y = 0, numerical and exact (|sum q A|; the sign of q follows the face)."""
+    """Heat flux integrated over the wall y = 0, numerical and exact, compared in absolute value: qw of the wall output
+    is the heat flux into the gas on every face, -k dT/dy on this wall, and the exact flux is integrated as k dT/dy."""
     xb, yb, zb, vb, names = read_TEC(path)
     iq = names.index("qw") - 3
     num = ex = 0.0
