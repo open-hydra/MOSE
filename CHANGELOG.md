@@ -541,9 +541,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - With MPI, an error that every rank finds stops every rank together, and the message of every rank reaches the log: an error in
   a time table, in a line of `bc.txt`, in a value of `input.ini` read again, in the mesh type or in the periodic images of a
   wall. Every rank called `MPI_ABORT`, which makes only a best attempt to stop the processes: the first call could stop the
-  others before they wrote their line, and at times no line reached the log. An error in a value of `input.ini` read again
-  stops every rank also when only one rank reads it (a file rewritten while the ranks read it), as the ranks decide together,
-  and the first of those ranks writes the rule: only rank 0 wrote it, so it was missing when rank 0 had read a valid value.
+  others before they wrote their line, and at times no line reached the log.
   An error that rank 0 alone finds at set-up (the data tables, the rules of `input.ini`, the boundary conditions) stops every
   rank together too, once rank 0 has written it: with `MPI_ABORT` from rank 0 alone, a run with Intel MPI 2021.12 could end with
   exit code 141 (SIGPIPE) and without the last line of its log. An initial condition that one rank cannot read stops every rank
@@ -551,6 +549,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   all, and the first rank that found the error writes it, with its rank. Rank 0 decided alone, so a run in which rank 1 could not
   read its copy of the file went on to its end; and with the lean read of a `.szplt` file, where each rank reads the variables of
   its own blocks after that decision, an error of that read was never looked at.
+- With MPI, rank 0 reads `input.ini`, at set-up and whenever it is read again during the run, and passes its text to every rank,
+  which parses it: every rank takes the same values. Every rank read the file on its own, so a file rewritten while the ranks
+  read it again could give them different values, and a different `sol-diter`, `res-diter` or `ini-diter` made the ranks call
+  their collective operations in different orders: the run hung until the time limit of the job (two ranks in two folders, the
+  value changed in the `input.ini` of rank 1 alone). A file that rank 0 cannot read stops every rank once rank 0 has written
+  why; the `input.ini` in the folders of the other ranks is not read.
 - The VTK outputs are well-formed XML: the variable names were written with the double quotes of the Tecplot lists
   (`Name=""rho(1)""`), not well-formed XML (Python's xml.etree, which parses with expat, stops on them), and a reader
   that takes the text between the first two quotes
