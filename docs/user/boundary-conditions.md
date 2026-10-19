@@ -167,18 +167,24 @@ and the form to write.
 **Inlets at total conditions (`401`, `402`, `407`).** The gas enters when $p_0$ is above
 $p_\text{stop} = p\,\bigl(1 + \tfrac{\gamma-1}{2}\,w/a\bigr)^{2\gamma/(\gamma-1)}$, the pressure that the gas of
 the boundary cell (pressure $p$, speed of sound $a$, velocity $w$ along the outward normal) reaches when the outgoing
-acoustic wave brings it to rest: a cell at rest takes the inflow as soon as $p_0 > p$, and a cell moving out takes it
-when $p_0$ is high enough to turn the flow back. The face state then follows from $T_0$, $p_0$, the flow direction
-and the invariant $a + \tfrac{\gamma-1}{2}\,w$ that reaches the face from inside. When that state would be supersonic
+acoustic wave brings it to rest: a cell at rest takes the inflow as soon as $p_0 > p$, a cell moving out takes it
+when $p_0$ is high enough to turn the flow back, and a cell moving in at $2a/(\gamma-1)$ or faster, which no pressure
+brings to rest ($p_\text{stop} = 0$), takes it for every $p_0 > 0$. The face state then follows from $T_0$, $p_0$, the
+flow direction and the invariant $a + \tfrac{\gamma-1}{2}\,w$ that reaches the face from inside, whatever its sign: the
+wave that links the cell to the face is a rarefaction or a shock, as for slower gas. When that state would be supersonic
 across the face, the invariant can no longer reach it and the face is choked: normal Mach number 1, with the total
 temperature and pressure of the reservoir (with the direction normal, the critical state $a_0\sqrt{2/(\gamma+1)}$, the
-largest mass flux the reservoir can give). When the gas does not enter, `401` and
+largest mass flux the reservoir can give). The face is choked too when no inflow state exists: when the gas of the cell
+moves in so fast that, even expanded to vacuum, it leaves the face faster than the gas of the reservoir can follow
+(with the direction normal, when $a + \tfrac{\gamma-1}{2}\,w < -a_0\sqrt{(\gamma-1)/2}$). The mass flux is continuous
+where $a + \tfrac{\gamma-1}{2}\,w$ changes sign. When the gas does not enter, `401` and
 `402` make the face a slip wall: they let no gas out, and reflect a wave that reaches them with a stagnation pressure
 above $p_0$. `407` is then an outlet at `p_back`: with the gas of the cell at rest or moving out, the outlet treatment of
 `406`; with the gas moving in, the face takes the state that the outgoing wave gives at the pressure
-$\min(p_\text{back}, p_\text{stop})$, where its velocity points out (at $p_\text{stop}$ the gas is at rest at the face), and
-it has no flux when the gas moves in at $2a/(\gamma-1)$ or faster. `rel_fac` has no effect on these three types: when the gas
-enters, the face state exists with $p_0$ as given.
+$\min(p_\text{back}, p_\text{stop})$, where its velocity points out (at $p_\text{stop}$ the gas is at rest at the face).
+A `407` face whose gas moves in at $2a/(\gamma-1)$ or faster is an outlet only with $p_0 \le 0$ or $T_0 \le 0$, a
+reservoir that feeds nothing, and then has no flux. `rel_fac` has no effect on these three types: when the gas enters,
+the face state exists with $p_0$ as given.
 
 **Time-varying data (`402`, `410`).** The `p0_file` of type `402` lists
 `time  p0` pairs, one per line, with `p0` in bar; a first line containing

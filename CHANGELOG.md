@@ -416,6 +416,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the face, takes the choked state, normal Mach 1. Past a pressure ratio (p0/p = 6.12 for a cell at rest at the reservoir
   temperature, normal inflow) the subsonic equations gave such a face: at p0 = 36 p normal Mach 1.85 and a mass flux of
   13.9 ρa, below the 20.8 ρa of the choked face. Results change for inlets at high pressure ratios, `401` and `402` included.
+- The inlets at total conditions (`401`, `402`) and the ambient boundary (`407`) let the gas in when the gas of the boundary
+  cell moves in at 2a/(γ−1) or faster (R ≤ 0, normal Mach 5 or more at γ = 1.4): no pressure brings that gas to rest, so
+  p_stop = 0 and every reservoir with p0 > 0 feeds the face, as the criterion of the guide says. A `401` or `402` face was a
+  slip wall and a `407` face had no flux, in silence: in a 1-D tube with the gas entering at 6a from a reservoir at p0 = p and
+  T0 = T the face now lets in 0.579 ρa instead of nothing. The face takes the inflow state on the invariant R, which links the
+  cell to the face whatever its sign, when that state exists and is subsonic across, and the choked state, normal Mach 1,
+  otherwise; no inflow state exists when the gas of the cell, even expanded to vacuum, leaves faster than the gas of the
+  reservoir can follow. A reservoir much hotter than the cell can give a subsonic face (T0 = 25 T, p0 = 0.1 p and the gas at
+  5.5a: normal Mach 0.83 and 0.0113 ρa), where a face choked whenever R ≤ 0 would let in 2.8 % more and jump by 8 % where R
+  changes sign; the mass flux is continuous there. Results change only at faces where R ≤ 0.
 - With `sol-format = vtk` the wall output sets the block sizes of its files, which it never set: depending on what they held, a
   run with a viscous wall could stop in the wall output or write wall files of no extent and one point. Each vtk wall file now
   has the extent and the points of its face. Tecplot wall files do not change.
