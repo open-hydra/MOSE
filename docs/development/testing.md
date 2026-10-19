@@ -164,8 +164,9 @@ picture).  The quickest checks:
 ```bash
 cd build
 
-# The whole suite wired into CTest
-ctest
+# The whole suite wired into CTest, but the full forms of the verification
+# cases (label verification: hours or days at one thread)
+ctest -LE verification
 
 # Just the fast pre-push tier (a few tens of seconds)
 ctest -L fast
@@ -215,20 +216,25 @@ through CTest **labels**
 | `validation` | Analytic or reference comparison |
 | `numerics` / `implementation` | Coverage area (numerical scheme vs. plumbing) |
 | `needs-cantera` / `needs-sundials` / `needs-mpi` | Requires the matching optional dependency; excluded from the minimal CI build |
+| `verification` | Full form of a verification case (families of grids, long runs), whose short form runs in the `validation` tier; run on request with `ctest -L verification`, excluded from the PR CI |
 
 Run a tier from the build directory:
 
 ```bash
 cd build
 
-# Everything wired into CTest
-ctest
+# Everything wired into CTest, but the full forms of the verification cases
+ctest -LE verification
 
 # Just the fast pre-push tier
 ctest -L fast
 
-# Everything except heavy-dependency cases (what the first job of PR CI runs)
-ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi"
+# Everything except heavy-dependency cases and the full forms of the
+# verification cases (what the first job of PR CI runs)
+ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi|verification"
+
+# The full forms of the verification cases
+ctest -L verification
 ```
 
 ### Where each tier runs
@@ -236,8 +242,8 @@ ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi"
 | Tier | Trigger | Selector |
 |------|---------|----------|
 | **Fast** | `git push` (pre-push hook, [`.githooks/pre-push`](https://github.com/open-hydra/MOSE/blob/main/.githooks/pre-push)) | `ctest -L fast` |
-| **PR CI** | pull request to `main` ([`ctest.yml`](https://github.com/open-hydra/MOSE/blob/main/.github/workflows/ctest.yml)) | `ctest --label-exclude "needs-*"`; in a second job built with MPI, `ctest -L needs-mpi` |
-| **Nightly / dispatch** | scheduled / manual | full suite with Cantera + Sundials + MPI |
+| **PR CI** | pull request to `main` ([`ctest.yml`](https://github.com/open-hydra/MOSE/blob/main/.github/workflows/ctest.yml)) | `ctest --label-exclude` the `needs-*` labels and `verification`; in a second job built with MPI, `ctest -L needs-mpi` |
+| **Nightly / dispatch** | scheduled / manual | full suite with Cantera + Sundials + MPI, and the full forms of the verification cases |
 
 The first CI job builds MOSE deliberately minimal (`USE_MPI=OFF`, `USE_TECIO=OFF`,
 `USE_SUNDIALS=OFF`, `USE_CANTERA=OFF`), so finite-rate chemistry,
@@ -336,6 +342,17 @@ jumps, made of blocks that meet with permuted indices, and `PlanarNozzleGrids`
 on grids whose blocks have different index orientations; they are there for
 their cost, 15 to 80 s of CPU time each.
 Run them with `ctest -L validation`.
+
+### Verification tier contents
+
+`MMSViscous3DFull` (`test/3D/viscous/mms`, label `verification`) runs the full
+form of `MMSViscous3D`, the runs of the [V&V page](../vv/3D-mms.md): zigzag on
+N = 16, 24, 36 and iface, periodic and with walls, on N = 20, 30, 45. The short
+form leaves out the grid with walls for its cost; run the full form after any
+change to the wall boundary conditions, to the face metrics or to the generator
+of the manufactured cases. CTest runs it at one thread, about a day (an
+estimate), with a TIMEOUT of three days: run it on a cluster node, or faster
+with `./MOSE.sh -p <threads> test` and `python3 -B verify.py` in its folder.
 
 ### MPI tier contents
 
@@ -440,7 +457,9 @@ mose_add_fast_script(MySmoke fast/my-smoke "fast;numerics;1D")
 Add the `fast` label only if the case runs in a few seconds on a tiny mesh
 and asserts a hard invariant — anything needing Cantera, Sundials or MPI
 must instead carry the matching `needs-*` label so it is excluded from the
-minimal CI build.
+minimal CI build. The full form of a verification case (families of grids,
+hours of runs) carries the `verification` label and an explicit `TIMEOUT`,
+so that the PR CI leaves it out.
 
 ---
 

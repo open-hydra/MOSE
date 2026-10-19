@@ -12,12 +12,12 @@ running on GitHub's CI runner.
 
 - **All driving is through CTest** ([`test/CMakeLists.txt`](CMakeLists.txt)), with
   tiers expressed as `LABELS`. The legacy `test/test.sh` runner has been removed —
-  cases run via `ctest` (whole suite or `-L fast`) or directly per-case via each
-  case's `MOSE.sh`.
+  cases run via `ctest` (whole suite but the full forms of the verification cases,
+  `-LE verification`, or `-L fast`) or directly per-case via each case's `MOSE.sh`.
 - **The pre-push hook** ([`.githooks/pre-push`](../.githooks/pre-push)) runs the fast
   tier (`ctest -L fast`); **PR CI** ([`ctest.yml`](../.github/workflows/ctest.yml))
-  runs everything except the `needs-*` heavy-dependency labels and, in a second job
-  (`test-mpi`), the `needs-mpi` tier.
+  runs everything except the `needs-*` heavy-dependency labels and the `verification`
+  label and, in a second job (`test-mpi`), the `needs-mpi` tier.
 - **CI build is minimal** ([`.github/workflows/ctest.yml`](../.github/workflows/ctest.yml)):
   `USE_MPI=OFF`, `USE_TECIO=OFF`, `USE_SUNDIALS=OFF`, `USE_CANTERA=OFF`; the second
   job builds with `USE_MPI=ON` (gfortran and the Open MPI of Ubuntu).
@@ -66,7 +66,7 @@ of the case:
 | `2D/euler/isentropic-vortex` | `2D-isentropic-vortex.md` | `IsentropicVortex` | exact solution | `verify.py` (N1) |
 | `2D/viscous/mms` | `2D-mms.md` | `MMSViscous` | manufactured solution | `verify.py` (N2) |
 | `2D/viscous/mms/skewed` | `2D-mms-skewed.md` | `MMSViscousSkewed` | manufactured solutions | `verify.py` (N2) |
-| `3D/viscous/mms` | `3D-mms.md` | `MMSViscous3D` | manufactured solutions | `verify.py` (N2) |
+| `3D/viscous/mms` | `3D-mms.md` | `MMSViscous3D`, `MMSViscous3DFull` | manufactured solutions | `verify.py` (N2) |
 | `2D/viscous/planar-nozzle` | `2D-planar-nozzle-grids.md` | `PlanarNozzleGrids` | mirror symmetry of O and H grids | `verify.py` (N8) |
 | `2D/viscous/ablating-wall` | `2D-ablating-wall.md` | `AblatingWall` | closed form of the wall state | `run.sh` (P1) |
 | `1D/Fer14` | `1D-fer14.md` | outside | digitized velocity and temperature profiles (`reference/*.csv`) | none: `verify.py` plots |
@@ -126,6 +126,12 @@ of the case:
   zigzag and 1.4 on iface (70 % of the order each family should show), with walls
   the same order for the heat flux integrated over the wall, and the totals of the
   equations with zero boundary flux within the smallest L2 error of each grid.
+  The full form of the 3-D case (zigzag on N = 16, 24, 36, iface periodic and with
+  walls on N = 20, 30, 45) is `MMSViscous3DFull`, label `verification`, out of the PR
+  CI: about a day at one thread (an estimate), TIMEOUT three days. The short form
+  leaves out the grid with walls for its cost, so run the full form after any change
+  to the wall boundary conditions, to the face metrics or to the generator of the
+  cases.
 - ☑ **N3 — Riemann-solver smoke matrix**: coarse Sod, few steps, once per solver;
   assert positivity (ρ,p>0) and no NaN. *Done:* `test/fast/riemann-smoke` (11
   shock-capturing solvers; low-Mach family deferred to a Gresho smoke).
@@ -336,7 +342,7 @@ The current blocker is that only 2 cases are in CTest. Restructure before adding
    the new fast scripts. *Remaining:* the `verify.py` cases that don't yet exit non-zero
    on failure (most 2-D/viscous cases) and the `needs-*` heavy cases.
 2. ☑ **Pre-push hook** → `ctest -L fast` ([`.githooks/pre-push`](../.githooks/pre-push)).
-3. ☑ **PR CI** → `ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi"`
+3. ☑ **PR CI** → `ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi|verification"`
    ([`ctest.yml`](../.github/workflows/ctest.yml)); a second job with `USE_MPI=ON`
    → `ctest -L needs-mpi`.
 4. ☐ **Nightly / `workflow_dispatch`** → full suite with Cantera+Sundials+MPI enabled.
@@ -351,8 +357,8 @@ The current blocker is that only 2 cases are in CTest. Restructure before adding
 | Tier | Trigger | Selector | Contents |
 |---|---|---|---|
 | 0 — fast | pre-push hook | `ctest -L fast` | F1–F7 |
-| 1 — PR CI | PR to `main` | `ctest -LE needs-*`; `ctest -L needs-mpi` (second job, MPI build) | fast + dependency-free validation; MPI tier |
-| 2 — nightly | schedule / dispatch | full | flames, reactive, equilibrium, MPI, parallel-equivalence |
+| 1 — PR CI | PR to `main` | `ctest -LE` the `needs-*` labels and `verification`; `ctest -L needs-mpi` (second job, MPI build) | fast + dependency-free validation; MPI tier |
+| 2 — nightly | schedule / dispatch | full | flames, reactive, equilibrium, MPI, parallel-equivalence, full forms of the verification cases (label `verification`) |
 
 ---
 

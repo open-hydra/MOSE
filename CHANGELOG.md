@@ -25,6 +25,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   multi-block case, runs the solver through the MPI launcher that CMake finds (`MPIEXEC_EXECUTABLE`, at most four ranks) and
   compares output files byte by byte. The CI runs this tier in a second job, `test-mpi`, which builds MOSE with gfortran,
   the Open MPI of Ubuntu and `USE_MPI=ON`.
+- A `verification` test tier holds the full forms of the verification cases, whose short forms run in the `validation`
+  tier: `MMSViscous3DFull`, the full form of `MMSViscous3D` with the grid with walls (about a day at one thread, an
+  estimate; TIMEOUT three days). The PR CI leaves the label out, and `ctest -L verification` runs it on request: a plain
+  `ctest` now runs it too, so the whole suite without it is `ctest -LE verification`.
 - MPI runs take the rank of every block from `INPUT/decomposition.map` (with the phase prefix of `bc.txt` in multi-phase runs)
   when the case has one: the decomposition map that the ATLAS mesh decomposer (MDB) writes next to the split mesh, one line per
   block with its cells along i, j and k, its number of cells and its rank, checked against the mesh. A map that does not fit the

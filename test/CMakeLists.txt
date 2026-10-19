@@ -8,9 +8,12 @@
 #    needs-cantera   -> requires USE_CANTERA=ON  (finite-rate / equilibrium)
 #    needs-sundials  -> requires USE_SUNDIALS=ON (stiff ODE chemistry)
 #    needs-mpi       -> requires USE_MPI=ON
+#    verification    -> full form of a verification case (families of grids,
+#                       long runs); run on request (ctest -L verification)
 #
-#  PR CI runs everything except the heavy-dependency labels:
-#    ctest -LE "needs-cantera|needs-sundials|needs-mpi"
+#  PR CI runs everything except the heavy-dependency labels and the full
+#  forms of the verification cases:
+#    ctest -LE "needs-cantera|needs-sundials|needs-mpi|verification"
 #  and, in a second job built with USE_MPI=ON (gfortran, Open MPI), the MPI tier:
 #    ctest -L needs-mpi
 # ---------------------------------------------------------------------------
@@ -110,6 +113,23 @@ mose_add_test(NAME MMSViscous3D DIR 3D/viscous/mms
               RUN "./MOSE.sh testfast" VERIFY verify.py
               LABELS "validation;numerics;3D"
               TIMEOUT 900)
+# The full form of MMSViscous3D (verification tier, out of the PR CI): zigzag on
+# N = 16, 24, 36 and iface, periodic and with walls, on N = 20, 30, 45 ("test"),
+# the runs of the V&V page. Run it after any change to the wall boundary
+# conditions, to the face metrics or to the generator of the cases. At one
+# thread, as CTest runs it, it takes about 21 h, an estimate not yet measured:
+# 9.5e-6 s of CPU per cell and iteration (the short form with walls at one
+# thread) times the cells and the iterations of the nine runs (8.0e9, the
+# walls on N = 45 alone 5.4e9). The CPU time grew by up to 69 % with the
+# load of a shared machine; the TIMEOUT, 3 days, is twice that. On a cluster
+# node, ./MOSE.sh -p <threads> test and python3 -B verify.py in the folder run
+# it in a few hours.
+mose_add_test(NAME MMSViscous3DFull DIR 3D/viscous/mms
+              RUN "./MOSE.sh test" VERIFY verify.py
+              LABELS "verification;numerics;3D"
+              TIMEOUT 259200)
+#   the short and the full form run in the same folder and write OUTPUT/ there: never at the same time (ctest -j)
+set_tests_properties(MMSViscous3D MMSViscous3DFull PROPERTIES RESOURCE_LOCK mms3d)
 
 # Planar nozzle on grid families (validation tier): a turbulent converging-
 # diverging nozzle (Spalart-Allmaras, SST) on O and H grids whose four blocks
