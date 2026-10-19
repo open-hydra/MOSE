@@ -181,12 +181,16 @@ contains
   !> Coriolis and centrifugal sources, the velocity of the stationary walls and of the inlets and far field, and the power
   !> of the torque file read at each use. The same arithmetic as Setup_RotatingFrame, so values read again unchanged leave
   !> every bit as it was. The model and the stationary faces change the equations and the boundary conditions: a change
-  !> of rotational-frame, or of the number or the faces of the stationary-face-<k> keys (n_file of them in the file read
-  !> again), stops the run. So does a value of axis or origin that is not finite: read as a number, it would enter every
-  !> term of the frame, and the test of the length of the axis compares, which a NaN passes as false (Not_Finite reads the
-  !> bits). Every rank checks the values that rank 0 read again and passed to it (Load_Input_File in Read_Ini), the
-  !> same on every rank; the ranks still take the decision to stop together (the largest of a flag), so that every
-  !> rank stops, or none (a rank that stopped alone would wait for the others in mpi_stop_all).
+  !> of rotational-frame, or of the stationary faces, stops the run. The registry holds the stationary-face-<k> keys of
+  !> the set-up, and a key that the file read again leaves out keeps its face, as every value left out does (Load_Ini):
+  !> the faces change only when a key up to the number of the set-up names another face, or when the file lists more
+  !> keys than the set-up (n_file of them, counted as at set-up, up to the first missing: a key after a gap of the
+  !> numbering is counted neither there nor here). A value of axis or origin that is not finite stops the run too: read
+  !> as a number, it would enter every term of the frame, and the test of the length of the axis compares, which a NaN
+  !> passes as false (Not_Finite reads the bits). Every rank checks the values that rank 0 read again and passed to it
+  !> (Load_Input_File in Read_Ini), the same on every rank; the ranks still take the decision to stop together (the
+  !> largest of a flag), so that every rank stops, or none (a rank that stopped alone would wait for the others in
+  !> mpi_stop_all).
   subroutine Reload_RotatingFrame ( n_file )
     use MOSE_Finite_m, only: Not_Finite
     use MOSE_Mod_MPI, only: mpi_is_root, mpi_allreduce_max_r8, mpi_stop_all
@@ -202,9 +206,9 @@ contains
       reason = '[ERROR] Rotating frame: rotational-frame in input.ini read again is "'//trim(obj_rot%model)// &
                '", "'//trim(obj_rot%model_setup)//'" at set-up: the model cannot change during the run'
     else if ( obj_rot%enabled ) then
-      if ( n_file /= obj_rot%n_stationary ) &
-        reason = '[ERROR] Rotating frame: input.ini read again does not list the stationary-face keys of the'// &
-                 ' set-up: the stationary faces cannot change during the run'
+      if ( n_file > obj_rot%n_stationary ) &
+        reason = '[ERROR] Rotating frame: input.ini read again lists stationary-face keys that the set-up does not'// &
+                 ' have: the stationary faces cannot change during the run'
       do k = 1, obj_rot%n_stationary
         if ( len_trim(reason) > 0 ) exit
         read(obj_rot%stationary_face_str(k), *) face(1), face(2)

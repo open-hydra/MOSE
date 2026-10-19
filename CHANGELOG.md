@@ -622,8 +622,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - When `input.ini` is read again during a run (every `ini-diter` iterations), a new `omega`, `axis` or `origin` of the rotating
   frame is taken by every term of the frame: the centrifugal source and the torque file took the new `omega`, while the Coriolis
   source, the velocity of the stationary walls, of the inlets and of the far field, and the absolute vorticity of the turbulence
-  models kept the old one, and a new axis or origin did not enter at all. A new `rotational-frame` or other
-  `stationary-face-<k>` keys stop the run with a message, on every MPI rank together: they were ignored without a word.
+  models kept the old one, and a new axis or origin did not enter at all. A new `rotational-frame`, or a
+  `stationary-face-<k>` key that names another face or that the set-up does not have, stops the run with a message, on
+  every MPI rank together: they were ignored without a word. The `stationary-face-<k>` keys that the file read again
+  leaves out keep their faces, as every key left out keeps its value.
 - A value of `axis` or `origin` of the rotating frame that is not finite (NaN or infinity), written in `input.ini` during the
   run, stops the run when the file is read again, every rank at that reading, with a message that names the key; in a gnu TESTING
   build it went into every term of the frame and the run failed at the next iteration; a DEBUG build stopped with SIGFPE at that

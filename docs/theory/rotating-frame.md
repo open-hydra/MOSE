@@ -136,8 +136,11 @@ For steady-state turbomachinery flows, a steady rotating-frame solution avoids t
   in every term at once: the Coriolis and centrifugal sources, the velocity of the stationary walls, of the inlets and of
   the far field, and the power of the torque file. The frame is taken at constant $\boldsymbol{\Omega}$ between two
   readings: the force $-\rho\,\dot{\boldsymbol{\Omega}} \times \boldsymbol{r}$ of a frame that speeds up is not modelled.
-  A change of `rotational-frame` or of the `stationary-face-<n>` keys, which changes the equations or the boundary
-  conditions, stops the run, and so does a value of `axis` or `origin` read again that is not finite (NaN or infinity).
+  A change of `rotational-frame` or of the stationary faces, which changes the equations or the boundary conditions,
+  stops the run: a `stationary-face-<n>` key that names another face, or one that the set-up does not have. A key that
+  the file read again leaves out keeps its face, as every parameter left out keeps its value. The keys are counted
+  from 1 up to the first one missing, at the start and at every reading: a key after a gap of the numbering is not
+  read. A value of `axis` or `origin` read again that is not finite (NaN or infinity) stops the run too.
 - The origin of the coordinate system (where $\boldsymbol{r} = \boldsymbol{0}$) should coincide with the axis of rotation.
 - All flux routines (convective and viscous) operate on the relative velocity without modification.
 

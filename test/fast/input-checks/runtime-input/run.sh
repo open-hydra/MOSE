@@ -54,7 +54,14 @@
 #        during the run;
 #     d. axis = NaN 0.0 0.0: the run must stop when it reads input.ini again,
 #        at iteration 20, with the message that a value of axis is not finite
-#        (read as a number, the NaN went into every term of the frame).
+#        (read as a number, the NaN went into every term of the frame);
+#     e. two stationary faces at the set-up, stationary-face-1 = 1 1 and
+#        stationary-face-2 = 2 2 (the plane x = x_max of block 2), and omega
+#        from 1e4 to 2e4: read again with both keys (e0), with
+#        stationary-face-1 alone (e1) and with no stationary-face key (e2).
+#        The keys left out keep their faces, as every key left out keeps
+#        its value: e1 and e2 must reach iteration 30 and write every output
+#        file of e0, byte for byte (the keys left out used to stop the run).
 #===============================================================================
 set -uo pipefail
 
@@ -226,7 +233,14 @@ else
 fi
 
 echo "-- 5. the rotating frame read again --"
-write_frame() {  # <directory> <iter-threshold> <newrun> <model> <omega> <stationary face> [axis]: input.ini written whole
+write_frame() {  # <directory> <iter-threshold> <newrun> <model> <omega> <stationary faces> [axis]: input.ini written whole;
+                 # the stationary faces separated by commas, written as stationary-face-1, -2, ... (no key if empty)
+  local keys="" rest=$6 n=0
+  while [[ -n $rest ]]; do
+    n=$((n + 1)); keys+="stationary-face-$n = ${rest%%,*}"$'\n'
+    [[ $rest == *,* ]] && rest=${rest#*,} || rest=""
+  done
+  keys=${keys%$'\n'}
   cat > "$1/input.ini.new" <<FRAME
 [MOSE-Parameters]
 iter-threshold = $2
@@ -258,13 +272,14 @@ shell-diter   = 1000000000
 omega             = $5
 axis              = ${7:-1.0 0.0 0.0}
 origin            = 0.0 0.0 0.0
-stationary-face-1 = $6
+${keys}
 FRAME
   mv "$1/input.ini.new" "$1/input.ini"
 }
-during() {  # <directory> <model> <omega> <face> [axis]: start at omega = 1e4 with face 1 1, write the change after iteration 7
+during() {  # <directory> <model> <omega> <faces> [axis] [faces at the start]: start at omega = 1e4 with the faces at the
+            # start (1 1 if not given), write the change after iteration 7
   local d=$1 pid n
-  prepare_frame "$d"; write_frame "$d" 30 true rigid-body 1.0e4 '1 1'
+  prepare_frame "$d"; write_frame "$d" 30 true rigid-body 1.0e4 "${6:-1 1}"
   ( cd "$d" && exec "$SOLVER" > solve.log 2>&1 ) &
   pid=$!
   for ((n = 0; n < 6000; n++)); do
@@ -327,6 +342,28 @@ else
   echo "  FAIL — axis: the run did not stop at iteration 20 with the message (last iteration ${last:-none}," \
        "see runs/frame-axis/solve.log)"; status=1
 fi
+# e. two stationary faces at the set-up (the walls x = 0 of block 1 and x = x_max of block 2), omega to 2e4 with both keys
+#    (e0), with stationary-face-1 alone (e1) and with no stationary-face key (e2): the keys left out keep their faces
+for c in "e0:1 1,2 2" "e1:1 1" "e2:"; do
+  IFS=: read -r tag faces <<< "$c"
+  during "runs/frame-$tag" rigid-body 2.0e4 "$faces" '1.0 0.0 0.0' '1 1,2 2'
+  if [[ $first != yes || $late == yes ]]; then
+    echo "  FAIL — $tag: the change did not come between iterations 7 and 20 (host too slow to poll)"; status=1
+  elif [[ $last != 30 ]] || ! command grep -q 'Rotating frame, input.ini read again: omega =  2.0000000E+04' \
+                                 "runs/frame-$tag/solve.log"; then
+    echo "  FAIL — $tag: the run stopped at iteration ${last:-none}, or the log does not give omega = 2e4 read again" \
+         "(see runs/frame-$tag/solve.log)"; status=1
+  elif [[ $tag != e0 ]]; then
+    list0=$(cd runs/frame-e0/OUTPUT && find . -type f | sort)
+    differ=$(cd runs/frame-e0/OUTPUT && find . -type f ! -exec cmp -s {} "../../frame-$tag/OUTPUT/{}" \; -print)
+    if [[ $list0 == "$(cd "runs/frame-$tag/OUTPUT" && find . -type f | sort)" && -z $differ ]]; then
+      echo "  ok — $tag: stationary-face keys left out (${faces:-none} read again): the run reaches iteration 30 with" \
+           "every output file of e0, byte for byte"
+    else
+      echo "  FAIL — $tag: the output files are not those of e0:" $differ; status=1
+    fi
+  fi
+done
 
 if [[ $status -eq 0 ]]; then
   echo "RuntimeInput: all checks passed"
