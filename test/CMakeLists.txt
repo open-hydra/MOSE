@@ -375,6 +375,16 @@ add_fortran_executable(volatile_order_check unit/volatile_order_check.f90)
 add_test(NAME VolatileOrder COMMAND volatile_order_check 1 18014398509481984 3)
 set_tests_properties(VolatileOrder PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
 
+# Wall distance to a bilinear face (BilinearDistance): the certified minimum of
+# the wall distance against the exact distance of the stationarity equations on
+# twisted, plane, non-convex, degenerate and far faces (within 288 u S, with its
+# certificate), and the fast-path test of the four triangles: taken by plane
+# faces, not by twisted ones (cases: unit/bilinear_distance_cases.txt).
+add_fortran_executable(bilinear_distance_check unit/bilinear_distance_check.f90)
+add_test(NAME BilinearDistance
+         COMMAND bilinear_distance_check ${CMAKE_CURRENT_SOURCE_DIR}/unit/bilinear_distance_cases.txt)
+set_tests_properties(BilinearDistance PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 120)
+
 # ===========================================================================
 #  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
 #  Each test generates its own small multi-block case and launches the solver

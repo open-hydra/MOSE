@@ -728,21 +728,64 @@ $c_{w1} f_w (\tilde\nu/d)^2$ (a factor $\cos^2\theta$: 0.97, 0.88, 0.75,
 $\omega_w = 60\nu/(\beta_1 d_1^2)$ of SST. That distance is exact only on
 meshes orthogonal to the wall, with the cell centres above the face centres.
 
-- Each face of a wall boundary (types 301, 302, 502, 503–505) is taken as the four
-  triangles between its centre and its sides, which are the face itself when
-  the face is plane and convex, as on every 2-D and axisymmetric mesh (on a
-  plane face that is not convex, a pathological cell, the centre can fall
-  outside the face, and the triangles are not the face). The distance to a
-  triangle is the distance to its plane when the projection of the point falls
-  inside it, otherwise the distance to the nearest side.
+- Each face of a wall boundary (types 103, 104, 301, 302, 502, 503–505) is the bilinear
+  surface through its four nodes, the face of the cells
+  ([Cell volume](numerics.md#cell-volume)):
+  $\mathbf{x}(s,t) = \mathbf{x}_1 + s\mathbf{a} + t\mathbf{b} + st\mathbf{T}$,
+  $\mathbf{a} = \mathbf{x}_2 - \mathbf{x}_1$, $\mathbf{b} = \mathbf{x}_4 - \mathbf{x}_1$,
+  with the twist $\mathbf{T} = \mathbf{x}_1 - \mathbf{x}_2 + \mathbf{x}_3 - \mathbf{x}_4$
+  (corners in cyclic order). The distance to it is its minimum over the face, in
+  one of two ways:
+  - **The four triangles** between its centre and its sides, when the face is
+    plane to the resolution of its coordinates: they lie within
+    $g = \min(|\mathbf{T}|/16,\ |\mathbf{T}\cdot\mathbf{n}|/(2|\mathbf{n}|))$ of
+    the face, $\mathbf{n}$ the cross product of its diagonals (the second bound
+    when the face, projected on the plane normal to $\mathbf{n}$, is convex). The
+    face takes this way when a computed bound is within $8uM + \varepsilon$, with
+    $u = 2^{-53}$, $M$ the largest coordinate of its corners in absolute value and
+    $\varepsilon$ a proven bound of the rounding of that computation, which grows
+    with $\kappa_n|\mathbf{T}|$, $\kappa_n$ = 1/sine of the angle between the
+    diagonals. Every face of a 2-D mesh (a parallelogram) takes it, and every
+    convex plane face whose corners are not within $(49 + 30\kappa_n)u$ of a
+    straight or a null angle. Its distance is within $8uM + 2\varepsilon$ of the
+    distance to the face, plus the rounding of the triangles. The distance to a
+    triangle is the distance to its plane when the projection of the point falls
+    inside it, otherwise the distance to the nearest side.
+  - **The certified minimum** on any other face: a branch and bound over the
+    rectangles of $(s, t)$, depth first. Upper bounds are points of the face (its
+    sides in closed form, the centre of each piece, projected Newton steps);
+    the lower bound of a piece is the larger of the distance to its two
+    triangles less $|\mathbf{T}_P|/4$, $\mathbf{T}_P$ the twist of the piece, and
+    the distance to the convex hull of its four corners, both less a proven
+    bound of their rounding; a piece is split in two across its longer side in
+    space. The result is within $\tau + 32uS = 288uS$ of the distance,
+    $S = |\mathbf{p} - \mathbf{x}_1| + |\mathbf{a}| + |\mathbf{b}| + |\mathbf{T}|$,
+    $\tau = 256uS$: the rounding of the size of the face and of the distance,
+    not of the coordinates. No case needs a treatment of its own: faces with a
+    collapsed side, three corners on one point, a bowtie, a pinch or a reflex
+    corner are plane or are treated the same way. The coordinates of the face
+    relative to its first corner pass through `VOLATILE` variables, so that the
+    compiler cannot rewrite them in terms of the coordinates themselves (as
+    for the [cell volume](numerics.md#cell-volume)).
 - On a 2-D axisymmetric wedge (BC 200) the distance is measured in the
   meridional plane $(x, r)$, $r = \sqrt{y^2+z^2}$, from the cell centre to the
   wall curve. This is the distance to the wall surface of revolution, and it
   does not depend on the angle of the wedge. A wall on the faces of the wedge
-  (faces 5–6) stops the run.
+  (faces 5–6) stops the run. It is the one exception to the single geometric
+  model of the cells: for the wall distance the wall of the wedge is the
+  surface of revolution of its meridional curve, for the volumes and the fluxes
+  the cells are polyhedra with plane faces; the two differ by
+  $r(1 - \cos(\delta/2)) \approx r\delta^2/8$.
 - A k-d tree over the face centres, with the radius of each face, finds the
-  nearest face: the exact distance is computed only for the faces whose centre
-  lies within the best distance found so far plus their radius.
+  nearest face: the distance is computed only for the faces whose centre lies
+  within the best distance found so far plus their radius. When some face takes
+  the certified minimum, the search makes two passes over the tree: the first
+  finds an upper bound of the distance (the triangles of each face plus the
+  bound of their gap from the face and of the rounding), the second computes the
+  certified minimum only on the faces whose triangles, less that bound, are not
+  farther than it. Each pass gives the minimum of a function of the face alone,
+  so the distance and the face that gives it do not depend on the shape of the
+  tree, on the threads or on the ranks.
 - Across periodic boundaries the wall goes on: the distance is the minimum over
   the periodic images of the wall too. A periodic connection (type 201) gives
   the translation from its source face to its own face, and on a 3-D mesh
@@ -789,8 +832,8 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   not farther from 0 than from $\pm B_j$, $|u\cdot B_j| \le G_{jj}/2$, and
   since $u_i = \sum_j (G^{-1})_{ij}\, u\cdot B_j$,
   $|u_i| \le \beta_i = \tfrac12 \sum_j |(G^{-1})_{ij}|\, G_{jj}$ ($1/2$ on
-  an orthogonal basis). A face is the four triangles between its centre $m$
-  and its sides, so $|(p - m)_i| \le \rho_i$, $\rho_i$ the largest
+  an orthogonal basis). Every point of a face is a convex combination of its
+  corners, so $|(p - m)_i| \le \rho_i$, $\rho_i$ the largest
   $|(q - m)_i|$ of a corner $q$ of a face, and
   $|v_i| \le |(c - a)_i| + |(m - a)_i| + |(p - m)_i| \le 1 + \rho_i$. The
   coefficients of $s$ are $k_i = v_i - u_i$: the images searched are
@@ -808,26 +851,16 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   minimum distance; between faces at the same distance, the first one in the
   boundary file.
 
-!!! warning "Twisted wall faces in 3-D"
-    A wall face whose corners $\mathbf{x}_1 \ldots \mathbf{x}_4$ (in cyclic
-    order) are not coplanar is the bilinear surface through them, with twist
-    $\mathbf{T} = \mathbf{x}_1 - \mathbf{x}_2 + \mathbf{x}_3 - \mathbf{x}_4$.
-    The four triangles lie within $|\mathbf{T}|/16$ of it, so the distance is
-    exact only to within $|\mathbf{T}|/16$: a relative error up to
-    $(|\mathbf{T}|/16)/y$, small next to cells thicker than $|\mathbf{T}|/16$
-    and of order one or more in thinner ones. On a unit face twisted by
-    $t = |\mathbf{T}|$, at height $h$ above it, the largest error is 6 % for
-    $t = h = 0.1$, 62 % for $t = 10^{-2}$ and $h = 10^{-3}$, and 62 times the
-    distance for $t = 0.1$ and $h = 10^{-4}$. On a smooth wall $|\mathbf{T}|$
-    falls as the square of the face size, so the error falls with refinement.
-    2-D and axisymmetric meshes are not affected: their wall faces are plane,
-    and the four triangles are the face. At start-up MOSE reports the largest
-    gap bound of the wall faces over the distance of the cell next to the face,
-    $\min(|\mathbf{T}|/16, |\mathbf{T}_n|/2)/y$ with $\mathbf{T}_n$ the part of
-    the twist along the normal of the face (zero on a plane face; the second
-    bound holds on faces convex in that plane), as a warning above 1 %.
+Twisted wall faces in 3-D. The four triangles of a face whose corners are not
+coplanar lie within $|\mathbf{T}|/16$ of it, and with them the distance would be
+wrong by up to $(|\mathbf{T}|/16)/y$: on a unit face twisted by $t = |\mathbf{T}|$,
+at the height $h$, 6 % for $t = h = 0.1$, 62 % for $t = 10^{-2}$ and
+$h = 10^{-3}$, and 62 times the distance for $t = 0.1$ and $h = 10^{-4}$. Such a
+face takes the certified minimum, and its distance is exact to the rounding.
+2-D and axisymmetric meshes are not affected: their wall faces are plane and
+take the four triangles, as before.
 
-Test `MeshGeometry`/`WallDistance`.
+Tests `MeshGeometry`/`WallDistance` and `BilinearDistance`.
 
 ---
 

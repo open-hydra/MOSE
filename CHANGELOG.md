@@ -18,10 +18,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   multi-block case, runs the solver through the MPI launcher that CMake finds (`MPIEXEC_EXECUTABLE`, at most four ranks) and
   compares output files byte by byte. The CI runs this tier in a second job, `test-mpi`, which builds MOSE with gfortran,
   the Open MPI of Ubuntu and `USE_MPI=ON`.
-- At start-up the root process reports how far the wall distance can be from exact on twisted 3-D wall faces: the largest
-  bound, min(|T|/16, |T_n|/2), over the distance of the cell next to the face, with that cell (T is the twist of the corners
-  of the face, T_n its part along the normal of the face). It is a warning above 1 %. 2-D and axisymmetric meshes have plane
-  wall faces and print nothing. The distances do not change.
 - MPI runs take the rank of every block from `INPUT/decomposition.map` (with the phase prefix of `bc.txt` in multi-phase runs)
   when the case has one: the decomposition map that the ATLAS mesh decomposer (MDB) writes next to the split mesh, one line per
   block with its cells along i, j and k, its number of cells and its rank, checked against the mesh. A map that does not fit the
@@ -373,12 +369,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   plane faces) the two are equal in exact arithmetic: results change in their last bits. A cell whose volume has not the sign
   of its block, a cell turned over away from its centre, stops the run at set-up with its block and cell.
 - The wall distance of the turbulence models is the exact minimum distance from the cell centre to the wall surface, a wall face
-  being the four triangles between its centre and its sides, and on a 2-D axisymmetric wedge the distance in the meridional
-  plane. It was the distance to the nearest wall-face centre, too large wherever the grid lines are not normal to the wall and
-  next to convex corners and the ends of walls (up to 10.9 %, 16.3 % and 15.9 % in three test geometries). Results change
-  wherever the distance changes, and at round-off where the grid lines are normal to a plane wall. Equal distances go to the
-  lowest face index, so the roughness a cell inherits is the same on every rank and thread. With a turbulence model, a wall on
-  faces 5–6 of a wedge stops the run.
+  being the bilinear surface through its four nodes, the face of the cells, and on a 2-D axisymmetric wedge the distance in the
+  meridional plane. It was the distance to the nearest wall-face centre, too large wherever the grid lines are not normal to the
+  wall and next to convex corners and the ends of walls (up to 10.9 %, 16.3 % and 15.9 % in three test geometries). A wall face
+  plane to the resolution of its coordinates, like every wall face of a 2-D or axisymmetric mesh, is the four triangles between
+  its centre and its sides. A twisted 3-D wall face, whose corners are not coplanar, lies up to |T|/16 from those triangles
+  (T = c1 − c2 + c3 − c4, its twist; with them the distance was off by up to 4.9 % in a test): its distance is a certified
+  minimum over the face, exact to the rounding of the size of the face. Results change wherever the distance changes,
+  and at round-off where the grid lines are normal to a plane wall. Equal distances go to the lowest face index, so the
+  roughness a cell inherits is the same on every rank and thread. With a turbulence model, a wall on faces 5–6 of a wedge
+  stops the run.
 - The type of the mesh (plane, axisymmetric wedge, 3-D sector closed by type `200`, slab translated in k) is taken from every
   node of every block, to within 1 % of the move of the nodes per cell in k, no longer from two probe nodes of block 1. A plane
   2-D mesh whose j index runs towards the x axis was taken for a wedge (wall distance off by 27 % in a test), and so was a plane

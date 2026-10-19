@@ -66,31 +66,46 @@ images of the wall too.
 With 2 significant digits (case turned2) the translations differ by up to 8.5e-3, 0.15 of the cells: the run must stop at
 set-up with the message on the periodic translations, which names the tolerance and asks for sides that match, with no NaN
 and no floating-point trap before it.
+Two cases have twisted wall faces, each the bilinear surface through its four nodes, whose four triangles between the
+centre and the sides are not the face:
+  twist     3-D block of 8 x 6 x 8 cells whose wall, on the j = 1 face, is the surface y = 2 (x - 0.5)(z - 0.5): every wall
+            face has the twist 2 dx dz = 1/32 along y, and its four triangles lie within 1/512 of it, a quarter of the
+            height of the first cells. The heights above the wall grow by 1.8 up to 0.3, and the grid lines lean along x
+            by half a cell at the top, in proportion to the height (every corner Jacobian stays positive): in 9 cells the
+            nearest face by the triangles is not the nearest face.
+  twistper  3-D block of 8 x 4 x 4 cells periodic in x (connections 201 between the i faces, period 1), whose wall, on the
+            whole j = 1 face, is the surface y = 0.08 sin(2 pi x) sin(2 pi z), z in [0, 0.5]: twisted faces across the
+            periodic boundary too.
 The reference is the exact distance from the cell centre (mean of the nodes; in the wedge in the coordinates x and
-r = sqrt(y^2 + z^2)) to the wall of the mesh (straight faces between the wall nodes, plane in every case) and to its
-periodic images, by a scan of all faces. It is checked on the cells that do not touch the wall (in one step the wall
-reaches only the cells next to it, through the diffusion across the wall face and the central difference of the cb2
-term): the largest relative difference must be below 1e-9 (1e-6 in the case noisy).
+r = sqrt(y^2 + z^2)) to the wall of the mesh and to its periodic images, by a scan of all faces: straight faces between the
+wall nodes, plane in every case but twist and twistper; on these two, the bilinear faces, with the exact distance of the
+stationarity equations (test/unit/bilinear_distance_exact.py, rational arithmetic) on the faces whose four triangles,
+less their gap |T|/16 from the face (T the twist), are not farther than the least of the triangles plus that gap, written
+once to twist_exact.txt and twistper_exact.txt (make_case.py exact NAME). It is checked on the cells that do not touch
+the wall (in one step the wall reaches only the cells next to it, through the diffusion across the wall face and the
+central difference of the cb2 term): the largest relative difference must be below 1e-9 (1e-6 in the case noisy). No
+run may print a warning on twisted wall faces (the start-up report of MOSE before the exact distance).
 
 Usage (from the test directory):
   python3 -B make_case.py case NAME            INPUT/ic.tec and INPUT/bc.txt of corner, arc, lip, periodic, pipe, sector,
                                                noisy, span, thin, far, staggered or oblique
   python3 -B make_case.py error NAME FILE      prints the largest relative error of d read from FILE (a diagnostic.tec)
   python3 -B make_case.py check N1=E1 ...      exit status 0 when the error of every case is below its tolerance
-  python3 -B make_case.py case twist           INPUT/ic.tec and INPUT/bc.txt of the 3-D case with twisted wall faces
-  python3 -B make_case.py twist LOG            exit status 0 when LOG reports the twist of the wall faces of the twist case
+  python3 -B make_case.py case twist           INPUT/ic.tec and INPUT/bc.txt of the 3-D case with twisted wall faces (and
+                                               twistper, periodic)
+  python3 -B make_case.py exact NAME           writes NAME_exact.txt, the exact reference of twist or twistper, with, for
+                                               each cell, the wall face of the exact minimum
   python3 -B make_case.py turnstop LOG         exit status 0 when LOG (case turned2) stopped at set-up with the message on
                                                the periodic translations
-
-The twist case is a 3-D block whose wall, on the j = 1 face, is the surface y = 2 (x - 0.5)(z - 0.5): every wall face is a
-bilinear surface with twist 2 dx dz = 1/32 along y, and the four triangles of a face lie within 1/512 of it. MOSE reports
-at start-up the largest of that bound over the distance of the cell next to the face; it must match the value computed
-here (the distance of that cell to the four triangles of the faces, as MOSE takes it) within 1e-3, the printed precision.
+For twist and twistper, error NAME FILE prints as its third number the cells whose nearest face by the four triangles is
+not the face of the exact minimum (at least one in twist: the second pass of the search is exercised).
 """
 import math
 import os
 import re
 import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 RGAS = 8314.46261815324 / 28.970418          # gas constant of FLINT for air, J/(kg K)
 MU = 1.1858686e-5                   # test/common/Air-viscous
@@ -529,24 +544,40 @@ def turn_stop(log):
 
 
 TWIST = (8, 6, 8)
+TWISTPER = (8, 4, 4)                # case twistper: cells, periodic in x with period 1, z in [0, TWISTPER_Z]
+TWISTPER_Z, TWISTPER_A = 0.5, 0.08  # and the amplitude of its wall y = A sin(2 pi x) sin(2 pi z)
 
 
-def twist_nodes():
-    """Node coordinates (x, y, z) of the twist case as MOSE reads them, by (i, j, k)."""
-    ni, nj, nk = TWIST
+TWIST_TOP, TWIST_LEAN = 0.3, 0.5      # case twist: height of the block above the wall, and lean of its grid lines
+
+
+def twist_nodes(name="twist"):
+    """Node coordinates (x, y, z) of the cases twist and twistper as MOSE reads them, by (i, j, k): the wall y_w(x, z) on
+    j = 0, then the stretched heights above it: in twist growing by 1.8 up to TWIST_TOP, the grid lines leaning along x by
+    TWIST_LEAN cells at the top in proportion to the height; in twistper 1e-3 (1.6^j - 1)/0.6, with the wall at i = NI
+    that of i = 0, so that the two sides of the period match exactly."""
+    ni, nj, nk = TWIST if name == "twist" else TWISTPER
     out = {}
     for k in range(nk + 1):
         for j in range(nj + 1):
             for i in range(ni + 1):
-                x, z = i / ni, k / nk
+                x = i / ni
                 eta = 1.0e-3 * (1.6 ** j - 1.0) / 0.6
-                out[(i, j, k)] = tuple(float(fmt(v)) for v in (x, 2.0 * (x - 0.5) * (z - 0.5) + eta, z))
+                if name == "twist":
+                    eta = TWIST_TOP * (1.8 ** j - 1.0) / (1.8 ** nj - 1.0)
+                    z = k / nk
+                    yw = 2.0 * (x - 0.5) * (z - 0.5)
+                    x = x + TWIST_LEAN * (eta / TWIST_TOP) / ni
+                else:
+                    z = TWISTPER_Z * k / nk
+                    yw = TWISTPER_A * math.sin(2.0 * math.pi * (i % ni) / ni) * math.sin(2.0 * math.pi * z)
+                out[(i, j, k)] = tuple(float(fmt(v)) for v in (x, yw + eta, z))
     return out
 
 
-def write_twist_case():
-    ni, nj, nk = TWIST
-    xyz = twist_nodes()
+def write_twist_case(name="twist"):
+    ni, nj, nk = TWIST if name == "twist" else TWISTPER
+    xyz = twist_nodes(name)
     for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
         if os.path.lexists(p):
             os.remove(p)
@@ -562,70 +593,111 @@ def write_twist_case():
                         f.write(f" {fmt(xyz[(i, j, k)][c])}\n")
         for v in (RHO, 0.0, 0.0, 0.0, P0, RHO * NUT):
             f.write(f" {fmt(v)}\n" * nc)
+
+    def rec(i, j, k, face, t):
+        return '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, k, face, t)
+
+    def con(*a):
+        return '%10d %7d %7d %7d %7d %7d %7d %7d %7d\n' % a
+
     out = []
     for k in range(1, nk + 1):
         for j in range(1, nj + 1):
-            out += ['%9d %7d %7d %7d %7d %7d\n' % (1, 1, j, k, 1, 300), '%9d %7d %7d %7d %7d %7d\n' % (1, ni, j, k, 2, 300)]
+            if name == "twist":
+                out += [rec(1, j, k, 1, 300), rec(ni, j, k, 2, 300)]
+            else:
+                out += [rec(1, j, k, 1, 201), con(1, ni, j, k, 2, 1, 0, 0, 1)]
+                out += [rec(ni, j, k, 2, 201), con(1, 1, j, k, 1, 1, 0, 0, 1)]
         for i in range(1, ni + 1):
-            out += ['%9d %7d %7d %7d %7d %7d\n' % (1, i, 1, k, 3, 301), WALL_LINE]
-            out += ['%9d %7d %7d %7d %7d %7d\n' % (1, i, nj, k, 4, 300)]
+            out += [rec(i, 1, k, 3, 301), WALL_LINE]
+            out += [rec(i, nj, k, 4, 300)]
     for j in range(1, nj + 1):
         for i in range(1, ni + 1):
-            out += ['%9d %7d %7d %7d %7d %7d\n' % (1, i, j, 1, 5, 300), '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, nk, 6, 300)]
+            out += [rec(i, j, 1, 5, 300), rec(i, j, nk, 6, 300)]
     with open("INPUT/bc.txt", "w") as f:
         f.write(sorted_bc("".join(out)))
 
 
-def twist_expected():
-    """Largest min(|T|/16, |T_n|/2) of the wall faces over the distance of their cell, with the distance MOSE takes:
-    the cell centre to the four triangles between the face centre and its sides, minimum over the wall faces."""
-    ni, nj, nk = TWIST
-    xyz = twist_nodes()
-
-    def sub(u, v):
-        return [u[0] - v[0], u[1] - v[1], u[2] - v[2]]
-
-    def dot(u, v):
-        return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
-
-    def cross(u, v):
-        return [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
-
-    faces = {}
+def twist_faces(name):
+    """The wall faces of twist or twistper, corners in the cyclic order of MOSE, and their images: (face, shift in x)."""
+    ni, nj, nk = TWIST if name == "twist" else TWISTPER
+    xyz = twist_nodes(name)
+    faces = []
     for k in range(nk):
         for i in range(ni):
-            faces[(i + 1, k + 1)] = [xyz[(i, 0, k)], xyz[(i + 1, 0, k)], xyz[(i + 1, 0, k + 1)], xyz[(i, 0, k + 1)]]
-
-    def fan(p, c):
-        m = [sum(q[n] for q in c) / 4.0 for n in range(3)]
-        return min(triangle_distance(p, m, c[n], c[(n + 1) % 4]) for n in range(4))
-
-    best = 0.0
-    for (i, k), c in faces.items():
-        t = [c[0][n] - c[1][n] + c[2][n] - c[3][n] for n in range(3)]
-        bound = math.sqrt(dot(t, t)) / 16.0
-        nrm = cross(sub(c[2], c[0]), sub(c[3], c[1]))
-        if all(dot(cross(sub(c[(n + 1) % 4], c[n]), sub(c[(n + 2) % 4], c[(n + 1) % 4])), nrm) > 0.0 for n in range(4)):
-            bound = min(bound, abs(dot(t, nrm)) / (2.0 * math.sqrt(dot(nrm, nrm))))
-        corners = [xyz[(i - 1 + a, b, k - 1 + cc)] for a in (0, 1) for b in (0, 1) for cc in (0, 1)]
-        p = [sum(q[n] for q in corners) / 8.0 for n in range(3)]
-        d = min(fan(p, f) for f in faces.values())
-        best = max(best, bound / d)
-    return best
+            faces.append([xyz[(i, 0, k)], xyz[(i + 1, 0, k)], xyz[(i + 1, 0, k + 1)], xyz[(i, 0, k + 1)]])
+    shifts = (0.0,) if name == "twist" else (-2.0, -1.0, 0.0, 1.0, 2.0)
+    return [(f, s) for s in shifts for f in faces], len(faces)
 
 
-def twist_check(log):
-    want = twist_expected()
-    got = None
-    for line in open(log, errors="replace"):
-        m = re.search(r"twisted wall faces, error bound up to\s+([0-9.Ee+-]+)", line)
-        if m:
-            got = float(m.group(1))
-    if got is None:
-        print(f"    no report of the twist in {log} (expected {want:.3e})")
-        sys.exit(1)
-    print(f"    reported {got:.3e}, expected {want:.3e}")
-    sys.exit(0 if abs(got / want - 1.0) <= 1.0e-3 else 1)
+def fan_distance(p, c):
+    """The four triangles between the mean of the corners and the sides, as MOSE takes a face of the fast path."""
+    m = [sum(q[n] for q in c) / 4.0 for n in range(3)]
+    return min(triangle_distance(p, m, c[n], c[(n + 1) % 4]) for n in range(4))
+
+
+def write_exact(name):
+    """NAME_exact.txt: for every cell (i, j, k) with j >= 2, the exact distance to the bilinear wall faces and their images,
+    and the index of the face of the minimum (faces numbered along i, then k, from 0)."""
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "unit"))
+    import bilinear_distance_exact as R
+    ni, nj, nk = TWIST if name == "twist" else TWISTPER
+    xyz = twist_nodes(name)
+    images, nf = twist_faces(name)
+    lines = [f"# i j k d_exact face: case {name}, exact distance from the cell centre to the bilinear wall faces "
+             "(make_case.py exact, test/unit/bilinear_distance_exact.py)"]
+    nexact = 0
+    for k in range(1, nk + 1):
+        for j in range(2, nj + 1):
+            for i in range(1, ni + 1):
+                corners = [xyz[(i - 1 + a, j - 1 + b, k - 1 + c)] for a in (0, 1) for b in (0, 1) for c in (0, 1)]
+                p = [sum(q[n] for q in corners) / 8.0 for n in range(3)]
+                cand = []
+                for n, (f, sh) in enumerate(images):
+                    g = [(q[0] + sh, q[1], q[2]) for q in f]
+                    t = [g[0][m] - g[1][m] + g[2][m] - g[3][m] for m in range(3)]
+                    gap = math.sqrt(sum(v * v for v in t)) / 16.0 + 1e-12
+                    cand.append((fan_distance(p, g), gap, n, g))
+                upper = min(fd + gap for fd, gap, n, g in cand)
+                best = None
+                for fd, gap, n, g in cand:
+                    if fd - gap <= upper:
+                        d, _ = R.ref_distance(p, g)
+                        nexact += 1
+                        if best is None or d < best[0]:
+                            best = (d, n % nf)
+                lines.append(f"{i} {j} {k} {format(best[0], '.25e')} {best[1]}")
+    with open(os.path.join(HERE, f"{name}_exact.txt"), "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"{name}: {len(lines) - 1} cells, {nexact} exact distances")
+
+
+def twist_error(name, path):
+    """Largest relative error of d against NAME_exact.txt, the cells checked, and the cells whose nearest face by the four
+    triangles is not the face of the exact minimum."""
+    data, ni, nj = read_zone(path)
+    nip, njp, nkp = TWIST if name == "twist" else TWISTPER
+    assert (ni, nj) == (nip, njp), (ni, nj)
+    xyz = twist_nodes(name)
+    images, nf = twist_faces(name)
+    f = factor()
+    err, cells, differ = 0.0, 0, 0
+    for line in open(os.path.join(HERE, f"{name}_exact.txt")):
+        if line.startswith("#"):
+            continue
+        i, j, k, d0, face = line.split()
+        i, j, k, d0, face = int(i), int(j), int(k), float(d0), int(face)
+        n = ((k - 1) * nj + (j - 1)) * ni + (i - 1)
+        rhs = data["rhoNuTilde"][n] / data["dt"][n]
+        d = math.sqrt(RHO * NUT * NUT * f / rhs) if rhs < 0.0 else float("inf")
+        err = max(err, abs(d / d0 - 1.0))
+        cells += 1
+        corners = [xyz[(i - 1 + a, j - 1 + b, k - 1 + c)] for a in (0, 1) for b in (0, 1) for c in (0, 1)]
+        p = [sum(q[m] for q in corners) / 8.0 for m in range(3)]
+        fans = [(fan_distance(p, [(q[0] + sh, q[1], q[2]) for q in g]), m % nf) for m, (g, sh) in enumerate(images)]
+        if min(fans)[1] != face:
+            differ += 1
+    print(f"{err:.3e} {cells} {differ}")
 
 
 def fv1(chi):
@@ -690,16 +762,18 @@ def check(pairs):
 
 def main():
     what = sys.argv[1]
-    if what == "case" and sys.argv[2] == "twist":
-        write_twist_case()
+    if what == "case" and sys.argv[2] in ("twist", "twistper"):
+        write_twist_case(sys.argv[2])
     elif what == "case":
         (write_periodic_case if sys.argv[2] in PERIODIC else write_case)(sys.argv[2])
+    elif what == "error" and sys.argv[2] in ("twist", "twistper"):
+        twist_error(sys.argv[2], sys.argv[3])
     elif what == "error":
         (periodic_error if sys.argv[2] in PERIODIC else error)(sys.argv[2], sys.argv[3])
     elif what == "check":
         check(sys.argv[2:])
-    elif what == "twist":
-        twist_check(sys.argv[2])
+    elif what == "exact":
+        write_exact(sys.argv[2])
     elif what == "turnstop":
         turn_stop(sys.argv[2])
     else:

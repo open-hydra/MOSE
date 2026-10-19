@@ -1,5 +1,5 @@
 module MOSE_Lib_Metrics
-  use iso_fortran_env, only: I4 => int32, R8 => real64
+  use iso_fortran_env, only: I4 => int32, R8 => real64, IK8 => int64
   use MOSE_Base_Types_m
   use MOSE_Advanced_Types_m
   use MOSE_Global_m
@@ -9,14 +9,36 @@ module MOSE_Lib_Metrics
   real(R8), public :: delthe = 0d0  ! grid axisymmetric angle
   real(R8), public :: cos_delthe = 1d0, sin_delthe = 0d0  ! its cosine and sine, set with it (Check_Mesh_Type)
 
-  ! Wall faces of Compute_Yn, read by Wall_Face_Distance while the k-d tree is queried: for face n, wall_corner(:,1:4,n)
+  ! Wall faces of Compute_Yn, read by the distance functions while the k-d tree is queried: for face n, wall_corner(:,1:4,n)
   ! are its corners in cyclic order and wall_corner(:,0,n) their mean; on an axisymmetric wedge (wall_meridional) the
   ! corners are in the meridional plane (x, r, 0), where corners 1 and 2 are the ends of the trace of the face. Across
-  ! periodic boundaries each face is moved, whole, by a periodic translation (Wall_Images).
+  ! periodic boundaries each face is moved, whole, by a periodic translation (Wall_Images). wall_fast(n): the face takes
+  ! the four triangles of Wall_Face_Distance, which are the face to the resolution of its coordinates (Face_Fast_Test);
+  ! otherwise the certified minimum over the bilinear face (Bilinear_Face_Distance). wall_ghat(n): an upper bound of the gap
+  ! between those triangles and the face; wall_fan_ok(n): the triangles are conditioned enough for the margin of the filter
+  ! of the second pass (Wall_Distance_Blk); wall_radius(n): every point of the face lies within it of wall_corner(:,0,n).
   real(R8), allocatable :: wall_corner(:,:,:)
   logical               :: wall_meridional = .false.
-  private :: wall_corner, wall_meridional
+  logical,  allocatable :: wall_fast(:), wall_fan_ok(:)
+  real(R8), allocatable :: wall_ghat(:), wall_radius(:)
+  ! Upper bound of the wall distance of the point being searched, from the first pass of Wall_Distance_Blk, and the least
+  ! distance computed so far in the second, read by the filter of the second pass (Wall_Exact_Distance): one per thread
+  real(R8)              :: wall_upper = 0d0, wall_least = 0d0
+  ! The four triangles in local coordinates (Local_Fan_Distance) of the faces met in the first pass of a point, with the
+  ! image of the wall they were met in (wall_image): the second pass of the same point takes them from this table instead of
+  ! computing them again. A slot holds face, image, the point it belongs to (fanc_tag against fanc_now, which grows by one
+  ! for each point, so that the table needs no clearing) and the value; a full table only means more computing. One table
+  ! per thread
+  integer, parameter    :: FANC = 1024
+  integer               :: fanc_face(0:FANC-1) = 0, fanc_img(0:FANC-1) = 0, wall_image = 0
+  integer(IK8)          :: fanc_tag(0:FANC-1) = 0, fanc_now = 0
+  real(R8)              :: fanc_val(0:FANC-1) = 0d0
+  !$omp threadprivate(wall_upper, wall_least, fanc_face, fanc_img, fanc_tag, fanc_now, fanc_val, wall_image)
+  private :: wall_corner, wall_meridional, wall_fast, wall_fan_ok, wall_ghat, wall_radius, wall_upper, wall_least
+  private :: FANC, fanc_face, fanc_img, fanc_tag, fanc_now, fanc_val, wall_image, Fan_Cached
   private :: Cell_Centre, Meridional, Wall_Face_Distance, Point_Segment_Distance, Point_Triangle_Distance, Cross3
+  private :: Wall_Upper_Distance, Wall_Exact_Distance, Wall_Face_Exact, Local_Fan_Distance, Filter_Margin, Tri_Dist_Lb, Orient
+  private :: Vnorm
   ! A degenerate or inverted cell found by Compute_Metric_Tensor, inside the OpenMP threads of Setup_Metrics: the run stops
   ! after the parallel region, on every rank (First_Bad_Metric, Stop_On_Bad_Metric)
   logical, public, protected :: bad_metric = .false.
@@ -593,19 +615,19 @@ contains
   end subroutine Compute_Metric_Tensor
 
   
-  subroutine Compute_Yn ( blk, bc, nb, nbound, report )
+  subroutine Compute_Yn ( blk, bc, nb, nbound )
     use MOSE_Lib_KDTree, only: kdtree_t, kdtree_build, kdtree_free
     use MOSE_Mod_MPI,    only: is_local_block, mpi_is_root, mpi_stop_all
     implicit none
     integer, intent(in)                                  :: nb, nbound
     type(MOSE_block_type), dimension(nb), intent(inout)  :: blk
     type(MOSE_bc_type), dimension(nbound), intent(in)    :: bc
-    logical, intent(in), optional                        :: report   ! report the twist of the wall faces (root only)
     ! Local
     real(R8), allocatable :: facex(:), facey(:), facez(:), facekr(:), facer(:)
     real(R8) :: corner(3,4)
     integer :: Fm, Bm, Im, Jm, Km, l, b, nwall, n
     logical, dimension(nb) :: needs_yn
+    logical :: all_fast
     type(kdtree_t) :: wall_tree
     ! Periodic images of the wall: image n is the wall turned about the x axis by img_angle(n), then translated by
     ! img_shift(:,n); wall_box(:,1:2) are the low and high corners of the box around the wall faces. Lattice of the
@@ -624,7 +646,8 @@ contains
     ! The distance is the minimum distance from the cell centre to the wall surface
     ! (NASA Turbulence Modeling Resource, Spalart-Allmaras page: not the distance to
     ! the nearest wall node or face centre; next to a convex corner, the distance to
-    ! the corner). On a 2-D axisymmetric wedge it is measured in the meridional plane
+    ! the corner), the union of the wall faces, each the bilinear face through its four
+    ! nodes. On a 2-D axisymmetric wedge it is measured in the meridional plane
     ! (x, r), from the wall curve: that is the distance to the wall surface of
     ! revolution, whatever the angle of the wedge. Same wedge test as the wedge
     ! stress (Lib_BC_Fluxes_Rotational), delthe of either sign.
@@ -723,10 +746,26 @@ contains
     ! the size of the mesh against its periods.
     call Wall_Images ( )
 
+    ! Fast path or certified minimum, face by face, on the faces as the search takes them
+    ! (moved by Wall_Images). On an axisymmetric wedge the faces are segments of the
+    ! meridional plane, whose distance is exact.
+    allocate ( wall_fast(nwall), wall_fan_ok(nwall), wall_ghat(nwall), wall_radius(nwall) )
+    do n = 1, nwall
+      wall_radius(n) = facer(n)
+      if ( wall_meridional ) then
+        wall_fast(n) = .true.
+        wall_fan_ok(n) = .true.
+        wall_ghat(n) = 0d0
+      else
+        call Face_Fast_Test ( wall_corner(:,1:4,n), wall_fast(n), wall_ghat(n), wall_fan_ok(n) )
+      end if
+    enddo
+    all_fast = all ( wall_fast )
+
     ! One k-d tree over the wall-face centres, with the face radii, shared by every
-    ! block and thread: it hands the exact point-face distance only the faces that
-    ! can still be nearer than the nearest found so far (centre within that
-    ! distance plus the face radius).
+    ! block and thread: it hands the point-face distance only the faces that can
+    ! still be nearer than the nearest found so far (centre within that distance
+    ! plus the face radius).
     call kdtree_build ( wall_tree, facex(1:nwall), facey(1:nwall), facez(1:nwall), nwall, facer(1:nwall) )
 
     ! Compute distance in block b by querying the shared k-d tree.
@@ -744,70 +783,10 @@ contains
       enddo
     end if
 
-    ! Twisted wall faces in 3-D: the distance is exact only to within the gap between
-    ! the four triangles of a face and the face; report its largest bound relative to
-    ! the distance of the cell next to the face (docs/theory/turbulence.md).
-    if ( present(report) ) then
-      if ( report .and. mpi_is_root .and. .not. wall_meridional ) call Report_Twist ( )
-    end if
-
     call kdtree_free ( wall_tree )
-    deallocate ( wall_corner, img_shift, img_angle )
+    deallocate ( wall_corner, img_shift, img_angle, wall_fast, wall_fan_ok, wall_ghat, wall_radius )
 
     contains
-
-      !> Start-up report on twisted wall faces. The four triangles of a wall face lie within min(|T|/16, |T_n|/2) of
-      !> the face, the bilinear surface through its corners: T is the twist c1 - c2 + c3 - c4, T_n its part along the
-      !> normal of the face (cross product of the diagonals), and the second bound holds when the face, projected on
-      !> the plane of that normal, is convex; a plane face has T_n = 0 and its triangles are the face. The report gives
-      !> the largest bound over the distance of the cell next to the face, which bounds the relative error of that
-      !> distance; nothing is printed when every face is plane to the resolution of its coordinates.
-      subroutine Report_Twist ( )
-        implicit none
-        ! Local
-        integer  :: l, k, worst(4)
-        real(R8) :: c(3,4), t(3), nrm(3), bound, ratio, rmax
-        logical  :: convex
-
-        rmax = 0d0
-        worst = 0
-        do l = 1, nbound
-          if ( .not. Is_Wall(bc(l) % type) ) cycle
-          ! The corners of the face in the mesh, not as Wall_Images moves them: the threshold below is the resolution
-          ! of the coordinates of the mesh
-          c = Face_Corners ( blk(bc(l)%b), bc(l)%i, bc(l)%j, bc(l)%k, bc(l)%f )
-          t = c(:,1) - c(:,2) + c(:,3) - c(:,4)
-          bound = norm2 ( t ) / 16d0
-          nrm = Cross3 ( c(:,3) - c(:,1), c(:,4) - c(:,2) )
-          if ( norm2 ( nrm ) > 0d0 ) then
-            convex = .true.
-            do k = 1, 4
-              if ( dot_product ( Cross3 ( c(:,mod(k,4)+1) - c(:,k), c(:,mod(k+1,4)+1) - c(:,mod(k,4)+1) ), nrm ) <= 0d0 ) &
-                convex = .false.
-            enddo
-            if ( convex ) bound = min ( bound, abs ( dot_product ( t, nrm ) ) / ( 2d0 * norm2 ( nrm ) ) )
-          end if
-          if ( bound <= 64d0 * epsilon(1d0) * maxval ( abs ( c ) ) ) cycle
-          ratio = bound / blk(bc(l)%b) % yn ( bc(l)%i, bc(l)%j, bc(l)%k )
-          if ( ratio > rmax ) then
-            rmax = ratio
-            worst = [ bc(l)%b, bc(l)%i, bc(l)%j, bc(l)%k ]
-          end if
-        enddo
-        if ( rmax > 0d0 ) then
-          if ( rmax > 1d-2 ) then
-            write(*,'(A,ES10.3,A,I0,A,I0,A,I0,A,I0,A)') ' [WARNING] Wall distance: twisted wall faces, error bound up to ', &
-              rmax, ' of the distance of the cell next to the face (block ', worst(1), ', cell ', worst(2), ' ', worst(3), &
-              ' ', worst(4), '; docs/theory/turbulence.md)'
-          else
-            write(*,'(A,ES10.3,A,I0,A,I0,A,I0,A,I0,A)') '   Wall distance: twisted wall faces, error bound up to ', &
-              rmax, ' of the distance of the cell next to the face (block ', worst(1), ', cell ', worst(2), ' ', worst(3), &
-              ' ', worst(4), ')'
-          end if
-        end if
-
-      end subroutine Report_Twist
-
 
       !> Corners of face Fm of cell (Im, Jm, Km) of a block, in cyclic order around the face.
       function Face_Corners ( blk, Im, Jm, Km, Fm ) result ( corner )
@@ -1324,11 +1303,11 @@ contains
         type(kdtree_t), intent(in)           :: tree
         real(R8), intent(in)                 :: face_kr(:)   ! Roughness of each wall face, by original face index
         ! Local
-        integer :: i, j, k, iface, n
-        real(R8) :: center(3), dist, q(3)
+        integer :: i, j, k, iface, n, iup
+        real(R8) :: center(3), dist, q(3), upper
 
         !$omp parallel
-        !$omp do collapse(3) private(i, j, k, center, dist, iface, n, q)
+        !$omp do collapse(3) private(i, j, k, center, dist, iface, n, q, upper, iup)
         do k = 1, blk % dim(3)
         do j = 1, blk % dim(2)
         do i = 1, blk % dim(1)
@@ -1336,17 +1315,72 @@ contains
           ! The cell centre, moved into the cell of the lattice of the periodic translations that holds the wall faces
           center = Reduced_Point ( Cell_Centre ( blk, i, j, k ) )
 
-          ! Nearest wall face via the k-d tree, exact point-face distance.
-          call kdtree_nearest_object ( tree, center(1), center(2), center(3), Wall_Face_Distance, dist, iface )
+          if ( all_fast ) then
 
-          ! Periodic images: an image can be nearer only if the box of the wall, seen
-          ! from the moved point, is not farther than the distance found so far. The
-          ! query goes on from that distance and face, so ties keep the lowest face.
-          do n = 1, nimg
-            q = Image_Point ( center, n )
-            if ( Box_Distance ( q ) > dist ) cycle
-            call kdtree_nearest_object ( tree, q(1), q(2), q(3), Wall_Face_Distance, dist, iface, resume=.true. )
-          enddo
+            ! Every face is plane to the resolution of its coordinates: its four triangles are the face
+            ! (Wall_Face_Distance).
+            call kdtree_nearest_object ( tree, center(1), center(2), center(3), Wall_Face_Distance, dist, iface )
+
+            ! Periodic images: an image can be nearer only if the box of the wall, seen
+            ! from the moved point, is not farther than the distance found so far. The
+            ! query goes on from that distance and face, so ties keep the lowest face.
+            do n = 1, nimg
+              q = Image_Point ( center, n )
+              if ( Box_Distance ( q ) > dist ) cycle
+              call kdtree_nearest_object ( tree, q(1), q(2), q(3), Wall_Face_Distance, dist, iface, resume=.true. )
+            enddo
+
+          else
+
+            ! First pass, over the faces and their images: an upper bound of the distance, the four triangles of a face
+            ! plus the bound of their gap from the face and of the rounding (Wall_Upper_Distance).
+            fanc_now = fanc_now + 1
+            wall_image = 0
+            call kdtree_nearest_object ( tree, center(1), center(2), center(3), Wall_Upper_Distance, upper, iup )
+            do n = 1, nimg
+              q = Image_Point ( center, n )
+              if ( Box_Distance ( q ) > upper ) cycle
+              wall_image = n
+              call kdtree_nearest_object ( tree, q(1), q(2), q(3), Wall_Upper_Distance, upper, iup, resume=.true. )
+            enddo
+
+            ! Second pass: the distance to the bilinear faces (Wall_Exact_Distance), with the search starting from the
+            ! bound of the first pass (2^-30 of it added, for the triangles of a face of the fast path computed again)
+            ! and no face: the tree prunes by that bound from the start, and the distance is computed only on the faces
+            ! whose triangles, less the same bound of their gap and of the rounding, are not farther than it, nor than
+            ! the least distance computed so far. The face of the minimum is never left out, and each face computed
+            ! gives a pure function of the face, so the distance and its face do not depend on the tree, the threads
+            ! or the ranks.
+            wall_upper = huge ( 1d0 )
+            if ( upper < 0.5d0 * huge ( 1d0 ) ) wall_upper = upper + 2d0**(-30) * upper
+            wall_least = huge ( 1d0 )
+            dist = wall_upper
+            iface = huge ( 1 )
+            wall_image = 0
+            call kdtree_nearest_object ( tree, center(1), center(2), center(3), Wall_Exact_Distance, dist, iface, &
+                                         resume=.true. )
+            do n = 1, nimg
+              q = Image_Point ( center, n )
+              if ( Box_Distance ( q ) > dist ) cycle
+              wall_image = n
+              call kdtree_nearest_object ( tree, q(1), q(2), q(3), Wall_Exact_Distance, dist, iface, resume=.true. )
+            enddo
+            if ( iface == huge ( 1 ) ) then
+              ! No face below the bound: the four triangles of a face of the fast path rounded differently in the two
+              ! passes, by more than the 2^-30 added. Search again with no bound.
+              wall_upper = huge ( 1d0 )
+              wall_least = huge ( 1d0 )
+              wall_image = 0
+              call kdtree_nearest_object ( tree, center(1), center(2), center(3), Wall_Exact_Distance, dist, iface )
+              do n = 1, nimg
+                q = Image_Point ( center, n )
+                if ( Box_Distance ( q ) > dist ) cycle
+                wall_image = n
+                call kdtree_nearest_object ( tree, q(1), q(2), q(3), Wall_Exact_Distance, dist, iface, resume=.true. )
+              enddo
+            end if
+
+          end if
 
           blk % yn (i,j,k) = dist
           blk % k_rough (i,j,k) = face_kr(iface)
@@ -1386,7 +1420,7 @@ contains
             q = center
             if ( n > 0 ) q = Image_Point ( center, n )
             do ll = 1, nwall_
-              dummy = Wall_Face_Distance ( ll, q(1), q(2), q(3) )
+              dummy = Wall_Face_Exact ( ll, q(1), q(2), q(3) )
               if (dummy < dbrute) dbrute = dummy
             enddo
           enddo
@@ -1515,6 +1549,582 @@ contains
               Point_Segment_Distance ( p, c, a ) )
 
   end function Point_Triangle_Distance
+
+  !> Fast path of the wall distance on the face with corners c(:,1:4) in cyclic order (docs/theory/turbulence.md, Wall
+  !> distance). The four triangles between the mean of the corners and the sides (Wall_Face_Distance) lie within the gap
+  !> g* = min(|T|/16, |T.n|/(2|n|)) of the face, T = c1 - c2 + c3 - c4 its twist and n = (c3 - c1) x (c4 - c2) the cross
+  !> product of its diagonals, the second bound when the face projected on the plane normal to n is convex (every corner
+  !> between sides of non-zero length turns the same way). The two bounds are computed together with eps1, eps2, proven
+  !> bounds of their rounding (u = 2^-53, every operation within 2u, sums in any order, fused multiply-adds), and the face
+  !> takes the fast path when one of them is within 8 u M plus its eps, M the largest |coordinate| of the corners: the face
+  !> is plane to the resolution of its coordinates. Every parallelogram takes it, and every convex plane face but those with
+  !> a corner within (49 + 30 kappa_n) u of a straight or a null angle, kappa_n = |c3 - c1| |c4 - c2| / |n|; the distance
+  !> of a face so taken is within 8 u M + 2 eps of the distance to the face, plus the rounding of the triangles. ghat is an
+  !> upper bound of g*, for the filter of the second pass of Wall_Distance_Blk; fan_ok: in each triangle, in the coordinates
+  !> local to c1 of Local_Fan_Distance, 1/sin of the angle at the mean of the corners is below 1e5, under which the margin
+  !> of that filter covers the rounding of the triangles. The sides and the diagonals are differences of the corners
+  !> rounded once, as written: VOLATILE, as in Compute_Metric_Tensor (and so not pure: C1589).
+  subroutine Face_Fast_Test ( c, fast, ghat, fan_ok )
+    implicit none
+    real(R8), intent(in)  :: c(3,4)
+    logical,  intent(out) :: fast, fan_ok
+    real(R8), intent(out) :: ghat
+    ! Local
+    real(R8), parameter :: U = epsilon(1d0) / 2d0, CNU = 4d0 + 4d0 * sqrt(2d0), CW = 10d0 + 4d0 * sqrt(2d0), &
+                           CONDMAX = 1d5
+    real(R8), volatile  :: ve(3,4), vd(3,2), vl(3,4)
+    real(R8) :: e(3,4), d1(3), d2(3), t(3), n(3), ne(4), nt, nn, nu, m, g, eps, w, epsw, cl(3,4), mc(3), u1(3), u2(3)
+    integer  :: k, k1
+    logical  :: convex
+
+    do k = 1, 4
+      ve(:,k) = c(:,mod(k,4)+1) - c(:,k)
+    enddo
+    vd(:,1) = c(:,3) - c(:,1)
+    vd(:,2) = c(:,4) - c(:,2)
+    e = ve
+    d1 = vd(:,1)
+    d2 = vd(:,2)
+    t = - ( e(:,1) + e(:,3) )
+    n = Cross3 ( d1, d2 )
+    nt = Vnorm ( t )
+    nn = Vnorm ( n )
+    do k = 1, 4
+      ne(k) = Vnorm ( e(:,k) )
+    enddo
+    m = maxval ( abs ( c ) )
+
+    ! |T|/16, on any face: rounding |T~ - T| <= 2u (|e1| + |e3|) + 2u |T|, of the norm 5u
+    g = nt / 16d0
+    eps = 2d0 * ( U / 8d0 * ( ne(1) + ne(3) ) + 5d0 * U / 8d0 * nt )
+    ghat = g + eps
+    fast = g <= 8d0 * U * m + eps
+
+    ! |T.n|/(2|n|), when the projection is convex (corners turning within their rounding are not taken as convex) and
+    ! the normal is known to 1/8 of its size: |n~ - n| <= nu = (4 + 4 sqrt 2) u |d1| |d2|
+    nu = CNU * U * Vnorm ( d1 ) * Vnorm ( d2 )
+    if ( nn > 0d0 .and. nu <= nn / 8d0 ) then
+      convex = .true.
+      do k = 1, 4
+        k1 = mod(k,4) + 1
+        w = dot_product ( Cross3 ( e(:,k), e(:,k1) ), n )
+        epsw = 2d0 * ne(k) * ne(k1) * ( CW * U * nn + nu )
+        if ( .not. ( w >= epsw ) ) convex = .false.
+      enddo
+      if ( convex ) then
+        g = abs ( dot_product ( t, n ) ) / ( 2d0 * nn )
+        eps = 2d0 * ( U * ( ne(1) + ne(3) ) + 9d0 * U * nt + nt * nu / nn )
+        ghat = min ( ghat, g + eps )
+        fast = fast .or. g <= 8d0 * U * m + eps
+      end if
+    end if
+
+    ! Conditioning of the four triangles in the coordinates local to c1
+    do k = 1, 4
+      vl(:,k) = c(:,k) - c(:,1)
+    enddo
+    cl = vl
+    mc = 0.25d0 * ( cl(:,1) + cl(:,2) + cl(:,3) + cl(:,4) )
+    fan_ok = .true.
+    do k = 1, 4
+      u1 = cl(:,k) - mc
+      u2 = cl(:,mod(k,4)+1) - mc
+      if ( .not. ( Vnorm ( u1 ) * Vnorm ( u2 ) < CONDMAX * Vnorm ( Cross3 ( u1, u2 ) ) ) ) fan_ok = .false.
+    enddo
+
+  end subroutine Face_Fast_Test
+
+
+  !> Distance from the point p to the bilinear face with corners c(:,1:4) in cyclic order, x(s,t) = c1 + s a + t b + s t T
+  !> (a = c2 - c1, b = c4 - c1, T = c1 - c2 + c3 - c4, s and t in [0,1]): its global minimum, certified within
+  !> tau = 256 u S, S = |p - c1| + |a| + |b| + |T|, u = 2^-53 (docs/theory/turbulence.md, Wall distance). Branch and bound
+  !> over rectangles of (s,t), depth first, with a stack of fixed size:
+  !>  - upper bound best: the distance to points of the face, its four sides (closed form), the centre of each piece and
+  !>    projected Newton steps (from the best point of a 5 x 5 grid, and at the end from the best point);
+  !>  - lower bound of a piece with corners V00, V10, V11, V01: the larger of the distance to its two triangles across
+  !>    V00-V11 less |T_P|/4 (T_P the twist of the piece: piece and triangles are within |T_P|/4 of each other), and the
+  !>    distance to the convex hull of its four corners, which holds the piece; both less proven bounds of their rounding
+  !>    (Tri_Dist_Lb, Orient);
+  !>  - a piece is dropped when its lower bound is within tau of best, resolved when the distance to its centre is, and
+  !>    otherwise split in two across its longer side in space; at most 128 levels.
+  !> d = best, the distance to a point of the face, within tau + 32 u S of the minimum when no piece is cut at the deepest
+  !> level; cert = best less the least lower bound of the pieces left (at most tau then), ncut the pieces cut at that level,
+  !> npiece the pieces visited. The coordinates local to c1 are differences rounded once, as written (VOLATILE, as in
+  !> Compute_Metric_Tensor), and every quantity of the bounds derives from them; not pure (C1589).
+  subroutine Bilinear_Face_Distance ( p, c, d, cert, ncut, npiece )
+    implicit none
+    real(R8), intent(in)            :: p(3), c(3,4)
+    real(R8), intent(out)           :: d
+    real(R8), intent(out), optional :: cert
+    integer,  intent(out), optional :: ncut, npiece
+    ! Local
+    real(R8), parameter :: U = epsilon(1d0) / 2d0, KTAU = 256d0
+    integer,  parameter :: MAXLEV = 128, MAXSTK = MAXLEV + 8
+    real(R8), volatile  :: vq(3), va(3), vb(3), ve(3)
+    real(R8) :: q(3), a(3), b(3), e(3), t(3), nt, scale, tau, best, bs, bt, zero(3), v(3,4), lb, lbmin, ub, ls, lt, h2
+    real(R8) :: pm0(3), pm1(3), kv(3,4,2), klb(2), ks(2), kt(2), khs(2), kht(2), s0, t0, hs, ht, dd, xg(3), si, ti
+    real(R8) :: sk_s0(MAXSTK), sk_t0(MAXSTK), sk_hs(MAXSTK), sk_ht(MAXSTK), sk_lb(MAXSTK), sk_v(3,4,MAXSTK)
+    integer  :: sk_lev(MAXSTK), nsk, lev, i, j, kk, nc, npc, ncu, o1, o2
+
+    vq = p - c(:,1)
+    va = c(:,2) - c(:,1)
+    vb = c(:,4) - c(:,1)
+    ve = c(:,3) - c(:,1)
+    q = vq
+    a = va
+    b = vb
+    e = ve
+    t = e - a - b
+    nt = Vnorm ( t )
+    scale = Vnorm ( q ) + Vnorm ( a ) + Vnorm ( b ) + nt
+    tau = KTAU * U * scale
+    zero = 0d0
+
+    ! Upper bound: the four sides, then projected Newton from the best point of a 5 x 5 grid
+    best = min ( Point_Segment_Distance ( q, zero, a ), Point_Segment_Distance ( q, a, e ), &
+                 Point_Segment_Distance ( q, e, b ), Point_Segment_Distance ( q, b, zero ) )
+    bs = 0.5d0
+    bt = 0.5d0
+    dd = huge ( 1d0 )
+    s0 = 0d0
+    t0 = 0d0
+    do j = 0, 4
+      do i = 0, 4
+        si = 0.25d0 * i
+        ti = 0.25d0 * j
+        xg = Bil ( si, ti )
+        if ( Vnorm ( xg - q ) < dd ) then
+          dd = Vnorm ( xg - q )
+          s0 = si
+          t0 = ti
+        end if
+      enddo
+    enddo
+    call Polish ( s0, t0 )
+
+    ! Branch and bound
+    v(:,1) = zero
+    v(:,2) = a
+    v(:,3) = e
+    v(:,4) = b
+    npc = 1
+    ncu = 0
+    lbmin = huge ( 1d0 )
+    nsk = 1
+    sk_s0(1) = 0d0
+    sk_t0(1) = 0d0
+    sk_hs(1) = 1d0
+    sk_ht(1) = 1d0
+    sk_lev(1) = 0
+    sk_v(:,:,1) = v
+    sk_lb(1) = Lower ( 1d0, 1d0, v, best - tau )
+    do while ( nsk > 0 )
+      s0 = sk_s0(nsk)
+      t0 = sk_t0(nsk)
+      hs = sk_hs(nsk)
+      ht = sk_ht(nsk)
+      lev = sk_lev(nsk)
+      v = sk_v(:,:,nsk)
+      lb = sk_lb(nsk)
+      nsk = nsk - 1
+      if ( lb >= best - tau ) then
+        lbmin = min ( lbmin, lb )
+        cycle
+      end if
+      ub = Vnorm ( Bil ( s0 + 0.5d0 * hs, t0 + 0.5d0 * ht ) - q )
+      if ( ub < best ) then
+        best = ub
+        bs = s0 + 0.5d0 * hs
+        bt = t0 + 0.5d0 * ht
+      end if
+      if ( ub - lb <= tau .or. lev >= MAXLEV ) then
+        if ( lev >= MAXLEV .and. ub - lb > tau ) ncu = ncu + 1
+        lbmin = min ( lbmin, lb )
+        cycle
+      end if
+      ! split in two across the longer side in space (the longer of its two sides along s against the longer along t)
+      ls = max ( Vnorm ( v(:,2) - v(:,1) ), Vnorm ( v(:,3) - v(:,4) ) )
+      lt = max ( Vnorm ( v(:,4) - v(:,1) ), Vnorm ( v(:,3) - v(:,2) ) )
+      if ( ls >= lt ) then
+        h2 = 0.5d0 * hs
+        pm0 = Bil ( s0 + h2, t0 )
+        pm1 = Bil ( s0 + h2, t0 + ht )
+        ks = [ s0, s0 + h2 ]
+        kt = [ t0, t0 ]
+        khs = h2
+        kht = ht
+        kv(:,1,1) = v(:,1)
+        kv(:,2,1) = pm0
+        kv(:,3,1) = pm1
+        kv(:,4,1) = v(:,4)
+        kv(:,1,2) = pm0
+        kv(:,2,2) = v(:,2)
+        kv(:,3,2) = v(:,3)
+        kv(:,4,2) = pm1
+      else
+        h2 = 0.5d0 * ht
+        pm0 = Bil ( s0, t0 + h2 )
+        pm1 = Bil ( s0 + hs, t0 + h2 )
+        ks = [ s0, s0 ]
+        kt = [ t0, t0 + h2 ]
+        khs = hs
+        kht = h2
+        kv(:,1,1) = v(:,1)
+        kv(:,2,1) = v(:,2)
+        kv(:,3,1) = pm1
+        kv(:,4,1) = pm0
+        kv(:,1,2) = pm0
+        kv(:,2,2) = pm1
+        kv(:,3,2) = v(:,3)
+        kv(:,4,2) = v(:,4)
+      end if
+      nc = 0
+      do kk = 1, 2
+        klb(kk) = Lower ( khs(kk), kht(kk), kv(:,:,kk), best - tau )
+        npc = npc + 1
+      enddo
+      ! the child with the larger lower bound goes on the stack first, so the smaller one is taken first
+      o1 = 1
+      o2 = 2
+      if ( klb(1) < klb(2) ) then
+        o1 = 2
+        o2 = 1
+      end if
+      do kk = 1, 2
+        nc = merge ( o1, o2, kk == 1 )
+        if ( klb(nc) >= best - tau ) then
+          lbmin = min ( lbmin, klb(nc) )
+          cycle
+        end if
+        if ( nsk >= MAXSTK ) then            ! not reached (the stack holds at most one more piece per level)
+          ncu = ncu + 1
+          lbmin = min ( lbmin, klb(nc) )
+          cycle
+        end if
+        nsk = nsk + 1
+        sk_s0(nsk) = ks(nc)
+        sk_t0(nsk) = kt(nc)
+        sk_hs(nsk) = khs(nc)
+        sk_ht(nsk) = kht(nc)
+        sk_lev(nsk) = lev + 1
+        sk_v(:,:,nsk) = kv(:,:,nc)
+        sk_lb(nsk) = klb(nc)
+      enddo
+    enddo
+    call Polish ( bs, bt )
+
+    d = best
+    if ( present(cert) ) cert = best - min ( lbmin, best )
+    if ( present(ncut) ) ncut = ncu
+    if ( present(npiece) ) npiece = npc
+
+  contains
+
+    !> Point (s, t) of the face, in the local coordinates
+    function Bil ( s, tt ) result ( x )
+      real(R8), intent(in) :: s, tt
+      real(R8)             :: x(3)
+      x = s * a + tt * b + ( s * tt ) * t
+    end function Bil
+
+    !> Projected Newton steps on |x(s,t) - q|^2 from (sa, ta), clamped to the unit square: they only lower best
+    subroutine Polish ( sa, ta )
+      real(R8), intent(in) :: sa, ta
+      real(R8) :: sc, tc, s1, t1, r(3), xs(3), xt(3), g1, g2, h11, h22, h12, det, ds, dt, d1, lam
+      integer  :: it
+      sc = sa
+      tc = ta
+      do it = 1, 30
+        r = Bil ( sc, tc ) - q
+        xs = a + tc * t
+        xt = b + sc * t
+        g1 = dot_product ( r, xs )
+        g2 = dot_product ( r, xt )
+        h11 = dot_product ( xs, xs )
+        h22 = dot_product ( xt, xt )
+        h12 = dot_product ( xs, xt ) + dot_product ( r, t )
+        det = h11 * h22 - h12 * h12
+        if ( det > 0d0 .and. h11 > 0d0 ) then
+          ds = - ( h22 * g1 - h12 * g2 ) / det
+          dt = - ( h11 * g2 - h12 * g1 ) / det
+        else
+          lam = max ( h11, h22, 1d-300 )
+          ds = - g1 / lam
+          dt = - g2 / lam
+        end if
+        if ( .not. ( abs ( ds ) <= 2d0 .and. abs ( dt ) <= 2d0 ) ) then
+          ds = sign ( min ( abs ( ds ), 2d0 ), ds )
+          dt = sign ( min ( abs ( dt ), 2d0 ), dt )
+          if ( .not. ( abs ( ds ) <= 2d0 .and. abs ( dt ) <= 2d0 ) ) exit      ! not a number
+        end if
+        s1 = min ( max ( sc + ds, 0d0 ), 1d0 )
+        t1 = min ( max ( tc + dt, 0d0 ), 1d0 )
+        d1 = Vnorm ( Bil ( s1, t1 ) - q )
+        if ( d1 < best ) then
+          best = d1
+          bs = s1
+          bt = t1
+        end if
+        if ( abs ( s1 - sc ) + abs ( t1 - tc ) < 4d0 * U ) exit
+        sc = s1
+        tc = t1
+      enddo
+    end subroutine Polish
+
+    !> Lower bound of the distance from q to the piece of sides hs, ht and corners vv (V00, V10, V11, V01). When the
+    !> bound (a) already reaches thr, the threshold at which the piece is dropped, it is returned alone: the decisions of
+    !> the search, and so the distance, are those of the larger of (a) and (b) (only the certificate can be larger, and
+    !> stays within tau)
+    function Lower ( hs_, ht_, vv, thr ) result ( lbo )
+      real(R8), intent(in) :: hs_, ht_, vv(3,4), thr
+      real(R8) :: lbo, da1, da2, db1, db2, lbs, lbh, o, eo, oi, ei, amax, thick, sg, w(3,4)
+      integer  :: k
+      logical  :: outside
+      da1 = Tri_Dist_Lb ( q, vv(:,1), vv(:,2), vv(:,3) )
+      da2 = Tri_Dist_Lb ( q, vv(:,1), vv(:,3), vv(:,4) )
+      ! (a) the two triangles across V00-V11, within |T_P|/4 = |T| hs ht / 4 of the piece
+      lbs = min ( da1, da2 ) - 0.25d0 * nt * hs_ * ht_ * ( 1d0 + 16d0 * U )
+      if ( lbs >= thr ) then
+        lbo = lbs
+        return
+      end if
+      db1 = Tri_Dist_Lb ( q, vv(:,1), vv(:,2), vv(:,4) )
+      db2 = Tri_Dist_Lb ( q, vv(:,2), vv(:,3), vv(:,4) )
+      ! (b) the convex hull of the four corners: 0 unless q is certainly outside it (a sub-determinant certainly of the
+      ! sign opposite to the whole); a hull flat to the rounding lies within its thickness of the four triangles
+      call Orient ( vv(:,1), vv(:,2), vv(:,3), vv(:,4), o, eo )
+      if ( .not. ( abs ( o ) > eo ) ) then
+        amax = 0.5d0 * max ( Vnorm ( Cross3 ( vv(:,2) - vv(:,1), vv(:,3) - vv(:,1) ) ), &
+                             Vnorm ( Cross3 ( vv(:,3) - vv(:,1), vv(:,4) - vv(:,1) ) ), &
+                             Vnorm ( Cross3 ( vv(:,2) - vv(:,1), vv(:,4) - vv(:,1) ) ), &
+                             Vnorm ( Cross3 ( vv(:,3) - vv(:,2), vv(:,4) - vv(:,2) ) ) )
+        thick = 0d0
+        if ( amax > 0d0 ) thick = ( abs ( o ) + eo ) / ( 2d0 * amax )
+        lbh = min ( da1, da2, db1, db2 ) - thick
+      else
+        sg = sign ( 1d0, o )
+        outside = .false.
+        do k = 1, 4
+          w = vv
+          w(:,k) = q
+          call Orient ( w(:,1), w(:,2), w(:,3), w(:,4), oi, ei )
+          if ( sg * oi < - ei ) outside = .true.
+        enddo
+        lbh = 0d0
+        if ( outside ) lbh = min ( da1, da2, db1, db2 )
+      end if
+      lbo = max ( lbs, lbh )
+    end function Lower
+
+  end subroutine Bilinear_Face_Distance
+
+
+  !> A lower bound of the distance from p to the triangle abc in binary64: the distance of Point_Triangle_Distance less a
+  !> bound of its rounding, every operation within 2u (docs/theory/turbulence.md, Wall distance). Where the triangle has a
+  !> plane, n = (b - a) x (c - a): (32 cond + 20) u (|p - a| + e), cond = |b - a| |c - a| / |n|, e the longest side.
+  !> Where Point_Triangle_Distance takes its sides (|n| at most 1e-12 e^2): every point of the triangle lies within its
+  !> height |n| / e over the longest side, so that height plus 16 u e + 20 u (|p - a| + e); on the border between the two
+  !> (|n|^2 within a factor 4 of the threshold, where the two evaluations of n may fall on either side), the larger of the
+  !> two; three corners on one point, 20 u |p - a|.
+  pure function Tri_Dist_Lb ( p, a, b, c ) result ( d )
+    implicit none
+    real(R8), intent(in) :: p(3), a(3), b(3), c(3)
+    real(R8)             :: d
+    ! Local
+    real(R8), parameter :: U = epsilon(1d0) / 2d0
+    real(R8) :: ab(3), ac(3), n(3), n2, e2, pa, e, mplane, mside
+
+    ab = b - a
+    ac = c - a
+    n = Cross3 ( ab, ac )
+    n2 = dot_product ( n, n )
+    e2 = max ( dot_product ( ab, ab ), dot_product ( c - b, c - b ), dot_product ( ac, ac ) )
+    pa = Vnorm ( p - a )
+    e = sqrt ( e2 )
+    d = Point_Triangle_Distance ( p, a, b, c )
+    mplane = 0d0
+    if ( n2 > 0d0 ) mplane = ( 32d0 * Vnorm ( ab ) * Vnorm ( ac ) / sqrt ( n2 ) + 20d0 ) * U * ( pa + e )
+    mside = 20d0 * U * pa
+    if ( e2 > 0d0 ) mside = sqrt ( n2 ) / e + 16d0 * U * e + 20d0 * U * ( pa + e )
+    if ( n2 > 4d0 * ( 1d-12 * e2 )**2 ) then
+      d = d - mplane
+    else if ( n2 > 0.25d0 * ( 1d-12 * e2 )**2 ) then
+      d = d - max ( mplane, mside )
+    else
+      d = d - mside
+    end if
+
+  end function Tri_Dist_Lb
+
+
+  !> o = det [b - a, c - a, d - a] and eo, a bound of its rounding, every operation within 2u: 32 u |b - a| |c - a| |d - a|
+  pure subroutine Orient ( a, b, c, d, o, eo )
+    implicit none
+    real(R8), intent(in)  :: a(3), b(3), c(3), d(3)
+    real(R8), intent(out) :: o, eo
+    ! Local
+    real(R8), parameter :: U = epsilon(1d0) / 2d0
+    real(R8) :: u1(3), u2(3), u3(3)
+
+    u1 = b - a
+    u2 = c - a
+    u3 = d - a
+    o = dot_product ( u1, Cross3 ( u2, u3 ) )
+    eo = 32d0 * U * Vnorm ( u1 ) * Vnorm ( u2 ) * Vnorm ( u3 )
+
+  end subroutine Orient
+
+
+  !> |v| = sqrt(v . v), a sum of squares and a root: within 5u of the length, every operation within 2u
+  pure function Vnorm ( v ) result ( r )
+    implicit none
+    real(R8), intent(in) :: v(3)
+    real(R8)             :: r
+
+    r = sqrt ( dot_product ( v, v ) )
+
+  end function Vnorm
+
+
+  !> The four triangles of wall face i of Compute_Yn between the mean of its corners and its sides, in the coordinates local
+  !> to its first corner (differences rounded once, VOLATILE): the distance from (x,y,z) for the filter of the second pass
+  !> of Wall_Distance_Blk, whose margin (Filter_Margin) covers their rounding at that scale (not pure: C1589).
+  function Local_Fan_Distance ( i, x, y, z ) result ( d )
+    implicit none
+    integer, intent(in)  :: i
+    real(R8), intent(in) :: x, y, z
+    real(R8)             :: d
+    ! Local
+    real(R8), volatile :: vq(3), vc(3,4)
+    real(R8) :: q(3), cl(3,4), mc(3)
+    integer  :: k
+
+    vq = [ x, y, z ] - wall_corner(:,1,i)
+    do k = 1, 4
+      vc(:,k) = wall_corner(:,k,i) - wall_corner(:,1,i)
+    enddo
+    q = vq
+    cl = vc
+    mc = 0.25d0 * ( cl(:,1) + cl(:,2) + cl(:,3) + cl(:,4) )
+    d = min ( Point_Triangle_Distance ( q, mc, cl(:,1), cl(:,2) ), Point_Triangle_Distance ( q, mc, cl(:,2), cl(:,3) ), &
+              Point_Triangle_Distance ( q, mc, cl(:,3), cl(:,4) ), Point_Triangle_Distance ( q, mc, cl(:,4), cl(:,1) ) )
+
+  end function Local_Fan_Distance
+
+
+  !> Local_Fan_Distance of wall face i from (x,y,z) through the table of the point (fanc_*): the value met for this face in
+  !> the image wall_image of the same point, when the table holds it, else computed and kept. Either way the same function of
+  !> the face and the point (the second pass of a point queries the points of the first). Linear probing from a hash of the
+  !> face and the image; a slot of another point is free.
+  function Fan_Cached ( i, x, y, z ) result ( d )
+    implicit none
+    integer, intent(in)  :: i
+    real(R8), intent(in) :: x, y, z
+    real(R8)             :: d
+    ! Local
+    integer :: h, k, hk, slot
+
+    h = mod ( mod ( i, FANC ) * 31 + mod ( wall_image, FANC ) * 977, FANC )
+    slot = -1
+    do k = 0, FANC - 1
+      hk = mod ( h + k, FANC )
+      if ( fanc_tag(hk) /= fanc_now ) then
+        slot = hk
+        exit
+      end if
+      if ( fanc_face(hk) == i .and. fanc_img(hk) == wall_image ) then
+        d = fanc_val(hk)
+        return
+      end if
+    enddo
+    d = Local_Fan_Distance ( i, x, y, z )
+    if ( slot >= 0 ) then
+      fanc_tag(slot) = fanc_now
+      fanc_face(slot) = i
+      fanc_img(slot) = wall_image
+      fanc_val(slot) = d
+    end if
+
+  end function Fan_Cached
+
+
+  !> Margin of the filter of the second pass for wall face i seen from (x,y,z): 2^-30 (|q - m| + r), m the mean of the
+  !> corners and r the radius of the face. It covers the rounding of Local_Fan_Distance on triangles whose angle at the mean
+  !> has 1/sin below 1e5, 3 (25 . 1e5 + 16) u (|q - m| + r), that of the local coordinates, and the 288 u S of the certified
+  !> minimum (S <= |q - m| + 9 r); it widens the set of the faces computed, not the result.
+  pure function Filter_Margin ( i, x, y, z ) result ( mg )
+    implicit none
+    integer, intent(in)  :: i
+    real(R8), intent(in) :: x, y, z
+    real(R8)             :: mg
+
+    mg = 2d0**(-30) * ( Vnorm ( [ x, y, z ] - wall_corner(:,0,i) ) + wall_radius(i) )
+
+  end function Filter_Margin
+
+
+  !> First pass of Wall_Distance_Blk: an upper bound of the distance from (x,y,z) to wall face i. On a face of the fast path
+  !> its distance (its four triangles); on another, the four triangles in local coordinates plus ghat and the margin; huge
+  !> when those triangles are too ill-conditioned for the margin (the face is then computed in the second pass anyway).
+  function Wall_Upper_Distance ( i, x, y, z ) result ( d )
+    implicit none
+    integer, intent(in)  :: i
+    real(R8), intent(in) :: x, y, z
+    real(R8)             :: d
+
+    if ( wall_fast(i) ) then
+      d = Wall_Face_Distance ( i, x, y, z )
+    else if ( wall_fan_ok(i) ) then
+      d = Fan_Cached ( i, x, y, z ) + wall_ghat(i) + Filter_Margin ( i, x, y, z )
+    else
+      d = huge ( 1d0 )
+    end if
+
+  end function Wall_Upper_Distance
+
+
+  !> Second pass of Wall_Distance_Blk: the distance from (x,y,z) to wall face i (Wall_Face_Exact), or huge when the face
+  !> cannot be nearer than min(wall_upper, wall_least), the bound of the first pass and the least distance computed so far
+  !> in this pass: its four triangles in local coordinates, less ghat and the margin, are farther. Both are at least the
+  !> minimum when the second pass ends with a face (wall_least always; wall_upper, else the pass is made again with no
+  !> bound), so the face of the minimum is never left out, whatever the order of the search. A face of the fast path is
+  !> always computed.
+  function Wall_Exact_Distance ( i, x, y, z ) result ( d )
+    implicit none
+    integer, intent(in)  :: i
+    real(R8), intent(in) :: x, y, z
+    real(R8)             :: d
+
+    if ( .not. wall_fast(i) .and. wall_fan_ok(i) ) then
+      if ( Fan_Cached ( i, x, y, z ) - wall_ghat(i) - Filter_Margin ( i, x, y, z ) > &
+           min ( wall_upper, wall_least ) ) then
+        d = huge ( 1d0 )
+        return
+      end if
+    end if
+    d = Wall_Face_Exact ( i, x, y, z )
+    wall_least = min ( wall_least, d )
+
+  end function Wall_Exact_Distance
+
+
+  !> Distance from (x,y,z) to wall face i of Compute_Yn: its four triangles on a face of the fast path (Wall_Face_Distance:
+  !> the face to the resolution of its coordinates, or the meridional segment on a wedge), the certified minimum over the
+  !> bilinear face otherwise (Bilinear_Face_Distance).
+  function Wall_Face_Exact ( i, x, y, z ) result ( d )
+    implicit none
+    integer, intent(in)  :: i
+    real(R8), intent(in) :: x, y, z
+    real(R8)             :: d
+
+    if ( wall_fast(i) ) then
+      d = Wall_Face_Distance ( i, x, y, z )
+    else
+      call Bilinear_Face_Distance ( [ x, y, z ], wall_corner(:,1:4,i), d )
+    end if
+
+  end function Wall_Face_Exact
+
 
 
   pure function Cross3 ( u, v ) result ( w )
@@ -2182,8 +2792,9 @@ contains
   end subroutine BC_Connect_Metrics
 
 
-  !> The walls of the wall distance: heat flux (301), temperature (302), the SRM grain (502: a wall that blows gas in, with
-  !> the wall values of a smooth wall for the turbulence variables), gas-surface interaction (503-505).
+  !> The walls of the wall distance: coupled to another solver (103, 104), heat flux (301), temperature (302), the SRM grain
+  !> (502: a wall that blows gas in, with the wall values of a smooth wall for the turbulence variables), gas-surface
+  !> interaction (503-505).
   function Is_Wall(type) result (ans)
       implicit none
       integer, intent(in) :: type
