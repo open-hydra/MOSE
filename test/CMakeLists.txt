@@ -265,7 +265,8 @@ mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D"
 # test/fast/output-files, run one after the other by
 # test/fast/output-files/run.sh.
 # Wall output: a vtk raw run with no-slip walls ends, and every wall file has
-# the extent, the points and the cell values of its face.
+# the extent, the points and the cell values of its face; wall.vtm lists one
+# file for each wall face, all written.
 # VTK outputs (field, wall, diagnostic) are well-formed XML with the right names.
 # vtk raw outputs (field and diagnostic, steady and time-accurate) hold raw
 # appended data in every block file, as sol-format asks.

@@ -120,4 +120,4 @@ jobs:
           PRTE_MCA_rmaps_default_mapping_policy: ":oversubscribe"
         run: >
           ctest --test-dir build --output-on-failure --timeout 900
-          --label-regex needs-mpi
+          --label-regex needs-mpi --no-tests=error

@@ -93,17 +93,20 @@ run() {
   mv OUTPUT "runs/$label"
 }
 
-# same <label-a> <label-b> <glob...>: every listed output file byte-identical
+# same <label-a> <label-b> <glob...>: every listed output file byte-identical; each glob must match a file of run a
+# (a file missing from run b fails cmp), so that a file one run does not write is not skipped
 same() {
-  local a="$1" b="$2" f n=0; shift 2
+  local a="$1" b="$2" f m n=0; shift 2
   for f in "$@"; do
+    m=0
     for x in runs/"$a"/$f; do
       [[ -f "$x" ]] || continue
-      n=$((n + 1))
+      m=$((m + 1))
       cmp -s "$x" "runs/$b/${x#runs/$a/}" || { echo "  differs: ${x#runs/$a/} ($a vs $b)"; return 1; }
     done
+    [[ $m -gt 0 ]] || { echo "  nothing compared: no $f in $a ($a vs $b)"; return 1; }
+    n=$((n + m))
   done
-  [[ $n -gt 0 ]] || { echo "  nothing compared ($a vs $b)"; return 1; }
   echo "  identical: $a vs $b ($n files)"
 }
 

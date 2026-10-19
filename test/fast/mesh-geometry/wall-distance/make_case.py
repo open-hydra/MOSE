@@ -739,7 +739,7 @@ def measured(name, path):
         for i in range(1, ni + 1):
             n = (j - 1) * ni + (i - 1)
             rhs = data["rhoNuTilde"][n] / data["dt"][n]
-            d = math.sqrt(RHO * NUT * NUT * f / rhs) if rhs < 0.0 else float("nan")
+            d = math.sqrt(RHO * NUT * NUT * f / rhs) if rhs < 0.0 else float("inf")
             out[(i, j)] = (d,) + geo[(i, j)]
     return out
 

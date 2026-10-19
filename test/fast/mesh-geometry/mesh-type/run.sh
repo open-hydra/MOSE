@@ -188,7 +188,7 @@ python3 -B make_case.py case mixed || exit 1
 euler_input 1
 "$LOCAL" > OUTPUT/mixed.log 2>&1
 rc=$?
-if [[ $rc -ne 0 ]] && grep -a -q 'Mesh type' OUTPUT/mixed.log; then
+if [[ $rc -ne 0 ]] && grep -a -q '\[ERROR\] Mesh type' OUTPUT/mixed.log; then
   echo "  [ok  ] mixed: stopped at set-up, exit code $rc"
 else
   echo "  [FAIL] mixed: exit code $rc, the run was not stopped on the mesh type (see OUTPUT/mixed.log)"
