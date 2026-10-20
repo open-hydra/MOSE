@@ -53,44 +53,46 @@ nightly/local tier.
 
 Cases of [`docs/vv`](../docs/vv/index.md) count as tested in this map only when CTest runs them. For every case
 folder: its CTest test, which fails when the criterion fails, or outside CTest; the reference data; the criterion
-of the case:
+of the case; the result. A case in CTest has the result of its CTest test. A case outside CTest has the result of a
+run of its folder (its `MOSE.sh`, `input.ini` and script) with MOSE of commit `10b59003b72c`: *passes* or *fails*
+against its criterion, *runs* where it has none (the run ends with exit status 0):
 
-| Case (`test/`) | Page (`docs/vv/`) | CTest | Reference | Criterion |
-|---|---|---|---|---|
-| `1D/Sod79` | `1D.md` | `Sod79` | analytic solution (Sod 1978) | `check.py` |
-| `1D/Ein91` | `1D.md` | `Einfeldt91` | analytic solution (ExactPack) | `verify.py` |
-| `1D/Noh87` | `1D.md` | `Noh87` | analytic solution (ExactPack) | `verify.py` |
-| `1D/Tor99` | `1D.md` | `Toro99` | analytic solution (ExactPack) | `verify.py` |
-| `1D/Shu-Osher` | `1D.md` | `ShuOsher`, `ShuOsherConvergence` | MOSE solution on N = 1600 (`reference/`) | `verify.py`, `convergence.py` (F8, P5) |
-| `2D/euler/prandtl-meyer` | — | `PrandtlMeyer` | analytic Prandtl–Meyer expansion | `check.py` |
-| `2D/euler/isentropic-vortex` | `2D-isentropic-vortex.md` | `IsentropicVortex` | exact solution | `verify.py` (N1) |
-| `2D/viscous/mms` | `2D-mms.md` | `MMSViscous` | manufactured solution | `verify.py` (N2) |
-| `2D/viscous/mms/skewed` | `2D-mms-skewed.md` | `MMSViscousSkewed` | manufactured solutions | `verify.py` (N2) |
-| `3D/viscous/mms` | `3D-mms.md` | `MMSViscous3D`, `MMSViscous3DFull` | manufactured solutions | `verify.py` (N2) |
-| `2D/viscous/planar-nozzle` | `2D-planar-nozzle-grids.md` | `PlanarNozzleGrids` | mirror symmetry of O and H grids | `verify.py` (N8) |
-| `2D/viscous/ablating-wall` | `2D-ablating-wall.md` | `AblatingWall` | closed form of the wall state | `run.sh` (P1) |
-| `1D/Fer14` | `1D-fer14.md` | outside | digitized velocity and temperature profiles (`reference/*.csv`) | none: `verify.py` plots |
-| `1D/diff1` | `1D-diffusion.md` | outside | Cantera (`reference/reference_unity_lewis.py`); MOSE fields in `reference/` | none: no verifier in the folder |
-| `1D/diff2` | `1D-multicomponent-diffusion.md` | outside | Cantera (`reference/reference_multicomponent.py`); MOSE fields in `reference/` | none: no verifier in the folder |
-| `1D/premixed-flame` | `1D-premixed-flame.md` | outside | Cantera free flame (`reference/flame_phi_1.0.csv`) | none: `verify.py` prints and plots |
-| `2D/euler/chang-nozzle` | — | outside | Mach on the axis and at the wall (`reference/ref1.dat`, `ref2.dat`) | none: `verify.py` plots |
-| `2D/euler/gresho-vortex` | `2D-gresho-vortex.md` | outside | the initial vortex, a steady solution | none: `verify.py` prints and plots |
-| `2D/euler/hypersonic-cylinder` | `2D-hypersonic-cylinder.md` | outside | normal-shock relations at the stagnation line | none: `verify.py` prints and plots |
-| `2D/euler/oblique-shock` | `2D-oblique-shock.md` | outside | oblique-shock relations | `verify.py`: p2/p1, T2/T1, ρ2/ρ1 and M2 within 1.5 % for each solver |
-| `2D/euler/ramp-channel` | — | outside | oblique-shock relations | none: `verify.py` plots |
-| `2D/euler/rocket-nozzle/frozen` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`); `reference/field.tec` | none: `../verify.py` plots |
-| `2D/euler/rocket-nozzle/finite-rate` | `2D-nozzle.md` | outside | `reference/field.tec` | `verify.py`: p, ρ, u, v and γ at the throat within a relative 1e-3 |
-| `2D/euler/rocket-nozzle/equilibrium` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`); `reference/field.tec` | none: `../verify.py` plots |
-| `2D/euler/supersonic-forward-step` | `2D-woodward-colella.md` | outside | OpenFOAM solution (`reference/OpenFOAM/`) | none: `verify.py` prints L2 and L∞ differences |
-| `2D/viscous/flat-plate-laminar` | `2D-flat-plate-laminar.md` | outside | Blasius solution, computed by `verify.py` | `verify.py` prints PASS for an RMS c_f error below 2.5 % at x ≥ 0.05 m; its exit code is 0 either way |
-| `2D/viscous/flat-plate-turbulent/SA` | `2D-flat-plate-turbulent.md` | outside | c_f of CFL3D (`reference/cf.dat`) | `verify.py`: RMS c_f error below 5 % |
-| `2D/viscous/flat-plate-turbulent/SST` | `2D-flat-plate-turbulent.md` | outside | c_f of FUN3D (`reference/cf.dat`) | `verify.py`: RMS c_f error below 8 % |
-| `2D/viscous/flat-plate-turbulent/Wilcox2006` | `2D-flat-plate-turbulent.md` | outside | c_f of CFL3D (`reference/cf.dat`) | `verify.py`: RMS c_f error below 8 % |
-| `2D/viscous/swbli/SA` | `2D-swbli.md` | outside | Schülein experiment; SU2, Wind-US, OpenFOAM (`reference/`) | none: no verifier; its initial condition is a binary Tecplot file (TecIO) |
-| `2D/viscous/swbli/SST` | `2D-swbli.md` | outside | as SA | as SA |
-| `3D/coriolis-channel` | `rotating-frame.md` | outside | — | none: no verifier |
-| `3D/pressure-centrifugal` | `rotating-frame.md` | outside | closed-form isentropic solution of the page | none: no verifier |
-| `3D/hyshotII` | `3D-hyshotII.md` | outside | wall pressure of the experiment and of TAU with SA (`reference/`) | none: no verifier; mesh and initial condition in binary Tecplot (TecIO) |
+| Case (`test/`) | Page (`docs/vv/`) | CTest | Reference | Criterion | Result |
+|---|---|---|---|---|---|
+| `1D/Sod79` | `1D.md` | `Sod79` | analytic solution (Sod 1978) | `check.py` | CTest |
+| `1D/Ein91` | `1D.md` | `Einfeldt91` | analytic solution (ExactPack) | `verify.py` | CTest |
+| `1D/Noh87` | `1D.md` | `Noh87` | analytic solution (ExactPack) | `verify.py` | CTest |
+| `1D/Tor99` | `1D.md` | `Toro99` | analytic solution (ExactPack) | `verify.py` | CTest |
+| `1D/Shu-Osher` | `1D.md` | `ShuOsher`, `ShuOsherConvergence` | MOSE solution on N = 1600 (`reference/`) | `verify.py`, `convergence.py` (F8, P5) | CTest |
+| `2D/euler/prandtl-meyer` | — | `PrandtlMeyer` | analytic Prandtl–Meyer expansion | `check.py` | CTest |
+| `2D/euler/isentropic-vortex` | `2D-isentropic-vortex.md` | `IsentropicVortex` | exact solution | `verify.py` (N1) | CTest |
+| `2D/viscous/mms` | `2D-mms.md` | `MMSViscous` | manufactured solution | `verify.py` (N2) | CTest |
+| `2D/viscous/mms/skewed` | `2D-mms-skewed.md` | `MMSViscousSkewed` | manufactured solutions | `verify.py` (N2) | CTest |
+| `3D/viscous/mms` | `3D-mms.md` | `MMSViscous3D`, `MMSViscous3DFull` | manufactured solutions | `verify.py` (N2) | CTest |
+| `2D/viscous/planar-nozzle` | `2D-planar-nozzle-grids.md` | `PlanarNozzleGrids` | mirror symmetry of O and H grids | `verify.py` (N8) | CTest |
+| `2D/viscous/ablating-wall` | `2D-ablating-wall.md` | `AblatingWall` | closed form of the wall state | `run.sh` (P1) | CTest |
+| `1D/Fer14` | `1D-fer14.md` | outside | digitized velocity and temperature profiles (`reference/*.csv`) | none: `verify.py` plots | runs |
+| `1D/diff1` | `1D-diffusion.md` | outside | Cantera (`reference/reference_unity_lewis.py`); MOSE fields in `reference/` | none: no verifier in the folder | runs |
+| `1D/diff2` | `1D-multicomponent-diffusion.md` | outside | Cantera (`reference/reference_multicomponent.py`); MOSE fields in `reference/` | none: no verifier in the folder | runs |
+| `1D/premixed-flame` | `1D-premixed-flame.md` | outside | Cantera free flame (`reference/flame_phi_1.0.csv`) | none: `verify.py` prints and plots | runs |
+| `2D/euler/chang-nozzle` | — | outside | Mach on the axis and at the wall (`reference/ref1.dat`, `ref2.dat`) | none: `verify.py` plots | runs |
+| `2D/euler/gresho-vortex` | `2D-gresho-vortex.md` | outside | the initial vortex, a steady solution | none: `verify.py` prints and plots | runs |
+| `2D/euler/hypersonic-cylinder` | `2D-hypersonic-cylinder.md` | outside | normal-shock relations at the stagnation line | none: `verify.py` prints and plots | runs |
+| `2D/euler/oblique-shock` | `2D-oblique-shock.md` | outside | oblique-shock relations | `verify.py`: p2/p1, T2/T1, ρ2/ρ1 and M2 within 1.5 % for each solver | fails: HLLC T2/T1 error 1.94 % and M2 error -3.21 % (threshold 1.5 %); HLLC+Tramel, HLLE and SLAU within 0.80 % |
+| `2D/euler/ramp-channel` | — | outside | oblique-shock relations | none: `verify.py` plots | runs |
+| `2D/euler/rocket-nozzle/frozen` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`); `reference/field.tec` | none: `../verify.py` plots | runs |
+| `2D/euler/rocket-nozzle/finite-rate` | `2D-nozzle.md` | outside | `reference/field.tec` | `verify.py`: p, ρ, u, v and γ at the throat within a relative 1e-3 | passes |
+| `2D/euler/rocket-nozzle/equilibrium` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`); `reference/field.tec` | none: `../verify.py` plots | runs |
+| `2D/euler/supersonic-forward-step` | `2D-woodward-colella.md` | outside | OpenFOAM solution (`reference/OpenFOAM/`) | none: `verify.py` prints L2 and L∞ differences | runs |
+| `2D/viscous/flat-plate-laminar` | `2D-flat-plate-laminar.md` | outside | Blasius solution, computed by `verify.py` | `verify.py` prints PASS for an RMS c_f error below 2.5 % at x ≥ 0.05 m; its exit code is 0 either way | passes: RMS c_f error 2.26 % |
+| `2D/viscous/flat-plate-turbulent/SA` | `2D-flat-plate-turbulent.md` | outside | c_f of CFL3D (`reference/cf.dat`) | `verify.py`: RMS c_f error below 5 % | passes: RMS c_f error 0.77 % |
+| `2D/viscous/flat-plate-turbulent/SST` | `2D-flat-plate-turbulent.md` | outside | c_f of FUN3D (`reference/cf.dat`) | `verify.py`: RMS c_f error below 8 % | passes: RMS c_f error 0.95 % |
+| `2D/viscous/flat-plate-turbulent/Wilcox2006` | `2D-flat-plate-turbulent.md` | outside | c_f of CFL3D (`reference/cf.dat`) | `verify.py`: RMS c_f error below 8 % | passes: RMS c_f error 0.50 % |
+| `2D/viscous/swbli/SA` | `2D-swbli.md` | outside | Schülein experiment; SU2, Wind-US, OpenFOAM (`reference/`) | none: no verifier; its initial condition is a binary Tecplot file (TecIO) | runs |
+| `2D/viscous/swbli/SST` | `2D-swbli.md` | outside | as SA | as SA | runs |
+| `3D/coriolis-channel` | `rotating-frame.md` | outside | — | none: no verifier | runs |
+| `3D/pressure-centrifugal` | `rotating-frame.md` | outside | closed-form isentropic solution of the page | none: no verifier | runs |
+| `3D/hyshotII` | `3D-hyshotII.md` | outside | wall pressure of the experiment and of TAU with SA (`reference/`) | none: no verifier; it needs a build with TecIO, for its binary Tecplot mesh and initial condition (`ic-format = tecplot binary`), and an initial condition built with ATLAS ICB from the `[ICB-*]` sections of its `input.ini` (`INPUT/` holds none) | — |
 
 ---
 
