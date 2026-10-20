@@ -26,6 +26,12 @@
 #                 point changes at every stage.
 #  On 2 and 4 ranks the blocks of each case sit on different ranks, so the
 #  faces between them, and the shared points, are between ranks.
+#  The end line of the 400 faces with gas entering (the flux evaluations,
+#  summed over ranks and threads, and the largest -w1/a1, the maximum over
+#  them) must also be that of 1x1, character for character, and so must the
+#  lines of the gas entering through each 400 boundary, which the rank that
+#  owns the block prints (sorted: the ranks print in any order), with at
+#  least one where the end line counts evaluations with gas entering.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -118,6 +124,29 @@ same() {
   echo "  identical: $c 1x1 vs $b ($n files)"
 }
 
+# entering <case> <label>: the end line of the 400 faces with gas entering of runs/<case>/solve_<label>.log, once, the same as
+# that of 1x1
+entering() {
+  local c="$1" b="$2" l1 lb
+  l1=$(grep -a '400 faces with gas entering' "runs/$c/solve_1x1.log")
+  lb=$(grep -a '400 faces with gas entering' "runs/$c/solve_$b.log")
+  [[ -n $l1 && $(printf '%s\n' "$l1" | wc -l) -eq 1 && $l1 == "$lb" ]] \
+    || { echo "  400 end lines differ: $c 1x1 [$l1] vs $b [$lb]"; return 1; }
+  echo "  same 400 end line: $c 1x1 vs $b [${l1# }]"
+}
+
+# lines <case> <label>: the lines of the gas entering through each 400 boundary of runs/<case>/solve_<label>.log, sorted, the
+# same as those of 1x1; at least one where the end line of 1x1 counts evaluations with gas entering
+lines() {
+  local c="$1" b="$2" f1 fb n
+  f1=$(grep -a '^ 400 boundary of block ' "runs/$c/solve_1x1.log" | sort)
+  fb=$(grep -a '^ 400 boundary of block ' "runs/$c/solve_$b.log" | sort)
+  n=$(grep -a '400 faces with gas entering' "runs/$c/solve_1x1.log" | sed -n 's/.*flux evaluations: *\([0-9]*\),.*/\1/p')
+  [[ $f1 == "$fb" && ( ${n:-0} -eq 0 || -n $f1 ) ]] \
+    || { echo "  400 lines of the gas entering: $c 1x1 [$f1] vs $b [$fb]; evaluations on 1x1: ${n:-0}"; return 1; }
+  echo "  same 400 lines of the gas entering: $c 1x1 vs $b ($(printf '%s\n' "$f1" | grep -c 'boundary') lines)"
+}
+
 status=0
 for c in sa-steady sst-steady sa-unsteady star3 star5; do
   make_inputs "$c" || fail "case generation ($c)"
@@ -126,6 +155,8 @@ for c in sa-steady sst-steady sa-unsteady star3 star5; do
   for cfg in $LAYOUTS; do
     run "$c" "${cfg%x*}" "${cfg#*x}"
     same "$c" "$cfg" || status=1
+    entering "$c" "$cfg" || status=1
+    lines "$c" "$cfg" || status=1
   done
 done
 
@@ -133,5 +164,5 @@ if [[ $status -ne 0 ]]; then
   echo "MPIBitIdentity: FAIL"
   exit 1
 fi
-echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks: 1x1, 1x4, 2x1, 4x1 and 2x2 bit-identical"
+echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks: 1x1, 1x4, 2x1, 4x1 and 2x2 bit-identical, with the same 400 lines and end line"
 exit 0

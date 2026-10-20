@@ -2,8 +2,8 @@
 #===============================================================================
 #  Boundary conditions (fast tier)
 #
-#  Boundary conditions: inlets, the records of bc.txt, walls, and walls in a
-#  rotating frame.
+#  Boundary conditions: inlets, the records of bc.txt, walls, walls in a
+#  rotating frame, and extrapolation faces and the gas entering through them.
 #
 #  One part per folder, each with its own case and checks, described at
 #  the head of its run.sh; each part runs in its folder, as CTest runs a
@@ -13,13 +13,15 @@
 #    RotatingFrame (rotating-frame): stationary walls of a rotating frame
 #    WallHeatSign (wall-heat-sign): sign of the wall heat flux and wall
 #      stress
+#    Extrapolation400 (extrapolation-400): extrapolation faces (400) and the
+#      lines of the gas entering through them
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(inlets bc-input rotating-frame wall-heat-sign)
+PARTS=(inlets bc-input rotating-frame wall-heat-sign extrapolation-400)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

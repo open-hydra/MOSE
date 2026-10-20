@@ -130,7 +130,7 @@ contains
               endif
 
             case (400) ! extrapolation
-              call BC_Extrapolation ( Im, Jm, Km, Fm, domain % blk(Bm) )
+              call BC_Extrapolation ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
 
             case (401) ! inlet: T0 + p0 (stagnation conditions)
               call BC_Inlet_StagnCond ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
@@ -304,6 +304,10 @@ contains
 
       enddo faces
     enddo blocks
+
+    ! The lines of the gas entering through 400 faces at this stage, before the source terms and the update of the cells
+    ! (after the implicit barrier of the last loop above: the loops over the records have no nowait)
+    call Report_400_Entering_Lines ()
 
   end subroutine BC_Fluxes
 

@@ -190,6 +190,13 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # Sign of the wall heat flux: q_wall of a wall 301 is positive into the fluid on
 # every face (the same wall on both sides of a channel heats it alike), and the
 # wall output writes qw as k grad T . n along the face normal (301 and 302).
+# Extrapolation faces (400): one step in a tube of air, the flux of each 400
+# face from the change of its cell, the flux of the cell state for either
+# direction of the gas; the lines of the gas entering through a 400 boundary,
+# the first one and one at each factor of 10 of its largest |w|/a, and the
+# end line of the evaluations with gas entering, also in a run that stops at
+# its first stage and with 1 and 4 threads on a face of 130 records; no end
+# line in a case without 400 faces.
 mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;physics;1D;2D")
 
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
@@ -430,7 +437,9 @@ if(USE_MPI)
     # The same output bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads: a
     # 2x2-block box with walls, inlets and outlets, Spalart-Allmaras and SST
     # steady with implicit residual smoothing, Spalart-Allmaras time-accurate,
-    # and the points shared by 3 and by 5 blocks of ViscousLinearPatch.
+    # and the points shared by 3 and by 5 blocks of ViscousLinearPatch; the
+    # lines of the gas entering through each 400 boundary and the end line of
+    # the 400 faces with gas entering the same as on 1x1.
     mose_add_mpi_script(MPIBitIdentity mpi/bit-identity "needs-mpi;implementation;2D;3D")
 
     # MPI calls only from the main thread (MPI_THREAD_FUNNELED): a probe

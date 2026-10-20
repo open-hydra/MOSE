@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Extrapolation faces (`400`) report the gas that enters the domain through them, which they let in with the state of the
+  boundary cell, as they take the flux of the cell state for either direction of the gas. The first time the gas enters
+  through the `400` faces of one face of a block (on each grid level), the run prints a line with the iteration, the faces and
+  the largest |w|/a among them (w the velocity of the gas of the cell along the normal out of the domain, a its speed of
+  sound), and one more each time that largest value at a stage is more than 10 times that of the last line; at the end of a
+  run whose case has `400` faces, the flux evaluations where the gas entered and their largest |w|/a. The flux of the faces
+  does not change.
 - The key `diffusive-metric` of `[MOSE-Numerics]` chooses the face metric of the viscous fluxes: `stencil`, the default, from the
   same differences of the cell centres that the face gradient takes of the field (see Changed); `inverse-mean`, the inverse of the
   mean of the inverse metrics of the two cells, whose face-normal edge is the vector between the cell centres; or `mean`, the mean

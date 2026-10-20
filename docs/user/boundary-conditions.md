@@ -112,6 +112,32 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 | `300` | Symmetry / slip wall | — |
 | `400` | Extrapolation | — |
 
+!!! note "Extrapolation (400)"
+    A `400` face needs no data: it takes the flux of the state of its boundary cell, $\mathbf{F}(q_1)\cdot\mathbf{n}\,A$,
+    whatever the direction of the gas. Where the gas of the boundary cell moves into the domain, it enters with the state of that
+    cell: the characteristics that enter take the values of the cell, not data from outside, so a `400` face keeps any uniform
+    inflow going by itself, whether the case wants it (the inlet of a truncated domain whose state outside is that of its
+    boundary cells) or not (a free boundary through which the flow draws gas in, a plenum fed through its outlet). Where the gas
+    outside has a known state, use an inlet (`401`–`405`, `408`, `410`), or the ambient `407` where the surroundings can push
+    gas into the domain.
+
+    The run says where the gas enters through `400` faces. The first time it enters through the `400` faces of one face of a
+    block (on each grid level), the run prints one line with the block, the face (and the grid level, with more than one),
+    the iteration, the faces through which the gas enters at that stage and the largest $|w|/a$ among them, $w$ the velocity
+    of the gas of the boundary cell along the normal out of the domain and $a$ its speed of sound. Each time the largest
+    $|w|/a$ of that boundary at a stage is more than 10 times that of its last line, one more line follows, with that value
+    and the faces above 10 times the last one: a boundary has at most one line for each order of magnitude that its inflow
+    grows, not one for each stage. The lines are written at the end of the boundary fluxes of their stage, before the cells
+    are updated, so a run that then stops on an error has them in its output. At the end of a run whose case has `400` faces,
+    one more line reports the flux evaluations of `400` faces where the gas entered, over the stages, grid levels and ranks,
+    and the largest $|w|/a$ among them (0 when no gas entered); a run that stops on an error does not print it. The lines do
+    not say whether or when the inflow ends; the end line says how many flux evaluations it lasted. After a restart the lines
+    and the end line count from the restart, with the iteration of the restarted run. $|w|/a$ of about $10^{-9}$ or less:
+    only round-off moves the gas towards the domain, as on the side faces of 1-D cases; from $10^{-6}$ to $10^{-3}$: small
+    motions towards the domain, such as the numerical oscillations next to a shock or a junction between blocks, or a weak
+    flow across the face; from $10^{-2}$ up: the gas really enters, at the inlet of a truncated domain or where the flow
+    draws gas in through a free boundary.
+
 !!! note "Axisymmetry (200)"
     With one cell in $k$, type `200` on faces 5 and 6 makes the mesh a 2-D axisymmetric wedge: the two faces lie at
     $\theta = \mp\delta/2$ and the ghost cell across each is the cell rotated by $\pm\delta$ about the $x$ axis. The
