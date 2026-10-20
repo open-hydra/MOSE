@@ -71,6 +71,15 @@ finest pair is the Van Leer limiter mildly clipping the smooth vortex core.
   {% include "vv/images/IsentropicVortex.svg" %}
 </figure>
 
+!!! note "Figure and code version"
+    The figure and the table come from July 2026 (commit `0b3b3c64`), and the code of 13 October 2026
+    (commit `b29130b`) gives them again. MOSE at commit `10b59003b72c` takes a time step about half as
+    large here (one additive rule over the directions, commit `667fc3c0`), and its runs end at
+    $t = 10.002$, $10.013$ and $10.007$: `verify.py` gives 2.49 %, 0.61 % and 0.17 % (observed orders
+    2.04 and 1.84), 2.4 % of the range of the axes from the figure at $N = 64$. Against the exact vortex
+    at the time each run ends, the errors are 2.49 %, 0.562 % and 0.128 % (observed orders 2.15 and
+    2.13), within 0.5 % of those of `b29130b`.
+
 ## Limiter choice and observed order
 
 The case fixes the **Van Leer** limiter on purpose. Only the *smooth* limiters

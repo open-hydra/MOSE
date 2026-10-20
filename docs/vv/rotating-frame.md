@@ -83,4 +83,14 @@ The reference state $(p_{\rm ref}, T_{\rm ref})$ at $r_{\rm ref}$ is fixed by to
 
 The fluid does not come fully to rest. A tangential velocity remains in the cell rows next to hub and shroud, up to 1.9 m/s at the shroud against a rim speed $\omega r_{\rm out} = 15$ m/s, and about 0.08 m/s in the core; it grows slowly with the iterations and goes with the 2 % deficit in the pressure rise.
 
+!!! note "Numbers and code version"
+    The numbers of the table and of the paragraph above come from October 2026 (commit `546f99d1`), and
+    the code of 13 October 2026 (commit `b29130b`) gives again the pressure rise, the residual and the
+    tangential velocities (111.4 Pa, $5.5\times10^{-9}$, 1.9 m/s and 0.08 m/s). MOSE at commit
+    `10b59003b72c` gives, at 200 000 iterations, a pressure rise of 112.7 Pa, relative $L_2$ errors of
+    $1.6\times10^{-5}$ ($p$) and $1.4\times10^{-5}$ ($T$), a total mass $2.4\times10^{-6}$ above the
+    initial one, a density residual of $4.4\times10^{-9}$, and 1.66 m/s at the shroud and 0.054 m/s in
+    the core; the ranges of $p$ and $T$ move by about 1 Pa and 0.002 K. The change comes from the commits
+    between `b29130b` and `10b59003b72c`.
+
 **Sensitivity note.** At $\omega = 100$ rad/s the rim Mach number is $\omega r_{\rm out}/\sqrt{\gamma R T} \approx 0.04$, giving a pressure variation of only $\sim 0.1\%$ across the annulus. Verification at this setting requires tight residual convergence and a precise mass-conservation pinning of $p_{\rm ref}$; running at higher $\omega$ (e.g. 1000 rad/s, $\sim 10\%$ variation) gives the comparison more dynamic range.

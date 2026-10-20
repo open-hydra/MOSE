@@ -57,6 +57,15 @@ MOSE solutions compared across four Riemann solvers in terms of non-dimensional 
   {% include "vv/images/HC-slice.svg" %}
 </figure>
 
+!!! note "Figure and code version"
+    The figure comes from the first upload of MOSE (May 2026, commit `ab2bf537`). MOSE at commit
+    `10b59003b72c` moves the HLLC, HLLE and SLAU curves by 8.9 %, 3.2 % and 7.3 % of the range of the
+    axes, and the HLLC+Tramel curve by 0.8 %. With any of the four solvers,
+    and also with the code of 13 October 2026 (commit `b29130b`), the solution does not settle at the
+    stagnation point: the error of $p_0$ in the cell where `verify.py` reads the stagnation state changes
+    by up to 7.7 points between 5000, 10 000 and 20 000 iterations, and by 9.2 points between two builds
+    (GNU 12.2 RELEASE with MPI on the cluster and gfortran 13 TESTING without MPI).
+
 All Riemann solvers capture the fundamental shock structure, but exhibit varying levels of accuracy in preserving a smooth post-shock region. In particular, the HLLC solver shows significant oscillations in the shock layer, while HLLC+ and HLLE provide smoother solutions. The SLAU solver demonstrates an intermediate behavior with moderate oscillations.
 
 The density profile along the cylinder wall confirms the overall behavior previously observed.

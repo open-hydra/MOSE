@@ -181,6 +181,13 @@ The comparison is therefore closed in both directions: OpenFOAM given MOSE's def
 
 For SA the four codes agree within 5.3-7.4 mm. For SST, MOSE and OpenFOAM solving the same model agree to 0.12 mm - one cell - while **SU2 and Wind-US differ from each other by a factor of two on the same quantity** (7.9 against 16.6 mm). Every grid-, boundary-condition- and model-determined quantity matches, and the residual is the expected footprint of two different convective schemes.
 
+!!! note "Figure and code version"
+    The MOSE curves and numbers of this page come from August and October 2026 (commits `29f68b4e` and
+    `0db7c838`). MOSE at commit `10b59003b72c` moves the MOSE skin friction by 7.9 % of the range of the axes with SA and by 1.1 %
+    with SST, and the SST wall pressure by 0.4 %; the separation bubble becomes 7.0 mm with SA and
+    15.7 mm with SST, and the mean $|C_f|$ differences from OpenFOAM become 1.4 %, 0.6 % and 0.8 % with
+    SA and 0.3 %, 3.3 % and 0.8 % with SST.
+
 ---
 
 ## Validation: against experiment, Wind-US and SU2

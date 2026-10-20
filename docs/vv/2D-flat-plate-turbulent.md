@@ -106,5 +106,22 @@ For each turbulence model, MOSE computes the wall shear stress distribution alon
    Wilcox k-ω
 </figure>
 
+!!! note "Figure and code version"
+    The figures come from July 2026 (commit `bd7ce104`), and the code of 13 October 2026 (commit
+    `b29130b`) gives them again, within 0.2 % of the range of the axes with SST and 0.4 % with Wilcox
+    2006. MOSE at commit `10b59003b72c` moves the SST curve by 1.8 % and the Wilcox 2006 curve by 1.7 % of
+    that range.
 
+    - SST: the curve moves at three commits, by 0.4 %, 1.1 % and 3.0 % of the range of the axes, steps
+      that partly cancel: the viscous face metric, from the mean of the metrics of the two cells to the
+      inverse of the mean of their inverses (commit `208f6f14`); the point-implicit factor of the
+      turbulence equations, which now divides their whole increment (commit `2cc7bc91`; before it the
+      steady state depended on the local time step); the face metric from the differences of the cell
+      centres (commit `000d28a12`, measured as the switch of `diffusive-metric` at `10b59003b72c`). A bisection over the commits between `b29130b` and `10b59003b72c`
+      finds no other step above 0.1 %.
+    - Wilcox 2006: with the inverse-mean face metric of commit `208f6f14`
+      (`diffusive-metric = inverse-mean`) the curve is within 0.5 % of the figure, so most of the change
+      comes from the face metric of commit `000d28a12`.
 
+    These numbers compare the skin friction after the 100 000 iterations of the inputs; the change of the
+    time step rule alone (commit `667fc3c0`) moves the SST curve by 0.01 %.

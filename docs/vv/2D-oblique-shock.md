@@ -57,4 +57,10 @@ The transversal density profile normalized with the analytical solution is plott
   {% include "vv/images/OS-slice.svg" %}
 </figure>
 
+!!! note "Figure and code version"
+    The figure comes from the first upload of MOSE (May 2026, commit `ab2bf537`): its code, with the
+    input of that time (MUSCL-SD reconstruction) and 3000 iterations, reproduces it within 0.22 % of the
+    range of the axes. MOSE at commit `10b59003b72c` moves the three profiles compared, HLLC, HLLC+Tramel
+    and SLAU, by 103 %, 76 % and 117 % of that range.
+
 The HLLE solver produces a quite uniform flow with density matching the analytical solution very closely. In contrast, HLLC exhibits errors up to 10% compared to the theoretical value, while HLLC+ remains slightly unstable with oscillations of approximately 2% around the analytical density.
