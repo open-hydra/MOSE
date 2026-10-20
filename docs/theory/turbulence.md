@@ -549,7 +549,8 @@ limiter (below): TMR's Wilcox2006-klim, in its "e" form (Wilcox2006-klim-e) unle
 $$
 \mu_t = \frac{\rho\,k}{\hat\omega}, \qquad
 \hat\omega = \max\!\left(\omega,\;
-  C_\text{lim}\,\frac{\sqrt{2\,S_{ij}\,S_{ij}}}{\beta^\ast}\right)
+  C_\text{lim}\,\sqrt{\frac{2\,\bar S_{ij}\,\bar S_{ij}}{\beta^\ast}}\right), \qquad
+\bar S_{ij} = S_{ij} - \tfrac{1}{3}\,\frac{\partial u_k}{\partial x_k}\,\delta_{ij}
 $$
 
 The limiter $C_\text{lim}$ prevents excessive eddy viscosity in regions
@@ -583,12 +584,13 @@ as the same page advises for this model.
 
 ### Cross-diffusion *(conditional)*
 
-Cross-diffusion is included only when $\nabla k\!\cdot\!\nabla\omega \le 0$:
+Cross-diffusion is included only when $\nabla k\!\cdot\!\nabla\omega > 0$:
 
 $$
 \text{CD} = \frac{\sigma_d\,\rho}{\omega}\,
-  (\nabla k\!\cdot\!\nabla\omega)
-\qquad \text{if } \nabla k\!\cdot\!\nabla\omega \le 0
+  (\nabla k\!\cdot\!\nabla\omega), \qquad
+\sigma_d = \tfrac{1}{8} \ \text{if } \nabla k\!\cdot\!\nabla\omega > 0, \qquad
+\sigma_d = 0 \ \text{if } \nabla k\!\cdot\!\nabla\omega \le 0
 $$
 
 ### Production limiter
