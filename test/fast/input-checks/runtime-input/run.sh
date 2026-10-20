@@ -324,7 +324,7 @@ for c in "model:none:1 1:the model cannot change" "face:rigid-body:1 3:the stati
   IFS=: read -r tag model face msg <<< "$c"
   during "runs/frame-$tag" "$model" 1.0e4 "$face"
   if [[ $first != yes || $late == yes ]]; then
-    echo "  FAIL — $tag: the change did not come between iterations 10 and 20 (host too slow to poll)"; status=1
+    echo "  FAIL — $tag: the change did not come between iterations 7 and 20 (host too slow to poll)"; status=1
   elif [[ $last == 20 ]] && command grep -q "$msg during the run" "runs/frame-$tag/solve.log"; then
     echo "  ok — $tag: the run stopped at iteration 20: $(command grep -m1 'ERROR\] Rotating frame' "runs/frame-$tag/solve.log" | cut -c1-90)…"
   else
@@ -334,7 +334,7 @@ for c in "model:none:1 1:the model cannot change" "face:rigid-body:1 3:the stati
 done
 during runs/frame-axis rigid-body 1.0e4 '1 1' 'NaN 0.0 0.0'
 if [[ $first != yes || $late == yes ]]; then
-  echo "  FAIL — axis: the change did not come between iterations 10 and 20 (host too slow to poll)"; status=1
+  echo "  FAIL — axis: the change did not come between iterations 7 and 20 (host too slow to poll)"; status=1
 elif [[ $last == 20 ]] && \
      command grep -q 'a value of axis in input.ini read again is not finite (NaN or infinity)' runs/frame-axis/solve.log; then
   echo "  ok — axis: the run stopped at iteration 20: $(command grep -m1 'ERROR\] Rotating frame' runs/frame-axis/solve.log | cut -c1-90)…"
