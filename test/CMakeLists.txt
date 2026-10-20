@@ -764,3 +764,27 @@ mose_add_mr_group(MultirateIdentity 4500 identity "onelevel;threads;blocks;halo;
 # map rebuilt at every macro step and every 4, conservation over three restarts (restart).
 mose_add_mr_group(MultirateConservation 3000 conservation "conservation;restart"
                   "multirate;validation;implementation;numerics;1D;2D;3D")
+# N5: observed temporal order with levels (acoustic and entropy waves, isentropic vortex through three blocks, laminar
+# flat plate, skewed hot square, a wall on skewed cells whose levels change along it, the wall channel with
+# Spalart-Allmaras and SST) (order); 9 and 13 levels: order, conservation, stability over 2000 macro steps (deep). Here
+# order and deep run their short forms (the macro steps H0 and H0/2; with 13 levels only the conservation); their full
+# forms (MR_FORM=full) are MultirateOrderFull, label verification.
+mose_add_mr_group(MultirateOrder 3600 order "order;deep" "multirate;validation;numerics;1D;2D")
+# N5: time-dependent inlets 402 and 410 on the finest level, order in time at the inlet cells (bc); a simple wave whose
+# level boundaries travel with it, refined jointly in space and time, against the exact solution (moving-levels).
+mose_add_mr_group(MultirateOrderInletsMoving 1800 order-inlets-moving "bc;moving-levels" "multirate;validation;numerics;1D")
+if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/run_group.sh")
+    add_test(
+        NAME    MultirateOrderFull
+        COMMAND bash ./run_group.sh orderfull order deep
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate"
+    )
+    set_tests_properties(MultirateOrderFull PROPERTIES
+        LABELS      "multirate;verification;numerics;1D;2D"
+        TIMEOUT     14400
+        ENVIRONMENT "${_MOSE_TEST_ENV};MR_FORM=full"
+    )
+    #   the short and the full forms run in the same folders (mr-order, mr-deep) and remove their cases and runs at
+    #   the start: never at the same time (ctest -j)
+    set_tests_properties(MultirateOrder MultirateOrderFull PROPERTIES RESOURCE_LOCK mr-order-deep)
+endif()

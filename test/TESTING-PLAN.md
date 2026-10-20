@@ -289,6 +289,23 @@ checks of an entry of the smaller of two runs of each (shared 192-thread machine
   `tecplot ascii` (one and several blocks), output
   instants k·`sol-dtime` and `time-threshold` bit for bit, one residual row per macro step, mass drift ≤ 1e-12 over
   three restarts; with `recompute-every` 4 the cells per level change, and only at the macro steps 4 m + 1. ~6 min.
+- ☑ **N5 — Multirate temporal order** (`MultirateOrder` and `MultirateOrderInletsMoving`, validation; full forms in
+  `MultirateOrderFull`, verification):
+  with the levels fixed, observed order on the last pair L1 ≥ 1.9 (≥ 1.8 for the turbulent channels) and L∞ near the
+  faces between levels ≥ 1.8 (acoustic and entropy waves, isentropic vortex through three blocks, laminar plate, skewed
+  hot square, a wall on smoothly skewed cells whose levels change along it); 9 and 13 levels: the same order,
+  drift ≤ 1e-12, amplitude after 2000 macro steps ≤ 1.01 × the initial; in `MultirateOrderInletsMoving`, inlets 402
+  and 410 on the finest level: L∞ order at the inlet cells ≥ 1.8, u > 0 in those cells, and the first cell against the
+  table at the same time, at the peak of the data within half of the distance the table has moved from t = 0, at the
+  end of the run within the amplitude of the table, and a simple wave whose faces between levels travel
+  with it, refined jointly in space and time against the exact solution: L1 order on the last pair ≥ 1.9 with the map
+  rebuilt at every macro step, mass drift ≤ 1e-12. The short forms of the order checks judge the macro steps H0 and H0/2
+  against a reference step of dt_min/16, the full forms (`MR_FORM=full`) H0 … H0/8 against dt_min/64; with 13 levels the short
+  form checks the conservation only, the order and the stability run in the full form. The entropy wave passes the
+  first pair with L1 1.93 (threshold 1.9), with ifx and gfortran alike; a change of the spatial scheme or of the case
+  that lowers its ratio of the errors with H0 and H0/2 by about 2 % fails the short form, and the full form then
+  decides on the last pair. ~8 min and ~3 min; full forms ~68 min
+  (one run, gfortran 13.2 TESTING with Intel MPI).
 
 ---
 
