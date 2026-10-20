@@ -131,7 +131,7 @@ condition must fall back to an impermeable wall:
 |---|---|
 | Injected mass flux | exactly 0 |
 | Wall temperature | 800 K (the prescribed melting point) |
-| Wall heat flux | −1.17 × 10⁴ W/m² — the wall heats the gas |
+| Wall heat flux | +1.78 × 10⁴ W/m² into the gas (after the 8000 iterations of `melting-inert`) — the wall heats the gas |
 | Flow field | conduction layer developing, only weak expansion venting |
 
 ### Default Schmidt number
@@ -156,7 +156,8 @@ python3 build_case.py hdpe     # generate mesh / IC / BC by hand
 python3 verify.py
 ```
 
-The case is registered in the fast tier as `AblatingWall` (~8 s):
+The case is registered in the fast tier as `AblatingWall` (about 11 s of CPU time at one thread; see
+`test/TESTING-PLAN.md`, section 4):
 
 ```bash
 ctest -R AblatingWall --output-on-failure

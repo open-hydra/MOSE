@@ -6,7 +6,8 @@ their grid lines and in their smoothness. The geometry and the flow are
 mirror-symmetric about the centre line, while the four blocks of every grid have
 different index orientations: a discretisation that does not depend on the
 orientation of the indices keeps the solution mirror-symmetric at every
-iteration. The full study compares the families on three levels of refinement.
+iteration. The full form runs the families on three levels of refinement and
+writes the field of every run; this page gives the result of the short form.
 
 ## Problem setup
 

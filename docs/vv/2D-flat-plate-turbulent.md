@@ -76,7 +76,7 @@ The case runs at the Mach and Reynolds numbers of the TMR zero-pressure-gradient
 The reference curves of `verify.py` (`reference/cf.dat`) are TMR data:
 
 - **SA**: CFL3D on the finest grid (level 1 of 8) of the TMR *2D Finite Flat Plate* numerics case, whose grid extends upstream and downstream of the plate (`all_cf_global.dat`);
-- **SST**: FUN3D with SST-Vm (the name the TMR now gives to these results, first reported as SST-V) on the 545 × 385 grid cut into triangles (`cf_plate_fun3d_sstv_tri.dat`);
+- **SST**: FUN3D with SST-Vm (the name the TMR gives to these results, first reported as SST-V) on the 545 × 385 grid cut into triangles (`cf_plate_fun3d_sstv_tri.dat`);
 - **Wilcox 2006**: CFL3D with Wilcox2006-klim-m on the 545 × 385 grid (`cf_plate_w06.dat`, which also holds FUN3D).
 
 ## Results and verification
@@ -115,8 +115,8 @@ For each turbulence model, MOSE computes the wall shear stress distribution alon
     - SST: the curve moves at three commits, by 0.4 %, 1.1 % and 3.0 % of the range of the axes, steps
       that partly cancel: the viscous face metric, from the mean of the metrics of the two cells to the
       inverse of the mean of their inverses (commit `208f6f14`); the point-implicit factor of the
-      turbulence equations, which now divides their whole increment (commit `2cc7bc91`; before it the
-      steady state depended on the local time step); the face metric from the differences of the cell
+      turbulence equations on their whole increment (commit `2cc7bc91`; with the factor on the source
+      alone the steady state depended on the local time step); the face metric from the differences of the cell
       centres (commit `000d28a12`, measured as the switch of `diffusive-metric` at `10b59003b72c`). A bisection over the commits between `b29130b` and `10b59003b72c`
       finds no other step above 0.1 %.
     - Wilcox 2006: with the inverse-mean face metric of commit `208f6f14`

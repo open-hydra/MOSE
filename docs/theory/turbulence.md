@@ -189,14 +189,11 @@ Activated when compressibility effects on turbulence are significant
     $c$ from $c^2 f(c) = 25\,\Omega\,\tilde\nu f_{v1}/a$, with
     $f(c) = 0.44/(1 + 14c^5) + 0.56$, and multiplies the production by
     $f_1(c)\,f(c)$, with $f_1(c) = 0.6/(1 + 9c^6) + 0.4$: the left side is a
-    number and the right side a speed (the code divides by $a$, not by $a^2$
-    as written above), so the factor depends on the units. For
-    $\Omega = 10^3$ 1/s, $\nu_t = 10^{-3}$ m²/s and $a = 340$ m/s it is 0.99
-    with lengths in metres and 0.22 with lengths in millimetres; and since
-    $a$ only divides, at $\Omega = 10^5$ 1/s it cuts the production by 78 %
-    whatever the Mach number. Until the correction is checked against its
-    source (the article the code cites, doi:10.2514/2.3967) it is not
-    available: use `SA` or another model.
+    number and the right side a speed, so the factor depends on the unit of
+    length. For $\Omega = 10^3$ 1/s, $\nu_t = 10^{-3}$ m²/s and $a = 340$ m/s
+    it is 0.99 with lengths in metres and 0.22 with lengths in millimetres.
+    The correction (the code cites doi:10.2514/2.3967) is not available: use
+    `SA` or another model.
 
 #### SAR — Rotation Correction
 
@@ -269,12 +266,6 @@ differences of these positions: [Cell gradients of the source terms](#cell-gradi
 - Behind the other faces (walls, symmetry, inflow, outflow, chimera, mapped faces) the ghost cell
   holds a copy of the gradient of the cell and the metric takes the cell itself: the difference
   across the boundary cell is one-sided, a choice of the model.
-
-Before, every ghost cell held the copy: next to a face between blocks the cell took the one-sided
-difference (the half difference $(S_{c+1} - S_c)/2$ with the cell metric of `mean` and
-`inverse-mean`) where the undivided mesh takes the central one, so the result depended on the
-division into blocks (in the two columns of cells next to the face, on a column with a shear
-flow whose strain rate varies across it).
 
 ---
 
@@ -626,7 +617,7 @@ model. It adds a quadratic dependence on the rotation tensor to the modelled
 stress, improving the prediction of anisotropy-driven secondary flows
 (corner flows, square ducts) while reusing the eddy viscosity of the
 underlying model. The code takes it as a suffix of the model name
-(`-QCR2000`), but `turbulence` does not accept such a name today (its
+(`-QCR2000`), but `turbulence` does not accept such a name (its
 allowed values are listed in the [registry](../user/registry.md)), so no run
 uses it; the test `QCR2000Stress` checks the stress against the definition.
 
@@ -670,9 +661,8 @@ stage. The source terms read
 them in the gradients of the wall cells: the $c_{b2}$ term of SA and its term
 $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST, the
 cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of the wall
-cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell that copied the cell,
-as MOSE did before, gave $a/2$. Before, the wall flux routines wrote these values after the fluxes,
-for the sources only, and the fluxes saw an extrapolation of $\rho Z$. An SRM grain (`502`) takes the
+cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell that copied the cell
+would give $a/2$. An SRM grain (`502`) takes the
 same rule for its turbulence variables, with the wall values of its flux: those of the blowing wall while
 it burns, of the wall at the flame temperature when it does not.
 
@@ -700,7 +690,7 @@ of the cell whose velocity gradient the ghost cell holds, and the cell itself be
 (see SA-RC above).
 The metrics are computed once at setup (`Cell_Source_Metrics`) and chosen in one place
 (`Source_Metrics`) by the source terms of SA, SA-RC, SST, Wilcox 2006 and SSG/LRR and by the eddy
-viscosity of the output. With `inverse-mean` and `mean` the metric is that of the cell, as before:
+viscosity of the output. With `inverse-mean` and `mean` the metric is that of the cell:
 the central difference across a cell next to a jump of size $r$ is then wrong by $(r-1)/4$, on a
 skewed wall cell a copied density takes a normal gradient it does not have (part 5 of `MMSResiduals`),
 and next to a zero-gradient face the normal component is half the one-sided difference.
@@ -864,7 +854,7 @@ at the height $h$, 6 % for $t = h = 0.1$, 62 % for $t = 10^{-2}$ and
 $h = 10^{-3}$, and 62 times the distance for $t = 0.1$ and $h = 10^{-4}$. Such a
 face takes the certified minimum, and its distance is exact to the rounding.
 2-D and axisymmetric meshes are not affected: their wall faces are plane and
-take the four triangles, as before.
+take the four triangles.
 
 Tests `MeshGeometry`/`WallDistance` and `BilinearDistance`.
 
@@ -978,12 +968,6 @@ $$
 The two increments add up to $\Delta t\,(F_E + F_k)$, the fluxes of $E_m + k$ alone, at every stage, and
 the converged solution, $F_k + S_k = 0$ and $F_E = S_k$, does not depend on the time step.
 
-Up to this version the factor divided the source alone,
-$q^{n+1} = q^n + \Delta t\,\bigl(F + S/(1 + \Delta t\,d)\bigr)$, and the energy, with
-`k-energy-coupling = true`, took the sink of $k$ divided by the same factor: the converged solution,
-wall shear and heat flux included, depended on the local time step. Steady solutions computed with
-the default change accordingly, and so do those with the coupling.
-
 ```ini
 [MOSE-Turbulence]
 point-implicit = .true.   ; (default) point-implicit factor on the turbulence increment, steady runs
@@ -1018,7 +1002,7 @@ alone, without gradients or ghost cells:
 | SA | $2\,c_{w1}\,(1 + c_{w3}^6)^{1/6}\,\tilde\nu/y^2$ | $f_w = g\,[(1 + c_{w3}^6)/(g^6 + c_{w3}^6)]^{1/6}$ grows with $g \ge 0$ towards $(1 + c_{w3}^6)^{1/6} = 2.005$: $2.005/f_w$, 1 where $r$ reaches its cap of 10, about 2 where $r \approx 1$ (an equilibrium boundary layer, where the destruction is slow against the diffusion) |
 
 ($y$ the wall distance of the source, moved below a rough wall.) The Reynolds-stress model SSG/LRR,
-which the key `turbulence` does not select in this version, takes no bound: none was derived for its
+which the key `turbulence` does not select, takes no bound: none was derived for its
 sources, and its $\hat d$ is zero. Then
 $\Delta t\,d \le \Delta t\,\hat d \le 1$: a forward-Euler stage cannot make
 $\tilde\nu$, $k$ or $\omega$ negative through their destruction, and neither can Heun and RK3, whose

@@ -386,8 +386,8 @@ so that $\Delta t\,(4D_{\max}\sum_d|\nabla\xi_d|^2 + s_h) = 4\,\text{VNN}$. What
   its symmetric part is negative semidefinite, its eigenvalues are real to $6\cdot10^{-4}$, and the largest stable VNN with the
   local step is 0.500 to 0.577 with Heun and 0.628 to 0.725 with RK3, approaching the limits of the table, 1/2 and 0.62
   (0.628), from above for very long or very short cells; on the diffusion-dominated 1° wedge of the test `WedgeAxisStep`
-  (32 × 32 cells, 2000 local steps) the largest stable VNN is about 0.5 with Heun (0.508 to 0.519 on the final code of this
-  series) and 0.63 to 0.65 with RK3 for $dx/dr$ = 1, 4 and 8 at Prandtl numbers 0.72 and 0.9 (and 10 at $dx/dr$ = 4), and the
+  (32 × 32 cells, 2000 local steps) the largest stable VNN is about 0.5 with Heun (0.508 to 0.519)
+  and 0.63 to 0.65 with RK3 for $dx/dr$ = 1, 4 and 8 at Prandtl numbers 0.72 and 0.9 (and 10 at $dx/dr$ = 4), and the
   test runs 2000 steps at the limits and at the recommended values. The eigenvalue criterion can mislead for non-normal operators
   ([8], pp. 26–27).
 
@@ -455,7 +455,7 @@ the start of the step alone: $1/\Delta t_i$ gains the term $\hat d_i$, so that
 $\Delta t\,d_i \le \Delta t\,\hat d_i \le 1$ and no stage makes $\tilde\nu$, $k$ or $\omega$ negative through their
 destruction
 ([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)). The Reynolds-stress model SSG/LRR, which the key
-`turbulence` does not select in this version, has no such bound: its $\hat d_i$ is zero.
+`turbulence` does not select, has no such bound: its $\hat d_i$ is zero.
 
 !!! tip "CFL ramp-up"
 

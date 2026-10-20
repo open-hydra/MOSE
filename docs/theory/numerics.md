@@ -40,6 +40,10 @@ of each hexahedral cell. The numerical algorithm consists of the following steps
   computed at each face with a 10-point stencil and mapped to Cartesian
   coordinates using the face metric tensor.
 
+Faces of type `200` join the two $k$ faces of one block, turned about the $x$
+axis or translated (see
+[Rotational Periodicity and Axisymmetric Wedge](#rotational-periodicity-and-axisymmetric-wedge-type-200)).
+
 ### Cell volume
 
 A cell is the image of the unit cube by the trilinear map
@@ -84,31 +88,6 @@ coordinates: the differences pass through `VOLATILE` variables, because with
 `-ffast-math` the compiler may otherwise evaluate
 $(\mathbf{q} - \mathbf{c}_1) - (\mathbf{c}_2 - \mathbf{c}_1)$ as
 $\mathbf{q} - \mathbf{c}_2$ (test `VolatileOrder`).
-
-### Rotational periodicity (type 200)
-
-Type 200 on the $k$ faces closes a mesh that turns about the $x$ axis: an
-axisymmetric wedge (one cell in $k$) or a 3-D sector (several). The flow
-beyond face 5 is the flow next to face 6 turned back by the angle $\delta$
-of the wedge or sector, and the flow beyond face 6 the flow next to face 5
-turned forward. With $g = +1$ on face 5 and $g = -1$ on face 6, the ghost
-cell takes the state of its source cell (on a wedge the cell itself, on a
-sector the cell next to the opposite $k$ face of the same block, in the same
-column) with the velocity turned about $x$ by $\varphi = -g\,\delta$:
-
-$$
-v_g = v\cos\varphi - w\sin\varphi = v\cos\delta + g\,w\sin\delta, \qquad
-w_g = v\sin\varphi + w\cos\varphi = -g\,v\sin\delta + w\cos\delta .
-$$
-
-$u$ and the scalars do not change under a turn about $x$, and are copied.
-The ghost cells and the fluxes of these faces take $\cos\delta$ and
-$\sin\delta$ computed once, with $\delta$, when the mesh is read. The record
-of a face of type 200 names no other block: a block closed by type 200 holds
-the whole wedge or sector in $k$, a column of cells with type 200 on one of
-its $k$ faces has it on the other, and a record of type 200 that does not fit
-this stops the run at setup (see the note on type 200 in
-[Boundary Conditions](../user/boundary-conditions.md#euler-boundaries)).
 
 ---
 
@@ -363,9 +342,10 @@ meridional section, affine as above: the corners decide again. In 3-D the corner
 are a necessary condition only; a cell whose volume (*Cell volume*) has not the
 sign of the determinant at its centre is turned over somewhere, and stops the
 run at setup as well ($\det J$ has the sign of the block in every point of a
-cell that is not turned over, and so has its integral). The check runs on every multigrid
-level too, whose nodes are every other node of the level above, and a stop there
-names the level. Behind a face of zero
+cell that is not turned over, and so has its integral). These checks run on every
+multigrid level too, whose nodes are every other node of the level above: the stop of
+the corners names the level, the other stops give the block and the cell of that
+level. Behind a face of zero
 area (an axis) the ghost cells are the reflection of the first cell through the
 axis, whose determinant has the opposite sign by construction: their sign is
 not checked, and a wall on such a face stops as said below. The ghost values of a
@@ -426,7 +406,7 @@ and 1-D runs give the bits of `inverse-mean`. On a wedge the $k$ neighbours are
 the cell turned by $\mp\delta$, so the velocity differs across them, and that
 column, the mean edge of the cells, is the difference of the turned positions
 divided by $\cos^2(\delta/2)$: the error of order $\delta^2$ of the azimuthal
-derivatives (see *Axisymmetric Wedge*). The ghost cells in the stencil take the
+derivatives (see *Axisymmetric wedge* below). The ghost cells in the stencil take the
 position at which their value is right for a linear field:
 
 - faces between blocks (`101`, `201`): the centre of the cell across, plus the
@@ -682,10 +662,10 @@ Properties, for every mesh and in 3-D, with the hypotheses written:
 - **Positivity.** The ghost state has $\rho_s \ge 0$, $p > 0$, $T > 0$ and
   so $\rho > 0$; the extrapolation amplifies $q_1$ at most by $1 + s$. The
   temperature and the mass fractions are what the viscous fluxes take
-  differences of, so they must be those of a gas. Before, every primitive was
-  extrapolated as $3q_1 - 3q_2 + q_3$, which can be negative (density that
-  rises steeply away from a hot wall) and amplifies by 3 and 6 on the two
-  layers.
+  differences of, so they must be those of a gas. The extrapolation of every
+  primitive as $3q_1 - 3q_2 + q_3$, which the other types keep (below), can be
+  negative (density that rises steeply away from a hot wall) and amplifies by 3
+  and 6 on the two layers.
 - **Wall value.** For the first two classes without the floor, the value
   interpolated at the face centre, $(G_1 + q_1)/2$, is the wall value, for any
   profile (zero velocity, zero $k$, the model value of $\omega$). The floor
@@ -717,10 +697,8 @@ Properties, for every mesh and in 3-D, with the hypotheses written:
   where the pressure and the composition do not vary across the wall cell (a
   boundary layer), its relative error otherwise of the order of
   $\Delta l_1\,\theta\,|\nabla p|/p$, and the same for the composition.
-- **Fluxes and sources.** One set of ghost cells: the wall flux routines no
-  longer write ghost values (before, the turbulence variables after the fluxes,
-  and copies of the densities and of the pressure for the sources), and the
-  source terms take the positions of the table.
+- **Fluxes and sources.** One set of ghost cells: the wall flux routines write
+  no ghost values, and the source terms take the positions of the table.
 
 Where a limit acts the ghost value is no longer the value of the field at its
 position, and the gradients next to the face are first order there: it happens
@@ -755,7 +733,32 @@ Declared limits:
   flux of the grain (the blowing wall while it burns, the wall at the flame
   temperature when it does not).
 
-## Axisymmetric Wedge (BC 200)
+## Rotational Periodicity and Axisymmetric Wedge (Type 200)
+
+Type 200 on the $k$ faces closes a mesh that turns about the $x$ axis: an
+axisymmetric wedge (one cell in $k$) or a 3-D sector (several). The flow
+beyond face 5 is the flow next to face 6 turned back by the angle $\delta$
+of the wedge or sector, and the flow beyond face 6 the flow next to face 5
+turned forward. With $g = +1$ on face 5 and $g = -1$ on face 6, the ghost
+cell takes the state of its source cell (on a wedge the cell itself, on a
+sector the cell next to the opposite $k$ face of the same block, in the same
+column) with the velocity turned about $x$ by $\varphi = -g\,\delta$:
+
+$$
+v_g = v\cos\varphi - w\sin\varphi = v\cos\delta + g\,w\sin\delta, \qquad
+w_g = v\sin\varphi + w\cos\varphi = -g\,v\sin\delta + w\cos\delta .
+$$
+
+$u$ and the scalars do not change under a turn about $x$, and are copied.
+The ghost cells and the fluxes of these faces take $\cos\delta$ and
+$\sin\delta$ computed once, with $\delta$, when the mesh is read. The record
+of a face of type 200 names no other block: a block closed by type 200 holds
+the whole wedge or sector in $k$, a column of cells with type 200 on one of
+its $k$ faces has it on the other, and a record of type 200 that does not fit
+this stops the run at setup (see the note on type 200 in
+[Boundary Conditions](../user/boundary-conditions.md#euler-boundaries)).
+
+### Axisymmetric wedge
 
 A 2-D axisymmetric case is a wedge of the 3-D mesh: one cell in $k$, whose two
 $k$ faces lie in the meridional planes $\theta = \mp\delta/2$ and carry the
@@ -775,6 +778,9 @@ from the state of the cell:
   sector below); with `inverse-mean` and `mean`, the inverse-mean face metric of
   the cell and its image. Both are computed once at setup (they depend on the
   mesh only).
+
+On a planar 2-D mesh (faces 5 and 6 parallel, no wedge angle) type `200` makes
+the image the cell itself, and the fluxes of the two faces cancel.
 
 For an axisymmetric field the mass, energy and scalar fluxes of the two faces
 are equal and opposite, and only the momentum fluxes are applied. Without swirl
@@ -827,11 +833,13 @@ so the `vnn` limits of the rule hold next to the axis too; without them, at a
 Prandtl number of 10, the first rows broke down at the `vnn` the rule declares
 stable (test `WedgeAxisStep`).
 
+### 3-D sector
+
 On a 3-D sector (type `200` with more than one cell in $k$) faces 5 and 6
 make one interior face of the whole annulus, computed once, by the record of
-face 6, for the inviscid and for the viscous flux. Beyond face 6 lies the cell
-next to face 5 turned forward by the sector angle, a turn $R$ about $x$: the
-$i$ and $j$ differences of the image row are those of that row turned, the
+face 6, for the inviscid and for the viscous flux. The image beyond face 6 is
+the cell next to face 5 turned forward by $R$, the turn about $x$ by the sector
+angle: the $i$ and $j$ differences of the image row are those of that row turned, the
 metric of the image is that of its cell turned, $M R^{\mathsf T}$ (each row of
 $M = \partial\xi/\partial\mathbf{x}$ is a vector), and the wall distance and
 roughness of the face are the mean of the two cells, as on an interior face.
@@ -869,9 +877,7 @@ exactly at $r = 0$ stops at setup, as on the wedge, with every
 and with `inverse-mean` and `mean` the periodic faces of the first row of cells
 would see half of $\partial u_r/\partial r$ ($1/6$ of the hoop term in Homann's
 flow; with `stencil` $1.6\times10^{-6}$ next to the periodic faces, as with the
-axis at a small radius). Put the axis nodes at a small radius. On a planar 2-D mesh (faces 5 and 6 parallel, no wedge angle)
-type `200` makes the image the cell itself, and the fluxes of the two faces
-cancel.
+axis at a small radius). Put the axis nodes at a small radius.
 
 ## Faces Between Blocks
 
@@ -905,11 +911,9 @@ viscous flux of a face between blocks has its own stencil, below).
 
 With `preconditioning-Ur-smooth` greater than 0 the max-dilation of $U_r$ in a
 cell next to a face between blocks also sees the cell across the face, through
-the ghost cell, with its value at the start of the stage; before the flux of
-these faces was computed once, the ghost held $U_r = 0$ and the smoothing
-ignored that neighbour. Neither is the unsplit mesh, where the smoothing sees
-the new value of the neighbour, so with the smoothing on a split mesh does not
-give the fluxes of the unsplit one bit for bit.
+the ghost cell, with its value at the start of the stage. In the unsplit mesh
+the smoothing sees the new value of the neighbour, so with the smoothing on a
+split mesh does not give the fluxes of the unsplit one bit for bit.
 
 With `diffusive-metric = stencil` the viscous flux of a face between blocks is
 that of an interior face: one face gradient, from the cell, the ghost cell and
@@ -990,7 +994,11 @@ of the records or of the threads.
 12. CFL3D, `source/cfl3d/libs/gfluxv1.F` (cross-derivative terms of the viscous
     fluxes), https://github.com/nasa/CFL3D, commit 776d516; S. L. Krist,
     R. T. Biedron, C. L. Rumsey, *CFL3D User's Manual (Version 5.0)*,
-NASA/TM-1998-208444, 1998, App. C.2, p. 249 (the volume at a cell interface as the mean of its neighbours, for the thin-layer terms; the manual, p. 27,
-leaves out the cross-derivative terms, which gfluxv1.F adds). 13. H. Jasak, *Error Analysis and Estimation for the Finite Volume Method with Applications to
-Fluid Flows*, PhD thesis, Imperial College, University of London, 1996, Eq. (3.32). 14. D. J. Mavriplis, "Revisiting the Least-squares Procedure for
-Gradient Reconstruction on Unstructured Meshes," NASA/CR-2003-212683, 2003, p. 14.
+    NASA/TM-1998-208444, 1998, App. C.2, p. 249 (the volume at a cell interface
+    as the mean of its neighbours, for the thin-layer terms; the manual, p. 27,
+    leaves out the cross-derivative terms, which gfluxv1.F adds).
+13. H. Jasak, *Error Analysis and Estimation for the Finite Volume Method with
+    Applications to Fluid Flows*, PhD thesis, Imperial College, University of
+    London, 1996, Eq. (3.32).
+14. D. J. Mavriplis, "Revisiting the Least-squares Procedure for Gradient
+    Reconstruction on Unstructured Meshes," NASA/CR-2003-212683, 2003, p. 14.

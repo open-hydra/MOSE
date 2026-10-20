@@ -10,12 +10,12 @@ This document describes how to obtain and build **MOSE**. The instructions descr
 Before attempting to build MOSE make sure your system provides the following external tools and compilers:
 
 - **CMake** – 3.23 or newer.
-- **Fortran compiler** – the GNU toolchain (`gfortran`) or Intel oneAPI (`ifort`/`ifx`). This version is tested with gfortran 12 and 13 and with ifx 2024.1. ifx 2023.0 is not supported: it stops with an internal compiler error on StringiFor, a library that FiNeR needs, and with Intel MPI 2021.8 its runs on several MPI ranks with several OpenMP threads each do not repeat the bits of the run on one rank.
+- **Fortran compiler** – the GNU toolchain (`gfortran`) or Intel oneAPI (`ifort`/`ifx`). MOSE is tested with gfortran 12 and 13 and with ifx 2024.1. ifx 2023.0 is not supported: it stops with an internal compiler error on StringiFor, a library that FiNeR needs, and with Intel MPI 2021.8 its runs on several MPI ranks with several OpenMP threads each do not repeat the bits of the run on one rank.
 - **C++ compiler** – required only if you wish to enable optional components that depend on C++ (Cantera, TecIO).
 - **C compiler** – needed when building SUNDIALS (optional).
 - **OpenMP** – needed for optional parallelization support.
 
-**ifx 2024.1 and IPO.** ifx 2024.1 (tested: 2024.1.0, build 20240308) compiles a loop of the ghost metrics of MOSE wrongly at `-O2` and `-O3` without interprocedural optimization: a minimal program in standard Fortran gives wrong values at `-O2` and `-O3`, also at the default level with no `-O` option, and the right ones at `-O0`, `-O1` and with `-ipo`. MOSE built so stops at set-up on the check of the ghost metrics, or runs with wrong ghost metrics. CMake therefore refuses ifx 2024.1 at `-O2` or above without IPO, with a message: a RELEASE build with `-DUSE_IPO=OFF` (`--no-ipo`), or whose toolchain cannot do IPO, and the TESTING build. The RELEASE build with IPO (the default) and the DEBUG build (`-O0`) configure as before. Other versions of ifx have not been tested.
+**ifx 2024.1 and IPO.** ifx 2024.1 (tested: 2024.1.0, build 20240308) compiles a loop of the ghost metrics of MOSE wrongly at `-O2` and `-O3` without interprocedural optimization: a minimal program in standard Fortran gives wrong values at `-O2` and `-O3`, also at the default level with no `-O` option, and the right ones at `-O0`, `-O1` and with `-ipo`. MOSE built so stops at set-up on the check of the ghost metrics, or runs with wrong ghost metrics. CMake therefore refuses ifx 2024.1 at `-O2` or above without IPO, with a message: a RELEASE build with `-DUSE_IPO=OFF` (`--no-ipo`), or whose toolchain cannot do IPO, and the TESTING build. The RELEASE build with IPO (the default) and the DEBUG build (`-O0`) are accepted. Other versions of ifx have not been tested.
 
 ### Git submodules
 

@@ -62,7 +62,7 @@ front — the key feature of this case (see below).
 | Laminar Schmidt $Sc$ | 1.0 |
 | Laminar Prandtl $Pr_l$ | 1.0 |
 
-Both transverse boundaries are **periodic** and the spanwise faces use symmetry,
+The two ends in $x$ are **periodic** (`201`) and the $j$ faces use symmetry (`300`),
 so the only error sources are the diffusive flux and the time integration.
 
 ## Unity Lewis number and the reference solution

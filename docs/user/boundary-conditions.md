@@ -97,6 +97,7 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 |:----:|------|-----------------------------|
 | `0` | Null / unused | — |
 | `101` | Block connection | `bs  is  js  ks  fs  d11  d12  d21  d22` |
+| `201` | Periodic connection (a block connection between two faces that differ by a translation) | `bs  is  js  ks  fs  d11  d12  d21  d22` |
 | `102` | Chimera overset | `n1  n2` then `n1+n2` donor lines: `bD iD jD kD  vol_frac` |
 | `103` | Coupled wall | `bs  is  js  ks  fs  d11  d12  d21  d22` |
 
@@ -143,10 +144,10 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
     $\theta = \mp\delta/2$ and the ghost cell across each is the cell rotated by $\mp\delta$ about the $x$ axis. The
     inviscid flux gives the pressure and centrifugal terms; with the Navier–Stokes equations the viscous stress of the
     faces is applied as well ($-\tau_{\theta\theta}/r$ in the radial momentum, see
-    [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge-bc-200)). Keep the wedge thin: the azimuthal
+    [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge)). Keep the wedge thin: the azimuthal
     derivatives carry an error of order $\delta^2$. With more than one cell in $k$, type `200` is a rotational
     periodicity: faces 5 and 6 make one interior face of the whole annulus, with its inviscid and viscous fluxes (see
-    [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge-bc-200)).
+    [Spatial Discretization](../theory/numerics.md#3-d-sector)).
 
     Type `200` joins the two $k$ faces of one block: beyond face 5 lies the cell next to face 6 of the same block, in the
     same column $(i, j)$, turned back by the angle, and beyond face 6 the cell next to face 5, turned forward; the
@@ -158,6 +159,12 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
     sector along $i$ or $j$; join the blocks of a ring by block connections (`101`), the junction at $\theta = 2\pi$
     included, and keep type `200` for a block that holds the whole sector or the whole turn. Two blocks each closed by
     its own type `200` are two separate periodic sectors, with no flux between them.
+
+    The mesh decomposer of ATLAS (MDB) cuts blocks along $i$, $j$ and $k$ unless `split-directions` (of
+    `[MDB-Parameters]`, or of `[MDB-Block<n>]` for block $n$) says otherwise, and keeps each record of type `200` on
+    its face: a block closed by type `200` that it cuts along $k$ gives blocks with type `200` on one $k$ face only, and
+    the run stops at setup. Give such a block `split-directions` without $k$ (for example `ij`); a ring whose blocks
+    are joined by `101`, the junction at $\theta = 2\pi$ included, can be cut along $k$.
 
 ### Inlet / Outlet
 
@@ -175,7 +182,7 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 | `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  g,  rel_fac,  [massf],  [turb]` |
 
 Type `409` (a forced outlet named in the reader of the boundary file) is not implemented: a record of type `409`, or of any
-type not listed on this page, gets no flux, and this version does not stop on it. Type `410` reads its data on the finest
+type not listed on this page, gets no flux, and MOSE does not stop on it. Type `410` reads its data on the finest
 grid level only: do not use it with a sequence of grid levels. Its file (Tecplot ASCII, one zone per block and time) must
 hold finite values: a zone whose `SOLUTIONTIME` is not finite (NaN or infinity), or whose value for a face of type `410` is
 not, stops the run at set-up, with the file, the zone, the line of its header, and the variable and the cell of the value.
@@ -231,23 +238,18 @@ ghost cells are those of the cell next to the face per unit mass, so the turbule
 is that of the first cell. The cell across the face is taken as wide as the first cell of the block (see
 [Spatial Discretization](../theory/numerics.md#gradient-computation-for-diffusive-fluxes)).
 
-**Time-varying data (`402`, `410`).** The `p0_file` of type `402` lists
-`time  p0` pairs, one per line, with `p0` in bar; a first line containing
-`periodic` makes the table periodic. MOSE interpolates linearly in time;
-before the first instant it uses the first value, after the last instant
-the last one (unless the table is periodic). Steady runs evaluate the data
-at time $-1$: with a periodic table this time is wrapped into the period, so
-a steady run should use a constant table (or type `401`). In time-accurate
-runs the data of `402` and `410` are evaluated at the time of each
-Runge–Kutta stage (see
-[Time Integration](../theory/time-integration.md#stage-times-and-time-dependent-boundary-data)).
-
-The `p0_file` of an inlet `402` is a text file of pairs `time [s]  p0 [bar]`, one per line, in increasing time (two
-equal times make a jump); a first line `periodic` makes the table repeat. The name is taken as written on the line,
-directories included (for example `INPUT/p0.dat`, relative to the directory of the run), up to 256 characters; a name with
-blanks goes in quotes. A table that cannot be opened, holds no pair, holds a time or a value that is not finite (NaN or
-infinity: the message gives its line and column) or has decreasing times stops the run at set-up, and so does a `402` line
-with fewer values than listed above or with an empty one.
+**Time-varying data (`402`, `410`).** The `p0_file` of an inlet `402` is a text file of pairs `time [s]  p0 [bar]`,
+one per line, in increasing time (two equal times make a jump); a first line holding the word `periodic` makes the
+table repeat. The name is taken as written on the line, directories included (for example `INPUT/p0.dat`, relative to
+the directory of the run), up to 256 characters; a name with blanks goes in quotes. MOSE interpolates linearly in
+time; before the first instant it uses the first value, after the last instant the last one (unless the table is
+periodic). Steady runs evaluate the data at time $-1$: with a periodic table this time is wrapped into the period, so
+a steady run should use a constant table (or type `401`). In time-accurate runs the data of `402` and `410` are
+evaluated at the time of each Runge–Kutta stage (see
+[Time Integration](../theory/time-integration.md#stage-times-and-time-dependent-boundary-data)). A table that cannot
+be opened, holds no pair, holds a time or a value that is not finite (NaN or infinity: the message gives its line and
+column) or has decreasing times stops the run at set-up, and so does a `402` line with fewer values than listed above
+or with an empty one.
 
 ### Viscous Walls
 
@@ -276,7 +278,7 @@ absorbs, conducted and radiated, the other walls the heat they conduct into the 
 |:----:|------|-----------|
 | `501` | Manifold connection | `bs  fs` |
 
-Type `501` does not work in this version: MOSE computes the mean state of the connected face and does not use it, so the face
+Type `501` is not applied: MOSE computes the mean state of the connected face and does not use it, so the face
 gets no flux. Do not use it.
 
 ### Gas–Surface Interaction
@@ -291,7 +293,7 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 | `505` | Surface reactions  | `reac_id, q_rad`                                                           |
 | `506` | Surface reactions and pyrolysis | `pyro_id, reac_id, q_rad, eps_wall, [massf_1 … massf_ns]`     |
 
-Type `506` is read but not applied in this version: the face gets no flux. Do not use it; `504` and `505` are the pyrolysis and
+Type `506` is read and not applied: the face gets no flux. Do not use it; `504` and `505` are the pyrolysis and
 the surface reactions alone.
 
 
@@ -340,7 +342,7 @@ the surface reactions alone.
 
 ## Examples
 
-**1-D Case (100 cells, all faces extrapolation)**
+**1-D Case (100 cells, extrapolation on faces 1 to 4)**
 
 ```
        1       1       1       1       1     400
@@ -351,7 +353,7 @@ the surface reactions alone.
        1     100       1       1       4     400
 ```
 
-Faces 1 and 2 each have 1 entry (the single cell at the end of the 1-D domain). Faces 3 and 4 each have 100 entries (one per $i$-cell).
+Faces 1 and 2 each have 1 entry (the single cell at the end of the 1-D domain). Faces 3 and 4 each have 100 entries (one per $i$-cell), and so do faces 5 and 6, of the null type `0`. With `400` on faces 3 and 4, two parallel planes, the velocity across is integrated and the fluxes of the two faces cancel; `300` on both, on faces normal to $y$, keeps it zero (see [Face Numbering](#face-numbering)).
 
 **2-D Supersonic Inlet (type 405)**
 

@@ -485,6 +485,8 @@ The `test/common/` directory contains shared species databases:
 |-----------|---------|
 | `Air/` | 5-species air (N₂, O₂, NO, N, O) with dimensional transport |
 | `nondim-Air/` | Same mixture in non-dimensional form |
+| `Air-sutherland/` | Transport table of air: viscosity and conductivity |
+| `Air-viscous/` | One-species air: phase, thermodynamic and transport tables |
 
 Test cases symlink to these files rather than duplicating them.
 

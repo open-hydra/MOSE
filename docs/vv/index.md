@@ -11,7 +11,7 @@ This section documents the Verification & Validation (V&V) test suite for MOSE. 
 | [Noh Implosion](1D.md#noh-implosion-problem) | 1D | supersonic | Strong shock, density jump | Analytical | HLLE | Noh (1987) |
 | [Toro Test 3](1D.md#toro-test-case-3) | 1D | subsonic–supersonic | Compound wave (shock + contact + shock) | Analytical | HLLE++ | Toro (1999) |
 | [Shu–Osher Interaction](1D.md#shuosher-shock-entropy-wave-interaction) | 1D | 3.0 | Shock / sine entropy-wave interaction | Richardson extrapolation (grid convergence) | HLLC | Shu & Osher (1989) |
-| [Finite-Rate Reactive Shock Tube](1D-fer14.md) | 1D | subsonic–supersonic | Reactive shock tube, finite-rate chemistry | Digitized reference profiles (velocity, temperature) | HLLC+ Tramel | Ferrer et al. (2014) |
+| [Finite-Rate Reactive Shock Tube](1D-fer14.md) | 1D | subsonic–supersonic | Reactive shock tube, finite-rate chemistry | Digitized reference profiles (velocity, temperature) | HLLC+Tramel | Ferrer et al. (2014) |
 | [Unity-Lewis Diffusion](1D-diffusion.md) | 1D | ~0 (diffusion) | Species + thermal diffusion, unity Lewis ($Le=1$) | Cantera low-Mach reference | HLLC | Forti/Ferrer; Cantera |
 | [Multicomponent Diffusion](1D-multicomponent-diffusion.md) | 1D | ~0 (diffusion) | Per-species mixture-averaged diffusion | Cantera low-Mach reference | HLLC | Forti/Ferrer; Cantera |
 | [Premixed Laminar Flame](1D-premixed-flame.md) | 1D | ~0 (deflagration) | Finite-rate chemistry, premixed CH$_4$/air flame structure | Cantera freely-propagating flame | HLLC | Cantera |
@@ -30,11 +30,11 @@ This section documents the Verification & Validation (V&V) test suite for MOSE. 
 | [Shock Wave-Boundary Layer Interaction](2D-swbli.md) | 2D | 5.0 | Shock-boundary-layer interaction, separation/reattachment | Schulein/SU2/Wind-US + same-grid OpenFOAM code-to-code | HLLC (SA, SST) | Schulein + code-to-code |
 | [Ablating Wall](2D-ablating-wall.md) | 2D | ~0 (blown column) | Gas-surface interaction: melting and pyrolysis walls, mass/energy surface balance | Closed-form surface energy balance (both face orientations) | HLLC | [GSI theory](../theory/gsi.md) |
 | [HyShot II Scramjet Combustor](3D-hyshotII.md) | 3D | 2.65 | Reacting scramjet combustor: sonic H$_2$ injection, shock train, finite-rate chemistry, chimera overset | HyShot II experiment (wall pressure, with uncertainty) + TAU S-A RANS | HLLC (SA) | Karl (2011); Chapuis et al. (2013) |
-| [Rotating Frame](rotating-frame.md) | 3D | low Mach | Coriolis and centrifugal source terms | Analytical / balance | Euler | rotating-frame theory |
+| [Rotating Frame](rotating-frame.md) | 3D | low Mach | Coriolis and centrifugal source terms | Analytical / balance | HLLC | rotating-frame theory |
 
 ## Running the tests
 
-Each test case lives under `test/` and contains a `verify.py` script.  The script reads the solver output, compares it against the exact solution, and writes output figures.
+Most test cases under `test/` hold a `verify.py` (some a `check.py` or a `compare.py`) that reads the solver output, compares it with the reference and draws the figures; `test/TESTING-PLAN.md` lists the verifier and the criterion of every case.
 
 ```bash
 cd test/1D/<TestName>

@@ -49,7 +49,7 @@ nightly/local tier.
 | Restart | core feature | every format bit for bit, counters included (`Restart`, `Restart`/`RestartCounters`, `MPIRestart`; `tecplot binary` with TecIO) | `MPIRestart` in `vtk raw` only |
 | I/O formats | tec ascii/bin, vtk ascii/raw | ascii; `vtk raw` files are well-formed XML with the right names, the field, wall and diagnostic outputs of a steady run carry minus the global iteration count as their time in `vtk raw`, `vtk ascii` and Tecplot ASCII (`OutputFiles`/`VtkNames`), and `vtk raw` files hold raw appended data (`OutputFiles`/`VtkRawFormat`) | round-trip untested |
 | Parallelism | OpenMP, MPI | 1 vs 4 threads (`OpenMPEquiv`); MPI ranks × threads bit-identical in the `needs-mpi` tier (`test/mpi/`) | MPI tier runs only in MPI builds: the second CI job, `test-mpi` (gfortran, Open MPI) |
-| 3D | full | source terms only | no 3D NS verification |
+| 3D | full | order of accuracy of the viscous manufactured solutions on skewed two-block grids with walls (`MMSViscous3D`, `MMSViscous3DFull`); the 3-D parts of the fast and MPI tests | no inviscid 3-D case |
 
 Cases of [`docs/vv`](../docs/vv/index.md) count as tested in this map only when CTest runs them. For every case
 folder: its CTest test, which fails when the criterion fails, or outside CTest; the reference data; the criterion
@@ -158,8 +158,9 @@ of the case:
   Wilcox 2006; see §2). *No further turbulent flat-plate cases needed.*
 - ☐ **P3 — Couette / Poiseuille** (2D viscous, analytic): clean fast laminar-NS check
   independent of Blasius subtleties.
-- ☐ **P4 — 3D Euler verification**: 3D isentropic vortex or manufactured case (3D is
-  currently source-term-only).
+- ◐ **P4 — 3D Euler verification**: 3D isentropic vortex or manufactured case. *Covered
+  with the viscous terms:* `MMSViscous3D` and `MMSViscous3DFull` (`test/3D/viscous/mms`),
+  manufactured solutions of the Navier–Stokes equations; no inviscid 3-D case.
 - ☑ **P5 — Shu–Osher** (1D): Mach-3 shock / sine interaction. *Done:*
   `test/1D/Shu-Osher` (hand-generated IC via `gen_ic.py`). Two CTest entries:
   `ShuOsher` (**fast**, single N=200 grid vs an N=1600 MOSE reference, 2.9 % L1) and
@@ -297,8 +298,8 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 **Rule of a row.** The ~Cost of a row is its CPU time at one thread in the build of the
 first CI job (gfortran, `TESTING`), the part run alone as its area runs it
 (`./run.sh <part>` in its folder). A row is in the fast tier when it takes about 10 s
-or less: a choice of MOSE, anchored to the slowest fast test of main before this
-series, `AblatingWall`, 9.7 s on the machine of the measurements below. Each row is
+or less: a choice of MOSE, anchored to the slowest fast test of main at commit
+`b29130b`, `AblatingWall`, 9.7 s on the machine of the measurements below. Each row is
 measured twice and the lower time counts, with the machine and the load written next to
 it. On a shared machine the CPU time of the same test grew by up to 69 % with the load,
 so one measurement cannot place a row that lies near the cap. A row between 10 and 13 s
@@ -313,7 +314,7 @@ are 32 to 52 % over the cap. So run `ExitCodes` (I9), `RuntimeInput` (I10) and
 `InputChecks`, `TimeIntegration` and `ViscousPatch`); at a lower load these times can be
 about a third lower. The costs of the other rows were measured when each row was added,
 as CPU time at one thread on the same machine at a load average of ~100 to ~190. The
-tests of main keep their tier: since the time step of this series `AblatingWall` takes
+tests of main keep their tier: with the time step of commit `667fc3c0` `AblatingWall` takes
 11.4 s and `Noh87` and `PrandtlMeyer` up to 9.6 s.
 
 Current `ctest -L fast`: **24 tests, ~134 s of CPU time** at one thread, one test at a
@@ -325,7 +326,7 @@ Noh87, Toro99, ShuOsher, PrandtlMeyer, RiemannSmoke,
 NumericsSmoke, InputChecks, TimeIntegration, BoundaryConditions, Conservation,
 OpenMPEquiv, Connections, Restart, OutputFiles, MMSResiduals, ViscousPatch, AblatingWall,
 MeshGeometry, QCR2000Stress, CellVolume, VolatileOrder, BilinearDistance. The 12 fast tests
-of main took ~41 s at the base of this series, on the same machine at a load average of
+of main took ~41 s at commit `b29130b`, on the same machine at a load average of
 ~190. MPI builds also register the `needs-mpi` tier (`test/mpi/`; `MPIConnectionFlux`,
 `MPIConnectionOrder`: the two-block cases with one block per rank;
 `MPIDecompositionMap`).
@@ -384,7 +385,7 @@ Restructure before adding cases:
 
 | Tier | Trigger | Selector | Contents |
 |---|---|---|---|
-| 0 — fast | pre-push hook | `ctest -L fast` | F1–F7 |
+| 0 — fast | pre-push hook | `ctest -L fast` | the rows of §4 in the fast tier |
 | 1 — PR CI | PR to `main` | `ctest -LE` the `needs-*` labels and `verification`; `ctest -L needs-mpi` (second job, MPI build) | fast + dependency-free validation; MPI tier |
 | 2 — nightly | schedule / dispatch | full | flames, reactive, equilibrium, MPI, parallel-equivalence, full forms of the verification cases (label `verification`) |
 

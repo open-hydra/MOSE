@@ -48,10 +48,10 @@ space-reconstruction = MUSCL
     If `input.ini` cannot be opened (missing, or without read permission), holds no line that is not blank, or the INI reader returns an error while it loads the file (a file with no section, a line it cannot parse, which the reader names on its error output), the run stops with the reason and exit code 1: at the start, and when MOSE reads `input.ini` again during the run. With MPI every rank stops. Without the stop the parameters would keep their defaults, or the values of the previous reading, in silence.
 
 !!! warning "Values outside their rules stop the run"
-    A value outside the rule of its parameter (column Allowed of the [Parameter Registry](registry.md): a bound such as `> 0`, an interval such as `in (0, 1)`, where `(` and `)` leave the end out and `[` and `]` take it in, each held by every value of a list of numbers; a list of names; `logical`) stops the run with a message: at the start, and when MOSE reads `input.ini` again during the run, every `ini-diter` iterations (10000 by default), to take the values changed meanwhile. In an MPI run rank 0 reads `input.ini`, at the start and at every reading, and passes its text to every rank, so that every rank takes the same values. With one working folder per rank, only the `input.ini` of rank 0 is read. The parameters that `input.ini` leaves out keep their values, the `stationary-face-<n>` keys of the rotating frame too. Of the rotating frame, `omega`, `axis` and `origin` read again enter every term of the frame together (the log of the run gives them); a change of `rotational-frame`, a `stationary-face-<n>` key that names another face or that the set-up does not have, or a value of `axis` or `origin` that is not finite (NaN or infinity), stops the run ([Rotating Frame](../theory/rotating-frame.md#implementation-notes)). The `stationary-face-<n>` keys are counted from 1 up to the first one missing, at the start and at every reading: a key after a gap of the numbering is not read.
+    A value outside the rule of its parameter (column Allowed of the [Parameter Registry](registry.md): a bound such as `> 0`, an interval such as `in (0, 1)`, where `(` and `)` leave the end out and `[` and `]` take it in, each held by every value of a list of numbers; a list of names; `logical`) stops the run with a message: at the start, and when MOSE reads `input.ini` again during the run, every `ini-diter` iterations (10000 by default), to take the values changed meanwhile. In an MPI run rank 0 reads `input.ini`, at the start and at every reading, and passes its text to every rank, so that every rank takes the same values. With one working folder per rank, only the `input.ini` of rank 0 is read. The parameters that `input.ini` leaves out keep their values, the `stationary-face-<n>` keys of the rotating frame too; what a reading changes in the rotating frame, and what stops the run, is in [Rotating Frame](../theory/rotating-frame.md#implementation-notes).
 
 !!! warning "Values that do not read stop the run"
-    A parameter of the [Parameter Registry](registry.md) whose value in `input.ini` does not read as its type stops the run with a message that gives the file, the section, the key and the value as written: a number that is not one (a word, `NaN`, `Infinity`, a decimal comma such as `0,5`), an integer written with a decimal point or an exponent (`2.0`, `1e3`: one compiler refuses it, another cuts the fraction), a logical that does not start with `T` or `F` after an optional period (`yes`, `1`; a word that starts with one of them reads as true or false), a list with more values than its parameter holds, a key with no value. So does a real read as an infinity (gfortran reads a number too large for a real, such as `1e999`, as one), with a rule or without: a bound such as `> 0` let it through. This holds at the start and when MOSE reads `input.ini` again during the run; `levels` of `[MOSE-Multigrid]`, which MOSE reads at the start only, stops the run as well. Before, such a value left its parameter at the default, or at the value of the previous reading, in silence. A value of `axis` or `origin` of the rotating frame that is not finite (NaN or infinity) stops the run at the start, with a message that names the key.
+    A parameter of the [Parameter Registry](registry.md) whose value in `input.ini` does not read as its type stops the run with a message that gives the file, the section, the key and the value as written: a number that is not one (a word, `NaN`, `Infinity`, a decimal comma such as `0,5`), an integer written with a decimal point or an exponent (`2.0`, `1e3`: one compiler refuses it, another cuts the fraction), a logical that does not start with `T` or `F` after an optional period (`yes`, `1`; a word that starts with one of them reads as true or false), a list with more values than its parameter holds, a key with no value. So does a real read as an infinity (gfortran reads a number too large for a real, such as `1e999`, as one), with a rule or without: a bound such as `> 0` let it through. This holds at the start and when MOSE reads `input.ini` again during the run; `levels` of `[MOSE-Multigrid]`, which MOSE reads at the start only, stops the run as well. A value of `axis` or `origin` of the rotating frame that is not finite (NaN or infinity) stops the run at the start, with a message that names the key.
 
 !!! warning "What a reading during the run changes"
     When MOSE reads `input.ini` again during the run, only the parameters that the solver reads at every step take the new values, such as `cfl`, `vnn` and the intervals of the outputs. The choices that the set-up makes once from the input are not made again, nor are its checks between keys: a new value of `equations`, `turbulence`, `chemistry`, `space-reconstruction`, `flux-limiter`, `riemann-solver`, `shock-detector` or `time-scheme` is checked against its rule and leaves the run as it was. Do not turn residual smoothing on during a run (`irs = true`): its work arrays exist only when it was on at the start, and the run stops with a segmentation fault.
@@ -101,14 +101,6 @@ Each cell takes the largest explicit step that keeps it stable, from one rule
   where diffusion sets the step) needs the CFL ramp `cfl-rise-threshold`: without it the first step
   can make $\omega$ negative.
 
-The rule used to take the smallest of the direction limits, the edge length of the cell
-instead of its width, and the smaller of the convective and the viscous limit, with the
-viscous one built on $\nu$. Each of these let the step exceed the stability limit of the
-scheme: on square 2-D cells by up to a factor 2, on skewed cells more, in a cell set by heat
-conduction by the factor 1.94. **The same `cfl` and `vnn` therefore give a smaller step than
-before**, most of all in viscous cells: on a turbulent nozzle case (Spalart–Allmaras, RK3,
-`cfl = 0.8`, `vnn = 0.3`) the global time-accurate step is 0.59 times the old one.
-
 Stability limits of the linearised schemes (MUSCL with upwind fluxes, central diffusion);
 the additive rule stays stable for any `cfl` and `vnn` up to these values:
 
@@ -128,12 +120,8 @@ a little beyond them blows up. Suggested values:
 - `RK2` (Heun): `cfl = 0.5` with moving shocks, up to `cfl = 0.7` where the flow is smooth, and
   `vnn = 0.4`; never `cfl` ≥ 0.95 or `vnn` ≥ 0.5.
 
-To recover part of the old step of a viscous time-accurate run, raise `vnn` rather than
-`cfl`: in the nozzle case above, `cfl = 0.8` with `vnn = 0.5` gives 0.84 of the old global
-step with RK3, and `vnn = 0.52`, beyond the positivity limit, hardly more (0.84): the step of
-a time-accurate RANS run also holds the bound of the stiffness of the turbulence sources,
-which `vnn` does not scale. With Heun, `cfl = 0.5` and `vnn = 0.4` give 0.67 of it. The
-defaults stay `cfl = 0.5` and `vnn = 0.3`.
+The defaults are `cfl = 0.5` and `vnn = 0.3`; in a viscous time-accurate run raise `vnn`
+within the limits of the table before `cfl`.
 
 ---
 

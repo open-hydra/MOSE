@@ -111,7 +111,7 @@ grows 2475 → 3530 bytes; the binary shrinks 7.07 → 5.65 MB.
 
 **Correctness under parallelism** — 2 MPI ranks and 4 OpenMP threads both produce
 output bit-identical to serial, same as the non-IPO build. Worth stating because,
-when this was measured, `ctest` had no MPI coverage at all. MPI builds now
+when this was measured, `ctest` had no MPI coverage at all. MPI builds
 register a `needs-mpi` tier that checks parallel runs: bit for bit against the
 serial run or the uninterrupted one, and which thread makes the MPI calls
 ([Testing](testing.md#mpi-tier-contents)).
@@ -159,7 +159,7 @@ flags: `-ipo` enters the link flags once. A build directory configured with an
 earlier version keeps what it cached then, as `-ipo` twice in the link flags:
 configure a new one.
 
-Three things were needed to make `-ipo` work at all, all now handled in
+Three things were needed to make `-ipo` work at all, all handled in
 `cmake/SetFortranFlags.cmake`:
 
 - **The flag must be on the link line too.** IPO objects hold IR, not ELF; code
@@ -178,7 +178,7 @@ Three things were needed to make `-ipo` work at all, all now handled in
   flags through `TRY_COMPILE(... COMPILE_DEFINITIONS)`, i.e. compile-only, so
   `-ipo` compiled fine, failed to link, and was silently rejected. It had
   therefore **never** been enabled on any Intel compiler, despite being listed in
-  the release flags since the first commit. `SetCompileFlag.cmake` now takes a
+  the release flags since the first commit. `SetCompileFlag.cmake` takes a
   `LINK` keyword that also puts the flag on the test program's link line. It is
   opt-in per call site on purpose: `LINK_OPTIONS` is a list, so a multi-word flag
   like `-check bounds` would reach the linker as one quoted argument.
@@ -324,15 +324,15 @@ than counting them per file.
 
 ### 6. Boundary fluxes walk only the rank's own records
 
-`BC_Fluxes` used to run one worksharing loop for every (block, face) pair of the
-**whole** mesh, on every rank and at every Runge–Kutta stage, and to skip the
+Before this entry `BC_Fluxes` ran one worksharing loop for every (block, face) pair of the
+**whole** mesh, on every rank and at every Runge–Kutta stage, and skipped the
 records of blocks owned by other ranks one at a time inside the loop. Every rank
 therefore read every boundary record of the mesh — a large derived type — at
 every stage: work that does not shrink when ranks are added. On an axisymmetric
 wedge mesh the wedge faces are boundary records too, about two per cell, so that
 the scan grows with the whole mesh rather than with the share of a rank.
 
-The loop now walks per-(block, face) lists of the rank's own records, built once
+The loop walks per-(block, face) lists of the rank's own records, built once
 at set-up next to `local_bc_idx` (`build_local_bc_index`). The (block, face)
 granularity is kept on purpose:
 
@@ -346,7 +346,7 @@ granularity is kept on purpose:
 
 With a `bc.txt` sorted by block and face (the documented format) the solution
 is therefore **bit-identical** to the old loop. With the records in any other
-order the solution is now the one of the sorted file, and deterministic; the
+order the solution is the one of the sorted file, and deterministic; the
 old loop summed the faces of a corner cell in file order and, with more than
 one thread, could even give a different solution from run to run (two threads
 updating the same corner cell). The wall output (`IO_Wall`) groups all the

@@ -324,8 +324,7 @@ soot_run() {
   local state=$1
   [[ $1 == sacomp ]] && state=sa-plain
   python3 -B make_case.py soot "$PREMIX" "$SOD/ic_x1.tec" INPUT "$state" || exit 1
-  # faces 3 and 4 of the tube, one cell thick in j: a copy (type 0), not the extrapolation 400, which takes
-  # three cells and with one cell reads ghost cells that no record fills
+  # faces 3 and 4 of the tube, one cell thick in j: the null type 0, no flux through them
   awk '$5 == 3 || $5 == 4 { $6 = 0 } { print }' "$SOD/bc_x1.txt" > INPUT/bc.txt
   local turb=none soot=LL91
   [[ $1 == sa || $1 == sa-plain ]] && turb=SA

@@ -98,7 +98,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (3.4 to 3.9 times as many in diffusion-dominated cases, at the same cost per iteration; 555 instead of 385 in the Prandtl–Meyer
   test, 8000 instead of 4000 in the inert configuration of the ablating-wall test), and time-accurate runs advance by a shorter
   step (0.59 of the global step in a turbulent nozzle case with Spalart–Allmaras, RK3, cfl 0.8, vnn 0.3). Steady solutions do not
-  move. The defaults of cfl and vnn do not change; the user guide gives the stable values and how to recover the step of before.
+  move. The defaults of cfl and vnn do not change; the user guide gives the stable values. In the nozzle case, RK3 with cfl 0.8
+  and vnn 0.5 gives 0.84 of the step of before, and vnn 0.52, beyond the positivity limit, hardly more: the step of a
+  time-accurate RANS run also holds the bound of the stiffness of the turbulence sources, which vnn does not scale. Heun with
+  cfl 0.5 and vnn 0.4 gives 0.67 of it.
 - In time-accurate RANS runs the turbulence sources are explicit, and the local time step includes the stiffness of their
   destruction, so that Δt·d ≤ 1 and no Runge–Kutta stage can make ν̃, k or ω negative through it. The point-implicit factor
   (`point-implicit`, true by default) now applies to steady runs only; a time-accurate run with it prints a warning. The factor
@@ -148,7 +151,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   After pulling this change into an existing clone, run `git submodule update --init --recursive`: CMake initializes a
   missing submodule, but does not update one that is checked out at an older commit, and stops with this command when
   FiNeR is older than v2.1.0. ifx 2023.0 stops with an internal compiler error on StringiFor v1.8.0 and is not supported:
-  this version is tested with gfortran 12 and 13 and with ifx 2024.1 (see the installation guide).
+  MOSE is tested with gfortran 12 and 13 and with ifx 2024.1 (see the installation guide).
 - `res-threshold` is relative to the density residual of the first iteration of a steady run (of each grid level): the run ends
   when its residual has fallen by that factor, and the default, `1e-10`, is a fall of ten orders. The test compared the residual
   as it is, which scales with the level of density and with the square root of the number of cells: the same flow stopped at
@@ -333,7 +336,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `asymptotic`, and its results change.
 - The QCR2000 stress takes the laminar and the eddy viscosity in the order in which the solver passes them: the quadratic
   correction acted on the laminar stress, and the eddy-viscosity stress went in uncorrected. `turbulence` does not accept
-  QCR2000 today, as the guide now says, so no run changes.
+  QCR2000, as the guide says, so no run changes.
 - The fluxes of the boundary faces no longer depend on the order of the records in `bc.txt`, and each MPI rank walks only the
   records of its own blocks. The boundary fluxes were computed in one worksharing loop per range of records, in file order, on
   every rank: the face contributions of a corner cell were summed in the order of the file, and with the records out of order
@@ -591,7 +594,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   1, in every build, with the file, the line of the header, the zone and the form to write (`I=<n>, J=<n>`, in upper case with
   no blank around `=`). The reader takes the nodes of a zone only so written: a header with `I = 3` or `j=2` kept the default
   of 2 nodes in silence, the values of the zone were read for that size, and the run ended with exit code 0. Other forms are
-  still not read.
+  not read.
 - A file of an assigned state (`410`) without `p`, without one of `u`, `v` and `w`, or without any `rho(N)` stops the run at
   set-up with exit code 1, with the file and the variables it lacks: the file gives the whole state of the cell across the
   face. The ghost cells took the value of the cell for a missing `p`, `u`, `v` or `w`, and the run ended with exit code 0;

@@ -25,6 +25,7 @@ The test verifies that numerical predictions of total pressure $p_0$ and total t
 | Parameter | Value |
 |---|---|
 | Time scheme | RK3 |
+| Time stepping | local (steady), 5000 iterations |
 | CFL | 0.5 |
 | Space reconstruction | MUSCL |
 | Flux limiter | Van Albada |
@@ -39,9 +40,10 @@ The mesh is composed of a structured grid around the cylindrical body with 160 c
 
 Boundary conditions:
 
-- Inlet: Mach 8.1 free-stream state
-- Cylinder surface: slip wall (symmetry)
-- Far-field boundaries: zero-gradient extrapolation
+- Outer boundary (`405`): supersonic inlet, $M = 8.1$, $T = 288.15$ K, $p = 101\,325$ Pa
+- Cylinder surface (`300`): slip wall
+- Outflow ends (`400`): extrapolation
+- Faces 5 and 6 (`200`): the closure of the planar 2-D mesh
 
 The test reads no probe: `verify.py` takes the post-shock total quantities in the field cell next to the cylinder surface and to the stagnation streamline (indices 80 and 0 of the field, counted from 0).
 
@@ -57,20 +59,12 @@ MOSE solutions compared across four Riemann solvers in terms of non-dimensional 
   {% include "vv/images/HC-slice.svg" %}
 </figure>
 
-!!! note "Figure and code version"
-    The figure comes from the first upload of MOSE (May 2026, commit `ab2bf537`). MOSE at commit
-    `10b59003b72c` moves the HLLC, HLLE and SLAU curves by 8.9 %, 3.2 % and 7.3 % of the range of the
-    axes, and the HLLC+Tramel curve by 0.8 %. With any of the four solvers,
-    and also with the code of 13 October 2026 (commit `b29130b`), the solution does not settle at the
-    stagnation point: the error of $p_0$ in the cell where `verify.py` reads the stagnation state changes
-    by up to 7.7 points between 5000, 10 000 and 20 000 iterations, and by 9.2 points between two builds
-    (GNU 12.2 RELEASE with MPI on the cluster and gfortran 13 TESTING without MPI).
-
 All Riemann solvers capture the fundamental shock structure, but exhibit varying levels of accuracy in preserving a smooth post-shock region. In particular, the HLLC solver shows significant oscillations in the shock layer, while HLLC+ and HLLE provide smoother solutions. The SLAU solver demonstrates an intermediate behavior with moderate oscillations.
 
 The density profile along the cylinder wall confirms the overall behavior previously observed.
 
-Quantitative error metrics at the stagnation point compared to analytical normal-shock solution:
+Quantitative error metrics at the stagnation point compared to analytical normal-shock solution (code of the first
+upload, `ab2bf537`; see the note below):
 
 | Solver | $p_0$ [MPa] | Error $p_0$ [%] | $T_0$ [K] | Error $T_0$ [%] |
 |---|---|---|---|---|
@@ -80,4 +74,13 @@ Quantitative error metrics at the stagnation point compared to analytical normal
 | SLAU | 8.34013 | -3.09 | 4079.70 | +0.26 |
 | **Analytical** | **8.60638** | **—** | **4069.11** | **—** |
 
-Notwithstanding only HLLE and HLLC+ provide smooth post-shock solutions, all solvers exhibit errors well within engineering tolerances.
+Only HLLE and HLLC+ provide smooth post-shock solutions.
+
+!!! note "Figure and code version"
+    The figure and the table come from the first upload of MOSE (May 2026, commit `ab2bf537`). MOSE at commit
+    `10b59003b72c` moves the HLLC, HLLE and SLAU curves by 8.9 %, 3.2 % and 7.3 % of the range of the
+    axes, and the HLLC+Tramel curve by 0.8 %. With any of the four solvers,
+    and also with the code of 13 October 2026 (commit `b29130b`), the solution does not settle at the
+    stagnation point: the error of $p_0$ in the cell where `verify.py` reads the stagnation state changes
+    by up to 7.7 points between 5000, 10 000 and 20 000 iterations, and by 9.2 points between two builds
+    (GNU 12.2 RELEASE with MPI on the cluster and gfortran 13 TESTING without MPI).

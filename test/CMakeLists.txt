@@ -117,7 +117,7 @@ mose_add_test(NAME MMSViscous3D DIR 3D/viscous/mms
 # N = 16, 24, 36 and iface, periodic and with walls, on N = 20, 30, 45 ("test"),
 # the runs of the V&V page. Run it after any change to the wall boundary
 # conditions, to the face metrics or to the generator of the cases. At one
-# thread, as CTest runs it, it takes about 21 h, an estimate not yet measured:
+# thread, as CTest runs it, it takes about 21 h, an estimate, not a measurement:
 # 9.5e-6 s of CPU per cell and iteration (the short form with walls at one
 # thread) times the cells and the iterations of the nine runs (8.0e9, the
 # walls on N = 45 alone 5.4e9). The CPU time grew by up to 69 % with the

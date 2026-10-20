@@ -159,7 +159,7 @@ MOSE prints diagnostic information to the console during loading and iteration. 
     (NaN, infinity) or on a negative pressure, also in RELEASE builds with fast math; a value of the initial condition
     that is not finite stops the run at set-up, in every build ([Initial Conditions](initial-conditions.md#required-variables)).
 
-    Known limit: errors raised inside the ORION library, which reads and writes the solution files, still end with
+    Known limit: errors raised inside the ORION library, which reads and writes the solution files, end with
     code 0, because ORION stops with `STOP`. For example, a binary Tecplot file (`ic-format = tecplot binary`) in a
     build without TecIO ends with «You can not read in binary format without compiling against TecIO» and exit code
     0. MOSE cannot refuse that input beforehand: whether TecIO is compiled in is known only inside ORION (its `TECIO`

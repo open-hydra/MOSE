@@ -112,13 +112,13 @@ Fourier heat flux under test.
 | Reynolds number | $\approx 5$ (viscous terms $\sim 20\%$ of convective) |
 | Mean Mach number | $\approx 0.47$ |
 | Equations | Navier–Stokes (laminar) |
-| Time scheme | RK3, local time stepping to steady state ($\|\text{res}\|\sim10^{-9}$) |
+| Time scheme | RK3, local time stepping until the density residual has fallen by $1.9\cdot10^{-5}$ from the first iteration (`res-threshold`) |
 | CFL / VNN | 0.2 / 0.3 |
 | Space reconstruction | MUSCL, Van Leer |
 | Riemann solver | HLLC |
 
 !!! note
-    $\mu=10$ the Reynolds number is only $\approx 5$, so the viscous fluxes carry a large fraction of the flux balance and the viscous operator is genuinely stressed (rather than a negligible correction).
+    With $\mu=10$ the Reynolds number is only $\approx 5$, so the viscous fluxes carry a large fraction of the flux balance and the viscous operator is genuinely stressed (rather than a negligible correction).
 
 ## Verification results
 
@@ -146,11 +146,11 @@ $p = \log_2\!\big(e(N)/e(2N)\big)$.
 | $v$    | 0.0718 | 0.0143 | 0.00313 | 2.33 | 2.19 |
 | $p$    | 0.130 | 0.0358 | 0.00879 | 1.85 | 2.03 |
 
-The errors are those of the study run before the local time step added the
-rates of the directions and of convection and diffusion, with VNN = 0.1. With
-VNN = 0.3 and the present rule, the steady states on $32^2$ and $64^2$ give the
-same orders and errors within 0.2 % of those of that run (the tables round them
-to three digits).
+The tables come with the page (commit `0b3b3c64`) and were computed with
+VNN = 0.1. With VNN = 0.3 and the local time step of one additive rule over the
+directions, convection and diffusion (MOSE of commit `667fc3c0`), the steady
+states on $32^2$ and $64^2$ give the same orders and errors within 0.2 % of
+those of the tables, which round them to three digits.
 
 Every variable converges at close to second order in both norms, confirming that
 the full viscous MUSCL/RK3 discretisation is second-order accurate.
