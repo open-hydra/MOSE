@@ -5,7 +5,7 @@ an axisymmetric wedge when the k = 1 node plane is the k = 0 plane turned about 
 wedge); on a 3-D mesh delthe is the angle of the sectors closed by the rotational periodicity (type 200). A cell folded
 at a corner stops the run at set-up. The nodes are checked relative to the thickness of the block, so that their
 round-off, with the digits they are written with, does not change the type: relative to the move of the nodes per cell in k
-(the thickness of a 2-D block). Thirteen cases:
+(the thickness of a 2-D block), measured along the k lines. Seventeen cases:
   slab      2-D plane slab, z from -0.5 to 0.5, y falling from 1 (j = 0) to 0.5 (j = NJ), wall (301) on the j = NJ face,
             symmetry (300) elsewhere. Its k = 1 plane is a translation of the k = 0 plane, not a rotation, so the mesh
             is plane. The wall distance, read back from the Spalart-Allmaras source (gas at rest, nu~ uniform, one
@@ -29,6 +29,11 @@ round-off, with the digits they are written with, does not change the type: rela
   tiltslab  the plane slab of slab with its k = 1 plane tilted, z from 0.5 at j = 0 to 0.52 at j = NJ: its k planes are
             not parallel, nearer a translation than a turn but only to 2e-2 of its thickness, so the run must stop at
             set-up with a non-zero exit code and a message on the mesh type.
+  touchslab the plane slab of slab with its k = 1 plane tilted about the y axis, z = -0.5 + x, so that it touches the
+            k = 0 plane along x = 0 (cells of no thickness at that edge), and its probe node (0,1) and its node (0,0)
+            do not move: the misfits of a turn by the null angle and of the translation by zero are equal, and the
+            block, whose k planes are not parallel, must stop the run at set-up with a non-zero exit code and the
+            message of tiltslab (it passed for plane).
   sectorshift100, sectorshift20  a 3-D sector of 90 degrees about x, 2 x 2 x K cells (x from 0 to 0.2, r from 0.5 to 1), type
             200 on its k faces, whose last k node plane does not match the first one turned: its nodes are turned by a
             fraction f of a k cell more, but the nodes (0,0) and (0,1); K = 100 and f = 0.5, K = 20 and f = 0.1. The nodes
@@ -50,15 +55,29 @@ round-off, with the digits they are written with, does not change the type: rela
             (1, 0, 0) e_i . (e_j x e_k) = -0.097 |e_i| |e_j| |e_k|, while the determinant of its mean edges is +0.70
             times the product of their lengths. The run must stop as for folded.
             The three with symmetry (300) on every face and the gas at rest.
+  ring3d    3-D ring about x, 2 x 2 x 36 cells over the full turn (x from 0 to 0.2, r from 0.5 to 1), type 200 on its k
+            faces, its last k node plane written as the first one: a block closed on itself, the periodicity by the
+            identity, a translation by zero. Symmetry (300) on the j faces, extrapolation (400) on the i faces, uniform
+            axial flow (100, 0, 0) m/s: five explicit steps must leave it uniform within 1e-12 of |u|, and the set-up
+            summary must name a 3-D mesh with no sector angle.
+  ring3d-round  the same with the last k node plane computed with the cosine and sine of the full turn, so that it
+            lies on the first one to the round-off only.
+  ring3d-sa ring3d-round with a wall (301) on its inner j face (r = 0.5) and symmetry (300) on the other j and i faces,
+            gas at rest with nu~ = nu: the wall distance read back from the Spalart-Allmaras source (one explicit Euler
+            step) must be, within 1e-9, the distance to the plane wall face of the sector of the cell,
+            cos(pi/K) ((r_j + r_{j+1})/2 - 0.5): the cell centre, the mean of its eight nodes, lies on the bisector of
+            its sector at the radius ((r_j + r_{j+1})/2) cos(pi/K), and the foot of its normal on that face lies inside
+            it. The cells next to the wall are left out, as in the other cases.
 Gas: test/common/Air-viscous (slab, flipwedge, at 300 K and 1 kPa with nu~ = nu) and test/common/Air (mixed, slab3d, folded,
 folded3d, folded-real, at 1 bar and 300 K).
 
 Usage (from the test directory):
   python3 -B make_case.py case NAME          INPUT/ic.tec and INPUT/bc.txt of slab, flipwedge, wedge5, farslab,
-                                             coarsewedge, tiltslab, sectorshift100, sectorshift20, mixed, slab3d, folded,
-                                             folded3d or folded-real
+                                             coarsewedge, tiltslab, touchslab, sectorshift100, sectorshift20, mixed,
+                                             slab3d, folded, folded3d, folded-real, ring3d, ring3d-round or ring3d-sa
   python3 -B make_case.py error NAME FILE    largest relative error of the distance read from FILE (a diagnostic.tec)
   python3 -B make_case.py uniform FILE       largest change of u, v, w over |u| in FILE (a field.tec), and of rho and p
+  python3 -B make_case.py uniform-axial FILE the same for the axial flow of the rings
 """
 import math
 import os
@@ -79,6 +98,8 @@ DELTA = math.radians(1.0)
 DELTA5 = math.radians(5.0)
 DIGITS = {"wedge5": 5, "coarsewedge": 2}   # significant digits of the coordinates in ic.tec; 17 for the other cases
 U0 = (100.0, 50.0, 0.0)
+U_AXIAL = (100.0, 0.0, 0.0)          # the flow of the rings, along their axis
+RING_K = 36                          # cells of the rings over the full turn
 TOL_D = 1.0e-9
 TOL_U = 1.0e-12
 
@@ -129,6 +150,12 @@ def coarsewedge_nodes():
     rs += [1.0e-6 * rs[-1]]
     turn = (0.0, -DELTA)                                                        # right-handed, as flipwedge
     return [[[(x, r * math.cos(turn[k]), r * math.sin(turn[k])) for x in xs] for r in rs] for k in range(2)]
+
+
+def touchslab_nodes():
+    nodes = slab_nodes()
+    nodes[1] = [[(x, y, -0.5 + x) for (x, y, z) in row] for row in nodes[0]]
+    return nodes
 
 
 def sector_shift_nodes(nk, frac, ni=2, nj=2, span=0.5 * math.pi):
@@ -184,6 +211,38 @@ def folded_nodes():
     for k in range(2):
         nodes[k][2][2] = (2.8, 2.8, nodes[k][2][2][2])
     return nodes
+
+
+def ring_nodes(exact, nk=RING_K, ni=2, nj=2):
+    """Nodes [k][j][i] of a ring about x over the full turn, nk cells in k: its last k plane is the first one written
+    again (exact), or the turn by 2 pi computed with its cosine and sine (on the first plane to the round-off)."""
+    nodes = []
+    for k in range(nk + 1):
+        phi = 2.0 * math.pi * k / nk
+        if exact and k == nk:
+            nodes.append(nodes[0])
+            continue
+        nodes.append([[(0.1 * i, (0.5 + 0.5 * j / nj) * math.cos(phi), (0.5 + 0.5 * j / nj) * math.sin(phi))
+                       for i in range(ni + 1)] for j in range(nj + 1)])
+    return nodes
+
+
+def ring_records(wall):
+    """Records of the rings: 2 x 2 x RING_K cells, type 200 on the k faces; with wall, a wall 301 on the inner j face
+    (r = 0.5) and symmetry (300) on the other j and i faces, else 300 on the j faces and 400 on the i faces."""
+    ni, nj, nk = 2, 2, RING_K
+    out = []
+    for k in range(1, nk + 1):
+        for j in range(1, nj + 1):
+            t = 300 if wall else 400
+            out += [rec(1, 1, j, k, 1, t), rec(1, ni, j, k, 2, t)]
+        for i in range(1, ni + 1):
+            out += ([rec(1, i, 1, k, 3, 301), WALL_LINE] if wall else [rec(1, i, 1, k, 3, 300)])
+            out.append(rec(1, i, nj, k, 4, 300))
+    for j in range(1, nj + 1):
+        for i in range(1, ni + 1):
+            out += [rec(1, i, j, 1, 5, 200), rec(1, i, j, nk, 6, 200)]
+    return out
 
 
 def folded3d_nodes():
@@ -300,6 +359,9 @@ def write_case(name):
     elif name == "tiltslab":
         write_ic([tiltslab_nodes()], [eu], ["rho1", "u", "v", "w", "p"])
         recs = faces_2d(1, 12, 8, (300, 300, 300, 300, 300))
+    elif name == "touchslab":
+        write_ic([touchslab_nodes()], [eu], ["rho1", "u", "v", "w", "p"])
+        recs = faces_2d(1, 12, 8, (300, 300, 300, 300, 300))
     elif name == "coarsewedge":
         write_ic([coarsewedge_nodes()], [eu], ["rho1", "u", "v", "w", "p"], DIGITS[name])
         recs = faces_2d(1, 12, 10, (300, 300, 300, 300, 200))
@@ -339,6 +401,13 @@ def write_case(name):
     elif name == "folded-real":
         write_ic([FOLDED_REAL], [eu], ["rho1", "u", "v", "w", "p"])
         recs = faces_3d(1, 1, 1, 1, 300)
+    elif name in ("ring3d", "ring3d-round"):
+        write_ic([ring_nodes(name == "ring3d")], [[RHO_EU, U_AXIAL[0], U_AXIAL[1], U_AXIAL[2], P_EU]],
+                 ["rho1", "u", "v", "w", "p"])
+        recs = ring_records(False)
+    elif name == "ring3d-sa":
+        write_ic([ring_nodes(False)], [sa], ["rho1", "u", "v", "w", "p", "rhoNuTilde"])
+        recs = ring_records(True)
     else:
         sys.exit(f"unknown case {name}")
     with open("INPUT/bc.txt", "w") as f:
@@ -423,7 +492,29 @@ def reference(name):
     return out
 
 
+def ring_error(path):
+    """Largest relative error of the wall distance of ring3d-sa read from FILE (a diagnostic.tec), over the cells off
+    the wall (j = 2): the distance to the plane wall face of the sector of the cell, cos(pi/K) ((r_j + r_{j+1})/2 - 0.5),
+    with r_j = 0.5 + 0.5 j/2 the radius of the node row j."""
+    data, ni, nj = read_zone(path)
+    f = factor()
+    c = math.cos(math.pi / RING_K)
+    err, cells = 0.0, 0
+    for k in range(1, RING_K + 1):
+        for j in range(2, nj + 1):
+            for i in range(1, ni + 1):
+                n = ((k - 1) * nj + (j - 1)) * ni + (i - 1)
+                d0 = c * (0.5 * ((0.5 + 0.5 * (j - 1) / nj) + (0.5 + 0.5 * j / nj)) - 0.5)
+                rhs = data["rhoNuTilde"][n] / data["dt"][n]
+                d = math.sqrt(RHO_SA * NUT * NUT * f / rhs) if rhs < 0.0 else float("nan")
+                err = max(err, abs(d / d0 - 1.0)) if d == d else float("inf")
+                cells += 1
+    print(f"{err:.3e} {cells}")
+
+
 def error(name, path):
+    if name == "ring3d-sa":
+        return ring_error(path)
     zones = read_zones(path)
     ref = reference(name)
     f = factor()
@@ -437,11 +528,11 @@ def error(name, path):
     print(f"{err:.3e} {len(ref)}")
 
 
-def uniform(path):
+def uniform(path, u0=U0):
     data, ni, nj = read_zone(path)
     names = list(data)
     rho, p = data[names[3]], data["p"]
-    du = max(max(abs(a - b) for a in data[n]) for n, b in zip(("u", "v", "w"), U0)) / math.sqrt(sum(x * x for x in U0))
+    du = max(max(abs(a - b) for a in data[n]) for n, b in zip(("u", "v", "w"), u0)) / math.sqrt(sum(x * x for x in u0))
     dr = max(abs(a / RHO_EU - 1.0) for a in rho)
     dp = max(abs(a / P_EU - 1.0) for a in p)
     print(f"{max(du, dr, dp):.3e}")
@@ -455,6 +546,8 @@ def main():
         error(sys.argv[2], sys.argv[3])
     elif what == "uniform":
         uniform(sys.argv[2])
+    elif what == "uniform-axial":
+        uniform(sys.argv[2], U_AXIAL)
     else:
         sys.exit(f"unknown request {what}")
 

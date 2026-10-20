@@ -393,7 +393,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   block ran as one of the two, and a 3-D mesh with a thin block 1 was taken for a 2-D one. A mesh whose blocks disagree, a 2-D
   block whose k planes fit neither a turn nor a translation to that tolerance (too few digits, or k planes that are not
   parallel), and a 3-D block closed by type `200` whose last k node plane is neither the first one turned nor translated, now
-  stop at set-up; the set-up summary names the type. Meshes recognised right keep their wedge angle to the bit.
+  stop at set-up; the set-up summary names the type. A 3-D block closed on itself over a full turn about the x axis, its
+  last k node plane on the first one (to the round-off), is translated by zero, the periodicity by the identity, as before
+  the check. The move of the nodes per cell in k is measured along the k lines, the sum of the moves of each node across
+  its cells in k: on a sector past half a turn the tolerance is 1 % of its arc per cell in the norm of the largest
+  component (between 0.71 and 1 of the arc), not of its chord per cell (4.2 times larger at 270 degrees). In 2-D a block
+  whose probe node keeps its azimuth while its k = 1 node plane is not the k = 0 plane translated to 1 % (k planes that
+  touch or cross, or a k = 1 plane scaled radially about the axis), and which the translation fits no better
+  than the turn by the null angle, stops at set-up as a block whose k planes are not parallel: it passed for plane (and,
+  with the planes crossed, stopped at its folded cells). Meshes recognised right keep their wedge angle to the bit.
 - The wall distance is the minimum over the images of the wall across periodic boundaries too (periodic connections `201`, slabs
   closed in k by type `200`, rotational periodicity of 3-D sectors). It was measured to the wall inside the mesh only, so near
   the end of a period it could be several times too large (by 9.8 times the exact distance in a test channel). A mesh without
@@ -403,7 +411,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the run with a message: not integer combinations of each other, more than three independent ones, a number of images too
   large for an integer, or not along x on a wedge or with sectors. Translations that differ by at most 1 % of the thinnest
   cell across the periodic boundaries are the same, as the two sides of a periodic boundary match only to the round-off of
-  the coordinates: a channel periodic in x, turned by 30 degrees and written with 4 significant digits, runs.
+  the coordinates: a channel periodic in x, turned by 30 degrees and written with 4 significant digits, runs. For a slab
+  closed by type `200` the cell is the move of its nodes per cell in k along its k lines, as for the mesh type: a block
+  closed on itself over a full turn about x gives the translation zero, or of the round-off, which is no periodicity.
 - On a 3-D mesh closed in k by type `200` (a sector turned about the x axis, or a slab whose last k node plane is the first
   one translated), the ghost cell beyond face 5 holds the state of the cell next to face 6 turned back by the sector angle
   (copied, on a translated slab): its w was the opposite of the turned one (face 6 was right). The second-order

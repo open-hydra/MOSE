@@ -65,21 +65,32 @@ my_case/
     and $r = \sqrt{y^2+z^2}$ kept, nodes on the axis included); it is plane when no block is so turned, and a mesh
     with blocks of both kinds stops the run. In 3-D, type `200` on faces 5 and 6 closes a sector: the last $k$ node
     plane of the block is the first one turned about the $x$ axis by the same angle in every such block, or translated
-    (a periodicity with no rotation); otherwise the run stops. Every node is checked against the average move of the
-    nodes per cell in $k$, the largest move of a node from the first $k$ node plane to the last over the cells between
-    them (the thickness of a 2-D block): a block is turned when its nodes match the turn to within 1 % of that move
-    and better than a translation, translated when they match a translation to within 1 % of it and better than a
-    turn, and the angles of the blocks agree to 1 %. So the round-off of the coordinates in the file has to stay below
+    (a periodicity with no rotation); otherwise the run stops. A block closed on itself over a full turn about $x$,
+    its last $k$ node plane on the first one, is translated by zero: the periodicity by the identity. Every node is
+    checked against the move of the nodes per cell in $k$, measured along the $k$ lines: the largest, over the nodes
+    of the first $k$ node plane, of the sum of the moves of the node across the cells in $k$ (each its largest
+    component), over the number of those cells (the thickness of a 2-D block). Along straight $k$ lines it is the
+    move from the first plane to the last per cell, and on a sector the length of the arc per cell in the norm of the
+    largest component (between 0.71 and 1 of the arc), which the chord from plane to plane understates past half a
+    turn (4.2 times at 270 degrees). A block is turned when its nodes match the turn
+    to within 1 % of that move and better than a translation, translated when they match a translation to within
+    1 % of it and better than a turn, or when the angle is null (a turn by the null angle is the translation by
+    zero), and the angles of the blocks agree to 1 %. So the round-off of the coordinates in the file has to stay below
     1 % of a cell in $k$, and a plane slab far from the $x$ axis, which a small turn nearly fits, stays plane. In a
     wedge whose two planes lie symmetric about $z = 0$ ($y$ the same in both), four significant digits are enough at
     any angle, three are not in general. A 2-D block nearer a turn than a translation, or nearer
     a translation than a turn, but not to 1 %, stops the run: write its coordinates with more digits, or make its $k$
-    planes parallel for a plane mesh. The set-up summary names the type, as `Mesh type`: 1-D, 2-D plane, 2-D
-    axisymmetric wedge with its angle in degrees, 3-D, or 3-D with the angle of its sectors. The periodic images of
+    planes parallel for a plane mesh. So does a 2-D block whose node $(0,1)$ (or the node farthest from the axis,
+    when that one lies on it) keeps its azimuth while its $k = 1$ node plane is not the $k = 0$ plane translated to
+    1 %: $k$ planes that touch or cross, or a $k = 1$ plane scaled radially about the axis. The set-up summary
+    names the type, as `Mesh type`: 1-D, 2-D plane, 2-D axisymmetric wedge with its angle in degrees, 3-D, or 3-D
+    with the angle of its sectors. The periodic images of
     the wall in the wall distance of the turbulence models follow the same rule: the translations of the periodic
-    connections (`201`), and of the slabs closed in $k$ by type `200`, are the same when they differ by at most 1 % of
-    the thinnest cell across the periodic boundaries, and translations that do not form a lattice to that stop the
-    run: the two sides of each periodic boundary must match to that, with enough digits. A channel periodic in $x$
+    connections (`201`), and of the slabs closed in $k$ by type `200` (their cells measured as above, so that a block
+    closed on itself over a full turn gives the translation zero, which is no periodicity), are the same when they
+    differ by at most 1 % of the thinnest cell across the periodic boundaries, and translations that do not form a
+    lattice to that stop the run: the two sides of each periodic boundary must match to that, with enough digits.
+    A channel periodic in $x$
     and turned by 30 degrees about $z$ gives translations that differ by 1.1e-4 of its cells with five digits, by
     8.8e-4 with four, and by 0.15 with two, which stops the run.
 

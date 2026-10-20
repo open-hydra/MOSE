@@ -351,7 +351,8 @@ mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;phys
 # Spalart-Allmaras source.
 # Mesh type: a plane 2-D mesh, an axisymmetric wedge and a 3-D slab periodic in
 # k are told apart by every node of every block; blocks that disagree stop, and
-# so does a cell folded at a corner (2-D, 3-D, and a cell of a real 3-D mesh).
+# so does a cell folded at a corner (2-D, 3-D, and a cell of a real 3-D mesh);
+# a 3-D ring closed by type 200 over the full turn is translated by zero.
 mose_add_fast_script(MeshGeometry fast/mesh-geometry "fast;implementation;physics;2D")
 
 # Quadratic constitutive relation QCR2000: a unit check of the stress as the

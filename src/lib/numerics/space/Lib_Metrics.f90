@@ -53,12 +53,13 @@ contains
   !>    periodicity (type 200 on faces 5 and 6) of a 3-D mesh, and 0 otherwise. A 2-D mesh is a wedge when, in every
   !>    block, the k = 1 node plane is the k = 0 plane turned about the x axis by the same angle; it is plane when no
   !>    block is so turned. In 3-D the k = dim(3) node plane of every block with a type-200 face is the k = 0 plane turned
-  !>    about the x axis by the same angle, or translated (delthe = 0). Every node is checked (Node_Planes); blocks that
-  !>    disagree stop the run.
+  !>    about the x axis by the same angle, or translated (delthe = 0); a block closed on itself, a full turn about the x
+  !>    axis with its last node plane on the first, is translated by zero. Every node is checked (Node_Planes); blocks
+  !>    that disagree stop the run.
   !>  - The angle is the azimuth turned by the node (0,1) of the block, as it always was, or by the node farthest from
   !>    the axis when that one lies on it. The angles of two blocks agree when they differ by at most ETA of the angle.
-  !>  - The checks are relative to the move of the nodes per cell in k, the largest move of a node from one plane to the
-  !>    other over the cells between them (the thickness of a 2-D block), not to the size of the coordinates: the
+  !>  - The checks are relative to the move of the nodes per cell in k, measured along the k lines (K_Move_Per_Cell; the
+  !>    thickness of a 2-D block), not to the size of the coordinates: the
   !>    coordinates of a mesh are written with a finite number of digits, and their round-off, relative to that move, is
   !>    what a turn or a translation leaves over. A check relative to the size of the coordinates, at 1e-6 of it, fails a
   !>    wedge of 5 degrees written with 5 significant digits, which is then taken for a plane mesh, and passes a plane slab
@@ -179,16 +180,24 @@ contains
 
   contains
 
-    !> Compare the node planes k = 0 and k = ktop of a block. The thickness of the block is the largest move of a node
-    !> from the plane 0 to the plane ktop (its largest component), and cell = thickness / ktop the move per cell in k (in
-    !> 2-D, ktop = 1, the thickness). turned: every node of the plane ktop is the node of the plane 0 turned about the x
-    !> axis by ang, with |ang| > tol, to within eta of cell, and closer than as a translation. moved: every node is the
-    !> node of the plane 0 translated by the move of the node (0,0), to within eta of cell, and closer than as a turn.
-    !> Comparing the two keeps a wedge from passing for a translation and a slab far from the axis, which a small turn
-    !> nearly fits, from passing for a wedge; taking cell, not the thickness, keeps a periodic plane of a sector of many
-    !> cells that does not match by a fraction of a cell from passing for a turn. fit, fit_move: the misfits of the turn
-    !> and of the translation over cell; nearer_turn: |ang| > tol and the turn fits better than the translation;
-    !> nearer_move: the translation fits better than the turn.
+    !> Compare the node planes k = 0 and k = ktop of a block. cell is the move of the nodes per cell in k measured along
+    !> the k lines (K_Move_Per_Cell; in 2-D, ktop = 1, the thickness of the block). turned: every node of the plane ktop
+    !> is the node of the plane 0 turned about the x axis by ang, with |ang| > tol, to within eta of cell, and closer
+    !> than as a translation. moved: every node is the node of the plane 0 translated by the move of the node (0,0), to
+    !> within eta of cell, and closer than as a turn, or with |ang| <= tol, which is no turn: the turn by a null angle is
+    !> the translation by zero, so a block closed on itself (a full turn about the x axis, its plane ktop on the plane 0)
+    !> is translated by zero, the periodicity by the identity. Comparing the two keeps a wedge from passing for a
+    !> translation and a slab far from the axis, which a small turn nearly fits, from passing for a wedge; taking cell,
+    !> not the thickness, keeps a periodic plane of a sector of many cells that does not match by a fraction of a cell
+    !> from passing for a turn. The move along the k lines, not the chord from the plane 0 to the plane ktop, makes
+    !> cell the move per cell of a sector past half a turn too (its arcs in the largest-component norm, between 0.71 and
+    !> 1 of the arc; the chord understates it, 4.2 times at 270 degrees), and of a block closed on itself, where the chord
+    !> is zero or round-off. In 2-D the null angle changes only a block whose probe node keeps its azimuth while its plane
+    !> k = 1 is not the plane k = 0 translated to eta, and which the translation did not fit better than the turn by the
+    !> null angle (planes that touch or cross, or a plane k = 1 scaled radially about the axis): it passed for plane,
+    !> and stops here (with crossed planes it stopped at its folded cells, Check_Folded_Cells). fit, fit_move: the
+    !> misfits of the turn and of the translation over cell; nearer_turn: |ang| > tol and the turn fits better than the
+    !> translation; nearer_move: the translation fits better than the turn, or |ang| <= tol.
     subroutine Node_Planes ( blk, ktop, sr, tol, eta, turned, ang, moved, fit, nearer_turn, fit_move, nearer_move )
       type(MOSE_block_type), intent(in) :: blk
       integer, intent(in)               :: ktop
@@ -197,7 +206,7 @@ contains
       real(R8), intent(out)             :: ang, fit, fit_move
       ! Local
       integer  :: i, j, i0, j0
-      real(R8) :: theta1, theta2, ca, sa, rmax, r, a(3), c(3), shift(3), turn_off, move_off, thick, cell
+      real(R8) :: theta1, theta2, ca, sa, rmax, r, a(3), c(3), shift(3), turn_off, move_off, cell
 
       associate ( node => blk % node )
         ! Probe node: (0,1), or the node of the plane 0 farthest from the axis when (0,1) lies on it
@@ -227,7 +236,6 @@ contains
         shift = node(0,0,ktop)%c - node(0,0,0)%c
         turn_off = 0d0
         move_off = 0d0
-        thick    = 0d0
         do j = 0, blk % dim(2)
           do i = 0, blk % dim(1)
             a = node(i,j,0)%c
@@ -235,12 +243,11 @@ contains
             turn_off = max ( turn_off, abs ( c(1) - a(1) ), abs ( c(2) - ( a(2) * ca - a(3) * sa ) ), &
                                        abs ( c(3) - ( a(2) * sa + a(3) * ca ) ) )
             move_off = max ( move_off, maxval ( abs ( c - a - shift ) ) )
-            thick    = max ( thick, maxval ( abs ( c - a ) ) )
           enddo
         enddo
-        cell = thick / ktop
+        cell = K_Move_Per_Cell ( blk, ktop )
         nearer_turn = abs ( ang ) > tol .and. turn_off < move_off
-        nearer_move = move_off < turn_off
+        nearer_move = move_off < turn_off .or. abs ( ang ) <= tol
         turned = nearer_turn .and. turn_off <= eta * cell
         moved  = nearer_move .and. move_off <= eta * cell
         fit      = huge ( 1d0 )
@@ -252,6 +259,38 @@ contains
     end subroutine Node_Planes
 
   end subroutine Check_Mesh_Type
+
+
+  !> The move of the nodes of a block per cell in k, from the node plane 0 to the plane ktop, measured along the k
+  !> lines: for every node of the plane 0 the sum, over the cells of its k line, of its move across each cell (the
+  !> largest component), and the largest of these sums over ktop. Along straight k lines it is the move from the plane 0
+  !> to the plane ktop per cell (to the round-off of the sum); with one cell in k (ktop = 1) it is that move, bit for
+  !> bit; along the arcs of a sector it is the length of the arc per cell in the largest-component norm, between 0.71
+  !> and 1 of the arc (0.90 of it over a full turn), which the chord from plane to plane understates past half a turn
+  !> (4.2 times at 270 degrees); for a block closed on itself (a full turn about the x axis) it is that length per cell,
+  !> where the chord is zero or round-off. The scale of the checks of the periodic planes (Check_Mesh_Type) and of the
+  !> periodic translations of the blocks closed by type 200 (Wall_Images).
+  pure function K_Move_Per_Cell ( blk, ktop ) result ( cell )
+    type(MOSE_block_type), intent(in) :: blk
+    integer, intent(in)               :: ktop
+    real(R8)                          :: cell
+    ! Local
+    integer  :: i, j, k
+    real(R8) :: s
+
+    cell = 0d0
+    do j = 0, blk % dim(2)
+      do i = 0, blk % dim(1)
+        s = 0d0
+        do k = 1, ktop
+          s = s + maxval ( abs ( blk % node(i,j,k) % c - blk % node(i,j,k-1) % c ) )
+        enddo
+        cell = max ( cell, s )
+      enddo
+    enddo
+    cell = cell / ktop
+
+  end function K_Move_Per_Cell
 
 
   subroutine Compute_Norm_Area( b )
@@ -912,7 +951,7 @@ contains
         integer,  allocatable :: order(:)
         logical,  allocatable :: closed(:)
         real(R8)              :: ginv(MAXV,MAXV), coef(MAXV), rhs(MAXV), rho(MAXV), beta(MAXV)
-        real(R8)              :: t(3), cface(3,4), hmin, thick, tol, lim, mr, images
+        real(R8)              :: t(3), cface(3,4), hmin, tol, lim, mr, images
         integer               :: nraw, nc, kmax(MAXV), mrot, i, j, m, n, l, b, k1, k2, k3, kk(MAXV)
         logical               :: sector, span, changed
         character(len=512)    :: msg
@@ -948,14 +987,10 @@ contains
             if ( .not. closed(b) ) cycle
             nraw = nraw + 1
             raw(:,nraw) = blk(b) % node(0,0,blk(b)%dim(3)) % c - blk(b) % node(0,0,0) % c
-            ! The move of the nodes per cell in k, as Check_Mesh_Type takes it
-            thick = 0d0
-            do j = 0, blk(b) % dim(2)
-              do i = 0, blk(b) % dim(1)
-                thick = max ( thick, maxval ( abs ( blk(b) % node(i,j,blk(b)%dim(3)) % c - blk(b) % node(i,j,0) % c ) ) )
-              enddo
-            enddo
-            hmin = min ( hmin, thick / blk(b) % dim(3) )
+            ! The move of the nodes per cell in k, as Check_Mesh_Type takes it: along the k lines, so that a block closed
+            ! on itself (a full turn about the x axis, translated by zero) gives its cells, not the round-off of its
+            ! seam, and its translation, zero or round-off, falls below the tolerance
+            hmin = min ( hmin, K_Move_Per_Cell ( blk(b), blk(b) % dim(3) ) )
           enddo
           deallocate ( closed )
         end if
