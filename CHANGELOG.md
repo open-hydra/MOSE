@@ -56,6 +56,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   boundary flux of an equation is zero for any state (every equation of the periodic fields, the mass with walls), the driver
   removes the mean of the discrete source once after set-up, so that the discrete steady problem has a solution; the mean and
   its ratio to the mean of |S| go to the log.
+- The patch test of the viscous fluxes checks the cells next to inlets and outlets too (`ViscousPatch`, part
+  `ViscousOpenPatch`, fast tier): every outer face of a 2-D mesh with nodes moved at random and of a 3-D pair of blocks an
+  inlet or an outlet, one type per block face, `401`–`407` and `420` (ghost cells that copy the cell) and `408` (ghost
+  cells that extrapolate the cells). These faces have no viscous flux, so with a linear velocity, or a linear temperature at
+  uniform density, the cells of a face must give minus the flux of the uniform stress or heat conduction through it, within
+  1e-11 of the scale of the face fluxes: it checks that the ghost cells of these types sit, in the metric of the face
+  gradients, where their values belong. The solver does not change.
 
 ### Changed
 

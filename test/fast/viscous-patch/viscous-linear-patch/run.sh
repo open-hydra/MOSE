@@ -31,7 +31,9 @@
 #  run). Controls that every face metric passes: walls 301 with q = 0 (here)
 #  and 302 with T_w uniform along the wall (ViscousWallPatch) on parallelogram
 #  cells. Plus the face metrics inverse-mean and mean: they must give the
-#  viscous force of an independent replica of their formulas.
+#  viscous force of an independent replica of their formulas. The cells next
+#  to inlets and outlets (401-408, 420), whose faces have no viscous flux,
+#  are the test ViscousOpenPatch.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -63,7 +65,8 @@ step() {
   cp "input-$tag.ini" input.ini
   cp "INPUT/bc-$tag.txt" INPUT/bc.txt
   rm -f INPUT/transport.dat
-  if [[ $tag == ref && ( $run == ene || $run == enep || $run == momw || $run == momr || $run == ene10* || $run == mom10* ) ]]; then
+  if [[ $tag == ref && ( $run == ene || $run == enep || $run == momw || $run == momr || $run == ene10* || $run == mom10* ||
+        $run == momio* || $run == eneio* ) ]]; then
     ln -sf transport-ref.dat INPUT/transport.dat
   else
     ln -sf "../$VISC/transport.dat" INPUT/transport.dat
@@ -137,6 +140,18 @@ if [[ $NAME == ViscousWallPatch ]]; then
   python3 -B "$MC" case paraT hot > /dev/null || exit 1
   step ns paraT hot
   python3 -B "$MC" limits OUTPUT/paraT-hot-ns.log || status=1
+elif [[ $NAME == ViscousOpenPatch ]]; then
+  echo "-- viscous patch test next to inlets and outlets, one type per block face, which have no viscous flux: the"
+  echo "   cells of a face give minus the flux of the uniform stress (mom) or heat conduction (ene) through it --"
+  for case in rand1:1 rand1:2 rand1:3 box3d:1; do
+    IFS=: read -r mesh types <<< "$case"
+    for run in "momio$types" "eneio$types"; do
+      python3 -B "$MC" case "$mesh" "$run" > /dev/null || exit 1
+      step ns "$mesh" "$run"
+      step ref "$mesh" "$run"
+      python3 -B "$MC" open "$mesh" "$run" "OUTPUT/diag-$mesh-$run-ns.tec" "OUTPUT/diag-$mesh-$run-ref.tec" || status=1
+    done
+  done
 else
   echo "-- viscous patch test: linear velocity (mom) and linear temperature (ene) --"
   for mesh in fold2 jump jump2 fan fan4 star3 star5 box3d sym; do

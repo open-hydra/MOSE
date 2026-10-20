@@ -381,8 +381,8 @@ endif()
 # Patch test of the viscous fluxes: the parts below, each in its folder of
 # test/fast/viscous-patch, run one after the other by
 # test/fast/viscous-patch/run.sh. ViscousPatch (fast tier) runs
-# ViscousLinearPatch; ViscousWallPatch, over about 10 s of CPU time at one
-# thread, runs in the validation tier under its own name.
+# ViscousLinearPatch and ViscousOpenPatch; ViscousWallPatch, over about 10 s
+# of CPU time at one thread, runs in the validation tier under its own name.
 # Patch test of the viscous fluxes: a linear velocity and a linear temperature
 # have zero viscous force and heat conduction in every cell, so the face
 # gradients must give zero to round-off on meshes with nodes moved at random,
@@ -392,10 +392,12 @@ endif()
 # walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
 # against an independent replica of their formulas. ViscousWallPatch: the
 # cells next to walls of prescribed temperature varying along the wall.
-# Cost: 44 and 63 one-step solver runs, about 10 s and 14.5 s of CPU time at
-# one thread.
+# ViscousOpenPatch: the cells next to inlets and outlets (401-408, 420), whose
+# faces have no viscous flux.
+# Cost: 44, 63 and 16 one-step solver runs, about 10 s, 14.5 s and 4 s of
+# CPU time at one thread.
 mose_add_parts_script(ViscousPatch fast/viscous-patch
-    PARTS viscous-linear-patch LABELS fast numerics 2D 3D)
+    PARTS viscous-linear-patch viscous-open-patch LABELS fast numerics 2D 3D)
 mose_add_parts_script(ViscousWallPatch fast/viscous-patch
     PARTS viscous-wall-patch LABELS validation numerics 2D 3D)
 
