@@ -329,6 +329,24 @@ checks of an entry of the smaller of two runs of each (shared 192-thread machine
   with it at the rounding; at the floor of kappa, no macro step redone on an acoustic wave, with cells raised by the
   margin); no negative nu~, k or omega after a stage near walls, with a
   positive control that must print the count. ~3 min.
+- ☑ **I16 — Multirate input checks** (`MultirateInput`, validation): 34 configurations outside the scope stop at
+  set-up or at the first macro step with a non-zero exit code and the message naming the key (among them, with
+  `nonlocal-cfl = redo`, `levels = recompute` and no fixed macro step, a cfl above 1 with van Leer, first-order and
+  minmod, and a vnn above 0.5 in a Navier–Stokes
+  run, `Wilcox2006`, `SA-RC` and `SST-RC` with levels, and an SRM grain in mode 1), and the controls complete (among
+  them vnn 0.5 in a Navier–Stokes run,
+  vnn 0.6 there with max-level 0 and in an Euler run, cfl 1.2 and vnn 0.6 with `nonlocal-cfl = off` and `count`,
+  cfl 1.2 with `nonlocal-cfl = redo` and `levels = fixed` or a fixed macro step, and `levels = fixed` with a fixed
+  macro step above the step of the map, which warns once);
+  a reading of `input.ini` during the run that changes a key of `[MOSE-Multirate]` or a key fixed for every run
+  (`time-accurate`, `k-energy-coupling`), or takes `cfl` and `vnn` (with `redo`) or `cfl-rise-threshold` out of the
+  scope, is not taken (`ini-error = warn`: the residual history of the run without the change, byte for byte) or stops
+  the run (`stop`), with `off` a `cfl` and a `vnn` above the bounds are taken, and a `cfl` within the bound is
+  taken with the interface margin following it, above its floor and at it; `fixed-macro-step` builds the level map of the macro step taken; the
+  depth of the map of the adaptive step is min(`max-level`, floor of the octaves of the local steps), also with
+  `levels = fixed`, and with a `macro-step-target` within the step of the slowest cells the map is the one built for
+  the target (the depth the target gives); the stage sequence of one macro step equals the reference sequence.
+  < 1 min.
 
 ---
 

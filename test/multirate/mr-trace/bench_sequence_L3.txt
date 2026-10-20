@@ -1,0 +1,34 @@
+# Stage sequence of one macro step of the recursive Heun multirate scheme with levels 0..3 (30 stages):
+# level l, stage k, abscissa t/H, theta of every coarser level m (exact fractions), as the recursion of the scheme
+# gives them (docs/theory/time-integration.md, Recursive Heun scheme): ADVANCE(l, tau) = STAGE(l, 1, tau), then for
+# l < 3 ADVANCE(l+1, tau) and ADVANCE(l+1, tau + h_l/2), then STAGE(l, 2, tau + h_l), h_l = H/2^l, theta_m = (t - tau_m)/h_m.
+l=0 k=1 t=0 theta=
+l=1 k=1 t=0 theta=0:0
+l=2 k=1 t=0 theta=0:0 1:0
+l=3 k=1 t=0 theta=0:0 1:0 2:0
+l=3 k=2 t=1/8 theta=0:1/8 1:1/4 2:1/2
+l=3 k=1 t=1/8 theta=0:1/8 1:1/4 2:1/2
+l=3 k=2 t=1/4 theta=0:1/4 1:1/2 2:1
+l=2 k=2 t=1/4 theta=0:1/4 1:1/2
+l=2 k=1 t=1/4 theta=0:1/4 1:1/2
+l=3 k=1 t=1/4 theta=0:1/4 1:1/2 2:0
+l=3 k=2 t=3/8 theta=0:3/8 1:3/4 2:1/2
+l=3 k=1 t=3/8 theta=0:3/8 1:3/4 2:1/2
+l=3 k=2 t=1/2 theta=0:1/2 1:1 2:1
+l=2 k=2 t=1/2 theta=0:1/2 1:1
+l=1 k=2 t=1/2 theta=0:1/2
+l=1 k=1 t=1/2 theta=0:1/2
+l=2 k=1 t=1/2 theta=0:1/2 1:0
+l=3 k=1 t=1/2 theta=0:1/2 1:0 2:0
+l=3 k=2 t=5/8 theta=0:5/8 1:1/4 2:1/2
+l=3 k=1 t=5/8 theta=0:5/8 1:1/4 2:1/2
+l=3 k=2 t=3/4 theta=0:3/4 1:1/2 2:1
+l=2 k=2 t=3/4 theta=0:3/4 1:1/2
+l=2 k=1 t=3/4 theta=0:3/4 1:1/2
+l=3 k=1 t=3/4 theta=0:3/4 1:1/2 2:0
+l=3 k=2 t=7/8 theta=0:7/8 1:3/4 2:1/2
+l=3 k=1 t=7/8 theta=0:7/8 1:3/4 2:1/2
+l=3 k=2 t=1 theta=0:1 1:1 2:1
+l=2 k=2 t=1 theta=0:1 1:1
+l=1 k=2 t=1 theta=0:1
+l=0 k=2 t=1 theta=

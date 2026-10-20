@@ -794,3 +794,8 @@ endif()
 # certificate, interface margin and redo (cfl4); no negative nu~, k or omega after a stage where the near-wall
 # destruction acts faster than the transport, with a positive control (positivity).
 mose_add_mr_group(MultirateShocks 3300 shocks "sod;shock;rpost;cfl4;positivity" "multirate;validation;numerics;1D;2D")
+# I16: configurations outside the scope of the integrator stop at set-up or at the first macro step, one run each, and
+# a reading of input.ini during the run that changes a key of [MOSE-Multirate] is not taken or stops the run (reject);
+# with fixed-macro-step the level map is that of the macro step taken (fixedstep); the stage sequence of one macro step
+# against the reference sequence of the recursion (trace).
+mose_add_mr_group(MultirateInput 1020 input "reject;fixedstep;trace" "multirate;validation;implementation;1D;2D;3D")
