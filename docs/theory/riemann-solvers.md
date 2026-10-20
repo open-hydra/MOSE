@@ -126,7 +126,8 @@ and integrate the conserved variables across these waves.
 
 All HLL variants solve a limited Riemann problem by estimating **two bounding wave speeds**
 $S_L$ (leftmost) and $S_R$ (rightmost) that bracket the entire wave structure.
-The Batten et al. (1997) estimate is the industry standard:
+MOSE takes the estimates that Batten et al. (1997) recommend, those of Einfeldt et al.
+with the Roe average (Batten's eq. 51), and bounds them by zero:
 
 $$
 S_L = \min\!\bigl(0,\;v_{n,L} - a_L,\;\tilde{v}_n - \tilde{a}\bigr),\qquad
@@ -136,9 +137,21 @@ $$
 where $\tilde{v}_n$ and $\tilde{a}$ are **Roe-averaged** values. The Roe average with
 sqrt-weighting $w = \sqrt{\rho_L/\rho_R}$ is:
 
-$$\tilde{v}_n = \frac{w\,v_{n,L} + v_{n,R}}{w + 1}, \quad \tilde{a} = a(\tilde{\rho}, \tilde{T}, \tilde{Y}_s)$$
+$$\tilde{v}_n = \frac{w\,v_{n,L} + v_{n,R}}{w + 1}, \quad
+\tilde{a}^2 = (\tilde{\gamma} - 1)\Bigl(\tilde{H} - \tfrac{1}{2}|\tilde{\mathbf{v}}|^2 + \tilde{c}_v\tilde{T} - \tilde{e}\Bigr),
+\quad \tilde{\gamma} = 1 + \tilde{R}/\tilde{c}_v$$
 
-**Purpose of Batten's bounds:**
+with $\tilde{H}$, $\tilde{T}$ and $\tilde{R}$ the Roe averages of the total enthalpy, the temperature and the gas
+constant, and $\tilde{c}_v$ and $\tilde{e}$ the averages of the specific heats and of the internal energies of the
+species (`roe_averages` in `Lib_Riemann_HLL.f90`). For a single calorically perfect gas this is the sound speed of
+Batten et al. (their p. 1563), $\tilde{c}^2 = (\gamma - 1)\bigl(\tilde{H} - \tfrac{1}{2}|\tilde{\mathbf{v}}|^2\bigr)$.
+
+The zero is not in Batten's eq. (51), $S_L = \min(v_{n,L} - a_L,\;\tilde{v}_n - \tilde{a})$,
+$S_R = \max(v_{n,R} + a_R,\;\tilde{v}_n + \tilde{a})$; in Batten et al. the zero appears
+where the flux or the intermediate state is selected, their eqs. (23)–(26): $\mathbf{F}_L$ when $S_L > 0$,
+$\mathbf{F}_R$ when $S_R < 0$.
+
+**Purpose of the bounds:**
 - $\max(0, \ldots)$ ensures $S_R \geq 0$ (rightmost wave travels right or stalls)  
 - $\min(0, \ldots)$ ensures $S_L \leq 0$ (leftmost wave travels left or stalls)  
 - The Roe averages provide entropy-consistent estimates that capture expansion fans correctly  
@@ -260,8 +273,8 @@ Tramel's improved variant of HLLE for better shear-layer resolution.
 
 **Key modification:**
 
-Instead of the standard Batten wave-speed bound using $\max(\tilde{v}_n, \tilde{a})$,
-HLLE++ uses $\tilde{v}_n$ directly as the lower eigenvalue bound.
+For the contact and shear waves HLLE++ takes the Roe eigenvalue $|\tilde{v}_n|$ itself
+(`riemann_HLLEpp` in `Lib_Riemann_HLL.f90`), blended with the HLLE eigenvalue as below.
 This change preserves **Eulerian shear waves** (pure tangential velocity jumps)
 that would otherwise be artificially diffused by standard HLLE.
 
