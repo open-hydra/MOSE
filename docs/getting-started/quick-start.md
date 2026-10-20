@@ -73,29 +73,29 @@ The `input.ini` file specifies the physics and numerics:
 
 ```ini
 [MOSE-Physics]
-equations = euler            # Inviscid compressible Euler
+equations = euler            ; Inviscid compressible Euler
 
 [MOSE-Numerics]
-cfl = 1.0                    # Courant–Friedrichs–Lewy number
-time-scheme = RK3            # 3rd-order Runge–Kutta temporal scheme
-time-accurate = false        # Steady-state integration (no physical time)
-irs-beta = 0.5               # Implicit restarts parameter
-riemann-solver = HLLE        # HLLE numerical flux
-space-reconstruction = MUSCL # 2nd-order spatial reconstruction
-flux-limiter = vanleer       # van Leer slope limiter
-integration-variables = cons # Conserved variables (ρ, ρu, ρv, E)
+cfl = 1.0                    ; Courant–Friedrichs–Lewy number
+time-scheme = RK3            ; 3rd-order Runge–Kutta temporal scheme
+time-accurate = false        ; Steady-state integration (no physical time)
+irs-beta = 0.5               ; Implicit residual smoothing (steady runs only)
+riemann-solver = HLLE        ; HLLE numerical flux
+space-reconstruction = MUSCL ; 2nd-order spatial reconstruction
+flux-limiter = vanleer       ; van Leer slope limiter
+integration-variables = cons ; Conserved variables (ρ, ρu, ρv, E)
 
 [MOSE-IO]
-shell-diter = 100           # Diagnostic output every 100 iterations
-sol-format = tecplot ascii   # Tecplot ASCII output format
+shell-diter = 100            ; Diagnostic output every 100 iterations
+sol-format = tecplot ascii   ; Tecplot ASCII output format
 
 [MOSE-Probes]
-probe1 = exit                # Probe at the exit plane
+probe1 = exit                ; Probe at the exit plane
 
 [exit]
-index-position = 1 50 33 1   # Probe location (i, j, k, block)
-variables = M                # Mach number output
-diter = 100                  # Probe output frequency
+index-position = 1 50 33 1   ; Probe location (block, i, j, k)
+variables = M                ; Mach number output
+diter = 100                  ; Probe output frequency
 
 ```
 

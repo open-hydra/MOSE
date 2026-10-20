@@ -28,6 +28,13 @@ time-scheme = RK3
 space-reconstruction = MUSCL
 ```
 
+!!! note "Comments"
+    A line that starts with `!`, `;` or `#` is a comment. After a value only `;` starts a comment
+    (`cfl = 0.9 ; CFL number`): a `#` or a `!` after a value is part of the value. A number followed by one
+    does not read and stops the run; a name followed by one stops the run when its parameter takes one of a
+    list of names, and is otherwise taken with the comment in it (a probe named so finds no section of that name,
+    and the run stops).
+
 !!! warning "Default values"
     If a parameter is not specified, the **default value** is used silently.
 
