@@ -226,6 +226,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ghost metrics wrongly there (a minimal program in standard Fortran gives wrong values at `-O2` and `-O3` and the right ones at
   `-O0`, `-O1` and with `-ipo`), and MOSE stopped at set-up on the check of the ghost metrics, or ran with wrong ghost metrics.
   The RELEASE build with IPO, the default, and the DEBUG build configure as before, with the same compile and link lines.
+- The fast tier (`ctest -L fast`, the pre-push hook) runs the parts of `InputChecks` and `ViscousPatch` that take about 10 s of
+  CPU time or less at one thread: `ExitCodes`, `RuntimeInput` and `ViscousWallPatch`, which take more, run in the validation
+  tier under their own names, and the PR CI runs both tiers as before (rule, tolerance and times in `test/TESTING-PLAN.md`,
+  section 4).
 
 ### Removed
 

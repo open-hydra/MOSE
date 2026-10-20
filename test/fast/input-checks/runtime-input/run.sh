@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  input.ini read again during a run (fast tier)
+#  input.ini read again during a run (validation tier)
 #
 #  Every ini-diter iterations MOSE reads input.ini again and takes its values.
 #  They must keep to the rules of the registry, as at setup: a value out of

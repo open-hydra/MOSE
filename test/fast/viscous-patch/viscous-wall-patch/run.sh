@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #===============================================================================
 #  Patch test of the viscous fluxes next to walls of prescribed temperature
-#  (fast tier): the cells with a face of type 302 on the meshes of
+#  (validation tier): the cells with a face of type 302 on the meshes of
 #  ViscousLinearPatch, with T linear, so that T_w varies along the walls, on
 #  skewed cells, and behind a wall whose two layers of extrapolated ghost
 #  cells are turned over (fan4); a velocity that is linear and zero on a no-slip wall,

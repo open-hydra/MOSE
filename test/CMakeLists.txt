@@ -161,6 +161,29 @@ function(mose_add_fast_script NAME DIR)
     endif()
 endfunction()
 
+# Helper: register some of the parts of an area, "./run.sh <part>...", with the
+# given labels. A part (a row of test/TESTING-PLAN.md, section 4) stays in the
+# fast tier at about 10 s of CPU time at one thread or less; the parts above it
+# run in the validation tier under a registration of their own, and come back
+# when a measurement at a lower load gives 10 s or less (section 4 of the plan
+# gives the rule, the tolerance and the times).
+function(mose_add_parts_script NAME DIR)
+    cmake_parse_arguments(T "" "" "PARTS;LABELS" ${ARGN})
+    if(EXISTS "${CMAKE_SOURCE_DIR}/test/${DIR}/run.sh")
+        list(JOIN T_PARTS " " _parts)
+        add_test(
+            NAME    ${NAME}
+            COMMAND bash -c "./run.sh ${_parts}"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${DIR}"
+        )
+        set_tests_properties(${NAME} PROPERTIES
+            LABELS      "${T_LABELS}"
+            TIMEOUT     120
+            ENVIRONMENT "${_MOSE_TEST_ENV}"
+        )
+    endif()
+endfunction()
+
 # Riemann smoke-matrix (F5): every shock-capturing solver stays positive;
 # shock-detector = Tramel turns the shock sensor on.
 mose_add_fast_script(RiemannSmoke   fast/riemann-smoke  "fast;numerics;1D")
@@ -276,9 +299,11 @@ mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D"
 # a ghost cell: probes at cell centres hold the values of their cells.
 mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 
-# Input checks (InputChecks): the parts below, each in its folder of
-# test/fast/input-checks, run one after the other by
-# test/fast/input-checks/run.sh.
+# Input checks: the parts below, each in its folder of test/fast/input-checks,
+# run one after the other by test/fast/input-checks/run.sh. InputChecks (fast
+# tier) runs LimiterDefaults, IRSTimeAccurate and DecompositionMap; ExitCodes
+# and RuntimeInput, over about 10 s of CPU time each at one thread, run in the
+# validation tier under their own names.
 # Exit codes of the error stops: a run that MOSE stops on an error ends with a
 # non-zero exit code and its message: the Sod tube as a viscous mixture of four
 # species without a diffusion table, a run that diverges, a NaN or an infinity
@@ -312,7 +337,13 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # input.ini read again during a run (ini-diter): a value out of the rules of
 # the registry stops the run with its message, as at setup; read again
 # unchanged, with keys left out or written, it gives the run without readings.
-mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;numerics;1D;2D")
+mose_add_parts_script(InputChecks fast/input-checks
+    PARTS limiter-defaults irs-time-accurate decomposition-map
+    LABELS fast implementation numerics 1D 2D)
+mose_add_parts_script(ExitCodes fast/input-checks
+    PARTS exit-codes LABELS validation implementation numerics 1D 2D)
+mose_add_parts_script(RuntimeInput fast/input-checks
+    PARTS runtime-input LABELS validation implementation numerics 2D)
 
 # Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).
 # Spalart-Allmaras with variable density: the right-hand side of the equation
@@ -347,9 +378,11 @@ if(TEST WedgeAxisStep)
     set_tests_properties(WedgeAxisStep PROPERTIES TIMEOUT 600)
 endif()
 
-# Patch test of the viscous fluxes (ViscousPatch): the parts below, each in
-# its folder of test/fast/viscous-patch, run one after the other by
-# test/fast/viscous-patch/run.sh.
+# Patch test of the viscous fluxes: the parts below, each in its folder of
+# test/fast/viscous-patch, run one after the other by
+# test/fast/viscous-patch/run.sh. ViscousPatch (fast tier) runs
+# ViscousLinearPatch; ViscousWallPatch, over about 10 s of CPU time at one
+# thread, runs in the validation tier under its own name.
 # Patch test of the viscous fluxes: a linear velocity and a linear temperature
 # have zero viscous force and heat conduction in every cell, so the face
 # gradients must give zero to round-off on meshes with nodes moved at random,
@@ -359,8 +392,12 @@ endif()
 # walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
 # against an independent replica of their formulas. ViscousWallPatch: the
 # cells next to walls of prescribed temperature varying along the wall.
-# Cost: 44 and 63 one-step solver runs, about 10 s and 14.5 s at one thread.
-mose_add_fast_script(ViscousPatch fast/viscous-patch "fast;numerics;2D;3D")
+# Cost: 44 and 63 one-step solver runs, about 10 s and 14.5 s of CPU time at
+# one thread.
+mose_add_parts_script(ViscousPatch fast/viscous-patch
+    PARTS viscous-linear-patch LABELS fast numerics 2D 3D)
+mose_add_parts_script(ViscousWallPatch fast/viscous-patch
+    PARTS viscous-wall-patch LABELS validation numerics 2D 3D)
 
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
 # which is an exact steady solution, checked against its closed form. These

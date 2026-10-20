@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Exit codes of the error stops (fast tier)
+#  Exit codes of the error stops (validation tier)
 #
 #  A run that MOSE stops on an error must end with a non-zero exit code, so
 #  that scripts and CI see the failure, and with its message, not with a
