@@ -266,6 +266,17 @@ by `test/multirate/run_group.sh`. Cases, checks and thresholds: [`docs/vv/multir
 Costs: CPU time with one thread in the build of the CI job without MPI (gfortran 13.2, TESTING), the sum over the
 checks of an entry of the smaller of two runs of each (shared 192-thread machine, load 93–155); I17 is wall time on
 2–4 MPI processes. The fast entry is F31.
+- ☑ **I18 — Multirate identity and equivalence** (`MultirateIdentity`, validation): one level (`max-level` 0,
+  `safety` 1) = single-rate Heun step bit for bit, residual history included, on 33 configurations (blocks, inlets
+  401, 402, 403, 405, 408, 410 and 420, the SRM grain in its inflow mode, laminar plate with the two diffusive
+  metrics and with an isothermal wall, 3-D hot
+  cube, Spalart–Allmaras and SST, also with the rotation and curvature correction, 2-D wedge, 1-D slab between symmetry j and k faces with the y and z velocity frozen, 1-D
+  duct with inclined j and k faces, `bc.txt` in reverse order), and the per-cell copies of the solver routines and the
+  boundary fluxes of a record statement by statement against their originals, with the MPI tags of the multirate
+  apart from those of the
+  single-rate exchanges; 1 against 3 and 4 OpenMP threads bit for bit; equal levels across the connections and one
+  block = three blocks with the same map; the halo of every level against an independent construction; mirror
+  symmetry of a centred pulse; free-stream preservation on a curvilinear periodic mesh. ~6 min.
 
 ---
 

@@ -749,3 +749,12 @@ endfunction()
 # configuration outside the scope stopped at set-up, on two 1-D cases of 284 cells; the lines of the gas entering through
 # 400 faces, with one level as with the single rate, on a tube of 8 cells.
 mose_add_mr_script(MultirateSmoke multirate/mr-smoke 300 "multirate;fast;implementation;1D")
+
+# I18: one level (max-level 0, safety 1) = single-rate step bit for bit, residual history included, on 33
+# configurations, and the per-cell copies of the solver routines statement by statement against their originals,
+# with the MPI tags of the multirate apart from those of the single-rate exchanges (onelevel); 1 against 3 and 4
+# OpenMP threads bit for bit (threads); equal levels across the connections and one block = three blocks with the
+# same map (blocks); the halo of every level against an independent construction (halo); mirror symmetry of a
+# centred pulse (sym); free-stream preservation on a curvilinear periodic mesh (free).
+mose_add_mr_group(MultirateIdentity 4500 identity "onelevel;threads;blocks;halo;sym;free"
+                  "multirate;validation;implementation;numerics;1D;2D;3D")
