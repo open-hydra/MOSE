@@ -156,6 +156,19 @@ $$
     which is used in the immediate vicinity of shocks.
     The shock-detection sensor (see below) smoothly modulates $\beta$.
 
+At the first interior face the slope behind the first cell, $s_0$ or $s_2$,
+takes the ghost cell of the boundary face. Behind a zero-gradient face (`0`,
+`401`–`407`, `420`) the ghost value is that of the first cell: that slope is
+zero, and every limiter gives zero with a zero argument, so the reconstruction
+of the first interior face is of first order on the side of the first cell.
+Behind a mapped face (`410`) the ghost cell is the first cell mirrored through
+the face (see *Gradient Computation for Diffusive Fluxes*), centred
+$\Delta l_1$ from the first cell along a straight grid line, the distance that
+the reconstruction takes: the slope is that of the field for the quantities of
+the file; for the turbulence variables and the soot, whose specific value is
+that of the first cell, the slope of $(\rho\phi)$ is $\phi_1$ times that of the
+density.
+
 !!! note "Choosing the reconstruction"
 
     `space-reconstruction = MUSCL` limits the slopes with the function
@@ -431,17 +444,25 @@ position at which their value is right for a linear field:
   ($2\mathbf{x}_1 - \mathbf{x}_2$, or $\mathbf{x}_1$, in a block with two
   cells, or one, across the face; there the value reads the ghost cell of the
   opposite face, so value and position agree only with three cells or more);
-  chimera (`102`) and mapped (`410`) faces take the same position, an
-  approximation, since their values come from donor cells or from a file; the
-  tangential differences of their faces take as neighbours of a ghost cell
-  along the face the ghost cells of the neighbouring faces; beyond the edges
-  of the block face a chimera face extrapolates the row of its ghost cells
-  linearly (in the k direction of a 2-D mesh, the ghost cell turned by the
-  wedge angle), a mapped face takes the ghost cell itself (no difference on
-  that side), an approximation; the MUSCL reconstruction of the first interior face
-  takes the distance $l_0 = \Delta l_1$ of the ghost cell instead, so on cells
-  stretched across these faces the slope behind the face is scaled by a factor
-  of order one, which the limiter bounds;
+  chimera (`102`) faces take the same position, an approximation, since their
+  values come from donor cells; the tangential differences of their faces take
+  as neighbours of a ghost cell along the face the ghost cells of the
+  neighbouring faces, and beyond the edges of the block face the row of its
+  ghost cells extrapolated linearly (in the k direction of a 2-D mesh, the
+  ghost cell turned by the wedge angle); the MUSCL reconstruction of the first
+  interior face takes the distance $l_0 = \Delta l_1$ of the ghost cell instead,
+  so on cells stretched across these faces the slope behind the face is scaled
+  by a factor of order one, which the limiter bounds;
+- mapped faces (`410`): the file gives the state of the cell across the face,
+  taken as the ghost cell, the first cell mirrored through the face; the
+  quantities of the file sit at its centre, $2\mathbf{x}_f - \mathbf{x}_1$, and
+  the turbulence variables, which the file does not give (the values of the
+  first cell per unit mass), at $\mathbf{x}_1$; a face with such a ghost cell in
+  its stencil takes one metric per group of quantities, as next to walls. The
+  soot, copied in the same way, takes the position of the species: no flux takes
+  its gradient. Where the cells of the solver that wrote the file have another
+  width across the face, its values sit at half that width from the face, and
+  the derivatives across the first row carry the error of that difference;
 - zero-gradient faces (`0`, `401`–`407`, `420`): the cell itself;
 - symmetry (`300`): the mirror image of the cell across the face; on a face of
   zero area (an axis at $r = 0$) the cell itself, since the ghost value there is
@@ -469,10 +490,20 @@ periodic face. For a field that breaks the condition the value of the ghost cell
 position makes the stencil exact: the error is proportional to the part that the
 condition forbids ($\mathbf{g}\cdot\mathbf{n}$, $G - RGR$, $\mathbf{g}\cdot\mathbf{T}$),
 it stays on the faces next to the boundary, and it vanishes as the solution
-satisfies the condition. Behind the other faces between blocks, the
-zero-gradient faces and the extrapolated ones the gradient is exact for every
-linear field; behind walls for the linear fields that take the wall values
-(next section).
+satisfies the condition. Behind the other faces between blocks and the
+zero-gradient faces the gradient is exact for every linear field; behind walls
+and `400` faces for the linear fields of the next section; behind mapped faces
+for the linear fields whose values in the file are those at the centre of the
+ghost cell. Behind the faces whose ghost value is $3u_1 - 3u_2 + u_3$ it is
+exact for every linear velocity, but for the mass fractions, the temperature and
+the specific turbulence and scalar variables only where the quantities that the
+rule extrapolates, $\rho_s$, $p$ and $(\rho\phi)$, are linear too (for $Y_s$ and
+$\phi$ where the density is uniform, for $T$ where the composition is uniform
+as well): their quotients $Y_s = \rho_s/\rho$, $T = p/(\rho R)$ and
+$\phi = (\rho\phi)/\rho$ are not linear where the density varies. There the
+derivative across the first row has a relative error of second order in the
+cell size on uniform cells and of first order on cells that grow by a fixed
+ratio across the face.
 
 $M_f$ is computed once at setup and stored on every face of the blocks of each
 rank, 27 values per cell (the mesh does not move); the cell centres come from

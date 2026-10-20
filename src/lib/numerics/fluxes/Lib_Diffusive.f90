@@ -12,8 +12,11 @@ contains
   !> their viscous variables Visc1..Visc10 (Visc_State, which Viscous_Variables computes once per stage for every cell),
   !> mapped to Cartesian components with the face metric Mf (MOSE_Lib_Stencil_Metrics: Viscous_Face_Metric); the state
   !> of the face is the mean of the primitive variables Prim1 and Prim2 of the two cells. Res1 takes -flux, Res2 +flux.
-  !> With a wall ghost cell in the stencil, Mg: one face metric per group of quantities (1 species and scalars,
-  !> 2 temperature, 3 velocity, 4 turbulence variables), whose ghost values sit at different positions (Ghost_Wall).
+  !> With a ghost cell of a wall or of a mapped face in the stencil, Mg: one face metric per group of quantities (1 species
+  !> and scalars, 2 temperature, 3 velocity, 4 turbulence variables), whose ghost values sit at different positions
+  !> (Ghost_Wall, Ghost_Q2D_Mapped). Behind a mapped face the soot, a copy of the cell, sits at x1, while the metric of
+  !> group 1 puts it with the species of the file at 2 x_f - x1: no flux reads its gradient (Soot_Diffusive_Flux takes that
+  !> of the temperature).
   subroutine Diffusive_Flux ( normal, area, waldis1, waldis2, kr1, kr2, Prim1, Prim2, Visc1, Visc2, Visc3, &
                               Visc4, Visc5, Visc6, Visc7, Visc8, Visc9, Visc10, Mf, Res1, Res2, a, b, c, &
                               Sc, Sct, Prt, Prl, soot_enabled, Mg )
@@ -52,7 +55,8 @@ contains
     !> temporary on every face.
     if ( present(Mg) ) then
       do v = 1, nprim
-        g = 1                                        ! species, soot and passive scalars
+        g = 1                                        ! species, soot and passive scalars (behind a mapped face the soot
+                                                     ! sits at x1 and this metric at 2 x_f - x1: no flux reads its gradient)
         if ( v == np ) g = 2                         ! temperature
         if ( v >= nu .and. v <= nw ) g = 3           ! velocity
         if ( nrans > 0 .and. v >= nt ) g = 4         ! turbulence variables

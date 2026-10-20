@@ -16,8 +16,14 @@
 #  walls (paraT). T linear at uniform pressure, the density not uniform, next
 #  to walls 301, 302 and 400 faces: their ghost cells extrapolate T itself
 #  (enep); a cold 302 wall and a steep pressure at 400 faces, where the floor
-#  and the cut of those ghost cells act and are counted (hot). Same case
-#  generator and checks: ../viscous-linear-patch
+#  and the cut of those ghost cells act and are counted (hot). Next to a face
+#  of type 410 (assigned state from a file), on cells with nodes moved at
+#  random, the state of the file at the centre of the ghost cell: u linear
+#  (mom410), T linear at uniform pressure (enep410); with Spalart-Allmaras,
+#  whose nu~ the ghost cell takes from the cell, nu~ linear against a replica
+#  of its fluxes and of its cb2 term (sa410), and nu~ uniform with the gas
+#  entering at 1.2 times the density of the cells, r(rho nu~) = nu~ r(rho)
+#  (turb410). Same case generator and checks: ../viscous-linear-patch
 #===============================================================================
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -592,6 +592,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   no blank around `=`). The reader takes the nodes of a zone only so written: a header with `I = 3` or `j=2` kept the default
   of 2 nodes in silence, the values of the zone were read for that size, and the run ended with exit code 0. Other forms are
   still not read.
+- A file of an assigned state (`410`) without `p`, without one of `u`, `v` and `w`, or without any `rho(N)` stops the run at
+  set-up with exit code 1, with the file and the variables it lacks: the file gives the whole state of the cell across the
+  face. The ghost cells took the value of the cell for a missing `p`, `u`, `v` or `w`, and the run ended with exit code 0;
+  without any `rho(N)` they had zero density, and the run ended at its first step with a run-time error (gfortran with bounds
+  checking).
 - With the rotating frame, `stationary-face-<n>` entries no longer make the start-up hang: the count of the entries asked for
   `stationary-face-1` at every pass, so stationary walls could not be used. A `rotational-frame` other than `rigid-body`, its
   default `none` included, turns the frame off before its entries are read; with `none` the switch of the frame was left
@@ -781,3 +786,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   quantities were copied, and the face metrics placed their ghost values where they are not, so the viscous flux of the faces
   between two wall cells was wrong for a linear field on skewed cells. Their velocity and turbulence variables take the wall
   values 2q_w − q₁ of an adiabatic wall, as the other walls: the turbulence variables were copied from the cell.
+- Next to a face of type `410` (assigned state from a file), with `diffusive-metric = stencil` (the default), the metrics of
+  the faces between the cells of the first row and of the source terms of the turbulence models put the state of the file at
+  the centre of the ghost cell of the face, the first cell mirrored through it, where the reconstruction already took it, and
+  the turbulence variables, which the file does not give and the ghost cell takes from the cell next to the face, at the
+  centre of that cell. Every quantity sat at 3x₁ − 3x₂ + x₃: the derivative of the copied ones across the first row was
+  half the right one on uniform cells, and that of the quantities of the file was wrong where the grid lines across the face
+  are not straight and uniform, at any resolution. The ghost cells take the turbulence variables and the soot of the cell per
+  unit mass: they took them per unit volume with the density of the file, so that where the two densities differ a uniform
+  field of these quantities did not stay uniform across the face, and the gas entering carried them scaled by the ratio of the
+  densities. Viscous runs with a `410` face change next to it; with turbulence or soot, where the density of the file differs
+  from that of the cell, runs with a `410` face change in the flux of these quantities through the face with every
+  `diffusive-metric`. Runs without a `410` face do not change.

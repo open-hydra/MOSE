@@ -12,7 +12,7 @@
 #    ViscousLinearPatch (viscous-linear-patch): patch test of the viscous
 #      fluxes
 #    ViscousWallPatch (viscous-wall-patch): the same next to walls of
-#      prescribed temperature
+#      prescribed temperature and to faces of type 410
 #    ViscousOpenPatch (viscous-open-patch): the same next to inlets and
 #      outlets (401-408, 420)
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.

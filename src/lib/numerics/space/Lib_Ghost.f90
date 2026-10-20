@@ -322,6 +322,12 @@ contains
       
   end subroutine Ghost_Symmetry
 
+  !> Ghost cells of a mapped face (410), both layers, and Pg(:,1:2): the state of the cell across the face that its file
+  !> gives, the densities of the species, the velocity and the pressure, interpolated at the time; the quantities after p
+  !> (the turbulence variables and the soot), which the file does not give, those of the cell per unit mass, phi_g = phi_1,
+  !> that is (rho phi)_g = rho_g (rho phi)_1/rho_1 with rho the sum of the densities of the species. So the specific values
+  !> whose differences the viscous fluxes and the sources take, phi = (rho phi)/rho (Visc_State), are those of the cell,
+  !> and a uniform field of them stays uniform across the face, whatever the density of the file.
   subroutine Ghost_Q2D_Mapped ( bc, blk, time )
     implicit none
     type(MOSE_bc_type), intent(inout)    :: bc
@@ -336,8 +342,9 @@ contains
     Km = bc % k
     Fm = bc % f
 
-    ! Interpolate Q2D data at current time (per-variable, reusing time_bc_type)
-    do s = 1, nprim
+    ! Interpolate Q2D data at current time (per-variable, reusing time_bc_type): the file gives every primitive up to the
+    ! pressure (Read_Q2D_Tecplot stops on a file that lacks one; a species that it does not name has zero density)
+    do s = 1, np
       if (bc % q2d_map(s) % exists) then
         if (bc % q2d_map(s) % periodic) then
           Pinterp(s) = bc % q2d_map(s) % update(time)
@@ -354,6 +361,11 @@ contains
         Pinterp(s) = blk % P(s, Im, Jm, Km)
       endif
     enddo
+
+    ! The quantities after p (the turbulence variables and the soot): the values of the cell per unit mass, at the density
+    ! of the file
+    if ( nprim > np ) Pinterp(np+1:nprim) = sum ( Pinterp(1:nsc) ) * ( blk % P(np+1:nprim,Im,Jm,Km) &
+                                                                       / sum ( blk % P(1:nsc,Im,Jm,Km) ) )
 
     ! First ghost cell
     Ig = Im - guide(Fm,1)

@@ -30,10 +30,14 @@
 !> of zero area, an axis, where the ghost value is a copy of the cell), and on the k faces of a wedge or of a 3-D sector
 !> (200) the source of the ghost cell, the cell next to the opposite k face of the block (on a wedge the cell itself),
 !> rotated by the angle of the wedge or sector, or, on a translated sector, translated from its outer face to this face
-!> as across a periodic pair. Chimera (102) and mapped (410) faces take the
-!> extrapolated position too, an approximation: their values come from donor cells or from a file. Behind a wall the two
-!> positions of a ghost cell give the faces with that ghost cell in their stencil one metric per group of quantities
-!> (species and scalars, temperature, velocity, turbulence variables: dir(d)%Mg, Diffusive_Flux). The centres of every
+!> as across a periodic pair. Chimera (102) faces take the extrapolated position too, an approximation: their values come
+!> from donor cells. Behind a mapped face (410) the quantities that its file gives, the state of the cell across the face,
+!> sit at the centre of the ghost cell, 2 x_f - x1 (the first cell mirrored through the face), and the turbulence variables,
+!> which the file does not give (the values of the cell per unit mass, Ghost_Q2D_Mapped), at x1; the other quantities after
+!> p (the soot), copied in the same way, take the position of the species, as no flux reads their gradient
+!> (Soot_Diffusive_Flux takes that of the temperature). Behind a wall or a mapped face the two positions of a ghost cell
+!> give the faces with that ghost cell in their stencil one metric per group of quantities (species and scalars,
+!> temperature, velocity, turbulence variables: dir(d)%Mg, Diffusive_Flux). The centres of every
 !> block are computed on every rank, from the nodes every rank holds until the end of the setup of the metrics, so no
 !> message is needed; the face metrics are stored for the blocks of the rank only (blk%dir(d)%Mf, on the faces of the
 !> block, interior and boundary).
@@ -51,9 +55,10 @@ module MOSE_Lib_Stencil_Metrics
 
   integer, parameter :: METRIC_MEAN = 0, METRIC_INVERSE_MEAN = 1, METRIC_STENCIL = 2
 
-  !> Cell centres of one block with one layer of ghost cells: x(1:3, 1-gc:n1+gc, 1-gc:n2+gc, 1-gc:n3+gc); behind the walls
-  !> and the 400 faces also the position of the extrapolated quantities, xe, and the groups of quantities that take it, em
-  !> (bit g-1 for group g: 1 species and scalars, 2 temperature, 3 velocity, 4 turbulence variables)
+  !> Cell centres of one block with one layer of ghost cells: x(1:3, 1-gc:n1+gc, 1-gc:n2+gc, 1-gc:n3+gc); behind the walls,
+  !> the 400 faces and the mapped faces also a second position, xe (that of the extrapolated quantities; of the turbulence
+  !> variables copied from the cell behind a mapped face), and the groups of quantities that take it, em (bit g-1 for
+  !> group g: 1 species and scalars, 2 temperature, 3 velocity, 4 turbulence variables)
   type :: centres_t
     real(R8), allocatable :: x(:,:,:,:), xe(:,:,:,:)
     integer, allocatable  :: em(:,:,:)
@@ -203,7 +208,8 @@ contains
       end select
     enddo
 
-    ! 4. Face metrics of the blocks of this rank; with a wall ghost cell in the stencil, one per group of quantities
+    ! 4. Face metrics of the blocks of this rank; with a ghost cell at two positions in the stencil (behind a wall or a
+    !    mapped face), one per group of quantities
     allocate ( nfill(3, domain % nb) )
     nfill = 0
     do b = 1, domain % nb
@@ -252,7 +258,7 @@ contains
   !> Position of the first ghost cell of boundary record r (not a face between blocks).
   subroutine Ghost_Position ( domain, xc, r )
     use MOSE_Advanced_Types_m
-    use MOSE_Global_m, only: ndir, model
+    use MOSE_Global_m, only: ndir, model, nrans
     use MOSE_Parameters_m, only: guide
     use MOSE_Lib_Metrics, only: delthe
     implicit none
@@ -318,7 +324,18 @@ contains
           xc(b) % x(:,Ig,Jg,Kg) = 2d0 * xf - x1
         end if
 
-      case default                              ! 3 u1 - 3 u2 + u3 (Ghost_Extrapolate), chimera, mapped
+      case (410)                                ! mapped face: its file gives the state of the cell across the face,
+        ! taken as the ghost cell (the first cell mirrored through the face), centred at 2 x_f - x1; the turbulence
+        ! variables, which the file does not give, the values of the cell per unit mass (Ghost_Q2D_Mapped), at x1 in a RANS
+        ! run. The other quantities after p (the soot), copied in the same way, take the position of the species: no flux
+        ! reads their gradient (Soot_Diffusive_Flux takes that of the temperature)
+        call Face_Centre_Normal ( domain % blk(b) % node, Im, Jm, Km, Fm, xf, nf )
+        xc(b) % x(:,Ig,Jg,Kg) = 2d0 * xf - x1
+        xc(b) % xe(:,Ig,Jg,Kg) = x1
+        xc(b) % em(Ig,Jg,Kg) = 0
+        if ( nrans > 0 ) xc(b) % em(Ig,Jg,Kg) = ibset ( xc(b) % em(Ig,Jg,Kg), 3 )
+
+      case default                              ! 3 u1 - 3 u2 + u3 (Ghost_Extrapolate), chimera
         if ( nd >= 3 ) then
           x2 = xc(b) % x(:,c2(1),c2(2),c2(3))
           x3 = xc(b) % x(:,c3(1),c3(2),c3(3))
@@ -386,7 +403,8 @@ contains
   end function Extrapolated_Groups
 
 
-  !> Position of the value of group g in cell (i,j,k) of a block: the centre, behind a wall the position of the group.
+  !> Position of the value of group g in cell (i,j,k) of a block: the centre, behind a wall or a mapped face the position
+  !> of the group.
   pure function Pos ( xc, i, j, k, g ) result ( y )
     implicit none
     type(centres_t), intent(in) :: xc
@@ -402,7 +420,7 @@ contains
   end function Pos
 
 
-  !> A ghost cell behind a wall, whose groups of quantities sit at two positions.
+  !> A ghost cell whose groups of quantities sit at two positions: behind a wall or a mapped face (a wall ghost cell below).
   pure logical function Wall_Ghost ( xc, i, j, k )
     implicit none
     type(centres_t), intent(in) :: xc
@@ -1032,10 +1050,12 @@ contains
   !> the positions that those terms take of the values (along an index direction with one cell, the edge of the cell and
   !> no difference). Exact for a linear field whose ghost cells sit where their value is right: the ghost cells of the
   !> fluxes, at the positions of Ghost_Position, behind a wall that of the group of the quantity (Ghost_Wall: 2 x_f - x_c
-  !> for the quantities with a wall value, x_c + s (x_c - x_2) for the extrapolated ones). One metric per group: the
+  !> for the quantities with a wall value, x_c + s (x_c - x_2) for the extrapolated ones), behind a mapped face 2 x_f - x_c
+  !> for the state of its file and x_c for the turbulence variables (Ghost_Q2D_Mapped). One metric per group: the
   !> velocity (blk%Ms); the density, whose ghost value follows the temperature behind a wall (blk%Msc: exact where the
   !> pressure and the composition do not vary across the wall cell, as in a boundary layer); the turbulence variables
-  !> (blk%Mst, only on the blocks with a 503-505 wall, where their position is not that of the velocity). The velocity
+  !> (blk%Mst, only on the blocks where their position is not that of the velocity: a 503-505 wall, a mapped face in a
+  !> RANS run). The velocity
   !> gradients of SA-RC (Compute_Velocity_Gradient): blk%Msa, behind the faces between blocks (101, 201) and of a sector
   !> turned about x (200) the position of the cell across, whose gradient the ghost cell holds (Connection_Ghost_Position,
   !> Ghost_Position), behind the other faces the cell itself, whose gradient is copied there.

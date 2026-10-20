@@ -310,8 +310,9 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # in the initial condition (a stop at set-up, exit code 1, in every build), in
 # the time table of an inlet 402, in a property line of bc.txt and in the file
 # of a face 410, a file of a face 410 that cannot be read (missing, cut, with a
-# word among its values, an unreadable zone header or a value too many) or
-# whose zones go back in time, an initial condition with too few variables, a
+# word among its values, an unreadable zone header or a value too many), whose
+# zones go back in time or that lacks a part of the state across the face, an
+# initial condition with too few variables, a
 # rotating frame
 # with a zero axis, or with an axis or an origin that is not finite,
 # chemistry = equilibrium without the elements of the species,
@@ -391,11 +392,12 @@ endif()
 # symmetry planes and
 # walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
 # against an independent replica of their formulas. ViscousWallPatch: the
-# cells next to walls of prescribed temperature varying along the wall.
+# cells next to walls of prescribed temperature varying along the wall, and
+# next to faces of type 410 (assigned state from a file).
 # ViscousOpenPatch: the cells next to inlets and outlets (401-408, 420), whose
 # faces have no viscous flux.
-# Cost: 44, 63 and 16 one-step solver runs, about 10 s, 14.5 s and 4 s of
-# CPU time at one thread.
+# Cost: 44, 75 and 16 one-step solver runs, about 10 s, 19 s and 4 s of CPU
+# time at one thread (the 12 runs next to faces of type 410 about 4 s).
 mose_add_parts_script(ViscousPatch fast/viscous-patch
     PARTS viscous-linear-patch viscous-open-patch LABELS fast numerics 2D 3D)
 mose_add_parts_script(ViscousWallPatch fast/viscous-patch

@@ -130,6 +130,14 @@
 #  that the reader takes (upper case, with no blank before =): the same duct
 #  with I = 3, or j=2, in the header of the second zone. I or J kept its
 #  default, 2, without a word, and the run went on.
+#  So does a file that lacks a part of the state of the cell across the face,
+#  which the ghost cells of a face of type 410 take whole (the density rho(N)
+#  of at least one species, u, v, w and p), with the file and the variables
+#  it lacks: the same duct with p, with u and w, or with rho(1), the density
+#  of its only species, taken out of the file. The ghost cells took the value
+#  of the cell for a missing p, u or w, and the run ended with exit code 0;
+#  without any rho(N) they had zero density, and the run ended at its first
+#  step with a run-time error (gfortran with bounds checking).
 #
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
@@ -649,6 +657,20 @@ run_q2d q2d-nan 1.0 NaN \
   "[ERROR] Q2D file q2d.dat, zone 2 (line 11), variable p, cell 1, 1: a value that is not finite (NaN or infinity)"
 run_q2d q2d-time Infinity 1.0E+05 \
   "[ERROR] Q2D file q2d.dat, line 11 (zone 2): SOLUTIONTIME is not finite (NaN or infinity)"
+
+echo "-- a Q2D file of a face 410 that lacks a part of the state across the face stops the run at set-up --"
+# the file of run_q2d with finite values (zone 2 at 1 s) without p, without u and w, without rho(1) (the density of the only
+# species): the name out of the VARIABLES line, the values out of both zones (zone 1: lines 6, 7, 9, 10 for rho(1), u, w, p;
+# zone 2: lines 15, 16, 18, 19), the CELLCENTERED range of both headers shortened
+run_q2d q2d-no-p 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat lacks p: the file of a face of type 410 gives the whole state of the cell across the face, the density rho(N) of at least one species N, u, v, w and p" \
+  'NR == 1 { sub(/ "p"/, "") } NR == 2 || NR == 11 { sub(/4-8/, "4-7") } NR == 10 || NR == 19 { next } { print }'
+run_q2d q2d-no-uw 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat lacks u, w: the file of a face of type 410 gives the whole state of the cell across the face, the density rho(N) of at least one species N, u, v, w and p" \
+  'NR == 1 { sub(/ "u"/, ""); sub(/ "w"/, "") } NR == 2 || NR == 11 { sub(/4-8/, "4-6") } NR == 7 || NR == 9 || NR == 16 || NR == 18 { next } { print }'
+run_q2d q2d-no-rho 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat lacks rho(N): the file of a face of type 410 gives the whole state of the cell across the face, the density rho(N) of at least one species N, u, v, w and p" \
+  'NR == 1 { sub(/ "rho.1."/, "") } NR == 2 || NR == 11 { sub(/4-8/, "4-7") } NR == 6 || NR == 15 { next } { print }'
 
 echo "-- a Q2D file of a face 410 that cannot be read stops the run at set-up --"
 # the file of run_q2d with finite values (zone 2 at 1 s), 19 lines (zone 1: lines 2 to 10, its header and the values of x, y,

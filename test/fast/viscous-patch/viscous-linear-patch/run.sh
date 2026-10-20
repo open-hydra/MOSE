@@ -66,7 +66,7 @@ step() {
   cp "INPUT/bc-$tag.txt" INPUT/bc.txt
   rm -f INPUT/transport.dat
   if [[ $tag == ref && ( $run == ene || $run == enep || $run == momw || $run == momr || $run == ene10* || $run == mom10* ||
-        $run == momio* || $run == eneio* ) ]]; then
+        $run == momio* || $run == eneio* || $run == enep410 ) ]]; then
     ln -sf transport-ref.dat INPUT/transport.dat
   else
     ln -sf "../$VISC/transport.dat" INPUT/transport.dat
@@ -134,6 +134,27 @@ if [[ $NAME == ViscousWallPatch ]]; then
       step ns "$mesh" "$run"
       step ref "$mesh" "$run"
       python3 -B "$MC" check "$mesh" "$run" "OUTPUT/diag-$mesh-$run-ns.tec" "OUTPUT/diag-$mesh-$run-ref.tec" coupled || status=1
+    done
+  done
+  echo "-- a face of type 410 (assigned state from a file), the cells next to it with nodes moved at random: the state of"
+  echo "   the file at the centre of the ghost cell (u linear, then T linear at uniform pressure: the momentum and the energy"
+  echo "   of the face cells, minus the flux of the uniform stress or heat through the face); Spalart-Allmaras, nu~ copied"
+  echo "   from the cell: nu~ linear, against a replica of its fluxes and of the cb2 term, and nu~ uniform with the density"
+  echo "   of the file 1.2 times that of the cells and the gas entering, r(rho nu~) = nu~ r(rho) --"
+  for mesh in rand1 box3d; do
+    groups=interior,mapped410
+    [[ $mesh == box3d ]] && groups=$groups,connection
+    for run in mom410 enep410; do
+      python3 -B "$MC" case "$mesh" "$run" > /dev/null || exit 1
+      step ns "$mesh" "$run"
+      step ref "$mesh" "$run"
+      python3 -B "$MC" check "$mesh" "$run" "OUTPUT/diag-$mesh-$run-ns.tec" "OUTPUT/diag-$mesh-$run-ref.tec" "$groups" \
+        || status=1
+    done
+    for run in sa410 turb410; do
+      python3 -B "$MC" case "$mesh" "$run" > /dev/null || exit 1
+      step ns "$mesh" "$run"
+      python3 -B "$MC" check "$mesh" "$run" "OUTPUT/diag-$mesh-$run-ns.tec" none "$groups" || status=1
     done
   done
   echo "-- limits: a 302 wall colder than 2/3 of its first cell, the pressure doubling at the 400 faces: counted --"

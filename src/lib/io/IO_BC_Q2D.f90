@@ -91,7 +91,8 @@ contains
   ! interpolation in time takes them in that order): a zone whose time no zone
   ! above it has, less than the last such time, stops the run too. Every rank
   ! reads the whole file (Setup_BC runs before the blocks are given to the
-  ! ranks), so every rank stops on the same error (mpi_stop_all).
+  ! ranks), so every rank stops on the same error (mpi_stop_all). So does a
+  ! file that lacks a part of the state across the face (Check_Q2D_State).
   ! ---------------------------------------------------------------------------
   subroutine Read_Q2D_Tecplot ( domain, filename )
     use MOSE_Advanced_Types_m
@@ -164,9 +165,10 @@ contains
 
     if (nvar_file < 1) call mpi_stop_all('[ERROR] Q2D file '//trim(filename)//' has no solution variables (only coordinates)')
 
-    ! Build variable name mapping
+    ! Build variable name mapping; the file must give the whole state of the cell across the face
     allocate(varmap(nvar_file))
     call build_varmap(tmp_names(4:nvar_total), nvar_file, varmap)
+    call Check_Q2D_State(filename, varmap)
 
     ! Continue scanning from current position (no rewind): count zones
     nzones_total = 0
@@ -454,6 +456,47 @@ contains
     enddo
 
   end subroutine build_varmap
+
+
+  ! ---------------------------------------------------------------------------
+  ! Stop the run at set-up when the variables of the file (varmap, from
+  ! build_varmap) lack a part of the state of the cell across the face, which
+  ! the ghost cells of a face of type 410 take whole (Ghost_Q2D_Mapped): the
+  ! density of the species (rho(N), at least one: a species that the file does
+  ! not name has zero density), u, v, w and p. Every rank reads the whole file,
+  ! so every rank stops (mpi_stop_all).
+  ! ---------------------------------------------------------------------------
+  subroutine Check_Q2D_State ( filename, varmap )
+    use MOSE_Global_m, only: nsc, nu, nv, nw, np
+    use MOSE_Mod_MPI,  only: mpi_stop_all
+    implicit none
+    character(len=*), intent(in) :: filename
+    integer, intent(in) :: varmap(:)
+    ! Local
+    character(len=32) :: missing
+
+    missing = ''
+    if (.not. any(varmap >= 1 .and. varmap <= nsc)) call Add('rho(N)')
+    if (.not. any(varmap == nu)) call Add('u')
+    if (.not. any(varmap == nv)) call Add('v')
+    if (.not. any(varmap == nw)) call Add('w')
+    if (.not. any(varmap == np)) call Add('p')
+    if (len_trim(missing) > 0) call mpi_stop_all('[ERROR] Q2D file '//trim(filename)//' lacks '//trim(missing)// &
+      ': the file of a face of type 410 gives the whole state of the cell across the face, the density rho(N) of '// &
+      'at least one species N, u, v, w and p')
+
+  contains
+
+    subroutine Add ( name )
+      character(len=*), intent(in) :: name
+      if (len_trim(missing) > 0) then
+        missing = trim(missing)//', '//name
+      else
+        missing = name
+      endif
+    end subroutine Add
+
+  end subroutine Check_Q2D_State
 
 
   ! ---------------------------------------------------------------------------

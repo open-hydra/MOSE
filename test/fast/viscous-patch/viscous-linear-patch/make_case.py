@@ -93,18 +93,38 @@ Runs:
          the state of the cell of the face (open_line), so that the inviscid flux of the face, the same in the two
          steps, stays at the scale of the fluxes of the cells; the low pressure keeps its round-off far below the
          viscous scale, as in mom.
+  mom410, enep410, sa410, turb410
+         rand1 and box3d, the plane y = 2 cm a face of type 410 (assigned state from a file), the other outer faces 400.
+         The file INPUT/q2d-410.dat, written here as ATLAS writes it (one zone per block with the nodes of the face and
+         one value per cell of the face: rho(1), u, v, w, p), holds the state of the field at the centre of the ghost
+         cell of each cell of the face, the cell mirrored through the face, 2 x_f - x_1 (x_f the mean of the four nodes
+         of the face, x_1 the centre of the cell): the cell across the face of the solver. MOSE gives that face no
+         viscous flux; the faces between the cells next to it and the source terms of Spalart-Allmaras read its ghost
+         cells, the state of the file at 2 x_f - x_1 and, for the turbulence variable, which the file does not give,
+         the value of the cell per unit mass at x_1. mom410: as mom, the momentum of the cells of the face is minus the
+         force of the uniform stress on the face, -tau . A/V (A the outward area vector of the face); enep410: as enep,
+         their energy is -k g . A/V. sa410: Spalart-Allmaras, the fluid at rest at uniform p and T (rho uniform), nu~
+         linear: no wall, so the wall distance is 1e8 m and production and destruction stay below 1e-20 of the scale;
+         the right-hand side of rho nu~ is the flux (mu + rho nu~_f)/sigma (grad nu~ . A) of every face but the 410 one,
+         with rho nu~_f the mean of the two cells (the state of the face), plus rho cb2/sigma |grad nu~|^2 (sa_replica
+         below). turb410: Spalart-Allmaras, nu~ uniform, a uniform velocity along the grid lines across the face (the
+         lines along which j varies), so that no gas crosses the faces 1, 2, 5, 6, into the domain through the 410 face,
+         whose file has 1.2 times the density of the cells: the gradient of nu~ is zero and every flux of rho nu~ is nu~
+         times the mass flux (the MUSCL slopes of rho nu~ are nu~ times those of rho, and every limiter is homogeneous
+         of degree one), so r(rho nu~) = nu~ r(rho) in every cell (one species). Checked: the cells without a 400 face.
 
-Observable: one explicit step from the same state with the Navier-Stokes equations and one reference step (mom: the Euler
-equations; ene, momw, momr, momio, eneio: Navier-Stokes with mu = k = 1e-30 and q = 0 on the 301 faces, because the
-solver refuses walls 301 and 302 with the Euler equations and the ghost cells must stay those of the walls; rk3: the
-Navier-Stokes step only, whose inviscid part is zero for this state). The diagnostic output holds, per cell, the
-residual over the step, r, and the step dt; r/dt of Navier-Stokes minus r/dt of the reference is the viscous right-hand
-side per unit volume. It is compared with the scale mu |G| (sum of face areas)/volume (mom, momw, momr, momio) or k |g|
-(sum of face areas)/volume (ene, rk3, eneio); threshold 1e-11 (for the energy of momr next to the 302 wall of paraT, plus
-a bound of the round-off of the temperature of the cell: see work). The cells are grouped by the faces they have:
-interior (no boundary face), connection (a face between blocks; corner: two of them, the cells at a point shared by 3
-or 5 blocks), symmetry (300), wall 301, wall 302; in the runs momio and eneio a cell with faces of inlets and outlets is
-in the group of each of their types.
+Observable: one explicit step from the same state with the Navier-Stokes equations and one reference step (mom, mom410:
+the Euler equations; ene, momw, momr, momio, eneio, enep410: Navier-Stokes with mu = k = 1e-30 and q = 0 on the 301
+faces, because the solver refuses walls 301 and 302 with the Euler equations and the ghost cells must stay those of the
+walls; rk3, sa410: the Navier-Stokes step only, whose inviscid part is zero for this state; turb410: the Navier-Stokes
+step only, whose inviscid part the check takes as nu~ r(rho)). The diagnostic output holds, per cell, the residual over
+the step, r, and the step dt; r/dt of Navier-Stokes minus r/dt of the reference is the viscous right-hand side per unit
+volume. It is compared with the scale mu |G| (sum of face areas)/volume (mom, momw, momr, momio) or k |g| (sum of face
+areas)/volume (ene, rk3, eneio); threshold 1e-11 (for the energy of momr next to the 302 wall of paraT, plus a bound of
+the round-off of the temperature of the cell: see work). The cells are grouped by the faces they have: interior (no
+boundary face), connection (a face between blocks; corner: two of them, the cells at a point shared by 3 or 5 blocks),
+symmetry (300), wall 301, wall 302; in the runs momio and eneio a cell with faces of inlets and outlets is in the group
+of each of their types.
 
 ViscousLinearPatch checks every group but wall 302 and coupled, plus the old metrics: on the rand1 mesh, run mom, diffusive-metric =
 inverse-mean and mean must give, cell by cell, the viscous force of an independent replica of their face gradients
@@ -113,8 +133,8 @@ Ghost_Wall), within 1e-10 of the scale. ViscousWallPatch checks the cells with a
 along the wall, on skewed cells (ene), and the velocity at a no-slip wall whose cells have nodes moved at random (momw),
 also at a wall that does not turn with a rotating frame, whose velocity in the frame varies along it, with every face
 metric (momr; on paraQ the cells with a 301 face); and the cells next to walls 301 and 302 with T linear at uniform
-pressure (enep), and the count of the limits of the wall ghost cells (hot). ViscousOpenPatch checks every group of the
-runs momio and eneio.
+pressure (enep), the count of the limits of the wall ghost cells (hot), and the cells next to a face of type 410 (mom410,
+enep410, sa410, turb410). ViscousOpenPatch checks every group of the runs momio and eneio.
 
 Usage (from a test directory):
   python3 -B make_case.py case MESH RUN [METRIC]     INPUT/ic.tec; INPUT/bc-ns.txt, input-ns.ini for the Navier-Stokes
@@ -159,7 +179,8 @@ N_ULP_T = 6                         # momr on paraT: the temperature of a cell n
 FMT = '{: .17E}'
 MESHES = ('fold2', 'jump', 'jump2', 'fan', 'fan4', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
 RUNS = ('mom', 'ene', 'rk3', 'momw', 'momr', 'enep', 'hot', 'ene103', 'ene104', 'mom103', 'mom104',
-        'momio1', 'momio2', 'momio3', 'eneio1', 'eneio2', 'eneio3')
+        'momio1', 'momio2', 'momio3', 'eneio1', 'eneio2', 'eneio3',
+        'mom410', 'enep410', 'sa410', 'turb410')
 BC_CONNECT, BC_SYM, BC_Q, BC_T, BC_OPEN = 101, 300, 301, 302, 400
 BC_COUPLED = (103, 104)                    # walls coupled to another solver (104: with the donor cells of a chimera)
 BC_INOUT = (401, 402, 403, 404, 405, 406, 407, 408, 420)   # inlets and outlets: an inviscid flux only
@@ -172,6 +193,16 @@ OPEN_SETS = {                              # runs momioN, eneioN: (mesh, N) -> {
 }
 P0_TABLE = 'INPUT/p0-402.dat'              # the table of p0 of the 402 faces (time, p0 in bar)
 GAMMA_AIR = 1.4                            # the 405 faces: the Mach number of the speed of the cell, |u|/sqrt(gamma R T)
+BC_MAPPED = 410                            # assigned state from a file
+RUNS_410 = ('mom410', 'enep410', 'sa410', 'turb410')
+RUNS_SA = ('sa410', 'turb410')             # Spalart-Allmaras: the turbulence variable rho nu~ after p
+Q2D_FILE = 'INPUT/q2d-410.dat'             # the file of the 410 face
+SIGMA, CB2 = 2.0 / 3.0, 0.622              # Spalart-Allmaras (Lib_Spalart.f90)
+NU0 = 0.1                                  # sa410, turb410: nu~ at x0, m^2/s (chi = rho nu~/mu about 1 at P_LOW)
+GNU2 = np.array([2.0, -1.5, 0.0])          # sa410: gradient of nu~, m/s, on rand1 ...
+GNU3 = np.array([2.0, -1.5, 1.0])          # ... and on box3d
+RHO_RATIO_410 = 1.2                        # turb410: density of the file over that of the cells
+U_410 = 1.0                                # turb410: speed of the flow, m/s
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -354,6 +385,8 @@ def outer_type(mesh, run, b, face):
         return OPEN_SETS[(mesh, open_run(run)[1])][(b, face)]
     if coupled_type(run):                # one wall, the plane y = 2 cm, coupled to another solver
         return coupled_type(run) if face == 3 else BC_OPEN
+    if run in RUNS_410:                  # one face of type 410, the plane y = 2 cm
+        return BC_MAPPED if face == 3 else BC_OPEN
     if run == 'mom':
         if mesh == 'sym' and face == 3:
             return BC_SYM
@@ -581,7 +614,7 @@ def field(mesh, run):
             W = np.array([[0.0, om[2], -om[1]], [-om[2], 0.0, om[0]], [om[1], -om[0], 0.0]])
             return {'G': G + W, 'u0': W.dot(x0), 'x0': x0}
         return {'G': G, 'u0': np.zeros(3), 'x0': x0}
-    if run == 'mom':
+    if run in ('mom', 'mom410'):
         G = GSYM if mesh == 'sym' else (G3 if mesh == 'box3d' else G2)
         u0 = {'box3d': np.array([1.0, 0.5, 0.3]), 'sym': np.array([1.0, 0.0, 0.0])}.get(mesh, U0)
         x0 = X0.copy()
@@ -590,6 +623,12 @@ def field(mesh, run):
         return {'G': G, 'u0': u0, 'x0': x0}
     if run in ('ene103', 'ene104'):      # along the wall y = 2 cm: no heat crosses it
         return {'g': gwall3 if mesh == 'box3d' else gwall2, 'x0': X0.copy()}
+    if run == 'sa410':                   # nu~ linear
+        return {'gn': GNU3 if mesh == 'box3d' else GNU2, 'x0': X0.copy()}
+    if run == 'turb410':                 # along the grid lines across the face, the lines along which j varies (rand1:
+                                         # sheared by x += 0.3 y), so that no gas crosses the faces 1, 2, 5, 6
+        d = np.array([0.0, 1.0, 0.0]) if mesh == 'box3d' else np.array([0.3, 1.0, 0.0])
+        return {'u': U_410 * d / math.sqrt(float(d.dot(d))), 'x0': X0.copy()}
     g = {'sym': gsym, 'box3d': g3, 'paraT': gparaT, 'paraQ': gparaQ}.get(mesh, g2)
     return {'g': g, 'x0': X0.copy()}
 
@@ -599,10 +638,14 @@ def state(mesh, run, x):
     if open_run(run) and open_run(run)[0] == 'ene':
         rho = P_LOW / (RGAS * T0)        # uniform: the 408 ghost cells hold T on the linear field
         return rho, np.zeros(3), rho * RGAS * (T0 + f['g'].dot(x - f['x0']))
-    if open_run(run) or run in ('mom', 'momw', 'momr', 'mom103', 'mom104'):
+    if open_run(run) or run in ('mom', 'momw', 'momr', 'mom103', 'mom104', 'mom410'):
         u = f['u0'] + f['G'].dot(x - f['x0'])
         p = P_WORK if (run == 'momr' and mesh in ('paraT', 'paraQ')) else P_LOW
         return p / (RGAS * T0), u, p
+    if run == 'sa410':
+        return P_LOW / (RGAS * T0), np.zeros(3), P_LOW
+    if run == 'turb410':
+        return P_LOW / (RGAS * T0), f['u'], P_LOW
     if run == 'hot':
         p = P_LOW + GP_HOT * (x[0] - LREF * OFFSET[0])
         return p / (RGAS * T0), np.zeros(3), p
@@ -610,6 +653,50 @@ def state(mesh, run, x):
     if run in ('ene', 'ene103', 'ene104'):
         return RHO0, np.zeros(3), RHO0 * RGAS * T
     return P_LOW / (RGAS * T), np.zeros(3), P_LOW
+
+
+def rans(mesh, run, x, rho):
+    """Spalart-Allmaras runs: rho nu~ at x, for the density rho (sa410: nu~ linear; turb410: nu~ uniform)."""
+    f = field(mesh, run)
+    if run == 'sa410':
+        return rho * (NU0 + f['gn'].dot(x - f['x0']))
+    return rho * NU0
+
+
+def file_state(mesh, run, x):
+    """The state that the file of the 410 face gives at x, the centre of the ghost cell: that of the field (turb410: with
+    RHO_RATIO_410 times its density)."""
+    rho, u, p = state(mesh, run, x)
+    if run == 'turb410':
+        rho = RHO_RATIO_410 * rho
+    return rho, u, p
+
+
+def write_q2d(blocks, mesh, run):
+    """The file of the 410 face y = 2 cm (face 3 of every block) in the form that ATLAS writes (map_strip_to_block in
+    src/BCB/file_unwrapped.f90): VARIABLES "x" "y" "z" and the names of the state, one zone per block, T="B<block>_T1" with
+    the nodes of the face, I along i and J along k, and one value of each variable per cell of the face, i fastest, at one
+    time. The value of a cell is the state of the field at the centre of its ghost cell, 2 x_f - x_1, x_f the mean of the
+    four nodes of the face and x_1 that of the eight nodes of the cell, as Ghost_Position computes them."""
+    names = ('rho(1)', 'u', 'v', 'w', 'p')
+    with open(Q2D_FILE, 'w') as out:
+        out.write(' VARIABLES ="x" "y" "z"' + ''.join(f' "{n}"' for n in names) + '\n')
+        for b, X in enumerate(blocks):
+            ni, _, nk = dims(X)
+            out.write(f' ZONE T="B{b + 1}_T1", I={ni + 1}, J={nk + 1}, K=1, DATAPACKING=BLOCK, '
+                      f'VARLOCATION=([1-3]=NODAL,[4-{3 + len(names)}]=CELLCENTERED), SOLUTIONTIME= 0.00000000E+00\n')
+            for axis in range(3):
+                out.write(''.join(' ' + FMT.format(X[i, 0, k, axis]) + '\n' for k in range(nk + 1) for i in range(ni + 1)))
+            C = centres(X)
+            cells = []
+            for k in range(1, nk + 1):
+                for i in range(1, ni + 1):
+                    xf = 0.25 * sum(face_nodes(X, 3, i, 1, k))
+                    cells.append(file_state(mesh, run, 2.0 * xf - C[i - 1, 0, k - 1]))
+            cols = ([c[0] for c in cells], [c[1][0] for c in cells], [c[1][1] for c in cells],
+                    [c[1][2] for c in cells], [c[2] for c in cells])
+            for col in cols:
+                out.write(''.join(' ' + FMT.format(v) + '\n' for v in col))
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -684,7 +771,7 @@ def write_case(mesh, run, metric):
     conn = connections(blocks)
     os.makedirs('INPUT', exist_ok=True)
     for p in ('INPUT/ic.tec', 'INPUT/bc.txt', 'INPUT/bc-ns.txt', 'INPUT/bc-ref.txt', 'INPUT/transport-ref.dat',
-              P0_TABLE):
+              P0_TABLE, Q2D_FILE):
         if os.path.lexists(p):
             os.remove(p)
     for b, X in enumerate(blocks):
@@ -692,12 +779,13 @@ def write_case(mesh, run, metric):
         vmin = min(cell_volume(X, i, j, k) for k in range(1, nk + 1) for j in range(1, nj + 1) for i in range(1, ni + 1))
         if vmin <= 0.0:
             sys.exit(f'block {b + 1}: a cell with volume {vmin}')
+    sa = run in RUNS_SA
     with open('INPUT/ic.tec', 'w') as out:
-        out.write('VARIABLES = "x" "y" "z" "rho1" "u" "v" "w" "p"\n')
+        out.write('VARIABLES = "x" "y" "z" "rho1" "u" "v" "w" "p"' + (' "rhoNuTilde"' if sa else '') + '\n')
         for b, X in enumerate(blocks):
             ni, nj, nk = dims(X)
             out.write(f'ZONE T="Block{b + 1}", I={ni + 1}, J={nj + 1}, K={nk + 1}, '
-                      f'DATAPACKING=BLOCK, VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED)\n')
+                      f'DATAPACKING=BLOCK, VARLOCATION=([1-3]=NODAL,[4-{9 if sa else 8}]=CELLCENTERED)\n')
             for axis in range(3):
                 out.write(''.join(' ' + FMT.format(X[i, j, k, axis]) + '\n'
                                   for k in range(nk + 1) for j in range(nj + 1) for i in range(ni + 1)))
@@ -705,10 +793,15 @@ def write_case(mesh, run, metric):
             cells = [state(mesh, run, C[i, j, k]) for k in range(nk) for j in range(nj) for i in range(ni)]
             cols = ([c[0] for c in cells], [c[1][0] for c in cells], [c[1][1] for c in cells],
                     [c[1][2] for c in cells], [c[2] for c in cells])
+            if sa:
+                cols += ([rans(mesh, run, C[i, j, k], cells[i + ni * (j + nj * k)][0])
+                          for k in range(nk) for j in range(nj) for i in range(ni)],)
             for col in cols:
                 out.write(''.join(' ' + FMT.format(v) + '\n' for v in col))
     if open_run(run):
         write_p0_table(blocks, mesh, run, conn)
+    if run in RUNS_410:
+        write_q2d(blocks, mesh, run)
     f = field(mesh, run)
     for tag in ('ns', 'ref'):
         rows = []
@@ -755,6 +848,8 @@ def write_case(mesh, run, metric):
                                         2 * f'{b + 1:8d}{i:8d}{j:8d}{k:8d}    1.0\n')
                         elif t in BC_INOUT:
                             rows.append(head + f'{t:8d}\n' + open_line(mesh, run, X, sgn, face, i, j, k, t) + '\n')
+                        elif t == BC_MAPPED:     # the name of its file
+                            rows.append(head + f'{t:8d}\n' + Q2D_FILE + '\n')
                         else:
                             rows.append(head + f'{t:8d}\n')
         with open(f'INPUT/bc-{tag}.txt', 'w') as out:
@@ -774,13 +869,16 @@ def write_case(mesh, run, metric):
     key = '' if metric is None else f'diffusive-metric = {metric}\n'
     scheme = 'RK3' if run == 'rk3' else 'euler'
     rot, frame = '', ''
+    if sa:                               # Spalart-Allmaras, without the point-implicit factor of steady runs (it scales r)
+        rot = 'turbulence = SA\n'
+        frame = '\n[MOSE-Turbulence]\npoint-implicit = false\n'
     if run == 'momr':                    # the frame of momr; the wall y = 2 cm (face 3 of every block) does not turn
         ax = axis_r(mesh)
         rot = 'rotational-frame = rigid-body\n'
         frame = ('\n[MOSE-Rotating-Frame]\n'
                  f'omega = {OMEGA_R}\naxis = {ax[0]} {ax[1]} {ax[2]}\n'
                  'origin = 0.0 0.0 0.0\n' + ''.join(f'stationary-face-{b + 1} = {b + 1} 3\n' for b in range(len(blocks))))
-    for tag, eq in (('ns', 'navier-stokes'), ('ref', 'euler' if run == 'mom' else 'navier-stokes')):
+    for tag, eq in (('ns', 'navier-stokes'), ('ref', 'euler' if run in ('mom', 'mom410') else 'navier-stokes')):
         with open(f'input-{tag}.ini', 'w') as out:
             out.write('[MOSE-Parameters]\niter-threshold = 1\nnewrun = true\nres-threshold = 1e-300\n\n'
                       f'[MOSE-Physics]\nequations = {eq}\nschmidt = 0.7\n' + rot + '\n'
@@ -857,6 +955,8 @@ def groups(blocks, mesh, run, conn):
                         g.append('wall302')
                     elif BC_Q in kinds:
                         g.append('wall301')
+                    elif BC_MAPPED in kinds:
+                        g.append('mapped410')
                     elif BC_SYM in kinds:
                         g.append('symmetry')
                     elif kinds.count('conn') >= 2:
@@ -870,9 +970,20 @@ def groups(blocks, mesh, run, conn):
 
 
 def scales(blocks, mesh, run):
+    """Per block and cell (i fastest): coef (sum of face areas)/volume, coef = mu |G| (momentum), the largest
+    (mu + rho nu~)/sigma times |grad nu~| (sa410), nu~ rho |u| (turb410: nu~ times the mass flux per unit area), k |g|
+    (energy)."""
     f = field(mesh, run)
-    coef = (MU * float(np.linalg.norm(f['G'])) if run in ('mom', 'momw', 'momr', 'mom103', 'mom104')
-            else KCOND * float(np.linalg.norm(f['g'])))
+    if run in ('mom', 'momw', 'momr', 'mom103', 'mom104', 'mom410'):
+        coef = MU * float(np.linalg.norm(f['G']))
+    elif run == 'sa410':
+        rho = P_LOW / (RGAS * T0)
+        rnmax = max(rans(mesh, run, c, rho) for X in blocks for c in centres(X).reshape(-1, 3))
+        coef = (MU + rnmax) / SIGMA * float(np.linalg.norm(f['gn']))
+    elif run == 'turb410':
+        coef = NU0 * P_LOW / (RGAS * T0) * float(np.linalg.norm(f['u']))
+    else:
+        coef = KCOND * float(np.linalg.norm(f['g']))
     out = []
     for X in blocks:
         ni, nj, nk = dims(X)
@@ -890,17 +1001,32 @@ def scales(blocks, mesh, run):
 def check(mesh, run, ns_path, eu_path, wanted):
     blocks = build(mesh, run)
     conn = connections(blocks)
-    comps = ['rhou', 'rhov', 'rhow'] if run in ('mom', 'momw', 'momr', 'mom103', 'mom104') else ['rhoe']
-    rhs = viscous_rhs(read_zones(ns_path), None if run == 'rk3' else read_zones(eu_path), comps)
+    if run in ('mom', 'momw', 'momr', 'mom103', 'mom104', 'mom410'):
+        comps = ['rhou', 'rhov', 'rhow']
+    elif run == 'sa410':
+        comps = ['rhoNuTilde']
+    elif run == 'turb410':
+        comps = ['rhoNuTilde', 'rho']
+    else:
+        comps = ['rhoe']
+    rhs = viscous_rhs(read_zones(ns_path), None if run in ('rk3', 'sa410', 'turb410') else read_zones(eu_path), comps)
+    if run == 'turb410':                 # r(rho nu~) - nu~ r(rho)
+        rhs = [a[:, :1] - NU0 * a[:, 1:] for a in rhs]
     grp = groups(blocks, mesh, run, conn)
     sc = scales(blocks, mesh, run)
-    expected = coupled_wall_rhs(blocks, mesh, run) if run in ('mom103', 'mom104') else None
+    expected, on = None, ()
+    if run in ('mom103', 'mom104'):
+        expected, on = coupled_wall_rhs(blocks, mesh, run), ('coupled',)
+    elif run in ('mom410', 'enep410'):
+        expected, on = coupled_wall_rhs(blocks, mesh, run), ('mapped410',)
+    elif run == 'sa410':
+        expected, on = sa_replica(blocks, mesh, run, conn), ('interior', 'connection', 'mapped410')
     worst = {}
     for b in range(len(blocks)):
         for c, gname in enumerate(grp[b]):
             if gname is None:
                 continue
-            want = expected[b][c] if (expected is not None and gname == 'coupled') else 0.0
+            want = expected[b][c] if (expected is not None and gname in on) else 0.0
             e = float(np.max(np.abs(rhs[b][c] - want))) / sc[b][c]
             worst[gname] = max(worst.get(gname, 0.0), e)
     ok = True
@@ -917,11 +1043,16 @@ def check(mesh, run, ns_path, eu_path, wanted):
 
 
 def coupled_wall_rhs(blocks, mesh, run):
-    """Runs mom103, mom104: per block and cell (i fastest), the momentum right-hand side per unit volume of a cell whose
-    face 3 is the coupled wall, -tau . A/V: a linear velocity has a uniform stress tau, whose forces on the faces of a
-    cell sum to zero, and MOSE gives the wall face no viscous flux (A, the outward area vector of the wall face)."""
-    G = field(mesh, run)['G']
-    tau = MU * (G + G.T) - 2.0 / 3.0 * MU * np.trace(G) * np.eye(3)
+    """Runs mom103, mom104, mom410: per block and cell (i fastest), the momentum right-hand side per unit volume of a cell
+    whose face 3 is the coupled wall or the 410 face, -tau . A/V: a linear velocity has a uniform stress tau, whose forces
+    on the faces of a cell sum to zero, and MOSE gives that face no viscous flux (A, the outward area vector of the face).
+    Run enep410: the energy right-hand side, -k g . A/V, from the uniform heat flux of a linear temperature."""
+    f = field(mesh, run)
+    if run == 'enep410':
+        tau = KCOND * f['g'].reshape(1, 3)       # one row: the energy flux per unit area along A is k g . A/|A|
+    else:
+        G = f['G']
+        tau = MU * (G + G.T) - 2.0 / 3.0 * MU * np.trace(G) * np.eye(3)
     out = []
     for X in blocks:
         ni, nj, nk = dims(X)
@@ -931,7 +1062,50 @@ def coupled_wall_rhs(blocks, mesh, run):
             for j in range(1, nj + 1):
                 for i in range(1, ni + 1):
                     a3 = cell_faces(X, sgn, i, j, k)[2]
-                    e.append(-tau.dot(a3) / cell_volume(X, i, j, k) if j == 1 else np.zeros(3))
+                    e.append(-tau.dot(a3) / cell_volume(X, i, j, k) if j == 1 else np.zeros(len(tau)))
+        out.append(e)
+    return out
+
+
+def sa_replica(blocks, mesh, run, conn):
+    """Run sa410: per block and cell (i fastest), the right-hand side of rho nu~ per unit volume, (1/V) times the sum over
+    the faces with a viscous flux (every face but the 410 one; the k faces of a 2-D mesh, symmetry planes across which nu~
+    does not vary, give zero) of (mu + rho nu~_f)/sigma (grad nu~ . A), A the outward area vector of the face and rho nu~_f
+    the mean of the two cells (Compute_Diffusive_Flux takes the state of a face as the mean of its two cells; across a face
+    between blocks the cell of the other block), plus the cb2 term of the source, rho cb2/sigma |grad nu~|^2
+    (SA_Source_Blk: grad rho = 0; with no wall, production and destruction stay below 1e-20 of the scale). Cells with a
+    400 face, which are not checked, get the sum of their other faces."""
+    gn = field(mesh, run)['gn']
+    rho = P_LOW / (RGAS * T0)
+    cent = [centres(X) for X in blocks]
+    out = []
+    for b, X in enumerate(blocks):
+        n = dims(X)
+        sgn = face_signs(X)
+        twod = X.shape[2] == 2
+        e = []
+        for k in range(1, n[2] + 1):
+            for j in range(1, n[1] + 1):
+                for i in range(1, n[0] + 1):
+                    faces = cell_faces(X, sgn, i, j, k)
+                    rc = rans(mesh, run, cent[b][i - 1, j - 1, k - 1], rho)
+                    tot = 0.0
+                    for face in range(1, 7):
+                        if twod and face >= 5:
+                            continue
+                        d = (face + 1) // 2 - 1
+                        idx = [i, j, k]
+                        idx[d] += 1 if face % 2 == 0 else -1
+                        if 1 <= idx[d] <= n[d]:
+                            xn = cent[b][idx[0] - 1, idx[1] - 1, idx[2] - 1]
+                        elif (b, face, i, j, k) in conn:
+                            bs, _, is_, js, ks = conn[(b, face, i, j, k)]
+                            xn = cent[bs][is_ - 1, js - 1, ks - 1]
+                        else:                    # an outer face: 410 (no viscous flux) or 400
+                            continue
+                        rf = 0.5 * (rc + rans(mesh, run, xn, rho))
+                        tot += (MU + rf) / SIGMA * float(gn.dot(faces[face - 1]))
+                    e.append(np.array([tot / cell_volume(X, i, j, k) + rho * CB2 / SIGMA * float(gn.dot(gn))]))
         out.append(e)
     return out
 

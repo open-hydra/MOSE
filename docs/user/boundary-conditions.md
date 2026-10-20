@@ -188,7 +188,8 @@ must have a time greater than every time above it (the zones of other blocks at 
 after it); otherwise the run stops at set-up, with the file, the zone, the line of its header and the two times.
 Each zone header must give `I=` and `J=` in upper case, with no blank around `=` (`I=3, J=2`): a header that gives no
 `I=` or no `J=` (for example `I = 3` or `i=3`) stops the run at set-up, with the file, the zone, the line of its header
-and the form to write.
+and the form to write. A file without `p`, without one of `u`, `v` and `w`, or without any `rho(N)` stops the run at set-up
+too, with the file and the variables it lacks.
 
 **Common fields:**
 
@@ -222,6 +223,13 @@ $\min(p_\text{back}, p_\text{stop})$, where its velocity points out (at $p_\text
 A `407` face whose gas moves in at $2a/(\gamma-1)$ or faster is an outlet only with $p_0 \le 0$ or $T_0 \le 0$, a
 reservoir that feeds nothing, and then has no flux. `rel_fac` has no effect on these three types: when the gas enters,
 the face state exists with $p_0$ as given.
+
+**Assigned state (`410`).** The file gives, for each cell of a face of type `410`, the state of the cell across the face,
+as across a face between blocks: the densities of the species, `rho(N)` (a species that the file does not name has zero
+density), and `u`, `v`, `w` and `p`. It gives no other quantity: the turbulence variables and the soot variables of its
+ghost cells are those of the cell next to the face per unit mass, so the turbulence that enters through a face of type `410`
+is that of the first cell. The cell across the face is taken as wide as the first cell of the block (see
+[Spatial Discretization](../theory/numerics.md#gradient-computation-for-diffusive-fluxes)).
 
 **Time-varying data (`402`, `410`).** The `p0_file` of type `402` lists
 `time  p0` pairs, one per line, with `p0` in bar; a first line containing
