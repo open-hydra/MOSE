@@ -277,6 +277,18 @@ checks of an entry of the smaller of two runs of each (shared 192-thread machine
   single-rate exchanges; 1 against 3 and 4 OpenMP threads bit for bit; equal levels across the connections and one
   block = three blocks with the same map; the halo of every level against an independent construction; mirror
   symmetry of a centred pulse; free-stream preservation on a curvilinear periodic mesh. ~6 min.
+- ☑ **I15 — Multirate conservation and exact restart** (`MultirateConservation`, validation): mass, momentum and
+  energy drift ≤ 1e-12 with levels (Euler, laminar, laminar and Spalart–Allmaras with `diffusive-metric = mean`,
+  Spalart–Allmaras on a smooth and on a rough wall, SST, the 2-D axisymmetric wedge; the mass of each species of a
+  frozen mixture of four; `SA-R` and SST with `sst-production = compressible`, mass and energy, and with
+  `k-energy-coupling`, mass, the energy drift reported, each with a result other than that of the run without the
+  option; `safety` 1.5; an SRM grain in its inflow mode with n = 0 at the
+  end of a closed duct, the mass against M(0) + mdot_ref A t) and positive controls that must drift, and with a
+  depth of the map that changes from one macro step to the next;
+  restart from `vtk raw` bit for bit (one and several blocks, map rebuilt at every macro step and every 4) and from
+  `tecplot ascii` (one and several blocks), output
+  instants k·`sol-dtime` and `time-threshold` bit for bit, one residual row per macro step, mass drift ≤ 1e-12 over
+  three restarts; with `recompute-every` 4 the cells per level change, and only at the macro steps 4 m + 1. ~6 min.
 
 ---
 

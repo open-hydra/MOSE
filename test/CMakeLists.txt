@@ -758,3 +758,9 @@ mose_add_mr_script(MultirateSmoke multirate/mr-smoke 300 "multirate;fast;impleme
 # centred pulse (sym); free-stream preservation on a curvilinear periodic mesh (free).
 mose_add_mr_group(MultirateIdentity 4500 identity "onelevel;threads;blocks;halo;sym;free"
                   "multirate;validation;implementation;numerics;1D;2D;3D")
+# I15: conservation with levels, also with the diffusive fluxes, with diffusive-metric = mean, with the turbulence
+# models, on a rough wall and in a frozen mixture of four species, and positive controls (conservation); exact restart
+# from vtk raw and from tecplot ascii and exact output instants k*sol-dtime and time-threshold, one and several blocks,
+# map rebuilt at every macro step and every 4, conservation over three restarts (restart).
+mose_add_mr_group(MultirateConservation 3000 conservation "conservation;restart"
+                  "multirate;validation;implementation;numerics;1D;2D;3D")
