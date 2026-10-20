@@ -306,6 +306,29 @@ checks of an entry of the smaller of two runs of each (shared 192-thread machine
   that lowers its ratio of the errors with H0 and H0/2 by about 2 % fails the short form, and the full form then
   decides on the last pair. ~8 min and ~3 min; full forms ~68 min
   (one run, gfortran 13.2 TESTING with Intel MPI).
+- ☑ **N6 — Multirate with shocks and the non-local CFL condition** (`MultirateShocks`, validation): Sod tube and a
+  planar shock with levels against the exact Riemann solution and the single rate (conservation ≤ 1e-12, L1 error
+  ≤ 1.05 × the single rate's, shock within one local cell, no more local extrema than the single rate); the
+  diagnostics of the step taken against the step admitted on the new state (positive and negative controls); states
+  that are not physical inside an attempt (a blast tube with far coarse cells and 10 levels: the attempt rejected and
+  redone with H halved, one halving per such rejection, conservation ≤ 1e-12, 1 and 3 threads
+  identical; a face that is not physical at the start of the macro step stops the run at the first stage with its
+  lines; faces that leave the tables after the first stage: the attempts rejected, and the stop below 2^-10 after 11
+  attempts with the face); the limit `max-attempts` (the stop at the rejection that reaches it, with the causes; the
+  outputs unchanged when the attempts stay below it; the limit checked after the floor; the attempt rejected by
+  `force-redo` not counted; a warning when the redo is off) and a local step that is not a positive finite number at
+  the start of the macro step (a cell at a negative pressure, at zero pressure at rest, at a negative density and
+  pressure with viscosity and at a density so small that the diffusion rate overflows: a step that is not a number,
+  infinite, negative and zero; the stop before the first stage, with the cell; the parts whose step is not a number,
+  infinite or zero hold in the builds without floating-point traps, TESTING and RELEASE); the
+  certificate, the interface margin and the redo of condition (4) of Gnedin, Semenov and Kravtsov (outputs unchanged
+  by a forced redo, conservation ≤ 1e-12, 1 and 3 threads identical; a redo that makes the map deeper than that of
+  its first attempt; the solutions at the output instants
+  k·`sol-dtime` bit for bit, the one at the end of the run included; the theta of each limiter in the margin at the
+  first macro step equal to the one of the set-up check; no violation on a uniform flow, whose cell at its limit ties
+  with it at the rounding; at the floor of kappa, no macro step redone on an acoustic wave, with cells raised by the
+  margin); no negative nu~, k or omega after a stage near walls, with a
+  positive control that must print the count. ~3 min.
 
 ---
 

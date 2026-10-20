@@ -788,3 +788,9 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/run_group.sh")
     #   the start: never at the same time (ctest -j)
     set_tests_properties(MultirateOrder MultirateOrderFull PROPERTIES RESOURCE_LOCK mr-order-deep)
 endif()
+# N6: Sod tube with the levels rebuilt at every macro step against the exact solution and the single rate (sod); a
+# planar shock through the faces between levels (shock); the step taken against the step admitted on the new state by
+# the cell and by its face neighbours (rpost); the non-local CFL condition (4) of Gnedin, Semenov and Kravtsov:
+# certificate, interface margin and redo (cfl4); no negative nu~, k or omega after a stage where the near-wall
+# destruction acts faster than the transport, with a positive control (positivity).
+mose_add_mr_group(MultirateShocks 3300 shocks "sod;shock;rpost;cfl4;positivity" "multirate;validation;numerics;1D;2D")
