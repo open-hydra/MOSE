@@ -46,11 +46,9 @@ $c_p T_w$ and the analysis below is free of table interpolation error.
 
 The run is a pseudo-time march (local time stepping) that is stopped before full convergence. The
 inert-surface check (no blowing, $|\rho v| < 5\times10^{-2}$ kg m⁻² s⁻¹) looks at the start-up flow
-while it decays, so `melting-inert` runs 8000 iterations, in its own directory: they bring the inert
-case to the pseudo-time that 4000 iterations reached before the additive local time step, whose step
-is about half as large in these cells (largest gas temperature 534.66 against 534.67 K, largest
-$|\rho v|$ 4.475e-2 against 4.485e-2; 5.56e-2 after 4000 iterations). The other configurations pass
-their checks with 4000.
+while it decays, so `melting-inert` runs 8000 iterations, in its own directory: with MOSE of commit
+`cd27e88266e5` the largest $|\rho v|$ is 5.450e-2 after 4000 iterations and 4.455e-2 after 8000, when
+the largest gas temperature is 530.93 K. The other configurations pass their checks with 4000.
 
 ---
 
