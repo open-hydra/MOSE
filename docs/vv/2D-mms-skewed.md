@@ -45,7 +45,7 @@ exact field at the cell centres.
 
 | Parameter | Value |
 |---|---|
-| Gas | calorically perfect air (`test/common/Air`), $\mu = 10$ (flat transport table), $\mathrm{Pr} = 0.72$, one species |
+| Gas | calorically perfect air, $\gamma = 1.4$, $R = 287$ J/(kg·K) (`test/common/Air`, written by ATLAS GPB from `test/common/Air/input.ini`), $\mu = 10$ (flat transport table `test/2D/viscous/mms/INPUT/transport.dat`, the values of ATLAS GPB with `mil = 10` and `Pr = 0.72`), $\mathrm{Pr} = 0.72$, one species |
 | Equations | Navier–Stokes (laminar) |
 | Time scheme | RK3, local time stepping until the residual has fallen by $5\cdot10^{-4}$ from the first iteration |
 | CFL / VNN | 0.2 / 0.1 |

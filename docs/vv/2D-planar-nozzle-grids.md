@@ -63,7 +63,7 @@ the coarse level, each block in its own colour:
 
 | Parameter | Value |
 |---|---|
-| Gas | air (`test/common/Air-viscous`, Sutherland viscosity), $\mathrm{Pr} = 0.72$, $\mathrm{Pr}_t = 0.9$ |
+| Gas | air: perfect gas with $\gamma = 1.4$ and $R = 287$ J/(kg·K) (`test/common/Air-viscous`, written by ATLAS GPB), viscosity of Sutherland's law $\mu = 1.458\times10^{-6}\,T^{3/2}/(T + 110.4)$ Pa·s (`test/common/Air-sutherland/transport.dat`), $\mathrm{Pr} = 0.72$, $\mathrm{Pr}_t = 0.9$ |
 | Turbulence | Spalart–Allmaras; SST (`omega-wall-bc = practical`) |
 | Time scheme | RK3, local time stepping (steady) |
 | CFL / VNN | 0.8 / 0.3 |
