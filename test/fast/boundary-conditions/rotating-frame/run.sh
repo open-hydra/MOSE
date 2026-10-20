@@ -10,16 +10,24 @@
 #  1 rad/s about x) with
 #  the two ends as such entries: the run must end within 60 s with exit code
 #  0, and its set-up summary must list the two patches, block 1 faces 1 and 2.
-#  A stationary face must be made of walls 301 and 302 of the mesh: with
-#  stationary-face-2 = 1 3 (a face of type 400) or = 2 1 (a block the mesh
-#  does not have) the run must stop at set-up, within 60 s, with a non-zero
-#  exit code and a message.
+#  A stationary face must have walls 301 or 302 of the mesh: with
+#  stationary-face-2 = 1 3 (a face of type 400, which has no wall) or = 2 1 (a
+#  block the mesh does not have) the run must stop at set-up, within 60 s,
+#  with a non-zero exit code and a message.
 #  Then a stationary wall (make_case.py): a short tube along x, the frame
 #  turning at 100 rad/s about x, the gas at rest in the absolute frame and
 #  face 1 an adiabatic wall that does not rotate (stationary-face-1 = 1 1).
 #  In the frame the wall and the cell next to it move alike, with -Omega x r:
 #  after one step, the wall shear in the wall output must stay below 1e-3 of
 #  mu Omega y_c / (dx/2), the shear of the same wall taken as rotating.
+#  Then the same tube with two cells across whose face 1 is a wall 302 for one
+#  cell and a block connection (101) to a second block for the other
+#  (make_case.py mixed): a connection never reads the stationary flag, so the
+#  face can be stationary; the run must end with exit code 0, list the patch,
+#  and keep the wall shear of its wall part below 1e-3 of the same scale. With
+#  a symmetry plane (300) in place of the connection (make_case.py
+#  mixed-symmetry), which takes the velocity of a wall at rest in its inviscid
+#  flux only, the run must stop at set-up with a message.
 #  Reuses the Sod inputs (test/1D/Sod79), the gas of test/common/Air-viscous
 #  and the transport of test/common/Air-sutherland.
 #===============================================================================
@@ -99,8 +107,8 @@ else
   fi
 fi
 
-echo "-- a stationary face that is not made of walls 301 and 302 --"
-for c in "1 3:covers a record of type 400" "2 1:names block 2, face 1, which has no record in bc.txt"; do
+echo "-- a stationary face with no wall 301 or 302 --"
+for c in "1 3:names block 1, face 3, which has no wall 301 or 302" "2 1:names block 2, face 1, which has no record in bc.txt"; do
   face=${c%%:*}; msg=${c#*:}
   sed -e "s/^stationary-face-2 = 1 2$/stationary-face-2 = $face/" input.ini > input-face.ini
   cp input.ini input-walls.ini && mv input-face.ini input.ini
@@ -166,6 +174,43 @@ else
     echo "  [FAIL] wall shear on the stationary wall $r of mu Omega y_c / (dx/2): the wall taken as rotating"
     fail=1
   fi
+fi
+
+echo "-- a stationary face that is a wall 302 in part and a block connection in part, one step --"
+python3 -B make_case.py mixed || exit 1
+rm -f OUTPUT/wall.tec
+timeout 60 "$LOCAL" > OUTPUT/mixed.log 2>&1
+rc=$?
+if [[ $rc -ne 0 || ! -f OUTPUT/wall.tec ]]; then
+  echo "  [FAIL] exit code $rc or no wall output (see OUTPUT/mixed.log)"
+  fail=1
+else
+  cp OUTPUT/wall.tec OUTPUT/wall-mixed.tec
+  if command grep -q 'stationary patches = 1:' OUTPUT/mixed.log && command grep -q 'block 1  face-dir 1' OUTPUT/mixed.log; then
+    echo "  [ok  ] the run ended with exit code 0 and the set-up summary lists the patch, block 1 face 1"
+  else
+    echo "  [FAIL] the set-up summary does not list the stationary patch (see OUTPUT/mixed.log)"
+    fail=1
+  fi
+  r=$(python3 -B make_case.py check OUTPUT/wall-mixed.tec)
+  if python3 -c "import sys; sys.exit(0 if float('$r') < 1e-3 else 1)"; then
+    echo "  [ok  ] wall shear on the wall part $r of mu Omega y_c / (dx/2)"
+  else
+    echo "  [FAIL] wall shear on the wall part $r of mu Omega y_c / (dx/2): the wall taken as rotating"
+    fail=1
+  fi
+fi
+
+echo "-- a stationary face that is a wall 302 in part and a symmetry plane 300 in part --"
+python3 -B make_case.py mixed-symmetry || exit 1
+timeout 60 "$LOCAL" > OUTPUT/mixed-symmetry.log 2>&1
+rc=$?
+msg="stationary-face-1 covers a record of type 300 (block 1, face 1, cell 1 2 1), which reads the stationary flag in part"
+if [[ $rc -ne 0 && $rc -ne 124 ]] && command grep -q "$msg" OUTPUT/mixed-symmetry.log; then
+  echo "  [ok  ] stopped at set-up, exit code $rc"
+else
+  echo "  [FAIL] exit code $rc, the run was not stopped with the message (see OUTPUT/mixed-symmetry.log)"
+  fail=1
 fi
 
 if [[ $fail -ne 0 ]]; then

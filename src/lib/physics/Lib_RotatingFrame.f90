@@ -585,18 +585,24 @@ contains
   end function RF_Is_Stationary_Face
 
 
-  !> At set-up, once bc.txt is read: every stationary-face-<k> = <block> <face> must name a face of the mesh whose records
-  !> are all walls 301 or 302, the only boundary conditions that take the velocity of a wall at rest in the laboratory.
-  !> On any other record the face would be at rest in part only (the inviscid flux of BC_Symmetry_Eul takes the normal
-  !> velocity of the wall at rest; the viscous flux, the ghost cells and the flux of an ablating wall do not), and a face
-  !> with no record of the mesh is not a wall at all: both stop the run.
+  !> At set-up, once bc.txt is read: every stationary-face-<k> = <block> <face> must name a face of the mesh with walls 301
+  !> or 302, the only boundary conditions that take the velocity of a wall at rest in the laboratory, and with no record
+  !> that would take it in part. The records fall in three classes by the points that read the stationary flag
+  !> (RF_Is_Stationary_Face): the walls 301 and 302 read it everywhere (inviscid and viscous flux, ghost cells, wall output,
+  !> torque); the types 0, 101, 102, 200, 201, 400, 407, 410, 501 and 506 never read it, so their boundary condition is the
+  !> same with or without the key (a face of a casing that is wall in part and connection in part); every other type reads
+  !> it in part, in the inviscid flux of BC_Symmetry_Eul, which 103, 104 and 300 call always and 401-406, 408, 420 and
+  !> 502-505 as a fallback (103 and 104 also in the ghost cells), so the face would be at rest in part only: that stops the
+  !> run. A face with no wall 301 or 302, or with no record of the mesh, has no wall to put at rest: that stops the run too.
+  !> A new type that never reads the flag must be added to the types skipped here; if it is not, it stops the run as one
+  !> that reads it in part.
   subroutine Check_Stationary_Faces ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
     type(MOSE_domain_type), intent(in) :: domain
     ! Local
-    integer :: k, l, b, f, nrec
+    integer :: k, l, b, f, nrec, nwall
     character(len=256) :: msg
 
     if ( .not. obj_rot%enabled ) return
@@ -605,20 +611,30 @@ contains
       b = obj_rot%stationary_face(1,k)
       f = obj_rot%stationary_face(2,k)
       nrec = 0
+      nwall = 0
       do l = 1, domain % nbound
         if ( domain % bc(l) % b /= b .or. domain % bc(l) % f /= f ) cycle
         nrec = nrec + 1
-        if ( domain % bc(l) % type /= 301 .and. domain % bc(l) % type /= 302 ) then
-          write(msg,'(A,I0,A,I0,A,I0,A,I0,A,3(1X,I0),A)') '[ERROR] Rotating frame: stationary-face-', k, &
-            ' covers a record of type ', domain % bc(l) % type, ' (block ', b, ', face ', f, ', cell', &
-            domain % bc(l) % i, domain % bc(l) % j, domain % bc(l) % k, '): only walls 301 and 302 can be at rest'// &
-            ' in the laboratory'
-          call mpi_stop_all ( trim(msg) )
-        end if
+        select case ( domain % bc(l) % type )
+          case (301, 302)
+            nwall = nwall + 1
+          case (0, 101, 102, 200, 201, 400, 407, 410, 501, 506)
+            ! never reads the stationary flag
+          case default
+            write(msg,'(A,I0,A,I0,A,I0,A,I0,A,3(1X,I0),A)') '[ERROR] Rotating frame: stationary-face-', k, &
+              ' covers a record of type ', domain % bc(l) % type, ' (block ', b, ', face ', f, ', cell', &
+              domain % bc(l) % i, domain % bc(l) % j, domain % bc(l) % k, '), which reads the stationary flag in part:'// &
+              ' the face would be at rest in part only'
+            call mpi_stop_all ( trim(msg) )
+        end select
       end do
       if ( nrec == 0 ) then
         write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] Rotating frame: stationary-face-', k, ' names block ', b, ', face ', f, &
           ', which has no record in bc.txt: it is no wall of the mesh'
+        call mpi_stop_all ( trim(msg) )
+      else if ( nwall == 0 ) then
+        write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] Rotating frame: stationary-face-', k, ' names block ', b, ', face ', f, &
+          ', which has no wall 301 or 302'
         call mpi_stop_all ( trim(msg) )
       end if
     end do

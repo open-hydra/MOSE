@@ -691,9 +691,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - On the same walls the energy flux of the wall face carries the work of the wall stress on the wall velocity, (τ·n)·w, as the
   faces between cells carry it with the velocity of their cells. The energy of the wall cells lacked it, by an amount per unit
   area of wall that does not depend on the mesh.
-- A `stationary-face-<n>` that is not made of walls `301` and `302`, or that has no record in `bc.txt`, stops the run at set-up
-  with a message that names the key, the record and its type: on a wall `503`–`505` such a face was at rest in the inviscid flux
-  and turning with the frame in the viscous flux, a boundary condition of no wall, and a face with no record did nothing.
+- A `stationary-face-<n>` whose face covers a record that would take the velocity of the wall at rest in part only (the
+  inviscid flux of a symmetry `300`, of the inlets and outlets `401`–`406`, `408` and `420`, and of the walls `103`, `104` and
+  `502`–`505`), whose face has no wall `301` or `302`, or that has no record in `bc.txt`, stops the run at set-up with a message
+  that names the key, and for a record the record and its type: on a wall `503`–`505` such a face was at rest in the inviscid
+  flux and turning with the frame in the viscous flux, a boundary condition of no wall, and a face with no record did nothing.
+  The walls of a stationary face may share it with the types that never read whether their face is stationary, whose boundary
+  condition is the same with or without the key (block connections, periodic and chimera faces, extrapolation `400`, `407`,
+  `410`, `501`, `506` and unused faces), as a casing face that is a wall in part and a block connection in part.
 - With the rotation–curvature correction of Spalart–Allmaras (`turbulence = SA-RC`) the ghost cells behind the faces between
   blocks (`101`) and of the periodic pairs (`201`) hold the velocity gradient of the cell across, from another rank by message,
   and on a 3-D sector closed by `200` the gradient of the turned image, so the result no longer depends on how the mesh is
