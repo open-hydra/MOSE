@@ -55,12 +55,12 @@
 #  initial condition with fewer variables than the model needs (set-up), a
 #  rotating frame with an axis of zero length (set-up),
 #  chemistry = equilibrium without the elements of the species,
-#  INPUT/composition.txt (set-up; the run used to start and go on with an
+#  INPUT/composition.txt (set-up; without the stop the run would go on with an
 #  equilibrium of no element), and a value outside the rule of the registry
-#  of each form not checked before: preconditioning-eps-min = 1 (the
+#  for three forms of rule: preconditioning-eps-min = 1 (the
 #  interval in (0, 1)), ode-relative-tol-species = 0 (a list of reals, > 0)
-#  and index-position = 1 -1 1 1 of a probe (a list of integers, >= 0); the
-#  three used to run with no message (set-up). The exit code must be
+#  and index-position = 1 -1 1 1 of a probe (a list of integers, >= 0); without
+#  the check the three would run with no message (set-up). The exit code must be
 #  between 1 and 128 (128 is what ifx gives to ERROR STOP; above 128 the
 #  shell reports a signal) and the log must hold the message.
 #
@@ -141,9 +141,9 @@
 #
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
-#  of the INI reader). The run used to stop on the first required key,
-#  naming that key and not the file, or, with the empty file, to end inside
-#  the reader with a run-time error.
+#  of the INI reader). Without this check the run would stop on the first
+#  required key, naming that key and not the file, or, with the empty file,
+#  end inside the reader with a run-time error.
 #
 #  A restart from a solution whose time or counter is not finite stops the
 #  run at set-up, in every build, with exit code 1, the file, the name of the

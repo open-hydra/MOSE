@@ -67,12 +67,9 @@ my_case/
     plane of the block is the first one turned about the $x$ axis by the same angle in every such block, or translated
     (a periodicity with no rotation); otherwise the run stops. A block closed on itself over a full turn about $x$,
     its last $k$ node plane on the first one, is translated by zero: the periodicity by the identity. Every node is
-    checked against the move of the nodes per cell in $k$, measured along the $k$ lines: the largest, over the nodes
-    of the first $k$ node plane, of the sum of the moves of the node across the cells in $k$ (each its largest
-    component), over the number of those cells (the thickness of a 2-D block). Along straight $k$ lines it is the
-    move from the first plane to the last per cell, and on a sector the length of the arc per cell in the norm of the
-    largest component (between 0.71 and 1 of the arc), which the chord from plane to plane understates past half a
-    turn (4.2 times at 270 degrees). A block is turned when its nodes match the turn
+    checked against the move of the nodes per cell in $k$ (defined in
+    [Spatial Discretization](../theory/numerics.md#rotational-periodicity-and-axisymmetric-wedge-type-200)). A block
+    is turned when its nodes match the turn
     to within 1 % of that move and better than a translation, translated when they match a translation to within
     1 % of it and better than a turn, or when the angle is null (a turn by the null angle is the translation by
     zero), and the angles of the blocks agree to 1 %. So the round-off of the coordinates in the file has to stay below
@@ -84,15 +81,8 @@ my_case/
     when that one lies on it) keeps its azimuth while its $k = 1$ node plane is not the $k = 0$ plane translated to
     1 %: $k$ planes that touch or cross, or a $k = 1$ plane scaled radially about the axis. The set-up summary
     names the type, as `Mesh type`: 1-D, 2-D plane, 2-D axisymmetric wedge with its angle in degrees, 3-D, or 3-D
-    with the angle of its sectors. The periodic images of
-    the wall in the wall distance of the turbulence models follow the same rule: the translations of the periodic
-    connections (`201`), and of the slabs closed in $k$ by type `200` (their cells measured as above, so that a block
-    closed on itself over a full turn gives the translation zero, which is no periodicity), are the same when they
-    differ by at most 1 % of the thinnest cell across the periodic boundaries, and translations that do not form a
-    lattice to that stop the run: the two sides of each periodic boundary must match to that, with enough digits.
-    A channel periodic in $x$
-    and turned by 30 degrees about $z$ gives translations that differ by 1.1e-4 of its cells with five digits, by
-    8.8e-4 with four, and by 0.15 with two, which stops the run.
+    with the angle of its sectors. The periodic images of the wall in the wall distance of the turbulence models
+    follow the same 1 % rule ([Turbulence](../theory/turbulence.md#wall-distance)).
 
 ---
 
@@ -142,28 +132,23 @@ MOSE prints diagnostic information to the console during loading and iteration. 
     If any issue occurs during loading (e.g., missing files, format errors), MOSE will print an error message and exit, so the successful loading message is a good sign that the case is set up correctly.
 
 !!! note "Exit code"
-    A run that MOSE stops on an error — at loading, at set-up, or because the solution diverges («Integration failed at
-    b, i, j, k», then «NaN, infinity or p<0 detected») — ends with a non-zero exit code, so that scripts and job
-    schedulers see the failure: 1 where MOSE ends with `stop 1` or `error stop 1`; otherwise that of `ERROR STOP` (128
-    with ifx, 1 with gfortran) or, when a rank stops every rank of an MPI run with `MPI_ABORT`, the one the MPI launcher
-    gives for `MPI_ABORT` with error code 1. With MPI, an error that every rank finds (for example a decomposition map
-    that does not fit, an `input.ini` that cannot be read, a line of `bc.txt` that cannot be read, a time table that
-    cannot be read or whose times decrease, a mesh whose blocks do not make one type) stops every rank together, and so
-    do a value of `input.ini` read again out of its rule, an initial condition that cannot be read, also when one rank
-    alone finds it, and an error that rank 0 alone finds at set-up (in the thermodynamic, transport or chemistry data,
-    in the rules of `input.ini`, in the boundary conditions), which rank 0 writes and then passes to every rank: each rank writes its
-    message, the ranks finalize MPI and end with exit code 1. A `stop` or `error stop` outside these collective stops (a
-    divergence, for instance) ends only its own rank, without finalizing MPI: the MPI launcher then ends the run with an
-    exit code of its own, 255 with the `mpiexec` of Intel MPI 2021.12 (measured on a divergence with two ranks). A
-    divergence is caught on any value that is not finite
-    (NaN, infinity) or on a negative pressure, also in RELEASE builds with fast math; a value of the initial condition
-    that is not finite stops the run at set-up, in every build ([Initial Conditions](initial-conditions.md#required-variables)).
+    A run that MOSE stops on an error, at loading, at set-up or because the solution diverges («Integration failed at
+    b, i, j, k», then «NaN, infinity or p<0 detected»), ends with a non-zero exit code: 1 where MOSE ends with `stop 1`
+    or `error stop 1`, otherwise that of `ERROR STOP` (128 with ifx, 1 with gfortran) or the one the MPI launcher gives
+    for `MPI_ABORT` with error code 1. With MPI, an error that every rank finds, an initial condition that cannot be read
+    (also when one rank alone finds it) and an error that rank 0 finds at set-up or when it reads `input.ini` again stop
+    every rank together: each rank writes its message, the ranks finalize MPI and end with exit code 1. A `stop` outside
+    these collective stops, a divergence for instance, ends its own rank only, and the MPI launcher ends the run with a
+    code of its own (255 with the `mpiexec` of Intel MPI 2021.12). A divergence is caught on any value that is not finite
+    or on a negative pressure, in RELEASE builds with fast math too; a value of the initial condition that is not finite
+    stops the run at set-up ([Initial Conditions](initial-conditions.md#required-variables)). The errors of each input are
+    in its page ([Input File](input.md), [Initial Conditions](initial-conditions.md),
+    [Boundary Conditions](boundary-conditions.md)).
 
-    Known limit: errors raised inside the ORION library, which reads and writes the solution files, end with
-    code 0, because ORION stops with `STOP`. For example, a binary Tecplot file (`ic-format = tecplot binary`) in a
-    build without TecIO ends with «You can not read in binary format without compiling against TecIO» and exit code
-    0. MOSE cannot refuse that input beforehand: whether TecIO is compiled in is known only inside ORION (its `TECIO`
-    macro). Check the end of the log, not only the exit code, when a run reads or writes binary files.
+    Known limit: errors raised inside the ORION library, which reads and writes the solution files, end with code 0,
+    because ORION stops with `STOP` (for example a binary Tecplot file, `ic-format = tecplot binary`, in a build without
+    TecIO: «You can not read in binary format without compiling against TecIO»). Check the end of the log, not only the
+    exit code, when a run reads or writes binary files.
 
 ```
  =========================================================================================
@@ -298,8 +283,12 @@ After a run completes, the `OUTPUT/` directory contains:
 | `field.*` | Solution fields ($\rho$, $u$, $v$, $w$, $p$, $T$, …) |
 | `residual-history.dat` | Iteration-by-iteration residual norms |
 | `wall.tec` | Wall quantities (skin friction, heat flux) — viscous cases only |
-| `diagnostic.*` | Per-cell residuals of $\rho$, $\rho u$, $\rho v$, $\rho w$, $\rho E$, of the soot variables and of the RANS variables (those of the last stage of the iteration written; the wall output, written just before, leaves them alone), local time step `dt`, shock-sensor flag `beta` — steady runs only; with a single species it needs `sol-variables` to name `thermo` (the default) or `transport`, and the run stops at its first solution output otherwise |
+| `diagnostic.*` | Per-cell residuals of $\rho$, $\rho u$, $\rho v$, $\rho w$, $\rho E$, of the soot and RANS variables, local time step `dt`, shock-sensor flag `beta` — steady runs only |
 | `<probe>.txt` | Time-history data at probe locations called <probe>|
+
+The residuals of `diagnostic.*` are those of the last stage of the iteration written (the wall output, written just
+before, leaves them alone). With a single species the diagnostic output needs `sol-variables` to name `thermo` (the
+default) or `transport`; otherwise the run stops at its first solution output.
 
 ### Input/Output Formats
 

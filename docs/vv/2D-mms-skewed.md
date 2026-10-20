@@ -45,7 +45,7 @@ exact field at the cell centres.
 
 | Parameter | Value |
 |---|---|
-| Gas | calorically perfect air, $\gamma = 1.4$, $R = 287$ J/(kg·K) (`test/common/Air`, written by ATLAS GPB from `test/common/Air/input.ini`), $\mu = 10$ (flat transport table `test/2D/viscous/mms/INPUT/transport.dat`, the values of ATLAS GPB with `mil = 10` and `Pr = 0.72`), $\mathrm{Pr} = 0.72$, one species |
+| Gas | calorically perfect air, $\gamma = 1.4$, $R = 287$ J/(kg·K), $\mu = 10$, $\mathrm{Pr} = 0.72$, one species |
 | Equations | Navier–Stokes (laminar) |
 | Time scheme | RK3, local time stepping until the residual has fallen by $5\cdot10^{-4}$ from the first iteration |
 | CFL / VNN | 0.2 / 0.1 |
@@ -53,6 +53,9 @@ exact field at the cell centres.
 | Riemann solver | HLLC |
 | Face metric | `diffusive-metric = stencil` (default) |
 | Grids | short form (CTest): $N = 10, 20$ cells per side; full form: $N = 20, 40, 80$ |
+
+The gas is that of `test/common/Air`, written by ATLAS GPB from `test/common/Air/input.ini`, with the flat transport
+table `test/2D/viscous/mms/INPUT/transport.dat` (the values of ATLAS GPB with `mil = 10` and `Pr = 0.72`).
 
 ## Checks
 

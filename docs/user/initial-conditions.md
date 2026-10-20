@@ -115,7 +115,7 @@ If the run went on after the solution the restart reads (it stopped without writ
 
 ### Exact restart
 
-Every solution stores the values of its cells so that a restart reads back the 64-bit values written: the binary formats (`vtk raw`, `tecplot binary`) store their bits, and the text formats (`vtk ascii`, `tecplot ascii`) write 17 significant digits, the fewest that give back every 64-bit value (a 64-bit real has a 53-bit significand, and the decimal numbers of n digits are closer together than the reals everywhere when 10^(n−1) > 2^53, that is n ≥ 17). The field solution also stores the counters that decide what the run does and writes next, with the same names in every format: as field data of the `.vts` files of a vtk solution, as data set auxiliary data of a Tecplot solution (`DATASETAUXDATA` records after the zones of a `.tec` file):
+Every solution stores the values of its cells so that a restart reads back the 64-bit values written: the binary formats (`vtk raw`, `tecplot binary`) store their bits, and the text formats (`vtk ascii`, `tecplot ascii`) write 17 significant digits, the fewest that give back every 64-bit value. The field solution also stores the counters that decide what the run does and writes next, with the same names in every format: as field data of the `.vts` files of a vtk solution, as data set auxiliary data of a Tecplot solution (`DATASETAUXDATA` records after the zones of a `.tec` file):
 
 | Item | Content |
 |------|---------|

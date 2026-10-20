@@ -35,8 +35,8 @@ centres, and the ghost cells of the wall the position at which their value is ri
              cell of the wall takes T = 2 T_w - T_c at the reflection 2 x_f - x_c of the cell centre and the pressure of the
              cell, so its density is that of the field at that point (Ghost_Wall), and the cell metric of the density takes
              that point; a density at a point where it is not right gives grad rho a normal component, which the term
-             -(nu + nu~) grad rho . grad nu~ / sigma turns into about 0.3 of the scale (a copy at the reflection, as before
-             the metrics of the sources took the cell itself for it). The wall distance of MOSE is that to the nearest wall face centre, not y, on skewed cells:
+             -(nu + nu~) grad rho . grad nu~ / sigma turns into about 0.3 of the scale (for example a copy of the cell placed
+             at the reflection). The wall distance of MOSE is that to the nearest wall face centre, not y, on skewed cells:
              the equilibrium does not hold, so the same column at uniform T is solved too and the difference of
              (right-hand side)/rho between the two runs, over (cb2/sigma) a^2, is checked; it holds the terms in grad rho;
   skewed3d   the same in 3-D: 5 x 16 x 5 cells, x += y tan 20, z += y tan 10, T linear in x and z, the sides of 400 type.

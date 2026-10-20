@@ -730,39 +730,13 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   $\mathbf{x}(s,t) = \mathbf{x}_1 + s\mathbf{a} + t\mathbf{b} + st\mathbf{T}$,
   $\mathbf{a} = \mathbf{x}_2 - \mathbf{x}_1$, $\mathbf{b} = \mathbf{x}_4 - \mathbf{x}_1$,
   with the twist $\mathbf{T} = \mathbf{x}_1 - \mathbf{x}_2 + \mathbf{x}_3 - \mathbf{x}_4$
-  (corners in cyclic order). The distance to it is its minimum over the face, in
-  one of two ways:
-  - **The four triangles** between its centre and its sides, when the face is
-    plane to the resolution of its coordinates: they lie within
-    $g = \min(|\mathbf{T}|/16,\ |\mathbf{T}\cdot\mathbf{n}|/(2|\mathbf{n}|))$ of
-    the face, $\mathbf{n}$ the cross product of its diagonals (the second bound
-    when the face, projected on the plane normal to $\mathbf{n}$, is convex). The
-    face takes this way when a computed bound is within $8uM + \varepsilon$, with
-    $u = 2^{-53}$, $M$ the largest coordinate of its corners in absolute value and
-    $\varepsilon$ a proven bound of the rounding of that computation, which grows
-    with $\kappa_n|\mathbf{T}|$, $\kappa_n$ = 1/sine of the angle between the
-    diagonals. Every face of a 2-D mesh (a parallelogram) takes it, and every
-    convex plane face whose corners are not within $(49 + 30\kappa_n)u$ of a
-    straight or a null angle. Its distance is within $8uM + 2\varepsilon$ of the
-    distance to the face, plus the rounding of the triangles. The distance to a
-    triangle is the distance to its plane when the projection of the point falls
-    inside it, otherwise the distance to the nearest side.
-  - **The certified minimum** on any other face: a branch and bound over the
-    rectangles of $(s, t)$, depth first. Upper bounds are points of the face (its
-    sides in closed form, the centre of each piece, projected Newton steps);
-    the lower bound of a piece is the larger of the distance to its two
-    triangles less $|\mathbf{T}_P|/4$, $\mathbf{T}_P$ the twist of the piece, and
-    the distance to the convex hull of its four corners, both less a proven
-    bound of their rounding; a piece is split in two across its longer side in
-    space. The result is within $\tau + 32uS = 288uS$ of the distance,
-    $S = |\mathbf{p} - \mathbf{x}_1| + |\mathbf{a}| + |\mathbf{b}| + |\mathbf{T}|$,
-    $\tau = 256uS$: the rounding of the size of the face and of the distance,
-    not of the coordinates. No case needs a treatment of its own: faces with a
-    collapsed side, three corners on one point, a bowtie, a pinch or a reflex
-    corner are plane or are treated the same way. The coordinates of the face
-    relative to its first corner pass through `VOLATILE` variables, so that the
-    compiler cannot rewrite them in terms of the coordinates themselves (as
-    for the [cell volume](numerics.md#cell-volume)).
+  (corners in cyclic order). The distance to it is its minimum over the face,
+  exact to the rounding of the size of the face and of the distance: a face plane
+  to the resolution of its coordinates (every face of a 2-D mesh) takes the four
+  triangles between its centre and its sides, any other face a certified minimum
+  ([Code Structure](../development/structure.md#wall-distance) gives the
+  algorithm). The four triangles of a twisted face would be wrong by up to
+  $(|\mathbf{T}|/16)/y$, 6 % on a unit face twisted by 0.1 at the height 0.1.
 - On a 2-D axisymmetric wedge (BC 200) the distance is measured in the
   meridional plane $(x, r)$, $r = \sqrt{y^2+z^2}$, from the cell centre to the
   wall curve. This is the distance to the wall surface of revolution, and it
@@ -772,38 +746,16 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   surface of revolution of its meridional curve, for the volumes and the fluxes
   the cells are polyhedra with plane faces; the two differ by
   $r(1 - \cos(\delta/2)) \approx r\delta^2/8$.
-- A k-d tree over the face centres, with the radius of each face, finds the
-  nearest face: the distance is computed only for the faces whose centre lies
-  within the best distance found so far plus their radius. When some face takes
-  the certified minimum, the search makes two passes over the tree: the first
-  finds an upper bound of the distance (the triangles of each face plus the
-  bound of their gap from the face and of the rounding), the second computes the
-  certified minimum only on the faces whose triangles, less that bound, are not
-  farther than it. Each pass gives the minimum of a function of the face alone,
-  so the distance and the face that gives it do not depend on the shape of the
-  tree, on the threads or on the ranks.
+- The distance and the face that gives it do not depend on the threads or on
+  the ranks.
 - Across periodic boundaries the wall goes on: the distance is the minimum over
   the periodic images of the wall too. A periodic connection (type 201) gives
   the translation from its source face to its own face, and on a 3-D mesh
   without sectors so does a block closed in $k$ by type `200` (its last node
-  plane is the first one translated). The distinct translations are reduced
-  to a basis $B_1 \ldots B_n$ of the lattice they generate, shortest first,
-  and then pairwise (Lagrange: $B_j$ becomes $B_j - m B_i$, $m$ the integer
-  nearest to $B_i\cdot B_j / B_i\cdot B_i$, while that shortens it) and, with
-  three translations, by threes ($B_l$ becomes $B_l - m_i B_i - m_j B_j$, with
-  $m_i, m_j$ the integers nearest to the least-squares coefficients of $B_l$ on
-  $B_i, B_j$ or next to them, while that shortens it). Three nearly dependent
-  translations can be reduced pair by pair (no pairwise step shortens them)
-  and still have a short sum: $B_1 = (1, 0, 0)$,
-  $B_2 = (-\tfrac12, \tfrac{\sqrt3}{2}, 0)$,
-  $B_3 = (-\tfrac12, -\tfrac{\sqrt3}{2}, \varepsilon)$ give
-  $B_1 + B_2 + B_3 = (0, 0, \varepsilon)$, which only the step by threes finds.
-  Each step adds to a vector an integer combination of the others, so the
-  lattice is the same, and the bound below holds for any basis of it: the
-  reduction only keeps the number of images small. The
-  images are the integer combinations $\sum_i k_i B_i$ of the basis (along $x$
-  on an axisymmetric wedge). The two sides of a periodic boundary match only
-  to the round-off of the coordinates in the mesh file: translations that
+  plane is the first one translated). The images are the integer combinations of
+  these translations (along $x$ on an axisymmetric wedge). The two sides of a
+  periodic boundary match only to the round-off of the coordinates in the mesh
+  file: translations that
   differ by at most $10^{-2}$ of the thinnest cell across the periodic
   boundaries are the same, as in the type of the mesh. The thickness of a
   cell across a periodic face is the distance from the centre of the face to
@@ -814,47 +766,17 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   lies; relative to the cells it does not. On a 3-D mesh whose
   sectors are closed by the rotational periodicity (type `200` on faces 5–6)
   the images are also the turns by multiples of the sector angle about the
-  $x$ axis, up to half a turn either way.
-- Only a bounded set of images can hold the nearest wall, whatever the size of
-  the mesh against its periods. Let $B^*_i$ be the dual basis
-  ($B^*_i\cdot B_j = \delta_{ij}$), $G_{ij} = B_i\cdot B_j$ the Gram matrix,
-  and $w_i = B^*_i\cdot w$ the coordinates of a vector $w$. Every wall face
-  is moved, whole, by the lattice vector that brings its centre $m$ to
-  $|(m - a)_i| \le 1/2$, $a$ the centre of the first wall face, and so is the
-  centre $c$ of every cell before its search: the periodic wall is the same
-  set. Let $p$ be the point of a face nearest to $c$ over all the images, and
-  $s$ the image that holds it: $s$ is a lattice vector closest to $v = c - p$
-  (another one would bring a point of the same face nearer), so $u = v - s$ is
-  not farther from 0 than from $\pm B_j$, $|u\cdot B_j| \le G_{jj}/2$, and
-  since $u_i = \sum_j (G^{-1})_{ij}\, u\cdot B_j$,
-  $|u_i| \le \beta_i = \tfrac12 \sum_j |(G^{-1})_{ij}|\, G_{jj}$ ($1/2$ on
-  an orthogonal basis). Every point of a face is a convex combination of its
-  corners, so $|(p - m)_i| \le \rho_i$, $\rho_i$ the largest
-  $|(q - m)_i|$ of a corner $q$ of a face, and
-  $|v_i| \le |(c - a)_i| + |(m - a)_i| + |(p - m)_i| \le 1 + \rho_i$. The
-  coefficients of $s$ are $k_i = v_i - u_i$: the images searched are
-  $|k_i| \le \lfloor 1 + \rho_i + \beta_i \rfloor$, one on each side
-  ($|k_i| \le 1$) when $\rho_i < 1/2$ on an orthogonal lattice. On a sector
-  every translation lies along $x$, and the turns keep the coordinate along
-  $x$, so the same bound holds for each turn. An image is searched only when
-  the box around the moved wall, seen from the cell moved back by the image,
-  is not farther than the distance found so far, so a mesh without periodic
-  boundaries costs nothing more. Translations that do not form a lattice stop
-  the run: one that is not an integer combination of the others, more than
-  three independent ones, or one not along $x$ on a wedge or with sectors; so
-  does a number of images too large for an integer.
+  $x$ axis, up to half a turn either way. A channel periodic in $x$ and turned by
+  30 degrees about $z$ gives translations that differ by 1.1e-4 of its cells with
+  five significant digits, by 8.8e-4 with four, and by 0.15 with two, which stops
+  the run. Translations that do not form a lattice stop the run: one that is not
+  an integer combination of the others, more than three independent ones, or one
+  not along $x$ on a wedge or with sectors. Only a bounded set of images can hold
+  the nearest wall, and only those are searched: a mesh without periodic
+  boundaries costs nothing more.
 - Each cell takes the sand-grain roughness $k_s$ of the face that gives the
   minimum distance; between faces at the same distance, the first one in the
   boundary file.
-
-Twisted wall faces in 3-D. The four triangles of a face whose corners are not
-coplanar lie within $|\mathbf{T}|/16$ of it, and with them the distance would be
-wrong by up to $(|\mathbf{T}|/16)/y$: on a unit face twisted by $t = |\mathbf{T}|$,
-at the height $h$, 6 % for $t = h = 0.1$, 62 % for $t = 10^{-2}$ and
-$h = 10^{-3}$, and 62 times the distance for $t = 0.1$ and $h = 10^{-4}$. Such a
-face takes the certified minimum, and its distance is exact to the rounding.
-2-D and axisymmetric meshes are not affected: their wall faces are plane and
-take the four triangles.
 
 Tests `MeshGeometry`/`WallDistance` and `BilinearDistance`.
 

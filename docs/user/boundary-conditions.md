@@ -38,10 +38,9 @@ For a block with $n_i \times n_j \times n_k$ cells the six faces are labelled:
 | 5 | $k = 1$ (kmin) | $i = 1 \ldots n_i$, $j = 1 \ldots n_j$ |
 | 6 | $k = n_k$ (kmax) | $i = 1 \ldots n_i$, $j = 1 \ldots n_j$ |
 
-For 2-D cases (`nk = 1`), faces 5 and 6 are degenerate. They should be set to the null type (`type = 0`) or symmetry (`300`).
-The null type has no flux through the k faces. In a planar case (not an axisymmetric wedge) with symmetry on all the k faces MOSE sets the z velocity to zero and does not integrate the z momentum. The two mirror planes one cell apart would otherwise give $w$ the mode $dw/dt = -2\,a\,w/\Delta z$ ($a$ the speed of sound, $\Delta z$ the thickness of the layer), which the explicit schemes cannot follow at the time step of the in-plane cells: round-off in $w$ would grow until the run fails. MOSE does so only when every k face is a plane normal to z (the x and y components of its unit normal at most $10^{-10}$). Where the k faces are not normal to z, as in a layer between parallel planes inclined to z, symmetry on them asks the gas to move along them, across the layer, and setting $w$ to zero would change the flow (the mass flow, the pressure): there MOSE integrates the z momentum, with a warning, and the mode above limits the time step. Heun follows it for time steps up to $\Delta z/a$ and RK3 up to $1.26\,\Delta z/a$: with the time step of the in-plane cells, about $\text{cfl}\,\Delta x/a$, layers thinner than about $\text{cfl}\,\Delta x$ (Heun) or $0.8\,\text{cfl}\,\Delta x$ (RK3) make the run fail.
-In a 1-D case (one cell in j and one in k) the same holds in both directions: with symmetry on all the k faces MOSE sets $w$ to zero and does not integrate it, and with symmetry on all the j faces it does the same for $v$, whose mode is $dv/dt = -2\,a\,v/\Delta y$, with the same condition: every j face a plane normal to y for $v$, every k face a plane normal to z for $w$. A channel whose section varies along x, one cell across with its faces along the walls, has faces that are not, and the velocity across is integrated, with a warning; cells thinner across than about $\text{cfl}\,\Delta x$ (Heun) or $0.8\,\text{cfl}\,\Delta x$ (RK3) then make the run fail.
-With symmetry on only one of the two faces and extrapolation (`400`) on the other, the velocity across keeps half that mode, $dv/dt = -a\,v/\Delta y$, and is integrated, since the extrapolation face lets the gas through. Heun follows that mode for time steps up to $2\,\Delta y/a$ and RK3 up to $2.51\,\Delta y/a$; as the time step of a 1-D case is about $\text{cfl}\,\Delta x/a$, cells thinner across than about $\text{cfl}\,\Delta x/2$ (Heun) or $0.4\,\text{cfl}\,\Delta x$ (RK3) make the run fail. Give both faces the same type.
+For 2-D cases (`nk = 1`), faces 5 and 6 are degenerate: give them the null type (`type = 0`) or symmetry (`300`). How MOSE
+treats the velocity across the faces of a direction of one cell, and which cells make a run fail, is in the note
+*Degenerate directions* under [Euler Boundaries](#euler-boundaries).
 
 An axisymmetric case is a wedge, symmetric about the plane $z = 0$, with faces 5 and 6 of type `200` (see [Euler Boundaries](#euler-boundaries)).
 
@@ -166,6 +165,30 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
     the run stops at setup. Give such a block `split-directions` without $k$ (for example `ij`); a ring whose blocks
     are joined by `101`, the junction at $\theta = 2\pi$ included, can be cut along $k$.
 
+!!! note "Degenerate directions (1-D and 2-D cases)"
+    A direction of one cell (the $k$ direction of a 2-D case, $j$ and $k$ of a 1-D case) has two faces across it: the null
+    type `0` has no flux through them. With $u_\perp$ the velocity across and $\Delta$ the thickness of the cell across
+    ($a$ the speed of sound), symmetry (`300`) on both faces makes the two mirror planes one cell apart give $u_\perp$ the
+    mode $du_\perp/dt = -2\,a\,u_\perp/\Delta$, which the explicit schemes cannot follow at the time step of the cells,
+    about $\text{cfl}\,\Delta x/a$: round-off in $u_\perp$ would grow until the run fails. So in a planar case (not an
+    axisymmetric wedge) with symmetry on all the faces of such a direction MOSE sets $u_\perp$ to zero and does not
+    integrate it, when every one of those faces is a plane normal to the axis of the direction (the other components of
+    its unit normal at most $10^{-10}$). Where they are not normal to it, as in a layer between parallel planes inclined to
+    $z$ or in a channel whose section varies along $x$, one cell across with its faces along the walls, symmetry asks the
+    gas to move along them, across the cell, and setting $u_\perp$ to zero would change the flow (the mass flow, the
+    pressure): there MOSE integrates $u_\perp$, with a warning. With extrapolation (`400`) on one or both faces $u_\perp$
+    is integrated too, since the extrapolation face lets the gas through. The modes and the cells that make the run fail:
+
+    | Faces across | $u_\perp$ | Mode | Stable step, Heun / RK3 | The run fails for cells thinner across than, Heun / RK3 |
+    |---|---|---|---|---|
+    | `300` + `300`, planes normal to the axis | set to zero, not integrated | — | — | — |
+    | `300` + `300`, planes inclined to the axis | integrated, with a warning | $-2\,a\,u_\perp/\Delta$ | $\Delta/a$ / $1.26\,\Delta/a$ | $\text{cfl}\,\Delta x$ / $0.8\,\text{cfl}\,\Delta x$ |
+    | `300` + `400` | integrated | $-a\,u_\perp/\Delta$ | $2\,\Delta/a$ / $2.51\,\Delta/a$ | $\text{cfl}\,\Delta x/2$ / $0.4\,\text{cfl}\,\Delta x$ |
+    | `400` + `400`, parallel planes | integrated | none: the fluxes of the two faces cancel | — | — |
+
+    Cells as wide across as along $x$ are within all these limits up to cfl 1. Give both faces the type `300` where the
+    velocity across must stay zero: MOSE then does not integrate it.
+
 ### Inlet / Outlet
 
 | Type | Name | Data line (comma-separated) |
@@ -183,20 +206,13 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 
 Type `409` (a forced outlet named in the reader of the boundary file) is not implemented: a record of type `409`, or of any
 type not listed on this page, gets no flux, and MOSE does not stop on it. Type `410` reads its data on the finest
-grid level only: do not use it with a sequence of grid levels. Its file (Tecplot ASCII, one zone per block and time) must
-hold finite values: a zone whose `SOLUTIONTIME` is not finite (NaN or infinity), or whose value for a face of type `410` is
-not, stops the run at set-up, with the file, the zone, the line of its header, and the variable and the cell of the value.
-So does a file that cannot be read, with the file and, for a zone, the zone and the line of its header: a file that cannot
-be opened or holds no `VARIABLES` line or no zone, a zone header whose `I`, `J`, `SOLUTIONTIME` or block number of the title
-(`T="B<block>_T<n>"`) does not read, zone data with a value that is not a number or that end before the values that `I`
-and `J` give, and a zone with more values than they give (the line after the data of a zone must be the header of the
-next one, with no blank line between). The zones must come in increasing time: a zone whose time no zone above it has
-must have a time greater than every time above it (the zones of other blocks at a time already given may come anywhere
-after it); otherwise the run stops at set-up, with the file, the zone, the line of its header and the two times.
-Each zone header must give `I=` and `J=` in upper case, with no blank around `=` (`I=3, J=2`): a header that gives no
-`I=` or no `J=` (for example `I = 3` or `i=3`) stops the run at set-up, with the file, the zone, the line of its header
-and the form to write. A file without `p`, without one of `u`, `v` and `w`, or without any `rho(N)` stops the run at set-up
-too, with the file and the variables it lacks.
+grid level only: do not use it with a sequence of grid levels. Its file is a Tecplot ASCII file with one zone per block
+and time: a `VARIABLES` line with `p`, `u`, `v`, `w` and at least one `rho(N)`; zone headers with `I=` and `J=` in upper
+case and no blank around `=` (`I=3, J=2`), `SOLUTIONTIME` and the title `T="B<block>_T<n>"`; each zone with exactly
+the values that its `I` and `J` give, and the header of the next zone on the line after them; the zones in increasing
+time (the zones of other blocks at a time already given may come anywhere after it). Every value must be finite. A file
+that departs from this, or that cannot be opened, stops the run at set-up with the file and, for a zone, the zone, the
+line of its header and the value, the variable, the times or the form to write at fault.
 
 **Common fields:**
 

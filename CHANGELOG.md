@@ -30,26 +30,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   estimate; TIMEOUT three days). The PR CI leaves the label out, and `ctest -L verification` runs it on request: a plain
   `ctest` now runs it too, so the whole suite without it is `ctest -LE verification`.
 - MPI runs take the rank of every block from `INPUT/decomposition.map` (with the phase prefix of `bc.txt` in multi-phase runs)
-  when the case has one: the decomposition map that the ATLAS mesh decomposer (MDB) writes next to the split mesh, one line per
-  block with its cells along i, j and k, its number of cells and its rank, checked against the mesh. A map that does not fit the
-  mesh or the run (a block line missing or one too many, blocks out of order, other cells, a rank the run does not have, a map
-  made for another number of ranks, a value that is not an integer, a directory in place of the file) stops the run at set-up:
-  every rank prints the same message, finalizes MPI and ends with exit code 1. The map is read in every build, so a map made
-  for more ranks also stops a serial run. With fewer blocks than ranks some ranks idle, with a warning, as without a map.
-  Without the file the assignment of the blocks and the outputs are those of before, bit for bit; with it the solution does not
-  change, only the rank on which each block is computed.
+  when the case has one: the decomposition map that the ATLAS mesh decomposer (MDB) writes next to the split mesh. A map that
+  does not fit the mesh or the run stops the run at set-up, on every rank, with exit code 1; the map is read in every build, so
+  a map made for more ranks also stops a serial run. With fewer blocks than ranks some ranks idle, with a warning, as without a
+  map. Without the file nothing changes; with it only the rank of each block does, not the solution.
 - At set-up MOSE warns, with the line number, about every `key = value` of `input.ini` that the reader does not take in its
   section: such a key is not read, and its parameter keeps its default. The guide says that a key lost this way is an error in
   the input. Inputs whose keys are all read do not change.
-- A restart goes on exactly as the run in one go would, from a solution in any format: every field solution stores the
-  counters that decide what the run does and writes next (the global iteration count `CYCLE`; `MOSE_ITERATION`,
-  `MOSE_OUTPUT_NUMBER`, `MOSE_GRID_LEVEL`, `MOSE_LAST_OUTPUT_TIME` and `MOSE_RES_REFERENCE`), as field data of the `.vts` files
-  of a vtk solution and as data set auxiliary data of a Tecplot solution, and a restart of the same kind of run reads them back.
-  A restart from such a solution keeps the CFL ramp, the numbering of the solutions, the multigrid level and the convergence
-  test of the uninterrupted run, and drops the rows of `residual-history.dat`, of the probe files and of `torque.dat` written
-  after the solution it reads: the run split in two parts writes the same files as the run in one go, byte for byte, within the
-  limits that the guide lists. A restart from vtk raw solutions did not start at all, and one from Tecplot started its counters
-  again: the numbered solutions of the second part replaced those of the first. A solution written before restarts as before.
+- A restart goes on exactly as the run in one go would, from a solution in any format: every field solution stores the counters
+  of the run (the global iteration count `CYCLE`; `MOSE_ITERATION`, `MOSE_OUTPUT_NUMBER`, `MOSE_GRID_LEVEL`,
+  `MOSE_LAST_OUTPUT_TIME` and `MOSE_RES_REFERENCE`), and a restart reads them back: the run split in two parts writes the same
+  files as the run in one go, byte for byte, within the limits that the guide lists. A restart from vtk raw solutions did not
+  start at all, and one from Tecplot started its counters again. A solution written before restarts as before.
 - The manufactured-solution driver (`MOSE_mms`) takes its field from the environment variable `MOSE_MMS_FIELD`: `periodic2d`,
   the field of `test/2D/viscous/mms` and the default, `periodic3d`, and the wall fields `wall2d` and `wall3d`, with walls at
   y = 0 and y = 1 and the wall temperature varying along them; an unknown value stops the driver at start. Where the total
@@ -57,12 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   removes the mean of the discrete source once after set-up, so that the discrete steady problem has a solution; the mean and
   its ratio to the mean of |S| go to the log.
 - The patch test of the viscous fluxes checks the cells next to inlets and outlets too (`ViscousPatch`, part
-  `ViscousOpenPatch`, fast tier): every outer face of a 2-D mesh with nodes moved at random and of a 3-D pair of blocks an
-  inlet or an outlet, one type per block face, `401`–`407` and `420` (ghost cells that copy the cell) and `408` (ghost
-  cells that extrapolate the cells). These faces have no viscous flux, so with a linear velocity, or a linear temperature at
-  uniform density, the cells of a face must give minus the flux of the uniform stress or heat conduction through it, within
-  1e-11 of the scale of the face fluxes: it checks that the ghost cells of these types sit, in the metric of the face
-  gradients, where their values belong. The solver does not change.
+  `ViscousOpenPatch`, fast tier): the ghost cells of `401`–`408` and `420` must sit, in the metric of the face gradients, where
+  their values belong. The solver does not change.
 
 ### Changed
 
@@ -83,35 +71,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `transport`; otherwise the run stops at its first solution output with a message that says so, where it named only the
   size of a buffer.
 - The local time step adds its limits over the directions and over convection and diffusion:
-  1/Δt = Σ_d (|u·∇ξ_d| + c|∇ξ_d|)/cfl + D_max Σ_d |∇ξ_d|²/vnn, where ∇ξ_d are the rows of the cell metric (the inverse widths of
-  the cell) and D_max is the largest diffusivity of the cell: momentum, 4/3 (μ + μ_t)/ρ; energy, (k + μ_t c_p/Pr_t)/(ρc_v),
-  that is γν/Pr = 1.94ν in air; species, with more than one; Spalart–Allmaras, (μ + ρν̃)/(σρ). In 3-D, on a cell whose three
-  directions are skewed against each other (a² + b² + c² + 2abc > 1 for the cosines a, b, c between the ∇ξ_d), the viscous part
-  takes the factor (2 + m + 1/m)/4, below 9/8, with m + 1 the largest eigenvalue of the matrix of the cosines: there the sum
-  alone does not bound the spectral radius of the viscous operator. It took the smallest of the direction limits, with the edge
-  length of the cell, and of a viscous limit on (μ + μ_t)/ρ, which is not stable where neither
-  one direction nor one process dominates: at cfl 0.8, sound waves in a box of square cells (with Heun the run stopped on a
-  negative pressure; with RK3 the pressure between 0.56 and 1.48 times its initial value) and an entropy wave on a skewed mesh
-  (stopped on a negative pressure, with Heun and with RK3), and heat conduction at the default vnn 0.3, which is 0.58 on the
-  energy diffusivity, beyond the limit 1/2 of Heun (stopped on a negative pressure). With the same cfl and vnn the step is
-  smaller, down to one half on square 2-D cells and by 1/1.94 in cells set by heat conduction: steady runs need more iterations
-  (3.4 to 3.9 times as many in diffusion-dominated cases, at the same cost per iteration; 555 instead of 385 in the Prandtl–Meyer
-  test, 8000 instead of 4000 in the inert configuration of the ablating-wall test), and time-accurate runs advance by a shorter
-  step (0.59 of the global step in a turbulent nozzle case with Spalart–Allmaras, RK3, cfl 0.8, vnn 0.3). Steady solutions do not
-  move. The defaults of cfl and vnn do not change; the user guide gives the stable values. In the nozzle case, RK3 with cfl 0.8
-  and vnn 0.5 gives 0.84 of the step of before, and vnn 0.52, beyond the positivity limit, hardly more: the step of a
-  time-accurate RANS run also holds the bound of the stiffness of the turbulence sources, which vnn does not scale. Heun with
-  cfl 0.5 and vnn 0.4 gives 0.67 of it.
+  1/Δt = Σ_d (|u·∇ξ_d| + c|∇ξ_d|)/cfl + D_max Σ_d |∇ξ_d|²/vnn, with ∇ξ_d the rows of the cell metric and D_max the largest
+  diffusivity of the cell (momentum, energy, species, Spalart–Allmaras: see the guide), and a factor below 9/8 on 3-D cells
+  whose three directions are skewed against each other. It took the smallest of the direction limits and of a viscous limit on
+  (μ + μ_t)/ρ, which is not stable where neither one direction nor one process dominates (sound waves on square cells, an
+  entropy wave on a skewed mesh and heat conduction at the default vnn stopped on a negative pressure). With the same cfl and
+  vnn the step is smaller, down to one half on square 2-D cells and by 1/1.94 in cells set by heat conduction: steady runs need
+  more iterations (3.4 to 3.9 times in diffusion-dominated cases) and reach the same solution, time-accurate runs advance by a
+  shorter step (0.59 of the global step in a turbulent nozzle case with Spalart–Allmaras, RK3, cfl 0.8, vnn 0.3). The defaults
+  of cfl and vnn do not change; the user guide gives the stable values. In the nozzle case, RK3 with cfl 0.8 and vnn 0.5 gives
+  0.84 of the step of before (the step of a time-accurate RANS run also holds the bound of the stiffness of the turbulence
+  sources, which vnn does not scale), and Heun with cfl 0.5 and vnn 0.4 0.67 of it.
 - In time-accurate RANS runs the turbulence sources are explicit, and the local time step includes the stiffness of their
-  destruction, so that Δt·d ≤ 1 and no Runge–Kutta stage can make ν̃, k or ω negative through it. The point-implicit factor
-  (`point-implicit`, true by default) now applies to steady runs only; a time-accurate run with it prints a warning. The factor
-  divided the whole source, production included, by 1 + Δt·d, which made the turbulence equations, and the mean flow through
-  μ_t, first-order accurate in time (order 1.00 for ν̃, 0.90 for k and 1.02 for ω with Heun and RK3; now about 2 with Heun and
-  3 with RK3). Where the destruction is faster than the transport the local step of those cells is smaller than before; with
-  Spalart–Allmaras the global step of a turbulent nozzle case did not change. Steady runs do not change. A time-accurate run with
-  SST or Wilcox 2006 and no CFL ramp (`cfl-rise-threshold`) prints a warning, and so does one with a rotation–curvature (-RC)
-  correction, whose term is evaluated without its time derivative; at the end of a RANS run one line gives the number of cell
-  updates in which a stage made ν̃, k or ω negative before the realizability floor.
+  destruction, so that no Runge–Kutta stage can make ν̃, k or ω negative through it; where the destruction is faster than the
+  transport the local step of those cells is smaller. The point-implicit factor (`point-implicit`, true by default) applies to
+  steady runs only, and a time-accurate run with it prints a warning: it made the turbulence equations, and the mean flow
+  through μ_t, first-order accurate in time (now about 2 with Heun and 3 with RK3). Steady runs do not change. A
+  time-accurate run with SST or Wilcox 2006 and no CFL ramp (`cfl-rise-threshold`), and one with a rotation–curvature (-RC)
+  correction, print a warning; at the end of a RANS run a line gives the number of cell updates in which a stage made ν̃, k
+  or ω negative before the realizability floor.
 - `res-threshold` ends steady runs only; time-accurate runs end on `time-threshold` or `iter-threshold`. The density residual
   that `res-threshold` reads says nothing about the convergence of a transient: a time-accurate run started from a steady state
   stopped after one step. A time-accurate case that ended on `res-threshold`, with the key or with its default, now runs to
@@ -140,27 +118,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   exponent (`2.0`, `1e3`: gfortran refused it, ifx cut the fraction, `2.7` read as 2), a logical that does not start with `T` or
   `F`, a list with more values than its parameter holds, a key with no value; so does `levels` of `[MOSE-Multigrid]`. Such a key
   was taken as one not given: its parameter kept the default, or the value of the previous reading, in silence.
-- MOSE builds with FiNeR v2.3.0 instead of v2.0.6. FiNeR v2.1.0 and later skip a comment line also when it holds `=` or a
-  bracket, and report the failures of their parser: with v2.0.6 such a line ended the reading of its section, and the keys
-  after it kept their defaults, so such an `input.ini` now gives the values written after the line. With v2.0.6 the last line
-  of an `input.ini` that does not end with a newline was lost too, without a message; v2.3.0 reads it. In the test cases such
-  a last line holds only keys that MOSE does not read (inputs of the ATLAS tools), so no run of the test suite changes. The
-  five libraries that FiNeR v2.0.7 and later no longer carry (PENF, FACE, FLAP, BeFoR64 and StringiFor) are submodules of MOSE
-  under `lib/third_party/`, at their release tags (v2.0.1, v1.1.17, v2.5.3, v1.2.4 and v1.8.0), and CMake adds them before FiNeR
-  from `FINER_DEPS_PATH` (`lib/third_party/` by default): a build needs neither FoBiS nor a download besides the submodules.
-  After pulling this change into an existing clone, run `git submodule update --init --recursive`: CMake initializes a
-  missing submodule, but does not update one that is checked out at an older commit, and stops with this command when
-  FiNeR is older than v2.1.0. ifx 2023.0 stops with an internal compiler error on StringiFor v1.8.0 and is not supported:
-  MOSE is tested with gfortran 12 and 13 and with ifx 2024.1 (see the installation guide).
+- MOSE builds with FiNeR v2.3.0 instead of v2.0.6: a comment line of `input.ini` that holds `=` or a bracket is skipped (with
+  v2.0.6 it ended the reading of its section, and the keys after it kept their defaults), and a last line without a final
+  newline is read (v2.0.6 lost it); no run of the test suite changes. PENF, FACE, FLAP, BeFoR64 and StringiFor are submodules
+  of MOSE under `lib/third_party/`, at their release tags, and CMake adds them before FiNeR from `FINER_DEPS_PATH`: a build
+  needs neither FoBiS nor a download besides the submodules. After pulling this change into an existing clone, run
+  `git submodule update --init --recursive` (CMake stops with this command when FiNeR is older than v2.1.0). ifx 2023.0 is
+  not supported (an internal compiler error on StringiFor v1.8.0); MOSE is tested with gfortran 12 and 13 and with ifx 2024.1
+  (see the installation guide).
 - `res-threshold` is relative to the density residual of the first iteration of a steady run (of each grid level): the run ends
   when its residual has fallen by that factor, and the default, `1e-10`, is a fall of ten orders. The test compared the residual
-  as it is, which scales with the level of density and with the square root of the number of cells: the same flow stopped at
-  different iterations in different units, and a flow at low density could stop after its first iteration, unconverged. Every
-  steady run that ends on `res-threshold` ends at another iteration (the PrandtlMeyer case of the test suite runs 767 iterations
-  instead of 555); runs that end on `iter-threshold` do not change. `residual-history.dat` and the screen still report the
-  residual as it is. A restart from a solution that holds no reference measures the threshold from its own first iteration, with a
-  warning. An input written for the absolute test keeps its stop with `res-threshold` divided by the density residual of the first
-  iteration (see the user guide, Stopping criteria).
+  as it is, which scales with the density and with the number of cells, so a flow at low density could stop unconverged after
+  its first iteration. Every steady run that ends on `res-threshold` ends at another iteration; runs that end on
+  `iter-threshold` do not change. `residual-history.dat` and the screen report the residual as it is. A restart from a solution
+  that holds no reference measures the threshold from its own first iteration, with a warning. An input written for the
+  absolute test keeps its stop with `res-threshold` divided by the density residual of the first iteration (see the user
+  guide, Stopping criteria).
 - With `sol-format = vtk raw` the field solutions hold their data as raw binary appended to each file, as the wall and diagnostic
   outputs did: they were base64 inside the XML, in a time-accurate run, and in a steady one up to its first diagnostic output.
   The values are the same, bit for bit; base64 took a third more room.
@@ -168,14 +141,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   as VTK readers resolve them; they listed `../vtk//<name>BlockN.vts`, outside `OUTPUT/`. An initial condition `INPUT/ic.vtm`
   reads its block files where the `.vtm` lists them, so a solution of MOSE copied into `INPUT/` with its `vtk/` folder starts a
   run; one whose block files are at `INPUT/vtk/field<entry>.vts`, where they were read before, is still read there.
-- The outputs of a steady run carry minus the global iteration count as their time in every format: the vtk `TIME` of the field,
-  wall and diagnostic outputs was −1, and the Tecplot solutions of the coarse grid levels of a sequence carried 0. The Tecplot
-  zones of a steady solution are static (no `STRANDID`), and those of a time-accurate one are in the strand of their block
-  (`STRANDID` = *b*). Tecplot solutions written by earlier versions of MOSE hold the count of a steady run as a positive
-  `SOLUTIONTIME`, with `STRANDID = 0`: a steady restart goes on from them as before, but a time-accurate restart takes them for a
-  solution at time t = count; to start a transient from such a solution, use it as the initial condition (`INPUT/ic.tec`,
-  `newrun = true`), which starts at t = 0. The text formats, `vtk ascii` and `tecplot ascii`, write 17 significant digits, the
-  fewest that give back every 64-bit value.
+- The outputs of a steady run carry minus the global iteration count as their time in every format (the vtk `TIME` was −1,
+  and the Tecplot solutions of the coarse grid levels carried 0). The Tecplot zones of a steady solution are static (no
+  `STRANDID`), those of a time-accurate one in the strand of their block. A Tecplot solution written by an earlier version of
+  MOSE holds the count of a steady run as a positive `SOLUTIONTIME`: a steady restart goes on from it, a time-accurate restart
+  takes it for a solution at t = count; to start a transient from it, use it as the initial condition (`INPUT/ic.tec`,
+  `newrun = true`). The text formats, `vtk ascii` and `tecplot ascii`, write 17 significant digits, the fewest that give back
+  every 64-bit value.
 - A Tecplot field solution ends with six `DATASETAUXDATA` records, the counters of the restart: a record of the ASCII format that
   the Tecplot Data Format Guide defines for data of the whole data set. The Python reader of ORION reads such files; a script
   that takes every number after a zone header must stop at them.
@@ -186,36 +158,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `CYCLE` and named scalars), any number of blocks and surface blocks, and whose Tecplot reader and writer handle the solution
   time with its sign, strands and data set auxiliary data. The vtk wall files now hold the cell values of their faces.
 - The viscous fluxes take by default (`diffusive-metric = stencil`) a face metric made of the same differences of the cell centres
-  that the face gradient takes of the field, so that the gradient of a linear field is exact on any mesh at the interior faces and
-  at the block connections, and at periodic pairs, symmetry faces and the k faces of a wedge or of a 3-D sector (type `200`) for
-  the linear fields that they allow. At the faces of type `200` the differences along the face are those of the row of the cell
-  and of the row of the image, the row of the source turned by the angle of the wedge or sector (positions and values), with one
-  metric per group of quantities where a ghost cell of a wall enters that row; with `inverse-mean` and `mean` these faces take,
-  as before, the inverse-mean metric of the cell and its image, whose derivatives along the face are wrong by (q - 1)^2/(4q) where
-  the cell size grows by q along the face and by (q - 1)/4 on the first row next to an axis (8.4e-3 and 5.0e-2 of the hoop term of
-  a linear field at q = 1.2, test `MMSResiduals`). `inverse-mean` builds the metric from the mean edges of the two cells, which
-  are not those differences: on meshes with nodes moved at random, cells of alternating size, grid lines that fold at a face
-  between blocks, points shared by three or five blocks or skewed cells on a symmetry plane, a linear velocity or temperature,
-  whose viscous force and heat conduction vanish, gave up to 5.4e-2 of their face-flux scale in the patch test with it, at any
-  resolution. The metric is computed at set-up and stored on the faces (27 values per cell); a face between blocks takes one
-  gradient, as an interior face. Results change for viscous runs on meshes that are not Cartesian; on meshes stretched across a
-  boundary layer, where the tangential derivatives of `mean` and `inverse-mean` carry the factor (1 + r)²/(4r); and at the faces
-  between blocks with SST, Wilcox 2006 or QCR, whose fluxes are not linear in the gradient, also on Cartesian meshes. A face whose
-  stencil does not span three directions (a degenerate cell, a face that collapses) stops the run at set-up with its block, cell
-  and face, and the remedy `diffusive-metric = inverse-mean`.
+  that the face gradient takes of the field: the gradient of a linear field is exact on any mesh at the interior faces and at the
+  block connections, and at periodic pairs, symmetry faces and the k faces of type `200` for the linear fields that they allow.
+  With `inverse-mean`, whose metric comes from the mean edges of the two cells, a linear velocity or temperature gave up to
+  5.4e-2 of the face-flux scale on non-smooth meshes (nodes moved at random, cells of alternating size, folds at a face between
+  blocks, skewed cells on a symmetry plane), at any resolution. The metric is computed at set-up and stored on the faces (27
+  values per cell). Results change for viscous runs on meshes that are not Cartesian, on meshes stretched across a boundary
+  layer, and at the faces between blocks with SST, Wilcox 2006 or QCR. A face whose stencil does not span three directions stops
+  the run at set-up with its block, cell and face, and the remedy `diffusive-metric = inverse-mean`.
 - A viscous run on a 2-D axisymmetric wedge or on a 3-D sector closed by type `200` whose axis nodes are exactly at r = 0 stops
   at set-up, with every `diffusive-metric`, with a message that asks to put the axis nodes at a small radius (the meshes of MOSE
-  put them at 1e-6 of the radial size of the first cell). On such an axis the faces have zero area and their ghost cells copy
-  the cells. With `inverse-mean` and `mean` the faces of type `200` take the derivative in r across the axis with a ghost cell one
-  cell away, and the hoop stress of the first row of cells is wrong, by 1/6 of the hoop term in Homann's stagnation-point flow on
-  the wedge and on the sector, and refinement does not reduce it. With `stencil` the faces take the difference on one side of the
-  copy: Homann's flow gets on the first row the hoop stress of a small axis radius (2.55e-5 against 2.58e-5 of the hoop term on 64
-  cells), but such an axis is not treated completely (ghost cells beyond it, not copies), and the run stops with every metric. A
-  wall on a face of zero area, as on the axis of a 3-D mesh
-  around it, stops with its remedy: the symmetry condition (`300`) on the axis. With `inverse-mean` and `mean` a viscous run on a
-  3-D mesh stops at set-up at any boundary face of zero area, as on such a polar line, with a message that asks for
-  `diffusive-metric = stencil`: with them the viscous force of the first row of cells of a linear field, which is zero, grows as
-  the mesh is refined, while `stencil` is exact there.
+  put them at 1e-6 of the radial size of the first cell): on such an axis the faces have zero area, their ghost cells copy the
+  cells, and with `inverse-mean` and `mean` the hoop stress of the first row of cells was wrong by 1/6 of the hoop term in
+  Homann's flow, whatever the refinement. A wall on a face of zero area, as on the axis of a 3-D mesh around it, stops with its
+  remedy, the symmetry condition (`300`) on the axis; with `inverse-mean` and `mean` a viscous run on a 3-D mesh with a
+  boundary face of zero area stops at set-up and asks for `diffusive-metric = stencil`.
 - In time-accurate RANS runs the local time step takes, for the stiffness of the turbulence sources, a bound that the state of
   the cell gives alone: Spalart–Allmaras 2 c_w1 (1 + c_w3⁶)^(1/6) ν̃/y², SST max(β*, 2 max(β₁, β₂)) ω, Wilcox 2006
   max(β*, 2 β₀) ω. Each step evaluated the turbulence sources once more, with a fill and an exchange of the ghost cells, only
@@ -346,16 +303,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   block and face, as the guide lists the records, gives the same solution bit for bit; any other order gives the solution of
   the sorted file.
 - A face between two blocks (block cut `101`, periodic connection `201`) is computed once, and its flux is given with opposite
-  signs to the cells on its two sides. Each block computed the face for its own cell with its own inputs, the shock sensor of
-  its own cell and, with HLLC-PC, a reference velocity of zero in the ghost cell. The two shares then differed: mass, momentum
-  and energy were not conserved at the face (with HLLC+Tramel the total mass of a periodic shock tube in two blocks drifted by
-  4.3e-3 of its value in 40 steps), and a mesh split into blocks did not give the solution of the unsplit mesh (up to 1.8e-1
-  apart). The record that computes the flux is that of the cell on the low-index side of the face; between faces of the same
-  parity (index directions permuted across the cut), the record with the smaller (block, face, k, j, i), so that the result
-  does not depend on the order of the records. Between MPI ranks the share of the other cell travels in one more message per
-  stage. With `preconditioning-Ur-smooth` > 0 the smoothing next to such a face now sees the cell across it, where it saw a
-  zero. Results change where a shock sensor or the preconditioning acts at a face between blocks, and at round-off where the
-  two blocks store the nodes of the common face with different digits or a periodic connection translates them.
+  signs to the cells on its two sides. Each block computed the face with its own inputs (the shock sensor of its own cell and,
+  with HLLC-PC, a reference velocity of zero in the ghost cell): mass, momentum and energy were not conserved at the face, and
+  a mesh split into blocks did not give the solution of the unsplit mesh. The record of the cell on the low-index side computes
+  the flux (between faces of the same parity, the record with the smaller block, face, k, j, i), whatever the order of the
+  records; between MPI ranks the share of the other cell travels in one more message per stage. With
+  `preconditioning-Ur-smooth` > 0 the smoothing next to such a face sees the cell across it. Results change where a shock
+  sensor or the preconditioning acts at a face between blocks, and at round-off where the two blocks store the nodes of the
+  common face with different digits or a periodic connection translates them.
 - Every MPI exchange uses one tag, within 32767, the bound that the MPI standard guarantees on every library. The tags were the
   rank of the sender plus an offset per exchange, up to 30000 plus the rank for the residual smoothing, and the output gathers
   used the block number: beyond 2768 ranks, or 31767 blocks, a library that offers only the least bound may reject such tags as
@@ -400,54 +355,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   velocity is now set to zero at set-up and not integrated, with a warning that names the faces, when those faces are planes
   normal to its axis (a tube of constant section); in a channel of variable section it is integrated as before, with a
   warning, and thin cells can still stop the run. Results change only in these 1-D cases.
-- The volume of a cell is the integral of det J of the trilinear cell, whose faces are the bilinear faces of their four nodes,
-  those of the area vectors of the fluxes: V = 1/6 sum_d e_d · (S_d⁻ + S_d⁺), e_d the mean edge of direction d and S_d⁻, S_d⁺
-  the area vectors of its two faces of that direction. It was a sum of five tetrahedra in absolute value, which cut each face
-  along one diagonal while the cell next door cuts it along the other: on a twisted face the two cells missed or counted twice
-  T · S_f/12 (T = c1 − c2 + c3 − c4, the twist of the face), so the volume of a cell was not the volume its faces enclose
-  (6.7 % and 18.5 % too large on cubes with one twisted face, T_n/h = 1 and 5) and the volumes of a mesh did not sum to its
-  volume (4.0e-3 short on a twisted mesh of 8³ cells). On cells with plane faces (2-D and axisymmetric meshes, 3-D meshes of
-  plane faces) the two are equal in exact arithmetic: results change in their last bits. A cell whose volume has not the sign
-  of its block, a cell turned over away from its centre, stops the run at set-up with its block and cell.
+- The volume of a cell is the integral of det J of the trilinear cell, whose faces are the bilinear faces of the fluxes. It was a
+  sum of five tetrahedra, which cut each face along a diagonal while the cell next door cuts it along the other: on a twisted
+  face the volume of a cell was not the volume its faces enclose (up to 18.5 % too large on a cube with one twisted face), and
+  the volumes of a mesh did not sum to its volume. On cells with plane faces (2-D and axisymmetric meshes, 3-D meshes of plane
+  faces) results change in their last bits. A cell whose volume has not the sign of its block, a cell turned over away from its
+  centre, stops the run at set-up with its block and cell, on every grid level of a multigrid run.
 - The wall distance of the turbulence models is the exact minimum distance from the cell centre to the wall surface, a wall face
-  being the bilinear surface through its four nodes, the face of the cells, and on a 2-D axisymmetric wedge the distance in the
-  meridional plane. It was the distance to the nearest wall-face centre, too large wherever the grid lines are not normal to the
-  wall and next to convex corners and the ends of walls (up to 10.9 %, 16.3 % and 15.9 % in three test geometries). A wall face
-  plane to the resolution of its coordinates, like every wall face of a 2-D or axisymmetric mesh, is the four triangles between
-  its centre and its sides. A twisted 3-D wall face, whose corners are not coplanar, lies up to |T|/16 from those triangles
-  (T = c1 − c2 + c3 − c4, its twist; with them the distance was off by up to 4.9 % in a test): its distance is a certified
-  minimum over the face, exact to the rounding of the size of the face. Results change wherever the distance changes,
-  and at round-off where the grid lines are normal to a plane wall. Equal distances go to the lowest face index, so the
-  roughness a cell inherits is the same on every rank and thread. With a turbulence model, a wall on faces 5–6 of a wedge
-  stops the run.
+  being the bilinear surface through its four nodes, and on a 2-D axisymmetric wedge the distance in the meridional plane. It
+  was the distance to the nearest wall-face centre, too large wherever the grid lines are not normal to the wall and next to
+  convex corners and the ends of walls (up to 16.3 % in the test geometries). A twisted 3-D wall face takes a certified minimum
+  over the face, exact to the rounding of its size. Results change wherever the distance changes, and at round-off where the
+  grid lines are normal to a plane wall. Equal distances go to the lowest face index, so the roughness a cell inherits is the
+  same on every rank and thread. With a turbulence model, a wall on faces 5–6 of a wedge stops the run. On a 3-D mesh with
+  twisted wall faces the start-up takes longer: 26 % at one thread on a mesh of 1e6 cells whose 1e4 wall faces are all
+  twisted (ifx 2024.1), within the spread of the measurements with 16 threads; meshes whose wall faces are plane take the
+  search of before.
 - The type of the mesh (plane, axisymmetric wedge, 3-D sector closed by type `200`, slab translated in k) is taken from every
-  node of every block, to within 1 % of the move of the nodes per cell in k, no longer from two probe nodes of block 1. A plane
-  2-D mesh whose j index runs towards the x axis was taken for a wedge (wall distance off by 27 % in a test), and so was a plane
-  slab far from the x axis; the periodic images of a 3-D slab periodic in k were turned, a mesh with a wedge block and a plane
-  block ran as one of the two, and a 3-D mesh with a thin block 1 was taken for a 2-D one. A mesh whose blocks disagree, a 2-D
-  block whose k planes fit neither a turn nor a translation to that tolerance (too few digits, or k planes that are not
-  parallel), and a 3-D block closed by type `200` whose last k node plane is neither the first one turned nor translated, now
-  stop at set-up; the set-up summary names the type. A 3-D block closed on itself over a full turn about the x axis, its
-  last k node plane on the first one (to the round-off), is translated by zero, the periodicity by the identity, as before
-  the check. The move of the nodes per cell in k is measured along the k lines, the sum of the moves of each node across
-  its cells in k: on a sector past half a turn the tolerance is 1 % of its arc per cell in the norm of the largest
-  component (between 0.71 and 1 of the arc), not of its chord per cell (4.2 times larger at 270 degrees). In 2-D a block
-  whose probe node keeps its azimuth while its k = 1 node plane is not the k = 0 plane translated to 1 % (k planes that
-  touch or cross, or a k = 1 plane scaled radially about the axis), and which the translation fits no better
-  than the turn by the null angle, stops at set-up as a block whose k planes are not parallel: it passed for plane (and,
-  with the planes crossed, stopped at its folded cells). Meshes recognised right keep their wedge angle to the bit.
+  node of every block, to within 1 % of the move of the nodes per cell in k. Two probe nodes of block 1 took a plane 2-D mesh
+  whose j index runs towards the x axis, and a plane slab far from the x axis, for a wedge (wall distance off by 27 % in a
+  test), turned the periodic images of a 3-D slab periodic in k, ran a mesh with a wedge block and a plane block as one of the
+  two, and took a 3-D mesh with a thin block 1 for a 2-D one. A mesh whose blocks disagree, a 2-D block whose k planes fit
+  neither a turn nor a translation to that tolerance (too few digits, or k planes that are not parallel), and a 3-D block
+  closed by type `200` whose last k node plane is neither the first one turned nor translated, stop at set-up; the set-up
+  summary names the type. A block closed on itself over a full turn about the x axis is translated by zero, the periodicity by
+  the identity. Meshes recognised right keep their wedge angle to the bit.
 - The wall distance is the minimum over the images of the wall across periodic boundaries too (periodic connections `201`, slabs
-  closed in k by type `200`, rotational periodicity of 3-D sectors). It was measured to the wall inside the mesh only, so near
-  the end of a period it could be several times too large (by 9.8 times the exact distance in a test channel). A mesh without
-  periodic boundaries costs nothing more, and the images searched are bounded whatever the size of the mesh against its
-  periods: every wall face and every cell centre is moved into one cell of the lattice of the periodic translations, reduced
-  pairwise and three at a time. With a turbulence model, periodic translations that cannot be the images of one wall stop
-  the run with a message: not integer combinations of each other, more than three independent ones, a number of images too
-  large for an integer, or not along x on a wedge or with sectors. Translations that differ by at most 1 % of the thinnest
-  cell across the periodic boundaries are the same, as the two sides of a periodic boundary match only to the round-off of
-  the coordinates: a channel periodic in x, turned by 30 degrees and written with 4 significant digits, runs. For a slab
-  closed by type `200` the cell is the move of its nodes per cell in k along its k lines, as for the mesh type: a block
-  closed on itself over a full turn about x gives the translation zero, or of the round-off, which is no periodicity.
+  closed in k by type `200`, rotational periodicity of 3-D sectors): it was measured to the wall inside the mesh only, and near
+  the end of a period it could be several times too large. A mesh without periodic boundaries costs nothing more, and the images
+  searched are bounded whatever the size of the mesh. With a turbulence model, periodic translations that cannot be the images
+  of one wall stop the run with a message. Translations that differ by at most 1 % of the thinnest cell across the periodic
+  boundaries are the same, as the two sides of a periodic boundary match only to the round-off of the coordinates: a channel
+  periodic in x, turned by 30 degrees and written with 4 significant digits, runs.
 - On a 3-D mesh closed in k by type `200` (a sector turned about the x axis, or a slab whose last k node plane is the first
   one translated), the ghost cell beyond face 5 holds the state of the cell next to face 6 turned back by the sector angle
   (copied, on a translated slab): its w was the opposite of the turned one (face 6 was right). The second-order
@@ -455,38 +394,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a radial flow that is its own mirror image departed from it by 1.8e-2 of its scale in 20 steps. Results change on 3-D
   sectors wherever the velocity next to face 6, turned by the sector angle, has a z component, and on translated slabs
   wherever w is not zero.
-- Type `200` joins the two k faces of one block: beyond face 5 lies the cell next to face 6 of the same block, in the same
-  column (i, j), and beyond face 6 the cell next to face 5, as the record names no other block. A record of type `200` on a
-  face 1 to 4, with its cell outside its block, or with no record of type `200` on the other k face of its block in its
-  column now stops the run at set-up, on every rank, with a message that names the record and the remedy. A 3-D sector
-  cut along k into blocks (in a test the rows of cells next to the cut and to the k faces were wrong by up to 31 times the
-  scale of a step), a ring of 360 degrees in several blocks closed by type `200` between the last block and the first,
-  type `200` on a face 1 to 4 of a 2-D wedge, and a wedge with type `200` on one k face only, whose two k faces took two
-  different conditions, ran in silence with wrong fluxes; on a 3-D mesh type `200` on a face 1 to 4 stopped at the first
-  step, on the rank of its block alone, and a record outside its block read outside the arrays. A sector is cut along i
-  or j instead, and the blocks of a ring are joined by `101`, the junction at 2π included. Other meshes do not change.
+- Type `200` joins the two k faces of one block: a record of type `200` on a face 1 to 4, with its cell outside its block, or
+  with no record of type `200` on the other k face of its block in its column stops the run at set-up, on every rank, with a
+  message that names the record and the remedy. A 3-D sector cut along k into blocks, a ring of 360 degrees in several blocks
+  closed by type `200` between the last block and the first, type `200` on a face 1 to 4 of a 2-D wedge, and a wedge with
+  type `200` on one k face only ran in silence with wrong fluxes, and a record outside its block read outside the arrays. Cut a
+  sector along i or j, and join the blocks of a ring by `101`, the junction at 2π included. The mesh decomposer of ATLAS (MDB)
+  cuts blocks along k unless `split-directions` says otherwise: give it `split-directions` without k for a block closed by
+  type `200` (see the guide). Other meshes do not change.
 - The inlets at total conditions (`401`, `402`) and the ambient boundary (`407`) let the gas in when the reservoir can push it
-  in: when p0 is above p_stop = p (R/a)^(2γ/(γ−1)), the pressure that the gas of the boundary cell reaches when the outgoing
-  wave brings it to rest (R the outgoing Riemann invariant). The choice followed the sign of the velocity of the cell: a tube at
-  rest never started from a `401` or `402`, a `407` at rest took its outflow branch and computed an inflow outside its own
-  domain (0.854 instead of 0.770 ρa at p0 = 2 p), and an inlet with p0 below p_stop let gas out. When the gas does not enter,
-  a `401` or `402` face is a slip wall and a `407` face an outlet at p_back, as before for gas moving out; with the gas of the
-  cell moving in, at min(p_back, p_stop), where the face velocity points out. Results change where the sign of the cell
-  velocity and the criterion disagree.
+  in, when p0 is above p_stop, the pressure that the gas of the boundary cell reaches when the outgoing wave brings it to rest.
+  The choice followed the sign of the velocity of the cell: a tube at rest never started from a `401` or `402`, a `407` at rest
+  computed an inflow outside its own domain, and an inlet with p0 below p_stop let gas out. When the gas does not enter, a
+  `401` or `402` face is a slip wall and a `407` face an outlet at p_back. Results change where the sign of the cell velocity
+  and the criterion disagree.
 - An inflow at total conditions whose face state would be supersonic across, built on an invariant that can no longer reach
   the face, takes the choked state, normal Mach 1. Past a pressure ratio (p0/p = 6.12 for a cell at rest at the reservoir
   temperature, normal inflow) the subsonic equations gave such a face: at p0 = 36 p normal Mach 1.85 and a mass flux of
   13.9 ρa, below the 20.8 ρa of the choked face. Results change for inlets at high pressure ratios, `401` and `402` included.
 - The inlets at total conditions (`401`, `402`) and the ambient boundary (`407`) let the gas in when the gas of the boundary
-  cell moves in at 2a/(γ−1) or faster (R ≤ 0, normal Mach 5 or more at γ = 1.4): no pressure brings that gas to rest, so
-  p_stop = 0 and every reservoir with p0 > 0 feeds the face, as the criterion of the guide says. A `401` or `402` face was a
-  slip wall and a `407` face had no flux, in silence: in a 1-D tube with the gas entering at 6a from a reservoir at p0 = p and
-  T0 = T the face now lets in 0.579 ρa instead of nothing. The face takes the inflow state on the invariant R, which links the
-  cell to the face whatever its sign, when that state exists and is subsonic across, and the choked state, normal Mach 1,
-  otherwise; no inflow state exists when the gas of the cell, even expanded to vacuum, leaves faster than the gas of the
-  reservoir can follow. A reservoir much hotter than the cell can give a subsonic face (T0 = 25 T, p0 = 0.1 p and the gas at
-  5.5a: normal Mach 0.83 and 0.0113 ρa), where a face choked whenever R ≤ 0 would let in 2.8 % more and jump by 8 % where R
-  changes sign; the mass flux is continuous there. Results change only at faces where R ≤ 0.
+  cell moves in at 2a/(γ−1) or faster (normal Mach 5 or more at γ = 1.4): no pressure brings that gas to rest, so every
+  reservoir with p0 > 0 feeds the face. Such a face was a slip wall (`401`, `402`) or had no flux (`407`), in silence. The face
+  takes the inflow state when it exists and is subsonic across, the choked state otherwise, and the mass flux is continuous
+  where the outgoing invariant changes sign. Results change only at faces where the gas of the cell moves in that fast.
 - With `sol-format = vtk` the wall output sets the block sizes of its files, which it never set: depending on what they held, a
   run with a viscous wall could stop in the wall output or write wall files of no extent and one point. Each vtk wall file now
   has the extent and the points of its face. Tecplot wall files do not change.
@@ -554,13 +484,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ("Integration failed"); an infinite coordinate ended it on a bound of an array (gfortran with bounds checking, exit code 2)
   or on a degenerate cell ("Metric tensor det=0", ifx). Runs whose initial condition is finite do not change.
 - An inlet `402` names its total-pressure table as written: a file name with a directory, quoted, or longer than 32 characters
-  (up to 256). The property line was read as a list, so a slash ended the read and the values after the name were never read,
-  and a long name was cut. A table that cannot be opened, holds no (time, value) pair or has decreasing times stops the run at
-  set-up with the name of the file: a missing table was not reported, and a table with decreasing times was read without a word,
-  the run ending with exit code 0. So does a time or a value of the table that is not finite (NaN, infinity), with the line and
-  the column: every comparison with a NaN is false, so a NaN pressure closed the face of the inlet in silence (no gas through
-  it) and the run ended with exit code 0, a NaN time passed the check of decreasing times, and a build that traps the invalid
-  floating-point operations (the DEBUG build) stopped with SIGFPE.
+  (up to 256); a slash ended the read of the property line, and a long name was cut. A table that cannot be opened, holds no
+  (time, value) pair, has decreasing times or holds a time or a value that is not finite stops the run at set-up with the name
+  of the file, and the line and the column of the value: a missing table was not reported, and the others ran in silence to
+  exit code 0 (a NaN pressure closed the face of the inlet).
 - A property line of `bc.txt` with an empty value (two commas with nothing between them) for a value without a default stops
   the run at set-up, with the line of the file, the record, its type and the name of the value; the value was left undefined,
   and the run went on. The values with a default keep it, and the guide lists them.
@@ -571,13 +498,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`Normal`, `nromal`) was taken as 0 rad without a word.
 - A value of a property line of `bc.txt` that is not finite (NaN or infinity), required or with a default value, the flow
   directions included, stops the run at set-up with exit code 1, in every build, with the line of the file, the record, its type
-  and the name of the value. The test of an empty value let a NaN through, as every comparison with a NaN is false: a NaN total
-  pressure of an inlet `401` closed its face in silence and the run ended with exit code 0 (with `-ffast-math`, an option of the
-  ifx RELEASE build, it was taken for an empty value), an infinite total temperature of an inlet `402` ran to the end with exit
-  code 0, a NaN roughness of a wall `302` did so in a gnu TESTING build and stopped at the divergence check in the ifx RELEASE
-  build, an infinite total pressure or a NaN direction stopped at the divergence check ("Integration failed"), and a build that
-  traps the invalid floating-point operations (the DEBUG build) stopped with SIGFPE at the first operation on the value. The
-  messages of the reader name the file it reads, which on a coarse multigrid level is the file of that level, not `bc.txt`.
+  and the name of the value: such values closed a face in silence, ran to the end with exit code 0, or stopped later at the
+  divergence check. The messages of the reader name the file it reads, which on a coarse multigrid level is the file of that
+  level, not `bc.txt`.
 - A time (`SOLUTIONTIME`) or a value of the file of an assigned state (`410`) that is not finite (NaN or infinity) stops the
   run at set-up with exit code 1, in every build, with the file, the zone, the line of its header, and the variable and the
   cell of the value. A NaN pressure ended the run at its first step: with a run-time error of an index out of bounds (gfortran
@@ -625,15 +548,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   previous reading in place, without a word.
 - With MPI, an error that every rank finds stops every rank together, and the message of every rank reaches the log: an error in
   a time table, in a line of `bc.txt`, in a value of `input.ini` read again, in the mesh type or in the periodic images of a
-  wall. Every rank called `MPI_ABORT`, which makes only a best attempt to stop the processes: the first call could stop the
-  others before they wrote their line, and at times no line reached the log.
-  An error that rank 0 alone finds at set-up (the data tables, the rules of `input.ini`, the boundary conditions) stops every
-  rank together too, once rank 0 has written it: with `MPI_ABORT` from rank 0 alone, a run with Intel MPI 2021.12 could end with
-  exit code 141 (SIGPIPE) and without the last line of its log. An initial condition that one rank cannot read stops every rank
-  as well: the ranks decide together on the error of the read, rank 0 writes the line of the set-up summary with the verdict of
-  all, and the first rank that found the error writes it, with its rank. Rank 0 decided alone, so a run in which rank 1 could not
-  read its copy of the file went on to its end; and with the lean read of a `.szplt` file, where each rank reads the variables of
-  its own blocks after that decision, an error of that read was never looked at.
+  wall. So does an error that rank 0 alone finds at set-up (the data tables, the rules of `input.ini`, the boundary conditions),
+  once rank 0 has written it, and an initial condition that one rank cannot read, which the first rank that found the error
+  writes, with its rank. Every rank called `MPI_ABORT`, which makes only a best attempt to stop the processes, so at times no
+  line reached the log (and with Intel MPI 2021.12 a run could end with exit code 141); rank 0 decided alone on the read of the
+  initial condition, so a run whose rank 1 could not read its copy went on to its end.
 - With MPI, a rank that stops every rank with `MPI_ABORT` (an error that it finds alone, such as a folded or degenerate cell,
   the axis at r = 0, a wall face of zero area or a probe of an unknown variable) writes out its output and its error output
   first. Built with gfortran and run with Open MPI 4.1.4 as one process with its output on a file, as CTest runs the fast
@@ -700,14 +619,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   lacked its last numbered solution and probe rows, and a restart from a first part that ended there numbered the solutions
   after it one lower, shifted the time-based ones and left the state of that iteration in no file. The guide no longer lists
   this as a limit of the restart.
-- With `diffusive-metric = stencil` the gradient at a wall face takes, along the wall, the differences of the wall values (the
-  temperatures of the neighbouring `302` faces; zero for the velocity of a no-slip wall and for the turbulence variables) with
+- With `diffusive-metric = stencil` the gradient at a wall face takes, along the wall, the differences of the wall values with
   the same differences of the positions, so that it is exact for a linear field whose wall values are its values at the face
-  centres. It set the derivatives along the wall to zero and mapped the result with the metric of the wall cell, whose direction
-  across the face is the wall normal only on parallelogram cells: where the wall temperature varies along a skewed wall the
-  normal gradient was off by (dT_w/ds)·tan θ, at any resolution, and on wall cells that are not parallelograms the direction of
-  the velocity gradient was wrong too (1.4e-2 to 8.8e-2 of the scale in the patch test; now at most 3.5e-13). Results change only
-  there.
+  centres. The derivatives along the wall were zero and the metric was that of the wall cell: where the wall temperature varies
+  along a skewed wall the normal gradient was off by (dT_w/ds)·tan θ at any resolution, and on wall cells that are not
+  parallelograms the velocity gradient was wrong too. Results change only there.
 - With `diffusive-metric = stencil` the source terms of the turbulence models (Spalart–Allmaras and its variants, SST,
   Wilcox 2006, SSG/LRR) and the eddy viscosity of the output take cell gradients whose metric comes from the same differences of
   the positions as of the values, with each ghost value at the point where it is right. With the metric of the cell the gradient
@@ -717,23 +633,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - With `diffusive-metric = stencil` a mesh with faces of zero area, such as an axis at r = 0 or the polar line of a 3-D mesh
   around its axis with symmetry on it, no longer stops at set-up on a not-a-number: such a face has a zero normal, as in the
   rest of the solver, its ghost cell is the cell itself, and its flux is zero.
-- The ghost cells behind viscous walls (`301`, `302`, `503`–`505`) and extrapolation faces (`400`) are filled once per stage, for the fluxes and the source terms alike, from the quantities whose differences the fluxes take:
-  with a wall value q_w the ghost takes 2q_w − q₁ (the velocity of the walls and the turbulence variables), the temperature of a
-  `302` wall max(2T_w − T₁, T_w/2), and the other quantities an extrapolation kept within [q₁/2, 2q₁]; the density follows from
+- The ghost cells behind viscous walls (`301`, `302`, `503`–`505`) and extrapolation faces (`400`) are filled once per stage,
+  for the fluxes and the source terms alike, from the quantities whose differences the fluxes take: with a wall value q_w the
+  ghost takes 2q_w − q₁ (the velocity of the walls and the turbulence variables), the temperature of a `302` wall
+  max(2T_w − T₁, T_w/2), and the other quantities an extrapolation kept within [q₁/2, 2q₁]; the density follows from
   p/(R T). The extrapolation 3q₁ − 3q₂ + q₃ of every primitive variable could turn negative and amplify (a negative ghost
   density next to a hot wall), put the wall value on the face only when the profile was linear over three cells, and the source
   terms read a second set of ghost values. A line at the end of a run counts the ghost fills in which the cut or the floor
   acted. Results change for every run with a wall or a `400` face, in the first rows of cells next to them.
 - The ghost cells behind the boundary faces other than `101`, `201` and `300` take their nodes by a linear extrapolation along
-  the index lines, so that both layers keep the edge across the face of the first cell. The cubic extrapolation made the second
-  ghost layer vanish where the second cell is 1.5 times as wide as the first, and the first layer at twice: a run stopped on a
-  determinant of exactly zero, or went on with a metric as large as 1/det, and at chimera faces (`102`) the viscous flux took an
-  infinite, undefined or reversed value where the second cell is three times the first or more. A cell whose determinant is
-  below 1e-12 of the product of its edges, or a ghost cell of the first layer behind a chimera face turned over or degenerate
-  against the first cell, now stops the run at set-up with its block, cell, face and ratio, and the message gives the
-  thresholds and the remedy (index lines that change smoothly across the first two node layers at the face). Behind the
-  other faces no flux reads the metric of the ghost cells, and only a ghost cell of zero size stops: a mesh whose edges along
-  such a face grow 3 times or more across the first cell runs. Every run changes in the last bits next to such faces, and by
+  the index lines, so that both layers keep the edge across the face of the first cell. The cubic extrapolation made a ghost
+  layer vanish where the cells grow 1.5 or 2 times across the face: a run stopped on a zero determinant, or went on with a
+  metric as large as 1/det, and at chimera faces (`102`) the viscous flux could take an infinite or reversed value. A cell whose
+  determinant is below 1e-12 of the product of its edges, or a ghost cell of the first layer behind a chimera face turned over
+  or degenerate against the first cell, stops the run at set-up with its block, cell, face and ratio, and the remedy. Behind
+  the other faces no flux reads the metric of the ghost cells. Every run changes in the last bits next to such faces, and by
   O(r − 1) where the cells are stretched across them.
 - A cell folded at one of its corners, or turned against the orientation of its block, stops the run at set-up, naming block,
   cell, corner node, the Jacobian there and the bound; the coarse levels of a sequence of grids are checked too. Such a cell
@@ -742,7 +656,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The two k faces of a 3-D sector closed by type `200`, one interior face of the whole annulus, carry its viscous flux (viscous
   stress, heat flux, diffusion of species and turbulence variables), computed once between the cell next to face 6 and the
   turned image of the cell next to face 5. They carried the inviscid flux only, so the solution tended to that of a sector
-  whose periodic planes are free of traction and adiabatic, an error whose share grows as the mesh is refined. Runs on the wedge do not change.
+  whose periodic planes are free of traction and adiabatic, an error whose share grows as the mesh is refined. Runs on the
+  wedge do not change.
 - On a 3-D block closed in k by type `200` with no angle (a translated sector), the ghost cells sit one period away, where their
   values belong: with `diffusive-metric = stencil` the metrics put them at the cell at the other end of the block, which scaled
   the derivative along k of the two layers of cells next to the k faces by 2/(2 − nk) (−1/3 with 8 cells), at any resolution.
@@ -761,11 +676,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A `stationary-face-<n>` whose face covers a record that would take the velocity of the wall at rest in part only (the
   inviscid flux of a symmetry `300`, of the inlets and outlets `401`–`406`, `408` and `420`, and of the walls `103`, `104` and
   `502`–`505`), whose face has no wall `301` or `302`, or that has no record in `bc.txt`, stops the run at set-up with a message
-  that names the key, and for a record the record and its type: on a wall `503`–`505` such a face was at rest in the inviscid
-  flux and turning with the frame in the viscous flux, a boundary condition of no wall, and a face with no record did nothing.
-  The walls of a stationary face may share it with the types that never read whether their face is stationary, whose boundary
-  condition is the same with or without the key (block connections, periodic and chimera faces, extrapolation `400`, `407`,
-  `410`, `501`, `506` and unused faces), as a casing face that is a wall in part and a block connection in part.
+  that names the key and the record: such a face was a boundary condition of no wall, or did nothing. A stationary face may be
+  shared with the types whose boundary condition does not read whether their face is stationary (the guide lists them), as a
+  casing face that is a wall in part and a block connection in part.
 - With the rotation–curvature correction of Spalart–Allmaras (`turbulence = SA-RC`) the ghost cells behind the faces between
   blocks (`101`) and of the periodic pairs (`201`) hold the velocity gradient of the cell across, from another rank by message,
   and on a 3-D sector closed by `200` the gradient of the turned image, so the result no longer depends on how the mesh is

@@ -40,19 +40,8 @@ MUSCL with van Leer, HLLC, `diffusive-metric = stencil` (default).
 
 ## Checks
 
-`verify.py` passes if, for every case run:
-
-1. the normalised $L_2$ error of $\rho$, $u$, $v$, $w$ and $p$ decreases on the
-   finest pair of grids;
-2. the observed $L_2$ order on the finest pair is at least 0.7 on zigzag and 1.4
-   on iface (70 % of the order the family is expected to show: about one on
-   zigzag, where the MUSCL reconstruction along the grid lines is not exact for
-   linear fields, two on iface);
-3. with walls, the heat flux integrated over the wall $y = 0$ converges to the
-   exact one with an order of at least that of check 2;
-4. on every grid, the totals $\sum \mathbf{U} V$ of the conserved variables whose
-   boundary flux is zero differ from those of the initial state, the exact field
-   at the cell centres, by less than the smallest $L_2$ error of the grid.
+`verify.py` applies to every case run the four checks of the
+[2D case](2D-mms-skewed.md#checks), with $w$ among the variables of check 1.
 
 ## Results
 

@@ -98,8 +98,6 @@ CPU affinity is important: without explicit process and thread binding, differen
 
 MOSE initialises MPI with the thread level `MPI_THREAD_FUNNELED`: every rank may run several OpenMP threads, but only the thread that initialised MPI makes MPI calls. Any MPI library that provides this level can be used; MOSE stops at start-up if the library provides less.
 
-With symmetry (`300`) on the two faces of an index direction that has fewer than two cells (the $k$ faces of a 2-D case, the $j$ faces of a 1-D case), the second layer of ghost cells of each face copies the first layer of the other. `Setup_Metrics` fills the ghost layers of the symmetry faces one layer at a time, each after the previous layer of every face, so their metrics do not depend on the number or on the order of the threads.
-
 ### Multi-node execution
 
 The same strategy extends naturally across nodes.

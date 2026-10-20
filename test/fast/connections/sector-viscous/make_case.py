@@ -24,8 +24,8 @@ ring  The sector from -45 to 45 degrees (S45, 4 cells in k) against the sector f
       cell is r/dt of a Navier-Stokes step minus r/dt of an Euler step from the same state; in every cell of S45, for
       rho u, rho v, rho w and rho E, it must equal that of the same cell of R90 within 1e-9 of the scale
         S = mu (U + 2 G/r0^2 + 4 C r1^3)/(r0 dtheta)   (momentum),   S (U r1 + G/r0 + C r1^4)   (energy),
-      r0 = 0.5, r1 = 1, dtheta = pi/8, with each metric. (Before the periodic face took inverse-mean with every value of
-      the key, and with stencil S45 differed from R90 on these stretched radii.)
+      r0 = 0.5, r1 = 1, dtheta = pi/8, with each metric. (A periodic face that took inverse-mean with every value of the
+      key would make S45 differ from R90 with stencil on these stretched radii.)
 mirror The sector from -45 to 45 degrees in 2 x 8 x 8 cells (uniform radii, node planes at theta = m pi/16) with the
       radial field alone, k faces of type 200 against type 300: the radial field is its own mirror image across the
       meridian planes, so the two conditions set the same ghost cells, and the viscous stress on the planes is the
@@ -48,9 +48,9 @@ stretch The mirror sector with radii stretched as the ring, r_j = 0.5 + 0.5 (j/8
       from one cell to the next (stretchgeo), k faces of type 200, the default face metric (stencil), the radial field
       alone: a linear field that the rotation allows (u(R x) = R u(x)), so the viscous force of every cell is zero. In the
       cells not next to the j faces (slip walls 300, which the radial field does not satisfy) the force must vanish to
-      round-off, below 1e-11 of (2/3) mu U A/V, also next to the periodic faces. (Before, with the inverse-mean metric of
+      round-off, below 1e-11 of (2/3) mu U A/V, also next to the periodic faces. (Measured with the inverse-mean metric of
       the periodic face, whose columns along the face are the mean edges of the cell and of its image instead of the
-      differences of the centres, those cells had 2.6e-2 and 5.9e-3 of it.)
+      differences of the centres: 2.6e-2 and 5.9e-3 of it in those cells.)
 wall  A translated sector next to a wall: a block of 4 x 4 x 6 cells periodic along z (period 6 mm), closed in k by type 200,
       whose k node planes are tilted, z = z_k + 0.3 x, so that the normal of the periodic faces has a part along x; cells
       growing by 1.3 along x from a wall 301 on i = 1 (the plane x = 0), j lines bent as y = y_j + 50 x^2 (1/m), 400 on the

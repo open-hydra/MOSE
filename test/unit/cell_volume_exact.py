@@ -124,7 +124,8 @@ def table_row(N):
             n = cross(sub(pts[2], pts[0]), sub(pts[3], pts[1]))
             if sum(t[m] * n[m] for m in range(3)) != 0:
                 twisted.append("ijk"[d] + "-+"[side])
-    # the five tetrahedra of the volume before, each in absolute value
+    # a sum of five tetrahedra, each in absolute value: exact only where the faces are plane
+    # (docs/theory/numerics.md, Cell volume)
     v = {1: q[1], 2: q[5], 3: q[3], 4: q[7], 5: q[2], 6: q[6], 7: q[4], 8: q[8]}
 
     def tv(i1, i2, i3, i4):

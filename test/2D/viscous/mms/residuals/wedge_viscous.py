@@ -63,8 +63,9 @@ only: it has no part from the faces of type 200 (tau_xtheta = 0 without swirl), 
 stretched radii take the derivative of u_r along x at the mean radius of the two rows, not at the face, an error of first
 order there, with stencil as with inverse-mean (1.7e-3 and 1.2e-3 of the largest axial force on N = 64, 6.3e-5 on uniform
 radii). The faces of type 200 take the derivatives
-along r from the differences of the centres of the row of the cell and of its image row (diffusive-metric = stencil): before,
-the mean edges of the cell and of its image, which gave (q - 1)/4 of the hoop term on the first row, 1.7e-3 here on N = 64.
+along r from the differences of the centres of the row of the cell and of its image row (diffusive-metric = stencil); the
+mean edges of the cell and of its image (inverse-mean) give (q - 1)/4 of the hoop term on the first row, 1.7e-3 measured
+here on N = 64.
 Linear fields (python3 -B wedge_viscous.py radial N LAW, axial N), whose viscous force is zero:
   radial  u_r = U r (U = 5e3 1/s), N = 16 rectangular cells, radii uniform, or growing by 1.1 or 1.2 (LAW uniform, geo1.1,
           geo1.2), 400 on i = 1, i = N and j = N: one Navier-Stokes and one Euler step. The faces of type 200 are exact for
@@ -74,8 +75,8 @@ Linear fields (python3 -B wedge_viscous.py radial N LAW, axial N), whose viscous
           radii, and on the first row also the round-off of the mirror ghost cell of the axis at 1e-6 dr. Checked, on the cells
           with no face 400: |force/hoop term - sin^2(delta/2)| below tol on the rows j >= 2 and below 3e-6 on the first row,
           tol = max(1e-9, 10 times the largest deviation on the uniform radii, measured in the same run and printed, itself
-          at most 1e-11, so that the tolerance of the stretched radii cannot float). (Before,
-          with the inverse-mean metric of the faces of type 200, 8.4e-3 on the rows j >= 2 and 5.0e-2 on the first row at 1.2.)
+          at most 1e-11, so that the tolerance of the stretched radii cannot float). (Measured with
+          the inverse-mean metric of the faces of type 200: 8.4e-3 on the rows j >= 2 and 5.0e-2 on the first row at 1.2.)
   axial   u = (a x, 0, 0) (a = 1e3 1/s), N = 16, cells growing by 1.15 along x from a wall 301 on i = 1 (x = 0, adiabatic) and
           along r, lines j bent inside the box, so that the faces of type 200 of the cells next to the wall take the ghost
           cells of the wall in their differences along the face: a Navier-Stokes step against one with mu = k = 1e-30 (the

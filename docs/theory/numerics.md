@@ -60,8 +60,9 @@ $$
 
 with $\bar{\mathbf{e}}_d$ the mean of the four edges of the cell along index $d$
 and $\mathbf{S}_d^{\mp}$ the area vectors of the two faces across index $d$,
-both along $+d$: an identity of polynomials in the 24 coordinates, since
-$\det J$ has degree at most two in each of $\xi$, $\eta$, $\zeta$. It is also
+both along $+d$: an identity of polynomials in the 24 coordinates, which can be
+checked term by term ($\det J$ has degree at most two in each of $\xi$, $\eta$,
+$\zeta$). It is also
 $\frac13\sum_f\bar{\mathbf{x}}_f\cdot\mathbf{S}_f$ over the six faces, outward,
 with $\bar{\mathbf{x}}_f$ the mean of the nodes of the face: the divergence
 theorem for $\nabla\cdot\mathbf{x} = 3$, with
@@ -81,13 +82,43 @@ twist of the face.
 The volume has the sign of the block (negative on a left-handed cell) and is
 stored in absolute value. A cell whose volume has not the sign of the
 determinant at its centre is turned over somewhere and stops the run at setup
-(see the checks of the cells under *Gradient Computation for Diffusive
-Fluxes*). The volume is computed from differences of the nodes, rounded once
-as written, so its rounding is that of the size of the cell, not that of its
-coordinates: the differences pass through `VOLATILE` variables, because with
-`-ffast-math` the compiler may otherwise evaluate
-$(\mathbf{q} - \mathbf{c}_1) - (\mathbf{c}_2 - \mathbf{c}_1)$ as
-$\mathbf{q} - \mathbf{c}_2$ (test `VolatileOrder`).
+(below). The volume is computed from differences of the nodes, so its rounding
+is that of the size of the cell, not that of its coordinates; the compiler must
+keep the order of these differences (test `VolatileOrder`).
+
+### Checks of the cells at setup
+
+A cell whose determinant is zero to $10^{-12}$ of the product of its edge lengths
+stops the run at setup, with its block and cell. So does a cell folded at
+one of its corners, or turned against its block, with its block, cell and corner
+node: a cell is the image of the unit cube by the trilinear map of its eight
+nodes, and at a corner the Jacobian of that map is
+$J = \mathbf{e}_i\cdot(\mathbf{e}_j\times\mathbf{e}_k)$, with
+$\mathbf{e}_i, \mathbf{e}_j, \mathbf{e}_k$ the three edges from that corner along
+$i$, $j$ and $k$. At every corner it must have the sign of the block (the sign of
+the determinant of the first cell, from which the face normals of the block take
+their orientation) and exceed $10^{-12}\,|\mathbf{e}_i||\mathbf{e}_j||\mathbf{e}_k|$;
+a corner with an edge of zero length (nodes that coincide on an axis) is not
+checked. On a plane 2-D mesh $J = \Delta z\, j(\xi, \eta)$, with $j$ the Jacobian
+of the bilinear map of the section, $\mathbf{x} = \mathbf{a} + \mathbf{b}\xi +
+\mathbf{c}\eta + \mathbf{d}\xi\eta$: $j = (\mathbf{b} + \mathbf{d}\eta)\times
+(\mathbf{c} + \mathbf{d}\xi)$ is affine in $(\xi, \eta)$ because
+$\mathbf{d}\times\mathbf{d} = 0$, so its sign in the cell is decided at the
+corners. On the 2-D wedge $J = R\,\sin\delta\; j_m(\xi, \eta)$, with $R > 0$ the
+bilinear radius when no node is on the axis and $j_m$ the Jacobian of the
+meridional section, affine as above: the corners decide again. In 3-D the corners
+are a necessary condition only; a cell whose volume (above) has not the
+sign of the determinant at its centre is turned over somewhere, and stops the
+run at setup as well ($\det J$ has the sign of the block in every point of a
+cell that is not turned over, and so has its integral). These checks run on every
+multigrid level too, whose nodes are every other node of the level above: the stop of
+the corners names the level, the other stops give the block and the cell of that
+level. Behind a face of zero
+area (an axis) the ghost cells are the reflection of the first cell through the
+axis, whose determinant has the opposite sign by construction: their sign is
+not checked (a wall on such a face stops, see *Gradient Computation for
+Diffusive Fluxes*). The first layer of ghost cells behind a chimera face is
+checked too (see *Chimera faces* in that section).
 
 ---
 
@@ -141,12 +172,13 @@ takes the ghost cell of the boundary face. Behind a zero-gradient face (`0`,
 zero, and every limiter gives zero with a zero argument, so the reconstruction
 of the first interior face is of first order on the side of the first cell.
 Behind a mapped face (`410`) the ghost cell is the first cell mirrored through
-the face (see *Gradient Computation for Diffusive Fluxes*), centred
-$\Delta l_1$ from the first cell along a straight grid line, the distance that
-the reconstruction takes: the slope is that of the field for the quantities of
-the file; for the turbulence variables and the soot, whose specific value is
-that of the first cell, the slope of $(\rho\phi)$ is $\phi_1$ times that of the
-density.
+the face (see *Gradient Computation for Diffusive Fluxes*): it has the length
+of the first cell across the face, which is then the spacing $\Delta l_0$ (or
+$\Delta l_2$) of the slope behind the first cell, and its centre lies that far
+from the centre of the first cell. Along a straight grid line the slope is then
+that of the field for the quantities of the file; for the turbulence variables
+and the soot, whose specific value is that of the first cell, the slope of
+$(\rho\phi)$ is $\phi_1$ times that of the density.
 
 !!! note "Choosing the reconstruction"
 
@@ -307,53 +339,15 @@ mean of the nodes of the face, $\mathbf{x}_1$ that of the cell). Their edges
 along the face are extrapolated as well, and turn a layer over where they change
 sharply across the first cell, as where the index lines across the face spread
 apart away from it: on a plane 2-D mesh where they grow 3 times or more the
-first layer, from 5/3 times the second. Behind a chimera face (102) the first
-layer is the ghost cell of the face, whose metric enters its viscous flux, and
-such a mesh stops at setup (below); the remedy is the mesh, with index lines
-that change smoothly across the first two node layers at that face (a ghost
-cell built as the mirror image of the first cell would not turn over: not done).
-Behind the other faces no flux reads the metric of either layer: walls take the
+first layer, from 5/3 times the second. Behind a chimera face the first layer
+enters the viscous flux (*Chimera faces*, below). Behind the other faces no flux
+reads the metric of either layer: walls take the
 metric of the cell, or the stencil of positions, the other faces carry no
 viscous flux that needs it, and the wedge rotates the cell. The solver reads
 only the length across the face, in the MUSCL reconstruction, and that is the
 length of the first cell whatever the edges along the face: their sign is not
-checked. A
-cell whose determinant is zero to $10^{-12}$ of the product of its edge lengths,
-or a ghost cell of the first layer behind a chimera face whose determinant is not
-that of the first cell in sign and to $10^{-12}$ in size, stops the run at setup,
-with its block, cell and face. So does a cell folded at
-one of its corners, or turned against its block, with its block, cell and corner
-node: a cell is the image of the unit cube by the trilinear map of its eight
-nodes, and at a corner the Jacobian of that map is
-$J = \mathbf{e}_i\cdot(\mathbf{e}_j\times\mathbf{e}_k)$, with
-$\mathbf{e}_i, \mathbf{e}_j, \mathbf{e}_k$ the three edges from that corner along
-$i$, $j$ and $k$. At every corner it must have the sign of the block (the sign of
-the determinant of the first cell, from which the face normals of the block take
-their orientation) and exceed $10^{-12}\,|\mathbf{e}_i||\mathbf{e}_j||\mathbf{e}_k|$;
-a corner with an edge of zero length (nodes that coincide on an axis) is not
-checked. On a plane 2-D mesh $J = \Delta z\, j(\xi, \eta)$, with $j$ the Jacobian
-of the bilinear map of the section, $\mathbf{x} = \mathbf{a} + \mathbf{b}\xi +
-\mathbf{c}\eta + \mathbf{d}\xi\eta$: $j = (\mathbf{b} + \mathbf{d}\eta)\times
-(\mathbf{c} + \mathbf{d}\xi)$ is affine in $(\xi, \eta)$ because
-$\mathbf{d}\times\mathbf{d} = 0$, so its sign in the cell is decided at the
-corners. On the 2-D wedge $J = R\,\sin\delta\; j_m(\xi, \eta)$, with $R > 0$ the
-bilinear radius when no node is on the axis and $j_m$ the Jacobian of the
-meridional section, affine as above: the corners decide again. In 3-D the corners
-are a necessary condition only; a cell whose volume (*Cell volume*) has not the
-sign of the determinant at its centre is turned over somewhere, and stops the
-run at setup as well ($\det J$ has the sign of the block in every point of a
-cell that is not turned over, and so has its integral). These checks run on every
-multigrid level too, whose nodes are every other node of the level above: the stop of
-the corners names the level, the other stops give the block and the cell of that
-level. Behind a face of zero
-area (an axis) the ghost cells are the reflection of the first cell through the
-axis, whose determinant has the opposite sign by construction: their sign is
-not checked, and a wall on such a face stops as said below. The ghost values of a
-chimera face (`102`) come from the donor cells and weights that the tool which
-wrote `bc.txt` computed for its own ghost cells; the face metric of their
-viscous flux takes these linear ones, so where the tool builds its ghost cells
-otherwise (on cells stretched across the face) the normal gradient is taken over
-a distance that differs by as much (no test with `102` faces). `diffusive-metric` in
+checked. The cells and the first layer of ghost cells behind chimera faces are
+checked at setup (*Checks of the cells at setup*, above). `diffusive-metric` in
 `[MOSE-Numerics]` selects the face metric:
 
 | `diffusive-metric` | Face metric | |
@@ -382,14 +376,12 @@ are exactly 1/4 there. Where the tangential differences of the stencil lie in
 the plane of the face, its split of the face area vector is the over-relaxed
 one of [13]. Exactness for linear fields does not certify accuracy on curved,
 highly stretched cells [14]; that case is not measured here. One effect of the
-off-face position of the tangential derivatives is measured: on a wedge whose
-cells grow along $r$, the axial viscous force of Homann's flow (test
-`MMSResiduals`) converges at first order on the first rows next to the axis
-($1.7\times10^{-3}$ of its largest value on the first row with 64 cells growing by
-1.007, against $6.3\times10^{-5}$ with uniform radii), with `stencil` as with
-`inverse-mean`; there the derivative of $u_r$ along $x$ at the faces $j$ is that
-of the mean of the two rows of cells, off the face by about $\Delta r\,(q-1)/4$,
-which agrees with it. `inverse-mean`
+off-face position of the tangential derivatives is measured (test `MMSResiduals`):
+on a wedge whose cells grow along $r$ by a ratio $q$, the axial viscous force of
+Homann's flow converges at first order on the first rows next to the axis, with
+`stencil` as with `inverse-mean`, as the derivative of $u_r$ along $x$ at the
+faces $j$ is that of the mean of the two rows of cells, off the face by about
+$\Delta r\,(q-1)/4$. `inverse-mean`
 takes the tangential columns
 from the mean edges of the two cells instead. On smooth meshes they approach
 the centre differences as the cells shrink, but where the mesh is not smooth
@@ -593,6 +585,17 @@ the value of a cell at the centre of the cell (the mean of its eight nodes),
 the wall velocity at the centre of the wall face (the mean of its four nodes).
 A change of either position has to be made in the metric too.
 
+**Chimera faces (`102`).** The first layer of ghost cells behind a chimera face is the
+ghost cell of the face, whose metric enters its viscous flux: a first layer that
+turns over (index lines that spread apart sharply across the first cell, above)
+or whose determinant is not that of the first cell in sign and to $10^{-12}$ in
+size stops the run at setup, with its block, cell and face; the remedy is the
+mesh, with index lines that change smoothly across the first two node layers at
+that face. The ghost values of a chimera face (`102`) come from the donor cells and weights that the tool which
+wrote `bc.txt` computed for its own ghost cells; the face metric of their
+viscous flux takes these linear ones, so where the tool builds its ghost cells
+otherwise (on cells stretched across the face) the normal gradient is taken over
+a distance that differs by as much (no test with `102` faces).
 The viscous flux of a chimera face is the mean of two fluxes: one with the
 central differences along the face of the row of the cell, one with those of
 the row of the ghost cells, filled from the donors. With a stress linear in the
@@ -758,6 +761,18 @@ its $k$ faces has it on the other, and a record of type 200 that does not fit
 this stops the run at setup (see the note on type 200 in
 [Boundary Conditions](../user/boundary-conditions.md#euler-boundaries)).
 
+MOSE finds the wedge and the sector from the nodes (the rule is in the note
+*Mesh type* of [Using MOSE](../user/using.md#case-directory-structure)): the
+last $k$ node plane of the block must be the first one turned or translated to
+within 1 % of the move of the nodes per cell in $k$, measured along the $k$
+lines: the largest, over the nodes of the first $k$ node plane, of the sum of the
+moves of the node across the cells in $k$ (each its largest component), over the
+number of those cells (the thickness of a 2-D block). Along straight $k$ lines it
+is the move from the first plane to the last per cell, and on a sector the
+length of the arc per cell in the norm of the largest component (between 0.71
+and 1 of the arc), which the chord from plane to plane understates past half a
+turn (4.2 times at 270 degrees).
+
 ### Axisymmetric wedge
 
 A 2-D axisymmetric case is a wedge of the 3-D mesh: one cell in $k$, whose two
@@ -815,12 +830,9 @@ $\partial u_r/\partial r$: an error of the hoop stress of those cells that
 refinement does not reduce ($1/6$ of $2\mu u_r/r^2$ in Homann's flow, on 32 and
 64 cells). With `stencil` the copy sits at the cell and the faces take the
 difference on one side of it: in Homann's flow, linear in $r$, the first row
-gets the hoop stress of a small axis radius ($2.55\times10^{-5}$ of
-$2\mu u_r/r^2$ away from the exact one, against $2.58\times10^{-5}$ with the
-axis at $10^{-6}\,\Delta r$, on 64 cells), so the error of $1/6$ is gone; a field
-that is not linear in $r$ stays farther from the result of the small radius
-(4.67 against 2.67 times the local hoop term on the first row for the cubic
-field of the test `MMSResiduals`). The stop stays with every metric, a declared
+gets the hoop stress of a small axis radius, so the error of $1/6$ is gone; a
+field that is not linear in $r$ stays farther from the result of the small
+radius (test `MMSResiduals`). The stop stays with every metric, a declared
 limit: the axis at $r = 0$ is not treated completely (ghost cells beyond the
 axis, not copies).
 
@@ -876,8 +888,8 @@ exactly at $r = 0$ stops at setup, as on the wedge, with every
 `diffusive-metric`: behind faces of zero area the ghost cells copy the cells,
 and with `inverse-mean` and `mean` the periodic faces of the first row of cells
 would see half of $\partial u_r/\partial r$ ($1/6$ of the hoop term in Homann's
-flow; with `stencil` $1.6\times10^{-6}$ next to the periodic faces, as with the
-axis at a small radius). Put the axis nodes at a small radius.
+flow; with `stencil` the error of a small axis radius, next to the periodic faces
+too). Put the axis nodes at a small radius.
 
 ## Faces Between Blocks
 

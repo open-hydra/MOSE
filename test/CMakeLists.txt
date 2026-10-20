@@ -228,7 +228,7 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # (the inlet 402 table under any file name; a missing or decreasing table stops
 # the run).
 # Rotating frame: stationary-face-1, -2, ... of [MOSE-Rotating-Frame] are read
-# and listed, and the run ends (the count of the keys used to loop forever); a
+# and listed, and the run ends (the count stops at the first key missing); a
 # stationary face may be a wall in part and a block connection in part.
 # Sign of the wall heat flux: q_wall of a wall 301 is positive into the fluid on
 # every face (the same wall on both sides of a channel heats it alike), and the

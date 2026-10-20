@@ -22,12 +22,12 @@
 #     input.ini also writes integration-variables = prim, riemann-solver =
 #     HLLE and flux-limiter = minmod, each read again every 5 iterations,
 #     must reach iteration 10, end normally and write the residual history
-#     of the same run without readings, byte for byte. The setup used to
-#     turn some values into names (integration-variables cons into
+#     of the same run without readings, byte for byte. A setup that turned
+#     some values into names (integration-variables cons into
 #     Conservative, riemann-solver HLLC into HLLC Batten, flux-limiter
-#     vanleer into Van Leer), which the check after each reading found out
-#     of the rules: the run with the required keys only stopped at its
-#     first reading.
+#     vanleer into Van Leer) would make the check after each reading find
+#     them out of the rules, and the run with the required keys only would
+#     stop at its first reading.
 #  4. a comment line that holds "=" in [MOSE-Numerics], before cfl, is
 #     skipped: with cfl = 0.4, the run with the line writes the residual
 #     history of the same run without it, byte for byte, and the setup names
@@ -61,7 +61,7 @@
 #        stationary-face-1 alone (e1) and with no stationary-face key (e2).
 #        The keys left out keep their faces, as every key left out keeps
 #        its value: e1 and e2 must reach iteration 30 and write every output
-#        file of e0, byte for byte (the keys left out used to stop the run).
+#        file of e0, byte for byte: the keys left out must not stop the run.
 #===============================================================================
 set -uo pipefail
 
