@@ -503,9 +503,11 @@ $$
 \frac{\partial(\rho E_m)}{\partial t} + \dots = \dots - \bigl(P_k - \beta^\ast\rho\,\omega\,k\bigr),
 $$
 
-with the same source as the $k$ equation (including its
-[point-implicit](#steady-runs-point-implicit-factor) factor), so $E_m + k$ is
-conserved.  This is the total-energy form of TMR [11] and Wilcox [4] written for
+with the same source as the $k$ equation, so $E_m + k$ is conserved.  In steady
+runs the [point-implicit](#steady-runs-point-implicit-factor) factor treats the
+energy and $k$ equations as one system: the two increments add up to that of the
+fluxes of $E_m + k$ at every stage, and the steady state does not depend on the
+time step.  This is the total-energy form of TMR [11] and Wilcox [4] written for
 $E_m$: subtracting the $k$ equation from the equation for $E = E_m + k$ leaves
 exactly this sink, and the diffusion of $k$ in the two equations cancels.  The
 pressure follows from $e = E_m - \tfrac12 u_iu_i$, MOSE's conserved energy being
@@ -958,10 +960,25 @@ the run (the change of the variable over the step) are scaled by the same factor
 are smaller than without it; the convergence check `res-threshold` uses the density residual and is
 not affected.
 
+With [`k-energy-coupling = true`](#energy-coupling-k-energy-coupling) the energy of the mean flow has
+the sink $-S_k$ of the $k$ equation, whose derivative with respect to $\rho k$ is $+\beta^\ast\omega$, so
+the factor is that of the two equations together: the implicit operator of the $k$ and energy rows
+is $D = \begin{pmatrix} 1 + \Delta t\,\beta^\ast\omega & 0 \\ -\Delta t\,\beta^\ast\omega & 1 \end{pmatrix}$, and the
+energy takes its own increment plus $\Delta t\,\beta^\ast\omega$ times that of $k$,
+
+$$
+\Delta(\rho E_m) = \Delta t\,\bigl(F_E - S_k\bigr) + \Delta t\,\beta^\ast\omega\,\Delta(\rho k), \qquad
+\Delta(\rho k) = \frac{\Delta t}{1 + \Delta t\,\beta^\ast\omega}\,\bigl(F_k + S_k\bigr).
+$$
+
+The two increments add up to $\Delta t\,(F_E + F_k)$, the fluxes of $E_m + k$ alone, at every stage, and
+the converged solution, $F_k + S_k = 0$ and $F_E = S_k$, does not depend on the time step.
+
 Up to this version the factor divided the source alone,
-$q^{n+1} = q^n + \Delta t\,\bigl(F + S/(1 + \Delta t\,d)\bigr)$, and the converged solution, wall shear
-and heat flux included, depended on the local time step. Steady solutions computed with the default
-change accordingly.
+$q^{n+1} = q^n + \Delta t\,\bigl(F + S/(1 + \Delta t\,d)\bigr)$, and the energy, with
+`k-energy-coupling = true`, took the sink of $k$ divided by the same factor: the converged solution,
+wall shear and heat flux included, depended on the local time step. Steady solutions computed with
+the default change accordingly, and so do those with the coupling.
 
 ```ini
 [MOSE-Turbulence]

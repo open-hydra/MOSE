@@ -231,10 +231,21 @@ contains
       ! Res (Internal_Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not depend
       ! on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1;
       ! T. H. Pulliam, AIAA Paper 93-3360, eq. 8)
+      ! With k in the total energy (k_energy_coupling) the energy row has the source -Source(1), whose derivative in rho k
+      ! is +beta* omega. The point-implicit system of the k and energy rows, D = [[1 + dt beta* omega, 0],
+      ! [-dt beta* omega, 1]], gives the energy row its own increment plus dt beta* omega times that of the k row: before
+      ! the factor, the energy row takes dt beta* omega fk = 1 - fk times the residual of the k row, and below the source
+      ! with the factor. The row of E_m + k then has the fluxes alone at every stage, and the steady state, where the
+      ! energy fluxes balance -Source(1) Volume, does not depend on the step. Written 1 - fk, the line shares no product
+      ! with the line of fk: written dt beta* omega fk, it made the compilers round fk otherwise (likely no longer fusing
+      ! the product with the + 1 in one multiply-add), and the runs without the coupling changed at round-off. 1 - fk
+      ! loses relative digits when dt beta* omega is small, where the term is below the round-off of the energy row.
+      ! Without the factor (fk = 1) the line does not run
       fk = 1d0 ; fw = 1d0
       if ( point_implicit ) then
         fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
         fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
+        if ( k_energy_coupling ) Res(np,i,j,k) = Res(np,i,j,k) + ( 1d0 - fk ) * Res(nt,i,j,k)
         Res(nt,  i,j,k) = Res(nt,  i,j,k) * fk
         Res(nt+1,i,j,k) = Res(nt+1,i,j,k) * fw
       end if

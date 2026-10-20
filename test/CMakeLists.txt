@@ -301,8 +301,9 @@ mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;numerics
 mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")
 
 # Steady state with the point-implicit factor: it must not depend on the time
-# step (a short hypersonic plate, Spalart-Allmaras and SST). Validation tier:
-# it converges 14 000 iterations per model.
+# step (a short hypersonic plate, Spalart-Allmaras, SST, and SST and Wilcox 2006
+# with k-energy-coupling). Validation tier: it converges 14 000 iterations per
+# model, about 12 s of CPU each.
 mose_add_fast_script(PointImplicitSteady 2D/viscous/point-implicit-steady "validation;numerics;2D")
 
 # Local time step next to the axis of the wedge (BC 200): the stress on the wedge

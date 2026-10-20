@@ -301,10 +301,12 @@ solution and matplotlib, so it lives in the **validation** tier rather than the
 fast pre-push suite (~4 s for the three solved grids).
 
 `PointImplicitSteady` ([`2D/viscous/point-implicit-steady`](2D/viscous/point-implicit-steady))
-converges a short hypersonic plate (6 × 16 cells, Spalart–Allmaras and SST) with the
-point-implicit factor, then continues it at half the (cfl, vnn) and with implicit
-residual smoothing: the wall shear and heat flux must not move, to 1e-9. Its 14 000
-iterations per model (~20–40 s) put it in the **validation** tier as well.
+converges a short hypersonic plate (6 × 16 cells; Spalart–Allmaras, SST, and SST and
+Wilcox 2006 with `k-energy-coupling = .true.`) with the point-implicit factor, then
+continues it at half the (cfl, vnn) and with implicit residual smoothing: the wall
+shear and heat flux must not move, to 1e-9. Its 14 000 iterations per model (about
+12 s of CPU at one thread each, ~50 s for the four) put it in the **validation**
+tier as well.
 
 `WedgeAxisStep` ([`2D/viscous/wedge-axis-step`](2D/viscous/wedge-axis-step)) checks the local time step
 next to the axis of a 1° wedge (diffusion-dominated, Prandtl number 10, a little swirl; square

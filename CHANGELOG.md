@@ -271,6 +271,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   solves F + S = 0 whatever the local time step. It divided the source alone, so that the steady state, wall shear and heat flux
   included, depended on the local time step. Steady RANS solutions computed with the default `point-implicit = .true.` change
   accordingly. The residuals of ν̃, k and ω printed during a steady run are scaled by the same factor.
+- With `k-energy-coupling = .true.` (SST, Wilcox 2006) the energy of the mean flow takes, in steady runs, the point-implicit
+  increment of the energy and k equations together: besides the sink of k with the factor of the k row, the share 1 − f_k of
+  the fluxes of k, f_k = 1/(1 + Δt·β*ω). It took the sink alone: with the whole increment of k scaled by the factor (above)
+  the converged energy, wall heat flux included, depended on the local time step (6.6e-6 of the wall heat flux at half the
+  step on the plate of `PointImplicitSteady` with SST, 5.6e-6 with Wilcox 2006), and E_m + k was not conserved at each step.
+  Now the two equations add up to the fluxes of E_m + k at every stage, and the converged solution does not depend on the
+  step. Steady runs with the coupling change; time-accurate runs and runs without the coupling do not.
 - In 3-D the rotation tensor of the turbulence models, W_ij = (∂u_i/∂x_j − ∂u_j/∂x_i)/2, has W_23 and W_32 with their sign.
   They had the opposite one, so the matrix was not a tensor, and the models that take its components, not only its magnitude,
   depended on how the flow is oriented in space wherever ω_x ≠ 0: the term r̃ of the rotation–curvature correction (SA-RC and

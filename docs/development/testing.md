@@ -315,8 +315,9 @@ convection of the isentropic vortex (N1) on 32, 64 and 128 cells, and
 manufactured solution (N2) on 32 and 64 cells (the full study, with 128
 cells, makes the V&V figure). `PointImplicitSteady`
 (`test/2D/viscous/point-implicit-steady`) is there for its
-cost, 14 000 iterations per model: the steady state of a short hypersonic plate
-with the point-implicit factor (Spalart–Allmaras, SST) does not depend on the
+cost, 14 000 iterations per model, about 12 s of CPU each: the steady state of a
+short hypersonic plate with the point-implicit factor (Spalart–Allmaras, SST, and
+SST and Wilcox 2006 with `k-energy-coupling = .true.`) does not depend on the
 time step, and implicit residual smoothing does not move it either (wall shear
 and heat flux to 1e-9). `WedgeAxisStep`
 (`test/2D/viscous/wedge-axis-step`) is there for its cost too, eight runs of
