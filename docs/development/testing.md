@@ -158,7 +158,7 @@ The key components are:
 ## Running Tests
 
 The validation cases are driven by **CTest** (see
-[Automated Test Tiers](#automated-test-tiers-ctest-ci) below for the full
+[Automated Test Tiers](#automated-test-tiers-ctest-and-ci) below for the full
 picture).  The quickest checks:
 
 ```bash
@@ -203,7 +203,7 @@ python3 -B verify.py
 
 ---
 
-## Automated Test Tiers (CTest & CI)
+## Automated Test Tiers (CTest and CI)
 
 The most important cases are wired into **CTest** so they can run
 unattended in a Git pre-push hook and in GitHub CI.  Tiers are expressed
