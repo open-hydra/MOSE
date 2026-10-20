@@ -79,7 +79,8 @@ exact field at the cell centres.
   checks on every case: the four on the case with walls, checks 1, 2 and 4 on
   the two periodic ones.
 - **Full form** (`./MOSE.sh test`): the refinement study of the three cases on
-  $N = 20, 40, 80$; `verify.py` passes every check of every case, gives the
+  $N = 20, 40, 80$. With `MOSE_mms` of commit `10b59003b72c`, `verify.py` passes
+  every check of every case, gives the
   errors and the observed orders below and draws the figures
   `OUTPUT/mms-skewed-grids.svg` (the coarsest grid of each family) and
   `OUTPUT/mms-skewed-<case>.svg` (the $L_2$ and $L_\infty$ errors against $N$).
