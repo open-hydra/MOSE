@@ -363,6 +363,17 @@ checks of an entry of the smaller of two runs of each (shared 192-thread machine
   block and the times per level over the ranks on 2 ranks with unequal work by a map that the log names, on 1 and 2 threads; exact
   restart on 2 ranks × 2 threads. ~6 min (one run,
   gfortran 13.2 TESTING with Intel MPI).
+- ☑ **P7 — Viscous shock tube of Daru and Tenaud with the multirate integrator** (`MultirateDaruTenaud`, validation):
+  Re = 200, the lower half of the tube on 50 × 25 cells stretched towards the wall; single rate at dt0/4 (the
+  reference) and at dt0, multirate with H = 4 dt0 and with H = dt0 (core cells at the step of the single rate, wall
+  cells smaller); every cell within its limit; with H = dt0 the L1 density error and the errors at ten probes at most
+  1.05 × those of the single rate at every output instant; the largest density jump on the wall and symmetry rows
+  within one local cell of the reference and no more local extrema than the single rate; mass and energy drift
+  ≤ 1e-12. About 2 min of CPU with one thread. The medium form (`MultirateDaruTenaudMedium`, label verification), the same
+  checks on 100 × 50 cells, about 19 min (one run, gfortran 13.2 TESTING with Intel MPI). The full form
+  (`MultirateDaruTenaudFull`, label verification: not run by the
+  pull-request checks), the same checks on 500 × 250 cells, also reports the wall density against table 1 of Zhou, Xu
+  and Liu; about 100 h of CPU with one thread (its four runs take 3.5e5 s of CPU).
 
 ---
 

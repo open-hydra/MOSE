@@ -799,6 +799,44 @@ mose_add_mr_group(MultirateShocks 3300 shocks "sod;shock;rpost;cfl4;positivity" 
 # with fixed-macro-step the level map is that of the macro step taken (fixedstep); the stage sequence of one macro step
 # against the reference sequence of the recursion (trace).
 mose_add_mr_group(MultirateInput 1020 input "reject;fixedstep;trace" "multirate;validation;implementation;1D;2D;3D")
+# P7: the viscous shock tube of Daru and Tenaud (Re = 200) on 50 x 25 cells: single rate at dt0/4 (the reference) and
+# at dt0, multirate with H = 4 dt0 and with H = dt0; every cell within its limit, the error of the multirate with
+# H = dt0 at most 1.05 times that of the single rate at every output instant and at the probes, the jumps of the
+# reference within one local cell and no more extrema than the single rate on the wall and symmetry rows,
+# conservation within 1e-12 (verify_daru.py).
+mose_add_mr_script(MultirateDaruTenaud multirate/mr-daru 900 "multirate;validation;numerics;2D")
+# P7, medium form: the same checks on 100 x 50 cells; label verification.
+if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru/run.sh")
+    add_test(
+        NAME    MultirateDaruTenaudMedium
+        COMMAND bash -c "./run.sh medium"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru"
+    )
+    set_tests_properties(MultirateDaruTenaudMedium PROPERTIES
+        LABELS      "multirate;verification;numerics;2D"
+        TIMEOUT     3600
+        ENVIRONMENT "${_MOSE_TEST_ENV}"
+    )
+endif()
+# P7, full form: the same checks on 500 x 250 cells, the resolution of the reference solutions; label verification,
+# not run by the pull-request checks (about 100 h of CPU with one thread: its four runs take 3.5e5 s of CPU; the TIMEOUT,
+# 200 h, is twice that).
+if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru/run.sh")
+    add_test(
+        NAME    MultirateDaruTenaudFull
+        COMMAND bash -c "./run.sh full"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru"
+    )
+    set_tests_properties(MultirateDaruTenaudFull PROPERTIES
+        LABELS      "multirate;verification;numerics;2D"
+        TIMEOUT     720000
+        ENVIRONMENT "${_MOSE_TEST_ENV}"
+    )
+    #   the three forms run in the same folder (mr-daru) and remove its cases and runs at the start: never at the
+    #   same time (ctest -j)
+    set_tests_properties(MultirateDaruTenaud MultirateDaruTenaudMedium MultirateDaruTenaudFull PROPERTIES
+        RESOURCE_LOCK mr-daru)
+endif()
 # I17 (builds with USE_MPI=ON): 1 x 1 against P x T byte by byte, single rate and multirate (a connection with the
 # orientation -1 0 0 1 among the cases, also against the same case without the turn), on the laminar plate, on the plate
 # with Spalart-Allmaras and with SST, on the hot cube in 3-D (a vertex of eight blocks inside the cells of level 1) and on
