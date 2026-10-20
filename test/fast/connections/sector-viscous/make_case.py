@@ -64,6 +64,39 @@ wall  A translated sector next to a wall: a block of 4 x 4 x 6 cells periodic al
       these fields. In every cell with no face 400, the wall cells included, it must vanish below 1e-11 of
       mu |G| (sum of the face areas)/volume (wallmom, rho u, rho v, rho w) and k |g| (sum of the face areas)/volume
       (wallene, rho E). The generator prints the largest distance of the two positions of the wall ghost cells.
+split The rule of type 200: it joins the two k faces of one block. Beyond face 5 lies the cell next to face 6 of the same
+      block, in the same column (i, j), turned back by the angle, and beyond face 6 the cell next to face 5 turned forward;
+      the record names no other block. So every record of type 200 must lie on face 5 or 6, inside its block, with a record
+      of type 200 on the other k face of the block in its column, and any other layout stops at set-up. A sector from
+      -22.5 to 22.5 degrees (x in [0, 0.2], r in [0.5, 1], 2 x 4 x 8 cells, faces i and j of type 300) of air at 1 bar and
+      300 K at rest with a rotation periodic with the sector, u_theta = W (1 + cos(8 (theta + 22.5 degrees))/2), W = 50 m/s,
+      one explicit Euler step:
+        split-whole    one block, type 200 on faces 5 and 6;
+        split-cutj     two blocks of 2 cells in j joined by 101, type 200 on the k faces of both: it runs, and in every cell
+                       its step must be that of split-whole within 1e-12 of the scale (the largest |r/dt| of split-whole: of
+                       rho, of rho E, and one for rho u, rho v and rho w);
+        split-cutk     two blocks of 4 cells in k joined by 101, type 200 on face 5 of the first and on face 6 of the second
+                       (a cut along k): in the column of record 49, on face 5, face 6 of block 1 is of type 101;
+        split-face4    split-whole with type 200 on face 4 (j = 4): record 81 is not on a k face;
+        split-outside  split-whole with record 97 (face 5, cell (1, 1, 1)) written at i = 3: outside the block;
+        split-missing  split-whole with record 97 written at the cell (2, 1, 1): no record on face 5 in the column (1, 1)
+                       of record 105, on face 6;
+      a 2-D axisymmetric wedge of 1 degree (one cell in k, x in [0, 0.2], r in [0.5, 1], 4 x 4 cells, faces 1 to 3 of type
+      300) of the same air with a radial velocity of 20 m/s and a swirl of 50 m/s:
+        split-wedge4   type 200 on faces 4, 5 and 6: record 13 is not on a k face;
+        split-wedge6   type 200 on face 5, type 300 on faces 4 and 6: in the column of record 17 face 6 is of type 300.
+      The last six must stop at set-up, before the type of the mesh is read and before any step, with exit code 1 and the
+      message that names the record (run.sh). Without the check, the sector cut along k runs with the rows of cells next to
+      the cut and to its k faces wrong by up to 31 times the scale of the step, the wedge with type 200 on face 4 or on one
+      k face only runs, with fluxes there that are neither those of the rotational periodicity nor those of a wall, and the
+      sector with type 200 on face 4 stops at its first flux.
+ring101 The remedy that the message of split gives for a ring of several blocks: the whole turn as four blocks of 90
+      degrees, block 1 the cells and the field of ring45 and block b those of the sector turned by 90 (b - 1) degrees, the
+      node plane at 315 degrees written with the bits of the plane at -45 degrees (as a mesher writes coincident planes),
+      face 6 of each block joined by 101 to face 5 of the next one, the junction at theta = 2 pi included, no type 200. The
+      field of ring is periodic for a turn by 90 degrees, so in every cell block 1 must give the step of ring45, which type
+      200 closes: an Euler step within 1e-12 of the largest |r/dt| of ring45 of each variable, and the viscous force
+      (diffusive-metric = stencil) within 1e-9 of the scale of ring.
 
 One explicit Euler step with local time stepping, first-order reconstruction. OUTPUT/diagnostic.tec holds, per cell, the
 increment of each conserved variable over the step, and the step dt.
@@ -74,11 +107,15 @@ Usage (from the test directory):
   python3 -B make_case.py case shift200|shift201                   INPUT/ic.tec and INPUT/bc.txt
   python3 -B make_case.py case wallmom|wallene                     INPUT/ic.tec, INPUT/bc-ns.txt, INPUT/bc-ref.txt and
                                                                    INPUT/transport-ref.dat
+  python3 -B make_case.py case split-NAME|ring101                  INPUT/ic.tec and INPUT/bc.txt (NAME: whole, cutj, cutk,
+                                                                   face4, outside, missing, wedge4, wedge6)
   python3 -B make_case.py ring NS45 EU45 NS90 EU90                 largest difference of the viscous forces over the scale
   python3 -B make_case.py mirror F200 F300                         largest difference over (2/3) mu U A/V
   python3 -B make_case.py linear NAME NS EU                        largest viscous force over (2/3) mu U A/V (stretch)
   python3 -B make_case.py shift F200 F201                          largest difference over the largest value of F201
   python3 -B make_case.py wall NAME NS REF                         largest viscous force or conduction over its scale
+  python3 -B make_case.py split WHOLE CUTJ                         largest difference of the steps over the scale
+  python3 -B make_case.py ring101 NS45 EU45 NS101 EU101            the same for the steps and the viscous forces of block 1
 """
 import math
 import os
@@ -103,6 +140,11 @@ WALL_BEND, WALL_TILT = 50.0, 0.3                       # wall: y = y_j + WALL_BE
 WALL_G = (1.0e3, 0.6e3, -0.8e3)                        # wallmom: u = x WALL_G, 1/s
 WALL_GT = 2.5e3                                        # wallene: T = T0 + WALL_GT x, K/m
 TOL_WALL = 1.0e-11
+SPLIT_N, SPLIT_P, SPLIT_W = (2, 4, 8), 1.0e5, 50.0     # split: cells in i, j and k, pressure (Pa), rotation (m/s)
+SPLIT_TH0, SPLIT_TH = -math.pi / 8.0, math.pi / 4.0    # split: first k node plane and angle of the sector
+SPLIT_RHO = SPLIT_P / (RGAS * T0)
+WEDGE_N, WEDGE_DELTA, WEDGE_V = (4, 4), math.radians(1.0), 20.0   # split: wedge cells in i and j, angle, radial velocity
+TOL_SPLIT = 1.0e-12
 
 
 def fmt(v):
@@ -484,12 +526,246 @@ def wall(name, ns, ref):
     sys.exit(0 if worst <= TOL_WALL else 1)
 
 
+def split_node(i, j, k):
+    """Node (i, j, k) of the sector of split: uniform radii, theta from SPLIT_TH0 over SPLIT_TH in SPLIT_N[2] cells."""
+    ni, nj, nk = SPLIT_N
+    th = SPLIT_TH0 + SPLIT_TH * k / nk
+    r = R0 + (R1 - R0) * j / nj
+    return tuple(float(fmt(v)) for v in (X1 * i / ni, r * math.cos(th), r * math.sin(th)))
+
+
+def wedge_node(i, j, k):
+    """Node (i, j, k) of the wedge of split: the two k node planes at theta = -delta/2 and +delta/2."""
+    wi, wj = WEDGE_N
+    th = (k - 0.5) * WEDGE_DELTA
+    r = R0 + (R1 - R0) * j / wj
+    return tuple(float(fmt(v)) for v in (X1 * i / wi, r * math.cos(th), r * math.sin(th)))
+
+
+def split_state(c):
+    """Sector of split: air at rest with a rotation periodic with the sector, at the cell centre c."""
+    th = math.atan2(c[2], c[1])
+    ut = SPLIT_W * (1.0 + 0.5 * math.cos(2.0 * math.pi * (th - SPLIT_TH0) / SPLIT_TH))
+    return (SPLIT_RHO, 0.0, -ut * math.sin(th), ut * math.cos(th), SPLIT_P)
+
+
+def wedge_state(c):
+    """Wedge of split: a radial velocity and a swirl (the cell centres lie at theta = 0)."""
+    return (SPLIT_RHO, 0.0, WEDGE_V, SPLIT_W, SPLIT_P)
+
+
+def split_zone(f, b, node, state, lo, hi):
+    """The zone of block b of INPUT/ic.tec: the nodes from lo to hi (node indices i, j, k of the whole mesh), and the
+    states of its cells at their centres."""
+    (i0, j0, k0), (i1, j1, k1) = lo, hi
+    f.write(f" ZONE  T = B{b}-IG, I={i1 - i0 + 1}, J={j1 - j0 + 1}, K={k1 - k0 + 1}, DATAPACKING=BLOCK, "
+            "VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+    for n in range(3):
+        for k in range(k0, k1 + 1):
+            for j in range(j0, j1 + 1):
+                for i in range(i0, i1 + 1):
+                    f.write(f" {fmt(node(i, j, k)[n])}\n")
+    cells = []
+    for k in range(k0 + 1, k1 + 1):
+        for j in range(j0 + 1, j1 + 1):
+            for i in range(i0 + 1, i1 + 1):
+                cells.append(state([sum(node(i - 1 + a, j - 1 + bb, k - 1 + d)[n] for a in (0, 1) for bb in (0, 1)
+                                        for d in (0, 1)) / 8.0 for n in range(3)]))
+    for v in range(5):
+        f.write("".join(f" {fmt(c[v])}\n" for c in cells))
+
+
+def block_rec(b, i, j, k, face, t, src=None):
+    """A record of bc.txt, with the property line of a connection 101: its source block, cell, face and the identity."""
+    s = '%9d %7d %7d %7d %7d %7d\n' % (b, i, j, k, face, t)
+    if src:
+        s += '%10d %7d %7d %7d %7d %7d %7d %7d %7d\n' % (src + (1, 0, 0, 1))
+    return s
+
+
+def box_faces(b, ni, nj, nk, types):
+    """The records of the six faces of block b of ni x nj x nk cells, face by face; types[f - 1] the type of face f (None:
+    no record, a connection written apart)."""
+    out = []
+    for face, i in ((1, 1), (2, ni)):
+        if types[face - 1] is not None:
+            out += [block_rec(b, i, j, k, face, types[face - 1]) for k in range(1, nk + 1) for j in range(1, nj + 1)]
+    for face, j in ((3, 1), (4, nj)):
+        if types[face - 1] is not None:
+            out += [block_rec(b, i, j, k, face, types[face - 1]) for k in range(1, nk + 1) for i in range(1, ni + 1)]
+    for face, k in ((5, 1), (6, nk)):
+        if types[face - 1] is not None:
+            out += [block_rec(b, i, j, k, face, types[face - 1]) for j in range(1, nj + 1) for i in range(1, ni + 1)]
+    return out
+
+
+def write_split(name):
+    """INPUT/ic.tec and INPUT/bc.txt of the case split-<name>."""
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    ni, nj, nk = SPLIT_N
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
+        if name in ("whole", "face4", "outside", "missing"):
+            split_zone(f, 1, split_node, split_state, (0, 0, 0), (ni, nj, nk))
+            out = box_faces(1, ni, nj, nk, [300, 300, 300, 200 if name == "face4" else 300, 200, 200])
+            if name in ("outside", "missing"):
+                # record 97, the first one of face 5 (cell (1, 1, 1)), written at i = 3 or at the cell (2, 1, 1)
+                out[96] = block_rec(1, 3 if name == "outside" else 2, 1, 1, 5, 200)
+        elif name == "cutk":
+            h = nk // 2
+            split_zone(f, 1, split_node, split_state, (0, 0, 0), (ni, nj, h))
+            split_zone(f, 2, split_node, split_state, (0, 0, h), (ni, nj, nk))
+            out = (box_faces(1, ni, nj, h, [300, 300, 300, 300, 200, None]) +
+                   box_faces(2, ni, nj, h, [300, 300, 300, 300, None, 200]))
+            for j in range(1, nj + 1):
+                for i in range(1, ni + 1):
+                    out += [block_rec(1, i, j, h, 6, 101, (2, i, j, 1, 5)), block_rec(2, i, j, 1, 5, 101, (1, i, j, h, 6))]
+        elif name == "cutj":
+            h = nj // 2
+            split_zone(f, 1, split_node, split_state, (0, 0, 0), (ni, h, nk))
+            split_zone(f, 2, split_node, split_state, (0, h, 0), (ni, nj, nk))
+            out = (box_faces(1, ni, h, nk, [300, 300, 300, None, 200, 200]) +
+                   box_faces(2, ni, h, nk, [300, 300, None, 300, 200, 200]))
+            for k in range(1, nk + 1):
+                for i in range(1, ni + 1):
+                    out += [block_rec(1, i, h, k, 4, 101, (2, i, 1, k, 3)), block_rec(2, i, 1, k, 3, 101, (1, i, h, k, 4))]
+        elif name in ("wedge4", "wedge6"):
+            wi, wj = WEDGE_N
+            split_zone(f, 1, wedge_node, wedge_state, (0, 0, 0), (wi, wj, 1))
+            out = box_faces(1, wi, wj, 1, [300, 300, 300, 200, 200, 200] if name == "wedge4" else
+                            [300, 300, 300, 300, 200, 300])
+        else:
+            sys.exit(f"unknown case split-{name}")
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(out))
+
+
+def write_ring101():
+    """INPUT/ic.tec and INPUT/bc.txt of ring101: four blocks of the nodes, cells and field of ring45, block b turned by
+    90 (b - 1) degrees, joined by 101 face 6 to face 5 of the next block, block 4 to block 1."""
+    rs, _, den, _ = mesh("ring45")
+    nj, nk, nb = len(rs) - 1, 4, 4
+
+    def node(i, j, m):
+        mm = (m + 2) % 16 - 2                               # m = 14, at 315 degrees, is m = -2: the same bits
+        th = mm * math.pi / den
+        return tuple(float(fmt(v)) for v in (X1 * i / NI, rs[j] * math.cos(th), rs[j] * math.sin(th)))
+
+    for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
+        if os.path.lexists(p):
+            os.remove(p)
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
+        for b in range(1, nb + 1):
+            m0 = 4 * (b - 1) - 2
+            split_zone(f, b, lambda i, j, k: node(i, j, m0 + k), lambda c: (RHO0,) + velocity(c[1], c[2], True) + (P0,),
+                       (0, 0, 0), (NI, nj, nk))
+    out = []
+    for b in range(1, nb + 1):
+        nxt, prv = b % nb + 1, (b - 2) % nb + 1
+        out += box_faces(b, NI, nj, nk, [300, 300, 300, 300, None, None])
+        for face, k, src in ((5, 1, (prv, nk, 6)), (6, nk, (nxt, 1, 5))):
+            out += [block_rec(b, i, j, k, face, 101, (src[0], i, j, src[1], src[2]))
+                    for j in range(1, nj + 1) for i in range(1, NI + 1)]
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(out))
+
+
+def read_zones(path):
+    """Cell values of a MOSE ASCII file of one or more zones (BLOCK packing), zone after zone: a list of (values by
+    name, cells in i, j and k)."""
+    with open(path) as f:
+        lines = f.read().splitlines()
+    names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s,"]+)', lines[0].split('=', 1)[1])]
+    zones = []
+    for line in lines[1:]:
+        if line.lstrip().startswith("ZONE"):
+            zones.append([tuple(int(re.search(k + r'=(\d+)', line).group(1)) - 1 for k in ('I', 'J', 'K')), []])
+        else:
+            zones[-1][1] += [float(v) for v in line.split()]
+    out = []
+    for n, values in zones:
+        nn, nc, z, pos = (n[0] + 1) * (n[1] + 1) * (n[2] + 1), n[0] * n[1] * n[2], {}, 0
+        for k, name in enumerate(names):
+            cnt = nn if k < 3 else nc
+            z[name] = values[pos:pos + cnt]
+            pos += cnt
+        out.append((z, n))
+    return out
+
+
+SPLIT_Q = ("rho", "rhou", "rhov", "rhow", "rhoe")
+
+
+def split(whole, cutj):
+    """split: r/dt of every cell of split-cutj against the same cell of split-whole, over the largest |r/dt| of
+    split-whole, of rho, of rho E, and one for rho u, rho v and rho w."""
+    (a, (ni, nj, nk)), = read_zones(whole)
+    fa = {q: [x / t for x, t in zip(a[q], a["dt"])] for q in SPLIT_Q}
+    fb = {q: [None] * (ni * nj * nk) for q in SPLIT_Q}
+    for z, (b, (mi, mj, mk)) in enumerate(read_zones(cutj)):
+        for k in range(mk):
+            for j in range(mj):
+                for i in range(mi):
+                    cl, cg = (k * mj + j) * mi + i, (k * nj + j + z * mj) * ni + i
+                    for q in SPLIT_Q:
+                        fb[q][cg] = b[q][cl] / b["dt"][cl]
+    smom = max(abs(x) for q in ("rhou", "rhov", "rhow") for x in fa[q])
+    ok = True
+    for q in SPLIT_Q:
+        scale = smom if q in ("rhou", "rhov", "rhow") else max(abs(x) for x in fa[q])
+        d, c = max((abs(x - y), c) for c, (x, y) in enumerate(zip(fa[q], fb[q])))
+        ok &= d / scale <= TOL_SPLIT
+        where = f"cell ({c % ni + 1}, {c // ni % nj + 1}, {c // (ni * nj) + 1})"
+        print(f"    {q}: largest |r/dt(cutj) - r/dt(whole)| over the scale {scale:.3e}: {d / scale:.3e} ({where}); "
+              f"tolerance {TOL_SPLIT:.0e}")
+    sys.exit(0 if ok else 1)
+
+
+def ring101(ns45, eu45, ns101, eu101):
+    """ring101: block 1 of the turn joined by 101 against ring45, closed by type 200, cell by cell: r/dt of the Euler step
+    over the largest |r/dt| of ring45 of each variable, and the viscous force (r/dt of Navier-Stokes minus Euler) over the
+    scales of ring."""
+    (s_ns, n), = read_zones(ns45)
+    (s_eu, _), = read_zones(eu45)
+    r_ns, r_eu = read_zones(ns101)[0][0], read_zones(eu101)[0][0]
+    ni, nj, _ = n
+
+    def steps(z):
+        return {q: [x / t for x, t in zip(z[q], z["dt"])] for q in SPLIT_Q}
+
+    a_ns, a_eu, b_ns, b_eu = steps(s_ns), steps(s_eu), steps(r_ns), steps(r_eu)
+    sm = MU * (U + 2.0 * G / R0 ** 2 + 4.0 * C * R1 ** 3) / (R0 * math.pi / 8.0)
+    se = sm * (U * R1 + G / R0 + C * R1 ** 4)
+    ok = True
+    for q in SPLIT_Q:
+        scale = max(abs(x) for x in a_eu[q])
+        d, c = max((abs(x - y), c) for c, (x, y) in enumerate(zip(a_eu[q], b_eu[q])))
+        ok &= d / scale <= TOL_SPLIT
+        print(f"    euler {q}: largest |r/dt(ring101) - r/dt(ring45)| over the scale {scale:.3e}: {d / scale:.3e} "
+              f"(cell ({c % ni + 1}, {c // ni % nj + 1}, {c // (ni * nj) + 1})); tolerance {TOL_SPLIT:.0e}")
+    for q in CONS:
+        s = se if q == "rhoe" else sm
+        d, c = max((abs((x1 - x2) - (y1 - y2)), c)
+                   for c, (x1, x2, y1, y2) in enumerate(zip(a_ns[q], a_eu[q], b_ns[q], b_eu[q])))
+        ok &= d / s <= TOL_RING
+        print(f"    viscous force {q}: largest |f(ring101) - f(ring45)| over the scale: {d / s:.3e} "
+              f"(cell ({c % ni + 1}, {c // ni % nj + 1}, {c // (ni * nj) + 1})); tolerance {TOL_RING:.0e}")
+    sys.exit(0 if ok else 1)
+
+
 def main():
     what = sys.argv[1]
     if what == "case" and sys.argv[2].startswith("shift"):
         write_shift(sys.argv[2][len("shift"):])
     elif what == "case" and sys.argv[2].startswith("wall"):
         write_wall(sys.argv[2])
+    elif what == "case" and sys.argv[2].startswith("split-"):
+        write_split(sys.argv[2][len("split-"):])
+    elif what == "case" and sys.argv[2] == "ring101":
+        write_ring101()
     elif what == "case":
         write_case(sys.argv[2])
     elif what == "ring":
@@ -502,6 +778,10 @@ def main():
         shift(*sys.argv[2:4])
     elif what == "wall":
         wall(*sys.argv[2:5])
+    elif what == "split":
+        split(*sys.argv[2:4])
+    elif what == "ring101":
+        ring101(*sys.argv[2:6])
     else:
         sys.exit(f"unknown request {what}")
 

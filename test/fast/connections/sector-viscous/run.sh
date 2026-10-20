@@ -37,6 +37,16 @@
 #    the wall (wallene); a Navier-Stokes step against one with mu = k = 1e-30.
 #    In every cell with no face 400, the wall cells included, the viscous force
 #    and the heat conduction must vanish below 1e-11 of their scales.
+#  - split: type 200 joins the two k faces of one block (make_case.py), one
+#    Euler step. A sector of 45 degrees cut along j, each block closed by
+#    type 200, gives the step of the whole sector within 1e-12; cut along k,
+#    with type 200 on face 4, with a record outside its block or with no
+#    record on the other k face, and a 2-D wedge with type 200 on face 4 or
+#    on one k face only, stop at set-up, before the mesh type and any step,
+#    with exit code 1 and the message that names the record. A ring of four
+#    blocks joined by 101, the junction at 2 pi included (the remedy of the
+#    message), gives in block 1 the step of the sector closed by type 200:
+#    Euler within 1e-12, viscous force within 1e-9.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -198,6 +208,54 @@ for run in wallmom wallene; do
 done
 rm -f INPUT/transport.dat
 ln -sf "../$VISC/transport.dat" INPUT/transport.dat
+
+echo "-- split: type 200 joins the two k faces of one block; other layouts stop at set-up --"
+for c in whole cutj; do
+  python3 -B make_case.py case "split-$c" || exit 1
+  step euler "split-$c"
+done
+if python3 -B make_case.py split OUTPUT/diagnostic-split-whole.tec OUTPUT/diagnostic-split-cutj.tec; then
+  echo "  [ok  ] a sector cut along j, each block closed by type 200, gives the step of the whole sector"
+else
+  echo "  [FAIL] the sector cut along j and the whole sector give different steps"
+  status=1
+fi
+# stop_case <case> <message>: the run must stop at set-up, before the type of the mesh and any step: exit code 1, the
+# line "Boundary conditions" with FAIL, the message, the STOP line of the set-up, no line "Mesh type", no diagnostic output
+stop_case() {
+  python3 -B make_case.py case "$1" || exit 1
+  write_ini euler
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/$1.log" 2>&1
+  local rc=$?
+  if [[ $rc -eq 1 ]] && grep -a -qE '^ +Boundary conditions +FAIL' "OUTPUT/$1.log" && grep -a -qF -- "$2" "OUTPUT/$1.log" \
+     && grep -a -qF 'STOP: boundary condition error (see above)' "OUTPUT/$1.log" \
+     && ! grep -a -q 'Mesh type' "OUTPUT/$1.log" && [[ ! -f OUTPUT/diagnostic.tec ]]; then
+    echo "  [ok  ] $1 stops at set-up: $2"
+  else
+    echo "  [FAIL] $1 (exit code $rc) does not stop at set-up with: $2 (see OUTPUT/$1.log)"
+    status=1
+  fi
+}
+rule="type 200 joins the k faces of one block:"
+ring="$rule cut sectors along i or j; join rings by 101 at each junction"
+k_only="type 200 is for the k faces (5 and 6) of a wedge or a sector only"
+stop_case split-cutk "[ERROR] bc.txt, record 49: type 200 on face 5 of block 1 at i, j = 1 1, but face 6 there is of type 101: $ring"
+stop_case split-face4 "[ERROR] bc.txt, record 81: type 200 on face 4 of block 1 at i, j, k = 1 4 1: $k_only"
+stop_case split-outside "[ERROR] bc.txt, record 97: type 200 on face 5 of block 1 at i, j, k = 3 1 1: the cell is outside the block, of 2 x 4 x 8 cells"
+stop_case split-missing "[ERROR] bc.txt, record 105: type 200 on face 6 of block 1 at i, j = 1 1, but face 5 there has no record: $rule give face 5 there type 200 too"
+stop_case split-wedge4 "[ERROR] bc.txt, record 13: type 200 on face 4 of block 1 at i, j, k = 1 4 1: $k_only"
+stop_case split-wedge6 "[ERROR] bc.txt, record 17: type 200 on face 5 of block 1 at i, j = 1 1, but face 6 there is of type 300: $rule give face 6 there type 200 too"
+python3 -B make_case.py case ring101 || exit 1
+step navier-stokes ring101-ns-stencil stencil
+step euler ring101-eu-stencil stencil
+if python3 -B make_case.py ring101 OUTPUT/diagnostic-ring45-ns-stencil.tec OUTPUT/diagnostic-ring45-eu-stencil.tec \
+                                   OUTPUT/diagnostic-ring101-ns-stencil.tec OUTPUT/diagnostic-ring101-eu-stencil.tec; then
+  echo "  [ok  ] a ring of four blocks joined by 101, the junction at 2 pi included, gives the step of the sector closed by 200"
+else
+  echo "  [FAIL] the ring of four blocks joined by 101 and the sector closed by type 200 give different steps"
+  status=1
+fi
 
 if [[ $status -eq 0 ]]; then
   echo "SectorViscous: all checks passed"

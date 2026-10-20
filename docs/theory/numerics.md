@@ -93,8 +93,8 @@ beyond face 5 is the flow next to face 6 turned back by the angle $\delta$
 of the wedge or sector, and the flow beyond face 6 the flow next to face 5
 turned forward. With $g = +1$ on face 5 and $g = -1$ on face 6, the ghost
 cell takes the state of its source cell (on a wedge the cell itself, on a
-sector the cell next to the opposite $k$ face) with the velocity turned
-about $x$ by $\varphi = -g\,\delta$:
+sector the cell next to the opposite $k$ face of the same block, in the same
+column) with the velocity turned about $x$ by $\varphi = -g\,\delta$:
 
 $$
 v_g = v\cos\varphi - w\sin\varphi = v\cos\delta + g\,w\sin\delta, \qquad
@@ -103,7 +103,12 @@ $$
 
 $u$ and the scalars do not change under a turn about $x$, and are copied.
 The ghost cells and the fluxes of these faces take $\cos\delta$ and
-$\sin\delta$ computed once, with $\delta$, when the mesh is read.
+$\sin\delta$ computed once, with $\delta$, when the mesh is read. The record
+of a face of type 200 names no other block: a block closed by type 200 holds
+the whole wedge or sector in $k$, a column of cells with type 200 on one of
+its $k$ faces has it on the other, and a record of type 200 that does not fit
+this stops the run at setup (see the note on type 200 in
+[Boundary Conditions](../user/boundary-conditions.md#euler-boundaries)).
 
 ---
 

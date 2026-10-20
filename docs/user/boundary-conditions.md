@@ -122,6 +122,17 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
     periodicity: faces 5 and 6 make one interior face of the whole annulus, with its inviscid and viscous fluxes (see
     [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge-bc-200)).
 
+    Type `200` joins the two $k$ faces of one block: beyond face 5 lies the cell next to face 6 of the same block, in the
+    same column $(i, j)$, turned back by the angle, and beyond face 6 the cell next to face 5, turned forward; the
+    record names no other block. So in every column a record of type `200` on one $k$ face needs one on the other $k$
+    face of the same block, and a block closed by type `200` holds the whole wedge or sector in $k$. A record of type
+    `200` on a face 1 to 4, with its cell outside its block, or without that partner stops the run at setup with a
+    message that names the record: so do a sector cut along $k$ into several blocks, a ring of 360° in several blocks
+    closed by type `200` between the last block and the first, and a wedge with type `200` on one $k$ face only. Cut a
+    sector along $i$ or $j$; join the blocks of a ring by block connections (`101`), the junction at $\theta = 2\pi$
+    included, and keep type `200` for a block that holds the whole sector or the whole turn. Two blocks each closed by
+    its own type `200` are two separate periodic sectors, with no flux between them.
+
 ### Inlet / Outlet
 
 | Type | Name | Data line (comma-separated) |

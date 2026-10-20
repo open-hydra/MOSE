@@ -428,6 +428,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a radial flow that is its own mirror image departed from it by 1.8e-2 of its scale in 20 steps. Results change on 3-D
   sectors wherever the velocity next to face 6, turned by the sector angle, has a z component, and on translated slabs
   wherever w is not zero.
+- Type `200` joins the two k faces of one block: beyond face 5 lies the cell next to face 6 of the same block, in the same
+  column (i, j), and beyond face 6 the cell next to face 5, as the record names no other block. A record of type `200` on a
+  face 1 to 4, with its cell outside its block, or with no record of type `200` on the other k face of its block in its
+  column now stops the run at set-up, on every rank, with a message that names the record and the remedy. A 3-D sector
+  cut along k into blocks (in a test the rows of cells next to the cut and to the k faces were wrong by up to 31 times the
+  scale of a step), a ring of 360 degrees in several blocks closed by type `200` between the last block and the first,
+  type `200` on a face 1 to 4 of a 2-D wedge, and a wedge with type `200` on one k face only, whose two k faces took two
+  different conditions, ran in silence with wrong fluxes; on a 3-D mesh type `200` on a face 1 to 4 stopped at the first
+  step, on the rank of its block alone, and a record outside its block read outside the arrays. A sector is cut along i
+  or j instead, and the blocks of a ring are joined by `101`, the junction at 2π included. Other meshes do not change.
 - The inlets at total conditions (`401`, `402`) and the ambient boundary (`407`) let the gas in when the reservoir can push it
   in: when p0 is above p_stop = p (R/a)^(2γ/(γ−1)), the pressure that the gas of the boundary cell reaches when the outgoing
   wave brings it to rest (R the outgoing Riemann invariant). The choice followed the sign of the velocity of the cell: a tube at

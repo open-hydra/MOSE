@@ -59,6 +59,9 @@ contains
 
       call Pair_Connections ( domain(m), m )
 
+      ! A face of type 200 takes what lies beyond it from the other k face of its block
+      call Check_Rotational_Faces ( domain(m) )
+
       if (m == 1) call Setup_Q2D_BC_Data ( domain(m) )
 
       if ((any(obj_io_bc%viscous_flag)) .and. (model==0)) then
@@ -795,6 +798,119 @@ contains
       end function Tangential
 
   end subroutine Pair_Connections
+
+
+  !> Checks the records of type 200 against the rule of the type, which joins the two k faces of one block. Beyond a
+  !> face of type 200 lies the cell next to the other k face of the same block, in the same column (i, j), turned by
+  !> the angle of the wedge or of the sector: on a 3-D sector the ghost cell and the flux of the face take the cell
+  !> k' = dim(3) - k + 1 of that block, and the record of face 6 computes the face once, for its cell and for that one
+  !> (Ghost_Axysimmetry, BC_Rotational_Periodic_Eul and _Visc); on a 2-D wedge, one cell in k, type 200 on faces 5 and
+  !> 6 is what makes the mesh a wedge (docs/user/boundary-conditions.md). The record names no other block. Without
+  !> this check a sector cut along k into blocks, a ring of several blocks closed by type 200 between the last block
+  !> and the first, type 200 on one k face of a wedge or on a face 1 to 4 run with wrong fluxes, in silence (on a 3-D
+  !> mesh a face 1 to 4 stops at the first flux, on the rank of its block alone). Every record of type
+  !> 200 on face f of block b, cell (i, j, k), must lie on face 5 or 6 (R1), in a block of the mesh and inside it
+  !> (R0), and have a record of type 200 on face 11 - f of block b in the same column (i, j) (R2); the first record
+  !> of the file that does not writes the error, and the run stops at set-up on every rank (each rank reads every
+  !> record: Check_BC and Stop_Together in Wrap_Setup). An error already written stays. The map holds the records of
+  !> faces 5 and 6 of the blocks with type 200 there, of every type, inside their block: nothing is read or written
+  !> outside an array. The numbers of the messages are written with I0, which keeps the sign of a negative index read
+  !> from a wrong file.
+  subroutine Check_Rotational_Faces ( domain )
+    use MOSE_Advanced_Types_m, only: MOSE_domain_type
+    use MOSE_Config_Types_m,   only: obj_io_bc
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    ! Local
+    type :: kface_records_type
+      integer, allocatable :: r(:,:)
+    end type kface_records_type
+    type(kface_records_type), allocatable :: rec(:,:)
+    logical, allocatable :: closed(:)
+    integer :: n, b, f, i, j, k, p
+    character(len=512) :: msg
+    ! The remedy of a record without its partner: where the other k face of its column is a face between blocks (101,
+    ! 201), the block goes on in k beyond it, a sector or a ring cut along k; elsewhere (another type, no record) the
+    ! block holds the wedge or the sector, and its other k face takes type 200 too
+    character(len=*), parameter :: rule = ': type 200 joins the k faces of one block: '
+    character(len=*), parameter :: cut = 'cut sectors along i or j; join rings by 101 at each junction'
+
+    if ( index(obj_io_bc % error_message, 'ERROR') > 0 ) return
+
+    ! The blocks of the mesh with a record of type 200 on face 5 or 6
+    allocate ( closed(domain % nb) )
+    closed = .false.
+    do n = 1, domain % nbound
+      b = domain % bc(n) % b
+      f = domain % bc(n) % f
+      if ( domain % bc(n) % type == 200 .and. ( f == 5 .or. f == 6 ) .and. b >= 1 .and. b <= domain % nb ) &
+        closed(b) = .true.
+    end do
+
+    ! Map of the records of faces 5 and 6 of those blocks, from the indices (i, j) of their cell
+    allocate ( rec(domain % nb, 5:6) )
+    do b = 1, domain % nb
+      if ( .not. closed(b) ) cycle
+      do f = 5, 6
+        allocate ( rec(b,f) % r(domain % blk(b) % dim(1), domain % blk(b) % dim(2)) )
+        rec(b,f) % r = 0
+      end do
+    end do
+    do n = 1, domain % nbound
+      b = domain % bc(n) % b
+      f = domain % bc(n) % f
+      if ( b < 1 .or. b > domain % nb ) cycle
+      if ( .not. closed(b) .or. ( f /= 5 .and. f /= 6 ) ) cycle
+      i = domain % bc(n) % i
+      j = domain % bc(n) % j
+      if ( i < 1 .or. i > domain % blk(b) % dim(1) .or. j < 1 .or. j > domain % blk(b) % dim(2) ) cycle
+      rec(b,f) % r(i,j) = n
+    end do
+
+    ! Every record of type 200, in the order of the file: R1, R0, R2
+    do n = 1, domain % nbound
+      if ( domain % bc(n) % type /= 200 ) cycle
+      b = domain % bc(n) % b
+      f = domain % bc(n) % f
+      i = domain % bc(n) % i
+      j = domain % bc(n) % j
+      k = domain % bc(n) % k
+      msg = ''
+      if ( f /= 5 .and. f /= 6 ) then
+        write(msg,'(3A,I0,A,I0,A,I0,A,I0,1X,I0,1X,I0,A)') '[ERROR] ', trim(bc_name), ', record ', n, &
+          ': type 200 on face ', f, ' of block ', b, ' at i, j, k = ', i, j, k, &
+          ': type 200 is for the k faces (5 and 6) of a wedge or a sector only'
+      else if ( b < 1 .or. b > domain % nb ) then
+        ! Reached in builds without bound checks only: Read_BCfile counts the records of a block face (n_bf) first
+        write(msg,'(3A,I0,A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ', record ', n, ': type 200 on face ', f, &
+          ' of block ', b, ', but the mesh has ', domain % nb, ' blocks'
+      else if ( any ( [ i, j, k ] < 1 ) .or. any ( [ i, j, k ] > domain % blk(b) % dim ) ) then
+        write(msg,'(3A,I0,A,I0,A,I0,A,I0,1X,I0,1X,I0,A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ', record ', n, &
+          ': type 200 on face ', f, ' of block ', b, ' at i, j, k = ', i, j, k, ': the cell is outside the block, of ', &
+          domain % blk(b) % dim(1), ' x ', domain % blk(b) % dim(2), ' x ', domain % blk(b) % dim(3), ' cells'
+      else
+        p = rec(b,11-f) % r(i,j)
+        if ( p == 0 ) then
+          write(msg,'(3A,I0,A,I0,A,I0,A,I0,1X,I0,A,I0,3A,I0,A)') '[ERROR] ', trim(bc_name), ', record ', n, &
+            ': type 200 on face ', f, ' of block ', b, ' at i, j = ', i, j, ', but face ', 11 - f, ' there has no record', &
+            rule, 'give face ', 11 - f, ' there type 200 too'
+        else if ( domain % bc(p) % type == 101 .or. domain % bc(p) % type == 201 ) then
+          write(msg,'(3A,I0,A,I0,A,I0,A,I0,1X,I0,A,I0,A,I0,2A)') '[ERROR] ', trim(bc_name), ', record ', n, &
+            ': type 200 on face ', f, ' of block ', b, ' at i, j = ', i, j, ', but face ', 11 - f, ' there is of type ', &
+            domain % bc(p) % type, rule, cut
+        else if ( domain % bc(p) % type /= 200 ) then
+          write(msg,'(3A,I0,A,I0,A,I0,A,I0,1X,I0,A,I0,A,I0,2A,I0,A)') '[ERROR] ', trim(bc_name), ', record ', n, &
+            ': type 200 on face ', f, ' of block ', b, ' at i, j = ', i, j, ', but face ', 11 - f, ' there is of type ', &
+            domain % bc(p) % type, rule, 'give face ', 11 - f, ' there type 200 too'
+        end if
+      end if
+      if ( len_trim(msg) > 0 ) then
+        obj_io_bc % error_message = msg
+        exit
+      end if
+    end do
+
+  end subroutine Check_Rotational_Faces
 
 
   subroutine Print_BC_Summary ()
