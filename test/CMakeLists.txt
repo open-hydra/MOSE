@@ -466,15 +466,21 @@ if(USE_MPI)
     # MPI calls only from the main thread (MPI_THREAD_FUNNELED): a probe
     # library preloaded into the solver counts the MPI calls made by any
     # other thread; it must count none on 2x2, 2x4 and 2x2 with IRS (steady).
-    find_package(Threads REQUIRED)
-    add_library(mpi_thread_probe MODULE mpi/thread-funnel/mpi_thread_probe.c)
-    target_link_libraries(mpi_thread_probe PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
-    set_target_properties(mpi_thread_probe PROPERTIES
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-    mose_add_mpi_script(MPIThreadFunnel mpi/thread-funnel "needs-mpi;implementation;2D")
-    if(TEST MPIThreadFunnel)
-        set_property(TEST MPIThreadFunnel APPEND PROPERTY
-            ENVIRONMENT "MOSE_MPI_THREAD_PROBE=$<TARGET_FILE:mpi_thread_probe>")
+    # Linux only: the probe is preloaded with LD_PRELOAD, a variable of the
+    # dynamic loader of ELF systems (ld.so), and gives the names without the
+    # trailing underscore as symbol aliases (the alias attribute of GCC);
+    # elsewhere neither is built nor registered.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_package(Threads REQUIRED)
+        add_library(mpi_thread_probe MODULE mpi/thread-funnel/mpi_thread_probe.c)
+        target_link_libraries(mpi_thread_probe PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+        set_target_properties(mpi_thread_probe PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+        mose_add_mpi_script(MPIThreadFunnel mpi/thread-funnel "needs-mpi;implementation;2D")
+        if(TEST MPIThreadFunnel)
+            set_property(TEST MPIThreadFunnel APPEND PROPERTY
+                ENVIRONMENT "MOSE_MPI_THREAD_PROBE=$<TARGET_FILE:mpi_thread_probe>")
+        endif()
     endif()
 
     # Faces between ranks: the two-block cases of ConnectionFlux with one block

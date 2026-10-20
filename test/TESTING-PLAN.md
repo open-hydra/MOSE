@@ -223,7 +223,8 @@ of the case:
 - ☑ **I6 — MPI thread level**: MOSE requests `MPI_THREAD_FUNNELED`, so only the thread
   that initialised MPI may call it. *Done (needs-mpi tier):* `test/mpi/thread-funnel`
   (`MPIThreadFunnel`) — a probe library preloaded into the solver counts no MPI call
-  from other threads on 2×2, 2×4 and 2×2-with-IRS (steady) ranks × threads.
+  from other threads on 2×2, 2×4 and 2×2-with-IRS (steady) ranks × threads; built and
+  registered on Linux only (`LD_PRELOAD`, symbol aliases).
 - ☑ **I8 — Block-to-rank assignment**: the optional `INPUT/decomposition.map`, in the
   format of the ATLAS mesh decomposer (MDB), gives the MPI rank of every block. *Done:*
   `test/fast/input-checks/decomposition-map` (`InputChecks`/`DecompositionMap`) — on one rank a map with every block
