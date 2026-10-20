@@ -374,6 +374,15 @@ checks of an entry of the smaller of two runs of each (shared 192-thread machine
   (`MultirateDaruTenaudFull`, label verification: not run by the
   pull-request checks), the same checks on 500 × 250 cells, also reports the wall density against table 1 of Zhou, Xu
   and Liu; about 100 h of CPU with one thread (its four runs take 3.5e5 s of CPU).
+- ☑ **P8 — Start-up of a nozzle with the multirate integrator** (`MultirateNozzleStartUp`, validation): a quasi-1D
+  convergent-divergent nozzle of 371 cells (case mr1d-nozzle-su) started by a ramp of the inlet total pressure from
+  1e5 to 2.6e5 Pa in 8 ms against an outlet at 1e5 Pa, the shock of the start-up moving down the divergent across a
+  face between levels; single rate at dt0/4 (the reference), dt0 and dt0/2, multirate with H = dt0 and with the
+  production macro step H and H/2; every cell of the fixed-step runs within its limit; in the throat band the error of
+  the multirate with H = dt0 at most 1.05 × that of the single rate wherever it has levels, the production runs within
+  the single-rate error plus the step differences and with an observed order ≥ 0.8 where the single rates converge; the
+  moving shock of H/2 within the shift of the single rates and of the two production runs (in faces) from the
+  reference. About 5 min of CPU with one thread.
 
 ---
 

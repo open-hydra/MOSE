@@ -138,6 +138,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   processes, per level, of the wall time of the stages without their exchanges and of the time of the exchanges. With
   the multirate disabled, the default, the results do not change (the `Timing` block changes as the entry under Changed
   says).
+- The tests of the multirate integrator (directory `test/multirate`, whose cases are built by
+  `test/multirate/mr-common/gen_mr_cases.py`; `ctest -L multirate -LE verification` runs them without the longer forms,
+  `ctest -L multirate` with them): a smoke test in the fast tier (`MultirateSmoke`); the validation groups
+  `MultirateIdentity`, `MultirateConservation`, `MultirateOrder`, `MultirateOrderInletsMoving`, `MultirateShocks`,
+  `MultirateInput`, `MultirateDaruTenaud` (the viscous shock tube of Daru and Tenaud) and `MultirateNozzleStartUp` (the
+  start-up of a nozzle); in builds with `USE_MPI=ON`, `MultirateHybrid` in the `needs-mpi` tier; and, with the label
+  `verification`, the full forms of the order checks (`MultirateOrderFull`) and the medium and full forms of the shock
+  tube of Daru and Tenaud (`MultirateDaruTenaudMedium`, `MultirateDaruTenaudFull`). The V&V page `docs/vv/multirate.md`
+  lists the cases, the checks and their thresholds.
 
 ### Changed
 

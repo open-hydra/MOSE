@@ -837,6 +837,12 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru/run.sh")
     set_tests_properties(MultirateDaruTenaud MultirateDaruTenaudMedium MultirateDaruTenaudFull PROPERTIES
         RESOURCE_LOCK mr-daru)
 endif()
+# P8: the start-up of a quasi-1D convergent-divergent nozzle by a ramp of the inlet total pressure (371 cells): single
+# rate at dt0/4 (the reference), dt0 and dt0/2, multirate with H = dt0 and with the production macro step H and H/2;
+# every cell of the fixed-step runs within its limit, in the throat band the error of the multirate with H = dt0 at most
+# 1.05 times that of the single rate and the production runs converging with the step, the moving shock of H/2 within
+# the shift of the single rates and of the two production runs from the reference (verify_nozzle.py).
+mose_add_mr_script(MultirateNozzleStartUp multirate/mr-nozzle 1800 "multirate;validation;numerics;1D")
 # I17 (builds with USE_MPI=ON): 1 x 1 against P x T byte by byte, single rate and multirate (a connection with the
 # orientation -1 0 0 1 among the cases, also against the same case without the turn), on the laminar plate, on the plate
 # with Spalart-Allmaras and with SST, on the hot cube in 3-D (a vertex of eight blocks inside the cells of level 1) and on
