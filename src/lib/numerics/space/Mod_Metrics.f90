@@ -167,8 +167,10 @@ contains
     ! A degenerate or inverted ghost cell (Compute_Metric_Tensor wrote the first one): every rank stops together
     call Stop_On_Bad_Metric ( )
 
-    ! Type 200: the face metric of the viscous flux depends on the metrics of the cell and of its image (above) only:
-    ! once here, into the record, for the faces of the blocks of this rank (Rotational_Periodic_Face_Metric)
+    ! Type 200: the face metric of the viscous flux with inverse-mean and mean depends on the metrics of the cell and of
+    ! its image (above) only: once here, into the record, for the faces of the blocks of this rank
+    ! (Rotational_Periodic_Face_Metric); with stencil Setup_Stencil_Metrics (below) takes from it the columns of the index
+    ! directions with one cell
     if ( model > 0 ) then
       do i = 1, domain % nbound
         if ( domain % bc(i) % type /= 200 ) cycle
@@ -199,12 +201,16 @@ contains
 
   !> A viscous run on the 2-D axisymmetric wedge (type 200 on the k faces, one cell in k), or on a 3-D sector closed by
   !> type 200 on its k faces, stops at setup when a boundary face of a block so closed has zero area, that is when the
-  !> axis is exactly at r = 0, with every diffusive-metric. The faces of type 200 (BC_Rotational_Periodic_Visc) take the
-  !> derivative in r across the axis with the ghost cell one cell away, but behind a face of zero area the ghost cell is a
-  !> copy of the cell (Ghost_Symmetry with a zero normal): they see half of d u_r/dr, and the hoop stress of the first row
-  !> of cells is wrong (by 1/6 of it in a Homann flow on the wedge; on a sector of four cells of 1 degree, by 1/12 next to
-  !> the faces of type 200 with diffusive-metric = stencil and by 1/6 with inverse-mean). The meshes of MOSE put the axis
-  !> nodes at a small radius, 1e-6 of the radial size of the first cell.
+  !> axis is exactly at r = 0, with every diffusive-metric. Behind a face of zero area the ghost cell is a copy of the cell
+  !> (Ghost_Symmetry with a zero normal). With inverse-mean and mean the faces of type 200 (BC_Rotational_Periodic_Visc)
+  !> take the derivative in r across the axis with the ghost cell one cell away: they see half of d u_r/dr, and the hoop
+  !> stress of the first row of cells is wrong by 1/6 of it in a Homann flow (on the wedge, 32 and 64 cells, and on a sector
+  !> of four cells of 1 degree). With stencil the copy sits at the cell (Ghost_Position) and the faces take the difference
+  !> on one side of it: in a Homann flow, linear in r, the first row is then as with the axis at a small radius (2.55e-5
+  !> against 2.58e-5 of the hoop term on 64 cells; 1.6e-6 next to the faces of type 200 of the sector), and a field that is
+  !> not linear in r stays farther from it (4.67 against 2.67 times the local hoop term on the first row for the cubic field
+  !> of MMSResiduals). The stop stays with every metric: such an axis is not treated completely (ghost cells beyond the
+  !> axis, not copies). The meshes of MOSE put the axis nodes at a small radius, 1e-6 of the radial size of the first cell.
   !> On the polar line of a 3-D mesh (a block around the axis, not closed by type 200) the faces on the axis have zero area
   !> too. The stencil metric places their ghost cells at the cells and is exact there for a linear field; with
   !> diffusive-metric = inverse-mean or mean the viscous force of the first row of cells grows as the mesh is refined (for a
@@ -260,17 +266,21 @@ contains
         write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] block ', b, ', cell', domain % bc(r) % i, domain % bc(r) % j, &
                                               domain % bc(r) % k, ', face ', domain % bc(r) % f, &
                                               ': a face of zero area on the 3-D sector (type 200 on the k faces):'
-        write(*,'(A)') ' [ERROR]   the axis is exactly at r = 0, and the hoop stress of the first row of cells would be wrong'
-        write(*,'(A)') ' [ERROR]   (by up to 1/6 of it in a Homann flow). Put the axis nodes at a small radius, 1e-6 of the'
-        write(*,'(A)') ' [ERROR]   radial size of the first cell, as the meshes of MOSE do.'
+        write(*,'(A)') ' [ERROR]   the axis is exactly at r = 0, where the ghost cells behind the faces of zero area copy the'
+        write(*,'(A)') ' [ERROR]   cells: an axis not treated completely (with inverse-mean and mean the hoop stress of the first'
+        write(*,'(A)') ' [ERROR]   row of cells would be wrong, by 1/6 of it in a Homann flow).'
+        write(*,'(A)') ' [ERROR]   Put the axis nodes at a small radius, 1e-6 of the radial size of the first cell, as the meshes'
+        write(*,'(A)') ' [ERROR]   of MOSE do.'
         call mpi_abort_all ( 'axis of the 3-D sector at r = 0 (see above)' )
       else
         write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] block ', b, ', cell', domain % bc(r) % i, domain % bc(r) % j, &
                                               domain % bc(r) % k, ', face ', domain % bc(r) % f, &
                                               ': a face of zero area on the 2-D axisymmetric wedge (type 200):'
-        write(*,'(A)') ' [ERROR]   the axis is exactly at r = 0, and the hoop stress of the first row of cells would be wrong'
-        write(*,'(A)') ' [ERROR]   (by 1/6 of it in a Homann flow). Put the axis nodes at a small radius, 1e-6 of the radial'
-        write(*,'(A)') ' [ERROR]   size of the first cell, as the meshes of MOSE do.'
+        write(*,'(A)') ' [ERROR]   the axis is exactly at r = 0, where the ghost cells behind the faces of zero area copy the'
+        write(*,'(A)') ' [ERROR]   cells: an axis not treated completely (with inverse-mean and mean the hoop stress of the first'
+        write(*,'(A)') ' [ERROR]   row of cells would be wrong, by 1/6 of it in a Homann flow).'
+        write(*,'(A)') ' [ERROR]   Put the axis nodes at a small radius, 1e-6 of the radial size of the first cell, as the meshes'
+        write(*,'(A)') ' [ERROR]   of MOSE do.'
         call mpi_abort_all ( 'axis of the 2-D axisymmetric wedge at r = 0 (see above)' )
       end if
     enddo

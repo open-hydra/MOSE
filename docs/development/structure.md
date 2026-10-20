@@ -248,10 +248,15 @@ differences of the wall temperature that `Wall_Face_Stencils` stores in its
 record (`bc%wstencil`, `bc%wM`, `bc%wdT`): `BC_Wall_Temperature` and
 `BC_Wall_Heat` read them through their optional argument `rec`, which every
 caller passes (`BC_Fluxes`, the wall output). Faces of type
-`200` (`BC_Rotational_Periodic_Visc`) take, with every option, the inverse-mean
+`200` (`BC_Rotational_Periodic_Visc`) take one gradient through `Diffusive_Flux`
+with `stencil`, with the metric that `Rotational_Face_Metric` stores on the face
+of the block (one per group of quantities with a wall ghost cell in the row of
+the cell or of the source; the image row is the row of the source turned,
+positions and values), and with `inverse-mean` and `mean` the inverse-mean
 metric of the cell and its image, which depends on the mesh only:
 `Setup_Metrics` computes it once (`Rotational_Periodic_Face_Metric`) and stores
-it in the record (`bc%rM`), and `BC_Fluxes` passes it. Chimera faces (`102`)
+it in the record (`bc%rM`), and `BC_Fluxes` passes it; the routine chooses by
+`obj_space_scheme%stencil_metric`, so every caller passes `bc%rM`. Chimera faces (`102`)
 keep their own metric with every option. The positions of the ghost cells that
 enter the metric are listed in [Numerics](../theory/numerics.md).
 

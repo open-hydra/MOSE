@@ -18,12 +18,14 @@ ring  The sector from -45 to 45 degrees (S45, 4 cells in k) against the sector f
         u = U (0, y, z) + G (0, -z, y)/r^2 + (4 C y z (y^2 - z^2), 0, 0),
       a radial field with uniform stress (normal stress (2/3) mu U on a meridian plane), a potential vortex u_theta = G/r
       (tau_rtheta = -2 mu G/r^2) and an axial harmonic field u_x = C r^4 sin(4 theta) (tau_xtheta = -4 mu C r^3 on the
-      planes at +-45 degrees); each of them has zero viscous force. diffusive-metric = inverse-mean, the metric that the
-      periodic face takes, so that the two meshes compute the same face. The viscous force of a cell is r/dt of a
-      Navier-Stokes step minus r/dt of an Euler step from the same state; in every cell of S45, for rho u, rho v, rho w
-      and rho E, it must equal that of the same cell of R90 within 1e-9 of the scale
+      planes at +-45 degrees); each of them has zero viscous force. With diffusive-metric = inverse-mean, and with
+      stencil, whose metric of the periodic face takes the differences of the positions of the cell and of its image row
+      as the interior face takes those of its neighbours, the two meshes compute the same face. The viscous force of a
+      cell is r/dt of a Navier-Stokes step minus r/dt of an Euler step from the same state; in every cell of S45, for
+      rho u, rho v, rho w and rho E, it must equal that of the same cell of R90 within 1e-9 of the scale
         S = mu (U + 2 G/r0^2 + 4 C r1^3)/(r0 dtheta)   (momentum),   S (U r1 + G/r0 + C r1^4)   (energy),
-      r0 = 0.5, r1 = 1, dtheta = pi/8.
+      r0 = 0.5, r1 = 1, dtheta = pi/8, with each metric. (Before the periodic face took inverse-mean with every value of
+      the key, and with stencil S45 differed from R90 on these stretched radii.)
 mirror The sector from -45 to 45 degrees in 2 x 8 x 8 cells (uniform radii, node planes at theta = m pi/16) with the
       radial field alone, k faces of type 200 against type 300: the radial field is its own mirror image across the
       meridian planes, so the two conditions set the same ghost cells, and the viscous stress on the planes is the
@@ -42,16 +44,41 @@ shift  A sector with no angle: a block of 4 x 4 x 8 cubic cells of 1 mm periodic
       scales the derivative in z of the cells next to the k faces by 2/(2 - NK) = -1/3: in the cell metric of the source
       terms (the vorticity of Spalart-Allmaras, so rho nu~ in those cells) and in the k column of the face metric of the
       i faces (the stress tau_zx = mu du/dz, which the faces of type 0 do not balance in the cells next to them, so rho w).
+stretch The mirror sector with radii stretched as the ring, r_j = 0.5 + 0.5 (j/8)^1.3 (stretchpot), or growing by 1.2
+      from one cell to the next (stretchgeo), k faces of type 200, the default face metric (stencil), the radial field
+      alone: a linear field that the rotation allows (u(R x) = R u(x)), so the viscous force of every cell is zero. In the
+      cells not next to the j faces (slip walls 300, which the radial field does not satisfy) the force must vanish to
+      round-off, below 1e-11 of (2/3) mu U A/V, also next to the periodic faces. (Before, with the inverse-mean metric of
+      the periodic face, whose columns along the face are the mean edges of the cell and of its image instead of the
+      differences of the centres, those cells had 2.6e-2 and 5.9e-3 of it.)
+wall  A translated sector next to a wall: a block of 4 x 4 x 6 cells periodic along z (period 6 mm), closed in k by type 200,
+      whose k node planes are tilted, z = z_k + 0.3 x, so that the normal of the periodic faces has a part along x; cells
+      growing by 1.3 along x from a wall 301 on i = 1 (the plane x = 0), j lines bent as y = y_j + 50 x^2 (1/m), 400 on the
+      other i face and on the j faces. Behind the wall a ghost cell holds the velocity at 2 x_f - x_1 and the temperature
+      at x_1 + s (x_1 - x_2) (extrapolated, Ghost_Wall), two positions that the bent lines keep apart: the periodic faces of
+      the cells next to the wall take one metric per group of quantities. Two linear fields that the periodicity allows:
+        wallmom  u = x (a, b, c), zero on the wall, uniform T and p;   wallene  u = 0, T = T0 + g x, uniform p, the heat
+                 flux of the field on the wall (q into the fluid, k g . n with the normal of the face);
+      a Navier-Stokes step, and a reference step with mu = k = 1e-30 and no heat flux on the wall (the solver takes no wall
+      with the Euler equations): the difference is the viscous force (wallmom) and the heat conduction (wallene), zero for
+      these fields. In every cell with no face 400, the wall cells included, it must vanish below 1e-11 of
+      mu |G| (sum of the face areas)/volume (wallmom, rho u, rho v, rho w) and k |g| (sum of the face areas)/volume
+      (wallene, rho E). The generator prints the largest distance of the two positions of the wall ghost cells.
 
 One explicit Euler step with local time stepping, first-order reconstruction. OUTPUT/diagnostic.tec holds, per cell, the
 increment of each conserved variable over the step, and the step dt.
 
 Usage (from the test directory):
   python3 -B make_case.py case ring45|ring90|mirror200|mirror300   INPUT/ic.tec and INPUT/bc.txt
+  python3 -B make_case.py case stretchpot|stretchgeo               INPUT/ic.tec and INPUT/bc.txt
   python3 -B make_case.py case shift200|shift201                   INPUT/ic.tec and INPUT/bc.txt
+  python3 -B make_case.py case wallmom|wallene                     INPUT/ic.tec, INPUT/bc-ns.txt, INPUT/bc-ref.txt and
+                                                                   INPUT/transport-ref.dat
   python3 -B make_case.py ring NS45 EU45 NS90 EU90                 largest difference of the viscous forces over the scale
   python3 -B make_case.py mirror F200 F300                         largest difference over (2/3) mu U A/V
+  python3 -B make_case.py linear NAME NS EU                        largest viscous force over (2/3) mu U A/V (stretch)
   python3 -B make_case.py shift F200 F201                          largest difference over the largest value of F201
+  python3 -B make_case.py wall NAME NS REF                         largest viscous force or conduction over its scale
 """
 import math
 import os
@@ -69,6 +96,13 @@ TOL_RING, TOL_MIRROR = 1.0e-9, 0.02
 SHIFT_N, SHIFT_H, SHIFT_U = (4, 4, 8), 1.0e-3, 10.0    # shift: cells in i, j and k, cell size (m), U0 (m/s)
 SHIFT_M = 3.0 * MU                                     # shift: rho nu~
 TOL_SHIFT = 1.0e-9
+TOL_LINEAR = 1.0e-11
+KCOND = 0.016544513989              # test/common/Air-viscous
+WALL_N, WALL_H, WALL_Q = (4, 4, 6), 1.0e-3, 1.3        # wall: cells in i, j, k, base cell size (m), growth along x
+WALL_BEND, WALL_TILT = 50.0, 0.3                       # wall: y = y_j + WALL_BEND x^2, z = z_k + WALL_TILT x
+WALL_G = (1.0e3, 0.6e3, -0.8e3)                        # wallmom: u = x WALL_G, 1/s
+WALL_GT = 2.5e3                                        # wallene: T = T0 + WALL_GT x, K/m
+TOL_WALL = 1.0e-11
 
 
 def fmt(v):
@@ -83,7 +117,15 @@ def mesh(name):
         ms = range(-2, 3) if name == "ring45" else range(-4, 5)
         return rs, list(ms), 8, True
     nj = 8
-    rs = [R0 + (R1 - R0) * j / nj for j in range(nj + 1)]
+    if name == "stretchpot":
+        rs = [R0 + (R1 - R0) * (j / nj) ** 1.3 for j in range(nj + 1)]
+    elif name == "stretchgeo":
+        w = [1.2 ** j for j in range(nj)]
+        rs = [R0]
+        for x in w:
+            rs.append(rs[-1] + (R1 - R0) * x / sum(w))
+    else:
+        rs = [R0 + (R1 - R0) * j / nj for j in range(nj + 1)]
     return rs, list(range(-4, 5)), 16, False
 
 
@@ -270,18 +312,196 @@ def shift(f200, f201):
     sys.exit(0 if ok else 1)
 
 
+def linear(name, ns, eu):
+    """stretch: the viscous force of the radial field (r/dt of NS minus r/dt of Euler) in the cells not next to the j faces,
+    over (2/3) mu U A/V, A/V = 1/(r dtheta) with r the mid radius of the cell; next to the periodic faces too."""
+    rs, _, _, _ = mesh(name)
+    (a, n), (b, _) = per_step(ns), per_step(eu)
+    ni, nj, nk = n
+    dth = math.pi / 16.0
+    worst, where = 0.0, None
+    for k in range(nk):
+        for j in range(1, nj - 1):
+            for i in range(ni):
+                c = (k * nj + j) * ni + i
+                s = (2.0 / 3.0) * MU * U / (0.5 * (rs[j] + rs[j + 1]) * dth)
+                for q in ("rhou", "rhov", "rhow"):
+                    e = abs(a[q][c] - b[q][c]) / s
+                    if e >= worst:
+                        worst, where = e, f"{q} of cell ({i + 1}, {j + 1}, {k + 1})"
+    print(f"    {name}: largest |viscous force| over (2/3) mu U A/V {worst:.3e} ({where}); tolerance {TOL_LINEAR:.0e}")
+    sys.exit(0 if worst <= TOL_LINEAR else 1)
+
+
+def wall_nodes():
+    """Nodes of the wall case, X[i][j][k] = (x, y, z): x growing by WALL_Q from the wall x = 0, y lines bent, k planes
+    tilted; the last k plane is the first one translated by the period (0, 0, NK h)."""
+    ni, nj, nk = WALL_N
+    xs = [WALL_H * (WALL_Q ** i - 1.0) / (WALL_Q - 1.0) for i in range(ni + 1)]
+    return [[[tuple(float(fmt(v)) for v in (xs[i], j * WALL_H + WALL_BEND * xs[i] ** 2, k * WALL_H + WALL_TILT * xs[i]))
+              for k in range(nk + 1)] for j in range(nj + 1)] for i in range(ni + 1)]
+
+
+def vsub(a, b):
+    return tuple(a[m] - b[m] for m in range(3))
+
+
+def vcross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def vdot(a, b):
+    return sum(a[m] * b[m] for m in range(3))
+
+
+def cell_faces(X, i, j, k):
+    """The six faces of cell (i, j, k) (0-based): (nodes, outward area vector), the area vector half the cross product of
+    the diagonals (Compute_Norm_Area); face index 1..6 as MOSE (1, 2 along i, 3, 4 along j, 5, 6 along k)."""
+    n = {(a, b, c): X[i + a][j + b][k + c] for a in (0, 1) for b in (0, 1) for c in (0, 1)}
+    centre = tuple(sum(p[m] for p in n.values()) / 8.0 for m in range(3))
+    quads = {1: [(0, 0, 0), (0, 1, 0), (0, 1, 1), (0, 0, 1)], 2: [(1, 0, 0), (1, 1, 0), (1, 1, 1), (1, 0, 1)],
+             3: [(0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)], 4: [(0, 1, 0), (1, 1, 0), (1, 1, 1), (0, 1, 1)],
+             5: [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)], 6: [(0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)]}
+    out = {}
+    for f, q in quads.items():
+        p = [n[c] for c in q]
+        av = tuple(0.5 * c for c in vcross(vsub(p[2], p[0]), vsub(p[3], p[1])))
+        xf = tuple(sum(c[m] for c in p) / 4.0 for m in range(3))
+        if vdot(vsub(xf, centre), av) < 0.0:
+            av = tuple(-c for c in av)
+        out[f] = (p, av, xf)
+    return out, centre
+
+
+def cell_scale(X, i, j, k):
+    """(sum of the face areas)/volume of cell (i, j, k), the volume (1/3) sum over the faces of centre . area vector."""
+    faces, _ = cell_faces(X, i, j, k)
+    total = sum(math.sqrt(vdot(av, av)) for _, av, _ in faces.values())
+    vol = sum(vdot(xf, av) for _, av, xf in faces.values()) / 3.0
+    return total / abs(vol)
+
+
+def wall_state(run, x):
+    if run == "wallmom":
+        return RHO0, tuple(g * x[0] for g in WALL_G), P0
+    t = T0 + WALL_GT * x[0]
+    return P0 / (RGAS * t), (0.0, 0.0, 0.0), P0
+
+
+def write_wall(run):
+    """INPUT/ic.tec, INPUT/bc-ns.txt, INPUT/bc-ref.txt and INPUT/transport-ref.dat of the wall case (run wallmom or
+    wallene); prints the largest distance of the two positions of the ghost cells of the wall, over the first cell."""
+    ni, nj, nk = WALL_N
+    X = wall_nodes()
+    for p in ("INPUT/ic.tec", "INPUT/bc-ns.txt", "INPUT/bc-ref.txt", "INPUT/transport-ref.dat"):
+        if os.path.lexists(p):
+            os.remove(p)
+    cells = []
+    for k in range(nk):
+        for j in range(nj):
+            for i in range(ni):
+                _, c = cell_faces(X, i, j, k)
+                rho, u, p = wall_state(run, c)
+                cells.append((rho,) + u + (p,))
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
+        f.write(f" ZONE  T = B1-IG, I={ni + 1}, J={nj + 1}, K={nk + 1}, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for n in range(3):
+            for k in range(nk + 1):
+                for j in range(nj + 1):
+                    for i in range(ni + 1):
+                        f.write(f" {fmt(X[i][j][k][n])}\n")
+        for v in range(5):
+            for c in cells:
+                f.write(f" {fmt(c[v])}\n")
+
+    def rec(i, j, k, face, t):
+        return '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, k, face, t)
+
+    worst = 0.0
+    for tag in ("ns", "ref"):
+        out = []
+        for k in range(1, nk + 1):
+            for j in range(1, nj + 1):
+                faces, x1 = cell_faces(X, 0, j - 1, k - 1)
+                _, x2 = cell_faces(X, 1, j - 1, k - 1)
+                p, av, xf = faces[1]
+                q = 0.0
+                if run == "wallene" and tag == "ns":
+                    nrm = tuple(-c / math.sqrt(vdot(av, av)) for c in av)   # face 1: unit normal towards growing i
+                    q = -KCOND * WALL_GT * nrm[0]                            # q into the fluid: k g . n on face 1 (odd)
+                out.append(rec(1, j, k, 1, 301) + f"    {q:.17E},    0.000000E+00,    0.000000E+00,\n")
+                if tag == "ns":
+                    # the two positions of the ghost cell (Ghost_Position): 2 x_f - x_1 and x_1 + s (x_1 - x_2), with
+                    # s = 2 l1/(l1 + l2) from the mean edges of the first two cells across the face (Extrapolation_Ratio)
+                    lines = [(jj, kk) for jj in (j - 1, j) for kk in (k - 1, k)]
+                    m1 = tuple(sum(X[1][jj][kk][m] - X[0][jj][kk][m] for jj, kk in lines) / 4.0 for m in range(3))
+                    m2 = tuple(sum(X[2][jj][kk][m] - X[1][jj][kk][m] for jj, kk in lines) / 4.0 for m in range(3))
+                    l1, l2 = math.sqrt(vdot(m1, m1)), math.sqrt(vdot(m2, m2))
+                    s = 2.0 * l1 / (l1 + l2)
+                    xm = tuple(2.0 * xf[m] - x1[m] for m in range(3))
+                    xe = tuple(x1[m] + s * (x1[m] - x2[m]) for m in range(3))
+                    worst = max(worst, math.sqrt(vdot(vsub(xm, xe), vsub(xm, xe))) / l1)
+            for j in range(1, nj + 1):
+                out.append(rec(ni, j, k, 2, 400))
+            for i in range(1, ni + 1):
+                out += [rec(i, 1, k, 3, 400), rec(i, nj, k, 4, 400)]
+        for face, k in ((5, 1), (6, nk)):
+            out += [rec(i, j, k, face, 200) for j in range(1, nj + 1) for i in range(1, ni + 1)]
+        with open(f"INPUT/bc-{tag}.txt", "w") as f:
+            f.write("".join(out))
+    # the reference: mu = k = 1e-30 (the solver takes no wall with the Euler equations)
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "..", "..", "common", "Air-viscous", "transport.dat")) as src, \
+            open("INPUT/transport-ref.dat", "w") as dst:
+        for line in src:
+            p = line.split()
+            dst.write(f"{p[0]} 1.0E-30 1.0E-30\n" if len(p) == 3 and re.match(r"^[0-9.Ee+-]+$", p[0]) else line)
+    print(f"    {run}: largest distance of the two positions of the wall ghost cells over the first cell {worst:.3e}")
+
+
+def wall(name, ns, ref):
+    """wall: the viscous force (wallmom, rho u, rho v, rho w) or the conduction (wallene, rho E) of the cells with no face
+    400, r/dt of NS minus r/dt of the reference, over mu |G| (sum of the face areas)/volume or k |g| (...)/volume."""
+    (a, n), (b, _) = per_step(ns), per_step(ref)
+    ni, nj, nk = n
+    X = wall_nodes()
+    gnorm = math.sqrt(sum(g * g for g in WALL_G))
+    worst, where = 0.0, None
+    for k in range(nk):
+        for j in range(1, nj - 1):
+            for i in range(ni - 1):
+                c = (k * nj + j) * ni + i
+                sc = cell_scale(X, i, j, k) * (MU * gnorm if name == "wallmom" else KCOND * WALL_GT)
+                for q in (("rhou", "rhov", "rhow") if name == "wallmom" else ("rhoe",)):
+                    e = abs(a[q][c] - b[q][c]) / sc
+                    if e >= worst:
+                        worst, where = e, f"{q} of cell ({i + 1}, {j + 1}, {k + 1})"
+    what = "viscous force" if name == "wallmom" else "heat conduction"
+    print(f"    {name}: largest |{what}| over its scale {worst:.3e} ({where}), cells with no face 400, the wall cells"
+          f" included; tolerance {TOL_WALL:.0e}")
+    sys.exit(0 if worst <= TOL_WALL else 1)
+
+
 def main():
     what = sys.argv[1]
     if what == "case" and sys.argv[2].startswith("shift"):
         write_shift(sys.argv[2][len("shift"):])
+    elif what == "case" and sys.argv[2].startswith("wall"):
+        write_wall(sys.argv[2])
     elif what == "case":
         write_case(sys.argv[2])
     elif what == "ring":
         ring(*sys.argv[2:6])
     elif what == "mirror":
         mirror(*sys.argv[2:4])
+    elif what == "linear":
+        linear(*sys.argv[2:5])
     elif what == "shift":
         shift(*sys.argv[2:4])
+    elif what == "wall":
+        wall(*sys.argv[2:5])
     else:
         sys.exit(f"unknown request {what}")
 

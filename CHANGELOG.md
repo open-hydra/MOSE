@@ -164,9 +164,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   time with its sign, strands and data set auxiliary data. The vtk wall files now hold the cell values of their faces.
 - The viscous fluxes take by default (`diffusive-metric = stencil`) a face metric made of the same differences of the cell centres
   that the face gradient takes of the field, so that the gradient of a linear field is exact on any mesh at the interior faces and
-  at the block connections, and at periodic pairs and symmetry faces for the linear fields that they allow; the k faces of a wedge
-  or of a 3-D sector (type `200`) keep the `inverse-mean` metric with every value of the key, which is not exact where the cell
-  size changes along the face (see the theory guide). `inverse-mean` builds the metric from the mean edges of the two cells, which
+  at the block connections, and at periodic pairs, symmetry faces and the k faces of a wedge or of a 3-D sector (type `200`) for
+  the linear fields that they allow. At the faces of type `200` the differences along the face are those of the row of the cell
+  and of the row of the image, the row of the source turned by the angle of the wedge or sector (positions and values), with one
+  metric per group of quantities where a ghost cell of a wall enters that row; with `inverse-mean` and `mean` these faces take,
+  as before, the inverse-mean metric of the cell and its image, whose derivatives along the face are wrong by (q - 1)^2/(4q) where
+  the cell size grows by q along the face and by (q - 1)/4 on the first row next to an axis (8.4e-3 and 5.0e-2 of the hoop term of
+  a linear field at q = 1.2, test `MMSResiduals`). `inverse-mean` builds the metric from the mean edges of the two cells, which
   are not those differences: on meshes with nodes moved at random, cells of alternating size, grid lines that fold at a face
   between blocks, points shared by three or five blocks or skewed cells on a symmetry plane, a linear velocity or temperature,
   whose viscous force and heat conduction vanish, gave up to 5.4e-2 of their face-flux scale in the patch test with it, at any
@@ -178,10 +182,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and face, and the remedy `diffusive-metric = inverse-mean`.
 - A viscous run on a 2-D axisymmetric wedge or on a 3-D sector closed by type `200` whose axis nodes are exactly at r = 0 stops
   at set-up, with every `diffusive-metric`, with a message that asks to put the axis nodes at a small radius (the meshes of MOSE
-  put them at 1e-6 of the radial size of the first cell). On such an axis the faces have zero area, their ghost cells copy the
-  cells, and the faces of type `200` take the derivative in r across the axis with a ghost cell one cell away: the hoop stress of
-  the first row of cells was wrong, on the wedge by 1/6 of the hoop term in Homann's stagnation-point flow, and on the sector next
-  to its faces of type `200`, and refinement does not reduce it. A wall on a face of zero area, as on the axis of a 3-D mesh
+  put them at 1e-6 of the radial size of the first cell). On such an axis the faces have zero area and their ghost cells copy
+  the cells. With `inverse-mean` and `mean` the faces of type `200` take the derivative in r across the axis with a ghost cell one
+  cell away, and the hoop stress of the first row of cells is wrong, by 1/6 of the hoop term in Homann's stagnation-point flow on
+  the wedge and on the sector, and refinement does not reduce it. With `stencil` the faces take the difference on one side of the
+  copy: Homann's flow gets on the first row the hoop stress of a small axis radius (2.55e-5 against 2.58e-5 of the hoop term on 64
+  cells), but such an axis is not treated completely (ghost cells beyond it, not copies), and the run stops with every metric. A
+  wall on a face of zero area, as on the axis of a 3-D mesh
   around it, stops with its remedy: the symmetry condition (`300`) on the axis. With `inverse-mean` and `mean` a viscous run on a
   3-D mesh stops at set-up at any boundary face of zero area, as on such a polar line, with a message that asks for
   `diffusive-metric = stencil`: with them the viscous force of the first row of cells of a linear field, which is zero, grows as

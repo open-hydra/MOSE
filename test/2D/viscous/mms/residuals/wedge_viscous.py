@@ -33,7 +33,10 @@ swirl   A polynomial field with dilatation and swirl, the two things Homann's fl
 
 Case (python3 -B wedge_viscous.py case FIELD N): x in [0, 3 mm], r in [0, 3 mm] with the axis nodes at r = 1e-6 dr (like the
 wedge meshes of MOSE, so that no face has zero area), N x N square cells; with the option axis0, the axis nodes at r = 0,
-so that the faces on the axis have zero area; air of test/common/Air-viscous (mu and k constant)
+so that the faces on the axis have zero area; with the option geo, radii growing geometrically from the axis along one
+smooth map for every N, r_j = 3 mm (exp(beta j/N) - 1)/(exp(beta) - 1), beta = 32 ln 1.014 (cells growing by 1.014 on
+N = 32 and by 1.007 on N = 64, from 0.79 to 1.24 times the uniform ones), the axis nodes at 1e-6 of the first cell; air of
+test/common/Air-viscous (mu and k constant)
 at uniform density and pressure (rho = 1.1858686e-3 kg/m3, T = 300 K, so nu = 1e-2 m2/s; for homann a = 1e4 1/s, L = 1 mm),
 with the velocity of FIELD at the cell centres. Faces: 400 on i = 1, i = N and j = N; 300 on the axis (j = 1); 200 on k.
 
@@ -53,17 +56,44 @@ viscous flux), with errors over the largest exact force of the same component:
   swirl   radial and azimuthal  error below 0.02 on N = 64 and observed order above 1.5 on the cells with r >= L/2 (next to
                   the axis the error of these cubic fields is of first order in the mesh);
           axial   below 1e-9 (exact for a quadratic u_x; the tau_xtheta of the two faces cancel).
+The same two fields on the radii of the option geo (stretched along r, as the wedges of nozzles): the same checks, and every
+error above that is not round-off (homann: radial, radial on r >= L/2, first row; swirl: radial and azimuthal, also on
+r >= L/2) within 2 times the same error of the uniform radii (printed next to it). The axial force of homann is printed
+only: it has no part from the faces of type 200 (tau_xtheta = 0 without swirl), and next to the axis the faces j of
+stretched radii take the derivative of u_r along x at the mean radius of the two rows, not at the face, an error of first
+order there, with stencil as with inverse-mean (1.7e-3 and 1.2e-3 of the largest axial force on N = 64, 6.3e-5 on uniform
+radii). The faces of type 200 take the derivatives
+along r from the differences of the centres of the row of the cell and of its image row (diffusive-metric = stencil): before,
+the mean edges of the cell and of its image, which gave (q - 1)/4 of the hoop term on the first row, 1.7e-3 here on N = 64.
+Linear fields (python3 -B wedge_viscous.py radial N LAW, axial N), whose viscous force is zero:
+  radial  u_r = U r (U = 5e3 1/s), N = 16 rectangular cells, radii uniform, or growing by 1.1 or 1.2 (LAW uniform, geo1.1,
+          geo1.2), 400 on i = 1, i = N and j = N: one Navier-Stokes and one Euler step. The faces of type 200 are exact for
+          this field (u(R x) = R u(x)); the faces i and j take the derivative in azimuth across the rotated ghost cells over
+          the mean edge of the cells, cos^2(delta/2) times too long (docs/theory/numerics.md), which leaves in every cell a
+          radial force of sin^2(delta/2) of the hoop term (2/3) mu U/r_c (r_c the radius of the cell centre), whatever the
+          radii, and on the first row also the round-off of the mirror ghost cell of the axis at 1e-6 dr. Checked, on the cells
+          with no face 400: |force/hoop term - sin^2(delta/2)| below tol on the rows j >= 2 and below 3e-6 on the first row,
+          tol = max(1e-9, 10 times the largest deviation on the uniform radii, measured in the same run and printed, itself
+          at most 1e-11, so that the tolerance of the stretched radii cannot float). (Before,
+          with the inverse-mean metric of the faces of type 200, 8.4e-3 on the rows j >= 2 and 5.0e-2 on the first row at 1.2.)
+  axial   u = (a x, 0, 0) (a = 1e3 1/s), N = 16, cells growing by 1.15 along x from a wall 301 on i = 1 (x = 0, adiabatic) and
+          along r, lines j bent inside the box, so that the faces of type 200 of the cells next to the wall take the ghost
+          cells of the wall in their differences along the face: a Navier-Stokes step against one with mu = k = 1e-30 (the
+          solver takes no wall with the Euler equations). The field is zero on the wall and holds no velocity in azimuth, so
+          the derivatives in azimuth carry no error: in every cell with no face 400, the wall and axis rows included, the
+          viscous force must vanish below 1e-11 of mu |a| (sum of the face areas)/volume.
 Axis at r = 0 on the wedge (homann, N = 32, option axis0): the faces on the axis have zero area and no normal, and their
-ghost cells copy the cells. The faces of the wedge (BC_Rotational_Periodic_Visc) take the derivative in r across the axis
-with the ghost cell one cell away: there they would see half of d u_r/dr, and the hoop stress of the first row would be
-wrong (lambda div(u) in tau_thetatheta by mu a f'/3, 1/6 of the hoop term 2 mu a f'/r). A viscous run must stop at setup
+ghost cells copy the cells. With diffusive-metric = inverse-mean or mean the faces of the wedge (BC_Rotational_Periodic_Visc)
+take the derivative in r across the axis with the ghost cell one cell away: there they would see half of d u_r/dr, and the
+hoop stress of the first row would be wrong (lambda div(u) in tau_thetatheta by mu a f'/3, 1/6 of the hoop term 2 mu a f'/r).
+With stencil the copy sits at the cell and the faces take the difference on one side of it. A viscous run stops at setup
 with the message on the axis at r = 0, with diffusive-metric = stencil and inverse-mean, without NaN before it.
 Axis at r = 0 on a 3-D sector (python3 -B wedge_viscous.py sector N [axis0]): Homann's flow on the same box in x and r, N x N
 cells, and SECTOR_K cells of DELTA around the axis, from -SECTOR_K DELTA/2 to +SECTOR_K DELTA/2, closed by type 200 on the k
 faces (u_r turned to the azimuth of each cell), 300 on the axis, 400 on i = 1, i = N and j = N. With axis0 the faces on the axis
-have zero area, and the faces of type 200 of the first row see half of d u_r/dr, as on the wedge (1/12 of the hoop term next
-to them with stencil, 1/6 with inverse-mean): a viscous run must stop at setup with the message on the axis at r = 0 of the
-sector, with diffusive-metric = stencil and inverse-mean, without NaN before it.
+have zero area; with inverse-mean the faces of the first row see half of d u_r/dr, as on the wedge (1/6 of the hoop term):
+a viscous run stops at setup with the message on the axis at r = 0 of the sector, with diffusive-metric = stencil and
+inverse-mean, without NaN before it.
 Polar line of a 3-D mesh (python3 -B wedge_viscous.py polar AXIS): the same box in x and r, 360 degrees around the axis in 8
 cells closed by a face between the block and itself (101), 5 x 4 cells in x and r, the axis nodes at r = 0, a linear
 velocity U + G x with every entry of G (G_POLAR) at the cell centres, faces 400 on i = 1, i = N and j = N and of type
@@ -78,13 +108,21 @@ AXIS on the axis (j = 1):
        without NaN before it.
 
 Usage (from the test directory), FIELD = homann or swirl:
-  python3 -B wedge_viscous.py case FIELD N [axis0]            INPUT/ic.tec and INPUT/bc.txt (axis0: axis nodes at r = 0)
-  python3 -B wedge_viscous.py error FIELD NS_FILE EU_FILE      prints the errors of one mesh, comma-separated; homann: radial,
+  python3 -B wedge_viscous.py case FIELD N [axis0|geo]        INPUT/ic.tec and INPUT/bc.txt (axis0: axis nodes at r = 0; geo:
+                                                           the geometric radii)
+  python3 -B wedge_viscous.py error FIELD NS_FILE EU_FILE [geo]  prints the errors of one mesh, comma-separated; homann: radial,
                                                            radial on r >= L/2, radial over the hoop term on the first row,
                                                            axial, azimuthal; swirl: radial, radial on r >= L/2, azimuthal,
                                                            azimuthal on r >= L/2, axial
   python3 -B wedge_viscous.py check FIELD E32 E64              exit status 0 when the errors on N = 32 and N = 64 pass
                                                            (E32, E64: the five numbers printed by 'error')
+  python3 -B wedge_viscous.py checkgeo FIELD E32 E64 G32 G64   exit status 0 when the errors G32, G64 of the geometric radii pass
+                                                           the same checks and stay within 2 times those of the uniform radii
+  python3 -B wedge_viscous.py radial N LAW                     INPUT/ic.tec and INPUT/bc.txt of the radial linear field
+  python3 -B wedge_viscous.py radialcheck N LAW NS EU [TOL]    prints the largest deviations; with TOL, exit status 0 when they pass
+  python3 -B wedge_viscous.py axial N                          INPUT/ic.tec, INPUT/bc.txt and INPUT/transport-ref.dat of the axial
+                                                           linear field with the wall
+  python3 -B wedge_viscous.py axialcheck N NS REF              exit status 0 when the viscous force of the axial field vanishes
   python3 -B wedge_viscous.py axisstop LOG                     exit status 0 when the run of LOG stopped at setup with the message
                                                            on the axis at r = 0 of the wedge, without NaN or trap
   python3 -B wedge_viscous.py sector N [axis0]                 INPUT/ic.tec and INPUT/bc.txt of Homann's flow on the 3-D sector
@@ -142,8 +180,16 @@ def homann(n):
     return out
 
 
-def radii(n, axis0=False):
-    """Node radii: the axis row at 1e-6 dr (at 0 with axis0), then j dr."""
+GEO_BETA = 32.0 * math.log(1.014)   # geo: r_j = SIZE (exp(beta j/N) - 1)/(exp(beta) - 1), growth 1.014 on N = 32
+
+
+def radii(n, axis0=False, geo=False):
+    """Node radii: the axis row at 1e-6 dr (at 0 with axis0), then j dr; with geo the radii of one smooth geometric map
+    for every N (GEO_BETA), the axis row at 1e-6 of the first cell."""
+    if geo:
+        rs = [SIZE * math.expm1(GEO_BETA * j / n) / math.expm1(GEO_BETA) for j in range(n + 1)]
+        rs[0] = 1.0e-6 * rs[1]
+        return rs
     dr = SIZE / n
     return [0.0 if axis0 else 1.0e-6 * dr] + [j * dr for j in range(1, n + 1)]
 
@@ -158,9 +204,9 @@ def swirl_force(xc, rc):
     return (8.0 / 3.0) * MU * B_SW, (32.0 / 3.0) * MU * C_SW * rc, 8.0 * MU * S_SW * rc * (1.0 + xc / L)
 
 
-def write_case(field, n, axis0=False):
+def write_case(field, n, axis0=False, geo=False):
     dx = SIZE / n
-    rn = radii(n, axis0)
+    rn = radii(n, axis0, geo)
     f = homann(n) if field == "homann" else None
     for p in ("INPUT/ic.tec", "INPUT/bc.txt"):
         if os.path.lexists(p):
@@ -457,14 +503,14 @@ def viscous_rhs(ns, eu, q):
     return tuple(ns[v][q] / ns["dt"][q] - eu[v][q] / eu["dt"][q] for v in ("rhou", "rhov", "rhow"))
 
 
-def errors_homann(ns_path, eu_path):
+def errors_homann(ns_path, eu_path, geo=False):
     """Errors of the viscous right-hand side of one mesh: radial, radial on r >= L/2 (both over the largest exact radial
     force), radial on the first row over the hoop term 2 mu a f'/r, axial (over the largest exact axial force), azimuthal
     (over the largest exact radial force)."""
     ns, n = read_zone(ns_path)
     eu, n2 = read_zone(eu_path)
     assert n == n2
-    rn = radii(n)
+    rn = radii(n, geo=geo)
     f = homann(n)
     er = er_far = er_hoop = ex = ez = 0.0
     fr_max = fx_max = 0.0
@@ -489,13 +535,13 @@ def errors_homann(ns_path, eu_path):
     return er / fr_max, er_far / fr_max, er_hoop, ex / fx_max, ez / fr_max
 
 
-def errors_swirl(ns_path, eu_path):
+def errors_swirl(ns_path, eu_path, geo=False):
     """Errors of the viscous right-hand side of one mesh, over the largest exact force of the same component: radial, radial
     on r >= L/2, azimuthal, azimuthal on r >= L/2, axial."""
     ns, n = read_zone(ns_path)
     eu, n2 = read_zone(eu_path)
     assert n == n2
-    rn = radii(n)
+    rn = radii(n, geo=geo)
     dx = SIZE / n
     fmax = [0.0, 0.0, 0.0]
     err = [0.0, 0.0, 0.0]
@@ -558,6 +604,236 @@ def check_swirl(a32, a64):
     return ok
 
 
+def check_geo(field, a32, a64, g32, g64):
+    """The geometric radii: the checks of the uniform radii on G32, G64 and every error that is not round-off within 2 times
+    the same error of the uniform radii on N = 64, for the components that the faces of type 200 carry: homann radial (also
+    on r >= L/2 and on the first row) and azimuthal; swirl radial, azimuthal and axial. The axial force of homann is printed
+    only: an axisymmetric field without swirl has no axial stress on the faces of type 200 (tau_xtheta = 0), and next to the
+    axis the faces j of stretched radii take the derivative of u_r along x at the mean radius of the two rows of cells, not
+    at the face, an error of first order there, with stencil as with inverse-mean (1.7e-3 and 1.2e-3 of the largest axial
+    force on N = 64)."""
+    if field == "swirl":
+        ok = check_swirl(g32, g64)
+        names = (("radial", 0), ("radial on r >= L/2", 1), ("azimuthal", 2), ("azimuthal on r >= L/2", 3))
+    else:
+        ok = True
+        good = g64[0] < 0.02
+        ok = ok and good
+        print(f"    radial viscous force: error {g32[0]:.3e} (N = 32), {g64[0]:.3e} (N = 64)  [{'ok' if good else 'FAIL'}]")
+        good = order(g32[1], g64[1]) > 1.5
+        ok = ok and good
+        print(f"      on r >= L/2: {g32[1]:.3e} (N = 32), {g64[1]:.3e} (N = 64), observed order {order(g32[1], g64[1]):.2f}"
+              f"  [{'ok' if good else 'FAIL'}]")
+        good = g64[2] < 1.0e-4
+        ok = ok and good
+        print(f"      first row off the axis, over the hoop term: {g32[2]:.3e} (N = 32), {g64[2]:.3e} (N = 64)"
+              f"  [{'ok' if good else 'FAIL'}]")
+        print(f"    axial viscous force (printed only, see wedge_viscous.py): error {g32[3]:.3e} (N = 32), {g64[3]:.3e}"
+              f" (N = 64), observed order {order(g32[3], g64[3]):.2f}")
+        good = max(g32[4], g64[4]) < 1.0e-9
+        ok = ok and good
+        print(f"    azimuthal viscous force: {g32[4]:.1e} (N = 32), {g64[4]:.1e} (N = 64)  [{'ok' if good else 'FAIL'}]")
+        names = (("radial", 0), ("radial on r >= L/2", 1), ("first row over the hoop term", 2))
+    for name, k in names:
+        good = g64[k] <= 2.0 * a64[k]
+        ok = ok and good
+        print(f"    {name} on N = 64: {g64[k]:.3e} against {a64[k]:.3e} of the uniform radii, ratio {g64[k] / a64[k]:.2f}"
+              f" (at most 2)  [{'ok' if good else 'FAIL'}]")
+    return ok
+
+
+RADIAL_U = 5.0e3                    # radial: u_r = RADIAL_U r, 1/s
+RADIAL_DEV_UNIFORM = 1.0e-11        # radial, uniform radii: the deviation that sets the tolerance of the stretched radii
+                                    # must itself be round-off (below 1e-11, as the field U was chosen for)
+AXIAL_A = 1.0e3                     # axial: u_x = AXIAL_A x, 1/s
+AXIAL_Q, AXIAL_BEND = 1.15, 0.1     # axial: growth of the cells along x and r, bending of the lines j inside the box
+
+
+def radial_radii(n, law):
+    """Node radii of the radial case: uniform or growing by the ratio of LAW (geo1.1, geo1.2), the axis row at 1e-6 dr."""
+    w = [1.0] * n if law == "uniform" else [float(law[3:]) ** j for j in range(n)]
+    out = [0.0]
+    for x in w:
+        out.append(out[-1] + SIZE * x / sum(w))
+    out[0] = 1.0e-6 * (out[1] - out[0])
+    return out
+
+
+def write_mesh(nodes_xr, cells_u, bc_rows, path_ic="INPUT/ic.tec", path_bc="INPUT/bc.txt"):
+    """INPUT/ic.tec of a wedge whose meridional nodes are nodes_xr[i][j] = (x, r) (at theta = -delta/2 and +delta/2) and
+    whose cell values are cells_u (u, v, w, j-major), at the uniform density and pressure of the module; INPUT/bc.txt."""
+    ni, nj = len(nodes_xr) - 1, len(nodes_xr[0]) - 1
+    for p in (path_ic, path_bc):
+        if os.path.lexists(p):
+            os.remove(p)
+    c, s = math.cos(0.5 * DELTA), math.sin(0.5 * DELTA)
+    with open(path_ic, "w") as out:
+        out.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
+        out.write(f" ZONE  T = B1-IG, I={ni + 1}, J={nj + 1}, K=2, DATAPACKING=BLOCK, "
+                  "VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        for comp in range(3):
+            for k in range(2):
+                for j in range(nj + 1):
+                    for i in range(ni + 1):
+                        x, r = nodes_xr[i][j]
+                        out.write(f" {(x, r * c, (-1.0, 1.0)[k] * r * s)[comp]:.16E}\n")
+        nc = ni * nj
+        for col in ([RHO0] * nc, [u[0] for u in cells_u], [u[1] for u in cells_u], [u[2] for u in cells_u], [P0] * nc):
+            out.write("".join(f" {x:.16E}\n" for x in col))
+    with open(path_bc, "w") as out:
+        out.write("".join(bc_rows))
+
+
+def wedge_rec(i, j, face, t):
+    return '%9d %7d %7d %7d %7d %7d\n' % (1, i, j, 1, face, t)
+
+
+def wedge_cell_centre(nodes_xr, i, j):
+    """Centre of the wedge cell (i, j) (0-based), the mean of its eight nodes: (x, y, 0), y = r cos(delta/2)."""
+    q = [nodes_xr[i + a][j + b] for a in (0, 1) for b in (0, 1)]
+    return (sum(p[0] for p in q) / 4.0, sum(p[1] for p in q) / 4.0 * math.cos(0.5 * DELTA), 0.0)
+
+
+def write_radial(n, law):
+    """The radial linear field u_r = RADIAL_U r on rectangular cells (uniform x, radii of LAW); faces as in write_case."""
+    rn = radial_radii(n, law)
+    dx = SIZE / n
+    nodes = [[(i * dx, rn[j]) for j in range(n + 1)] for i in range(n + 1)]
+    cells = []
+    for j in range(n):
+        for i in range(n):
+            xc = wedge_cell_centre(nodes, i, j)
+            cells.append((0.0, RADIAL_U * xc[1], 0.0))
+    rows = [wedge_rec(1, j, 1, 400) for j in range(1, n + 1)] + [wedge_rec(n, j, 2, 400) for j in range(1, n + 1)]
+    rows += [wedge_rec(i, 1, 3, 300) for i in range(1, n + 1)] + [wedge_rec(i, n, 4, 400) for i in range(1, n + 1)]
+    for face in (5, 6):
+        rows += [wedge_rec(i, j, face, 200) for j in range(1, n + 1) for i in range(1, n + 1)]
+    write_mesh(nodes, cells, rows)
+
+
+def radial_deviation(n, law, ns_path, eu_path):
+    """Largest |force/hoop term - sin^2(delta/2)| on the rows j >= 2 and on the first row, cells with no face 400 (the
+    radial force over (2/3) mu U/r_c, r_c the radius of the cell centre)."""
+    ns, _ = read_zone(ns_path)
+    eu, _ = read_zone(eu_path)
+    rn = radial_radii(n, law)
+    s2 = math.sin(0.5 * DELTA) ** 2
+    dev, dev1 = 0.0, 0.0
+    for j in range(n - 1):
+        rc = 0.5 * (rn[j] + rn[j + 1]) * math.cos(0.5 * DELTA)
+        for i in range(1, n - 1):
+            fr = viscous_rhs(ns, eu, j * n + i)[1]
+            e = abs(abs(fr) / ((2.0 / 3.0) * MU * RADIAL_U / rc) - s2)
+            if j == 0:
+                dev1 = max(dev1, e)
+            else:
+                dev = max(dev, e)
+    return dev, dev1
+
+
+def radial_check(n, law, ns_path, eu_path, tol):
+    dev, dev1 = radial_deviation(n, law, ns_path, eu_path)
+    ok = dev <= tol and dev1 <= 3.0e-6
+    bound = f"at most {tol:.1e}"
+    if law == "uniform":
+        # tol is at least 10 times this deviation: only its own bound can fail
+        ok = ok and dev <= RADIAL_DEV_UNIFORM
+        bound = f"at most {RADIAL_DEV_UNIFORM:.0e}, so that the tolerance of the stretched radii cannot float"
+    print(f"    radii {law}: |force/hoop term - sin^2(delta/2)| {dev:.3e} on the rows j >= 2 ({bound}), "
+          f"{dev1:.3e} on the first row (at most 3e-6)  [{'ok' if ok else 'FAIL'}]")
+    return ok
+
+
+def axial_nodes(n):
+    """Meridional nodes of the axial case: x growing by AXIAL_Q from the wall x = 0, r growing by AXIAL_Q from the axis
+    (axis row at 1e-6 of the first cell), the lines j bent inside the box (x = 0 and x = SIZE kept)."""
+    wx = [AXIAL_Q ** a for a in range(n)]
+    xs = [0.0]
+    for w in wx:
+        xs.append(xs[-1] + SIZE * w / sum(wx))
+    rs = [0.0]
+    for w in wx:
+        rs.append(rs[-1] + SIZE * w / sum(wx))
+    rs[0] = 1.0e-6 * rs[1]
+    return [[(xs[i] + AXIAL_BEND * rs[j] * math.sin(math.pi * xs[i] / xs[-1]), rs[j]) for j in range(n + 1)]
+            for i in range(n + 1)]
+
+
+def write_axial(n):
+    """The axial linear field u = (AXIAL_A x, 0, 0) next to a wall 301 on i = 1 (adiabatic), 400 on i = N and j = N, 300 on
+    the axis, 200 on k; INPUT/transport-ref.dat with mu = k = 1e-30 for the reference step."""
+    nodes = axial_nodes(n)
+    cells = []
+    for j in range(n):
+        for i in range(n):
+            xc = wedge_cell_centre(nodes, i, j)
+            cells.append((AXIAL_A * xc[0], 0.0, 0.0))
+    rows = []
+    for j in range(1, n + 1):
+        rows.append(wedge_rec(1, j, 1, 301) + "    0.000000E+00,    0.000000E+00,    0.000000E+00,\n")
+    rows += [wedge_rec(n, j, 2, 400) for j in range(1, n + 1)]
+    rows += [wedge_rec(i, 1, 3, 300) for i in range(1, n + 1)] + [wedge_rec(i, n, 4, 400) for i in range(1, n + 1)]
+    for face in (5, 6):
+        rows += [wedge_rec(i, j, face, 200) for j in range(1, n + 1) for i in range(1, n + 1)]
+    write_mesh(nodes, cells, rows)
+    here = os.path.dirname(os.path.abspath(__file__))
+    if os.path.lexists("INPUT/transport-ref.dat"):
+        os.remove("INPUT/transport-ref.dat")
+    with open(os.path.join(here, "..", "..", "..", "..", "common", "Air-viscous", "transport.dat")) as src, \
+            open("INPUT/transport-ref.dat", "w") as dst:
+        for line in src:
+            p = line.split()
+            dst.write(f"{p[0]} 1.0E-30 1.0E-30\n" if len(p) == 3 and re.match(r"^[0-9.Ee+-]+$", p[0]) else line)
+
+
+def wedge_cell_scale(nodes_xr, i, j):
+    """(sum of the face areas)/volume of the wedge cell (i, j) (0-based): area vectors as half the cross product of the
+    diagonals, volume (1/3) sum over the faces of centre . area vector (outwards)."""
+    c, s = math.cos(0.5 * DELTA), math.sin(0.5 * DELTA)
+    node = {}
+    for a in (0, 1):
+        for b in (0, 1):
+            x, r = nodes_xr[i + a][j + b]
+            for k in (0, 1):
+                node[(a, b, k)] = (x, r * c, (-1.0, 1.0)[k] * r * s)
+    nodes = [[[node[(a, b, k)] for k in (0, 1)] for b in (0, 1)] for a in (0, 1)]
+    faces = [[(0, 0, 0), (0, 1, 0), (0, 1, 1), (0, 0, 1)], [(1, 0, 0), (1, 1, 0), (1, 1, 1), (1, 0, 1)],
+             [(0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)], [(0, 1, 0), (1, 1, 0), (1, 1, 1), (0, 1, 1)],
+             [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)], [(0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)]]
+    centre = [sum(node[key][m] for key in node) / 8.0 for m in range(3)]
+    total, vol = 0.0, 0.0
+    for f in faces:
+        p = [nodes[a][b][k] for a, b, k in f]
+        d1 = [p[2][m] - p[0][m] for m in range(3)]
+        d2 = [p[3][m] - p[1][m] for m in range(3)]
+        av = [0.5 * (d1[1] * d2[2] - d1[2] * d2[1]), 0.5 * (d1[2] * d2[0] - d1[0] * d2[2]), 0.5 * (d1[0] * d2[1] - d1[1] * d2[0])]
+        xf = [sum(q[m] for q in p) / 4.0 for m in range(3)]
+        if sum((xf[m] - centre[m]) * av[m] for m in range(3)) < 0.0:
+            av = [-v for v in av]
+        total += math.sqrt(sum(v * v for v in av))
+        vol += sum(xf[m] * av[m] for m in range(3)) / 3.0
+    return total / abs(vol)
+
+
+def axial_check(n, ns_path, ref_path):
+    """The viscous force (momentum, r/dt of NS minus r/dt of the reference) of the cells with no face 400, the wall and axis
+    rows included, over mu |a| (sum of the face areas)/volume: below 1e-11."""
+    ns, _ = read_zone(ns_path)
+    ref, _ = read_zone(ref_path)
+    nodes = axial_nodes(n)
+    worst, where = 0.0, None
+    for j in range(n - 1):
+        for i in range(n - 1):
+            sc = MU * AXIAL_A * wedge_cell_scale(nodes, i, j)
+            for k, f in enumerate(viscous_rhs(ns, ref, j * n + i)):
+                if abs(f) / sc >= worst:
+                    worst, where = abs(f) / sc, f"component {k + 1} of cell ({i + 1}, {j + 1})"
+    ok = worst <= 1.0e-11
+    print(f"    axial field next to the wall: largest |viscous force| over its scale {worst:.3e} ({where}), at most 1e-11"
+          f"  [{'ok' if ok else 'FAIL'}]")
+    return ok
+
+
 def main():
     what = sys.argv[1]
     if what == "polar":
@@ -576,19 +852,38 @@ def main():
         polar_stop(sys.argv[2], sys.argv[3])
     if what == "linear":
         polar_linear(sys.argv[2], sys.argv[3])
+    if what == "radial":
+        write_radial(int(sys.argv[2]), sys.argv[3])
+        return
+    if what == "radialtol":
+        dev, _ = radial_deviation(int(sys.argv[2]), "uniform", sys.argv[3], sys.argv[4])
+        print(f"{max(1.0e-9, 10.0 * dev):.3e}")
+        return
+    if what == "radialcheck":
+        sys.exit(0 if radial_check(int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5], float(sys.argv[6])) else 1)
+    if what == "axial":
+        write_axial(int(sys.argv[2]))
+        return
+    if what == "axialcheck":
+        sys.exit(0 if axial_check(int(sys.argv[2]), sys.argv[3], sys.argv[4]) else 1)
     field = sys.argv[2] if len(sys.argv) > 2 else ""
     if field not in FIELDS:
         sys.exit(f"unknown field {field}: use one of {', '.join(FIELDS)}")
+    opt = sys.argv[4] if len(sys.argv) > 4 else ""
     if what == "case":
-        write_case(field, int(sys.argv[3]), len(sys.argv) > 4 and sys.argv[4] == "axis0")
+        write_case(field, int(sys.argv[3]), opt == "axis0", opt == "geo")
     elif what == "error":
-        errs = (errors_homann if field == "homann" else errors_swirl)(sys.argv[3], sys.argv[4])
+        geo = len(sys.argv) > 5 and sys.argv[5] == "geo"
+        errs = (errors_homann if field == "homann" else errors_swirl)(sys.argv[3], sys.argv[4], geo)
         print(",".join(f"{e:.6e}" for e in errs))
     elif what == "check":
         a32 = [float(v) for v in sys.argv[3].split(",")]
         a64 = [float(v) for v in sys.argv[4].split(",")]
         ok = (check_homann if field == "homann" else check_swirl)(a32, a64)
         sys.exit(0 if ok else 1)
+    elif what == "checkgeo":
+        a32, a64, g32, g64 = ([float(v) for v in sys.argv[k].split(",")] for k in (3, 4, 5, 6))
+        sys.exit(0 if check_geo(field, a32, a64, g32, g64) else 1)
     else:
         sys.exit(f"unknown request {what}")
 

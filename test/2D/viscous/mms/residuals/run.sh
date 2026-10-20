@@ -57,13 +57,25 @@
 #     next to the axis it must match the hoop stress 2 mu u_r/r^2) and axial
 #     components, the azimuthal one staying zero; swirl, the radial and
 #     azimuthal components on the cells with r >= L/2, the axial one exact.
-#     Axis at r = 0 on the wedge: the faces of the wedge would get the hoop
-#     stress of the first row wrong, so a viscous run must stop at setup and
-#     say why, with diffusive-metric = stencil and inverse-mean; so must a
-#     viscous run on a 3-D sector closed by type 200 on its k faces (homann,
-#     four cells of 1 degree, wedge_viscous.py sector) with the axis at r = 0,
-#     where the faces of type 200 of the first row see half of d u_r/dr as
-#     on the wedge. Polar line of
+#     The same two fields on radii growing geometrically from the axis: the
+#     same checks, and every error that is not round-off within 2 times that
+#     of the uniform radii (the faces of the wedge take the derivatives along
+#     r from the differences of the centres, diffusive-metric = stencil).
+#     Linear fields, whose viscous force is zero: u_r = U r on rectangular
+#     cells with uniform radii and radii growing by 1.1 and 1.2, where every
+#     cell keeps sin^2(delta/2) of its hoop term (the derivatives in azimuth
+#     of the faces i and j), within the round-off measured on the uniform
+#     radii, itself at most 1e-11 (rows j >= 2), and 3e-6 (first row);
+#     u = (a x, 0, 0) next to a wall
+#     301 on cells growing along x and r with bent lines, where the faces of
+#     the wedge take the ghost cells of the wall: no viscous force in every
+#     cell with no face 400, below 1e-11 of its scale.
+#     Axis at r = 0 on the wedge: with inverse-mean and mean the faces of the
+#     wedge would get the hoop stress of the first row wrong, so a viscous run
+#     must stop at setup and say why, with diffusive-metric = stencil and
+#     inverse-mean; so must a viscous run on a 3-D sector closed by type 200
+#     on its k faces (homann, four cells of 1 degree, wedge_viscous.py sector)
+#     with the axis at r = 0. Polar line of
 #     a 3-D mesh (360 degrees around the axis, axis at r = 0): with symmetry on
 #     the axis the viscous force of a linear velocity field must vanish to
 #     round-off, next to the axis too (diffusive-metric = stencil); with
@@ -307,12 +319,18 @@ wedge_step() {
 echo "-- 4. viscous stress on the 2-D axisymmetric wedge, 32 x 32 and 64 x 64 cells --"
 for field in homann swirl; do
   errors=()
+  gerrors=()
   for n in 32 64; do
     python3 -B wedge_viscous.py case "$field" "$n" || exit 1
     wedge_step navier-stokes "$field-ns-n$n"
     wedge_step euler "$field-eu-n$n"
     errors+=("$(python3 -B wedge_viscous.py error "$field" "OUTPUT/diagnostic-$field-ns-n$n.tec" \
                                                     "OUTPUT/diagnostic-$field-eu-n$n.tec")")
+    python3 -B wedge_viscous.py case "$field" "$n" geo || exit 1
+    wedge_step navier-stokes "$field-geo-ns-n$n"
+    wedge_step euler "$field-geo-eu-n$n"
+    gerrors+=("$(python3 -B wedge_viscous.py error "$field" "OUTPUT/diagnostic-$field-geo-ns-n$n.tec" \
+                                                     "OUTPUT/diagnostic-$field-geo-eu-n$n.tec" geo)")
   done
 
   if [[ $field == homann ]]; then
@@ -326,7 +344,47 @@ for field in homann swirl; do
     echo "  [FAIL] the viscous force on the wedge is not the Navier-Stokes one"
     fail=1
   fi
+  echo "-- the same on radii growing geometrically from the axis --"
+  if python3 -B wedge_viscous.py checkgeo "$field" "${errors[0]}" "${errors[1]}" "${gerrors[0]}" "${gerrors[1]}"; then
+    echo "  [ok  ] second-order agreement, within 2 times the errors of the uniform radii"
+  else
+    echo "  [FAIL] the viscous force on the stretched wedge is not the Navier-Stokes one"
+    fail=1
+  fi
 done
+
+echo "-- a linear field on the wedge, u_r = U r, on uniform and stretched radii: the error in azimuth only --"
+for law in uniform geo1.1 geo1.2; do
+  python3 -B wedge_viscous.py radial 16 "$law" || exit 1
+  wedge_step navier-stokes "radial-$law-ns"
+  wedge_step euler "radial-$law-eu"
+done
+tol=$(python3 -B wedge_viscous.py radialtol 16 OUTPUT/diagnostic-radial-uniform-ns.tec OUTPUT/diagnostic-radial-uniform-eu.tec)
+echo "    tolerance on the rows j >= 2: $tol (max(1e-9, 10 times the deviation on the uniform radii))"
+for law in uniform geo1.1 geo1.2; do
+  if python3 -B wedge_viscous.py radialcheck 16 "$law" "OUTPUT/diagnostic-radial-$law-ns.tec" \
+       "OUTPUT/diagnostic-radial-$law-eu.tec" "$tol"; then
+    echo "  [ok  ] radii $law: the faces of the wedge are exact for the linear field"
+  else
+    echo "  [FAIL] radii $law: the faces of the wedge are not exact for the linear field"
+    fail=1
+  fi
+done
+
+echo "-- a linear field on the wedge next to a wall, u = (a x, 0, 0), stretched and bent cells --"
+python3 -B wedge_viscous.py axial 16 || exit 1
+wedge_step navier-stokes axial-ns
+rm -f INPUT/transport.dat
+ln -sf transport-ref.dat INPUT/transport.dat
+wedge_step navier-stokes axial-ref
+rm -f INPUT/transport.dat
+ln -sf "../$VISC/transport.dat" INPUT/transport.dat
+if python3 -B wedge_viscous.py axialcheck 16 OUTPUT/diagnostic-axial-ns.tec OUTPUT/diagnostic-axial-ref.tec; then
+  echo "  [ok  ] no viscous force, next to the wall and the axis too"
+else
+  echo "  [FAIL] a viscous force of the linear field next to the wall"
+  fail=1
+fi
 
 echo "-- the axis at r = 0 on the wedge (homann, N = 32): a declared stop of the viscous runs --"
 python3 -B wedge_viscous.py case homann 32 axis0 || exit 1

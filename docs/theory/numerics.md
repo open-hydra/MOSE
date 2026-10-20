@@ -360,7 +360,7 @@ a distance that differs by as much (no test with `102` faces). `diffusive-metric
 
 | `diffusive-metric` | Face metric | |
 |---|---|---|
-| `stencil` (default) | $M_f = \left(J_f^{T}\right)^{-1}$, $J_f^{T} = \left[D_a\mathbf{x},\ D_b\mathbf{x},\ D_c\mathbf{x}\right]$ | the same differences of the cell centres as of the field: exact for a linear field on any mesh, except at the faces of type `200` (see *Axisymmetric Wedge*) and at the chimera faces (`102`) |
+| `stencil` (default) | $M_f = \left(J_f^{T}\right)^{-1}$, $J_f^{T} = \left[D_a\mathbf{x},\ D_b\mathbf{x},\ D_c\mathbf{x}\right]$ | the same differences of the cell centres as of the field: exact for a linear field on any mesh (at the symmetry faces and the faces of type `200` for the linear fields that they allow), except at the chimera faces (`102`) |
 | `inverse-mean` | $M_f = \left[\tfrac12\left(A_L + A_R\right)\right]^{-T}$ | the face-normal edge is the centre-to-centre vector: exact for a linear field on any stretching normal to the face |
 | `mean` | $M_f = \tfrac12\left(M_L + M_R\right)$ | faster; biased on stretched meshes |
 
@@ -383,7 +383,15 @@ parallelograms it is the diamond scheme with least-squares weights [11], which
 are exactly 1/4 there. Where the tangential differences of the stencil lie in
 the plane of the face, its split of the face area vector is the over-relaxed
 one of [13]. Exactness for linear fields does not certify accuracy on curved,
-highly stretched cells [14]; that case is not measured here. `inverse-mean`
+highly stretched cells [14]; that case is not measured here. One effect of the
+off-face position of the tangential derivatives is measured: on a wedge whose
+cells grow along $r$, the axial viscous force of Homann's flow (test
+`MMSResiduals`) converges at first order on the first rows next to the axis
+($1.7\times10^{-3}$ of its largest value on the first row with 64 cells growing by
+1.007, against $6.3\times10^{-5}$ with uniform radii), with `stencil` as with
+`inverse-mean`; there the derivative of $u_r$ along $x$ at the faces $j$ is that
+of the mean of the two rows of cells, off the face by about $\Delta r\,(q-1)/4$,
+which agrees with it. `inverse-mean`
 takes the tangential columns
 from the mean edges of the two cells instead. On smooth meshes they approach
 the centre differences as the cells shrink, but where the mesh is not smooth
@@ -395,9 +403,13 @@ tangential columns of the two metrics coincide; there the error of
 extrapolated straight across the fold. The column across the face is kept as $\tfrac12(a_L + a_R)$, which
 is $\mathbf{x}_R - \mathbf{x}_L$, and so are the columns of the index
 directions with one cell (1-D runs, the $k$ direction of 2-D meshes and
-wedges), where the field does not vary: 1-D runs give the bits of
-`inverse-mean`. The ghost cells in the stencil take the position at which their
-value is right for a linear field:
+wedges). On 1-D runs and plane 2-D meshes the field does not vary along them,
+and 1-D runs give the bits of `inverse-mean`. On a wedge the $k$ neighbours are
+the cell turned by $\mp\delta$, so the velocity differs across them, and that
+column, the mean edge of the cells, is the difference of the turned positions
+divided by $\cos^2(\delta/2)$: the error of order $\delta^2$ of the azimuthal
+derivatives (see *Axisymmetric Wedge*). The ghost cells in the stencil take the
+position at which their value is right for a linear field:
 
 - faces between blocks (`101`, `201`): the centre of the cell across, plus the
   translation of a periodic pair;
@@ -429,9 +441,10 @@ value is right for a linear field:
 - symmetry (`300`): the mirror image of the cell across the face; on a face of
   zero area (an axis at $r = 0$) the cell itself, since the ghost value there is
   a copy of the cell, and the viscous flux of that face is zero;
-- the $k$ faces of a 3-D sector (`200`): the cell at the other end, rotated by
-  the angle of the sector; on a translated sector (no angle) the cell at the
-  other end translated by the period, as across a periodic pair: plus the
+- the $k$ faces of a wedge or of a 3-D sector (`200`): the source of the ghost
+  cell, the cell at the other end of the block (on a wedge the cell itself),
+  rotated by the angle of the wedge or sector; on a translated sector (no angle)
+  the cell at the other end translated by the period, as across a periodic pair: plus the
   vector from the centre of its outer face to the centre of this face. The
   mesh check at setup has found every node of the last $k$ plane of the block
   to be the node of the first plane translated by one vector, within 1 % of
@@ -720,8 +733,11 @@ from the state of the cell:
   $+p/r$ and the centrifugal terms of the axisymmetric equations;
 - viscous: the flux of a face between the cell and its rotated image, with the
   stencil of an interior face (the $i$ and $j$ neighbours of the image rotated
-  in the same way) and the inverse-mean face metric of the cell and its image,
-  with every `diffusive-metric`, computed once at setup (it depends on the
+  in the same way) and, with `diffusive-metric = stencil`, the face metric of
+  the same differences of the positions, the row of the image the row of the
+  cell turned (exact for the linear fields that the rotation allows, see the 3-D
+  sector below); with `inverse-mean` and `mean`, the inverse-mean face metric of
+  the cell and its image. Both are computed once at setup (they depend on the
   mesh only).
 
 For an axisymmetric field the mass, energy and scalar fluxes of the two faces
@@ -750,12 +766,21 @@ $2.5\times10^{-5}$ for $\delta = 1^\circ$). Keep the wedge thin.
 Put the axis nodes at a small radius, as MOSE's meshes do ($10^{-6}\,\Delta r$):
 a viscous run on a wedge whose axis is exactly at $r = 0$ stops at setup, with
 every `diffusive-metric`. On such an axis the faces have zero area and no
-normal, so their ghost cells copy the cells, and the wedge faces of the first
-row of cells, which take the derivative in $r$ across the axis with the ghost
-cell one cell away, would see half of $\partial u_r/\partial r$: an error of the
-hoop stress of those cells that refinement does not reduce ($1/6$ of
-$2\mu u_r/r^2$ in Homann's flow). With `inverse-mean` and `mean` the faces $i$
-of those cells would do the same.
+normal, so their ghost cells copy the cells. With `inverse-mean` and `mean` the
+wedge faces and the faces $i$ of the first row of cells take the derivative in
+$r$ across the axis with the ghost cell one cell away and would see half of
+$\partial u_r/\partial r$: an error of the hoop stress of those cells that
+refinement does not reduce ($1/6$ of $2\mu u_r/r^2$ in Homann's flow, on 32 and
+64 cells). With `stencil` the copy sits at the cell and the faces take the
+difference on one side of it: in Homann's flow, linear in $r$, the first row
+gets the hoop stress of a small axis radius ($2.55\times10^{-5}$ of
+$2\mu u_r/r^2$ away from the exact one, against $2.58\times10^{-5}$ with the
+axis at $10^{-6}\,\Delta r$, on 64 cells), so the error of $1/6$ is gone; a field
+that is not linear in $r$ stays farther from the result of the small radius
+(4.67 against 2.67 times the local hoop term on the first row for the cubic
+field of the test `MMSResiduals`). The stop stays with every metric, a declared
+limit: the axis at $r = 0$ is not treated completely (ghost cells beyond the
+axis, not copies).
 
 Next to the axis the hoop stress also stiffens the explicit step. In the radial
 momentum of the first row of cells, at $r \approx \Delta r/2$, it is a damping
@@ -778,25 +803,37 @@ The cell next to face 6 takes the flux and the cell next to face 5 the same
 flux with its momentum turned back, $R^{\mathsf T}F$: mass, energy, species,
 turbulence variables, axial momentum and angular momentum about $x$ are
 conserved. A translated sector (faces 5 and 6 parallel) is the same with
-$R = I$. The viscous face takes the metric of the wedge, the inverse of the mean
-of the inverse metrics (`inverse-mean`), with every `diffusive-metric`. On the
-wedge and on the sector the derivatives of these faces along the face (in $i$
-and $j$) are central differences over two cells divided by the mean edge of the
-cell and of its image: where the cell size grows along the face by a ratio $q$
-they carry the factor $(1+q)^2/(4q)$ of the note *Tangential derivatives* above,
-a relative error of $(q-1)^2/(4q)$ ($8.3\times10^{-3}$ at $q = 1.2$), and in the
-first row next to an axis with symmetry (`300`), whose ghost cell is the mirror
-image of the cell, $(3+q)/4$, a relative error of $(q-1)/4$ ($5\times10^{-2}$ at
-$q = 1.2$); refinement at a fixed ratio does not reduce them. A linear field is
-therefore not exact at the faces of type `200`: for $u_r = U r$, whose viscous
-force is zero, the radial viscous force of a cell of the wedge is that relative
-error times the hoop term $\tau_{\theta\theta}/r$, on top of the error of order
-$\delta^2$ above.
+$R = I$. The viscous face of the wedge and of the sector takes, with
+`diffusive-metric = stencil`, the metric of the same differences of the
+positions as the gradient takes of the values: across the face the image, at
+the position of its ghost cell, minus the cell; along the face the differences
+of the row of the cell and of the row of the image, which are those of the row
+of the source turned by $R$, positions and values (a ghost cell of the row of
+the source, behind a wall too, turned with it). A linear field that the
+periodicity allows, $\mathbf{u}(R\mathbf{x}) = R\,\mathbf{u}(\mathbf{x})$, is so
+exact at these faces on any mesh; where a wall ghost cell enters the row of the
+cell or of the source, the face takes one metric per group of quantities, as an
+interior face. With `inverse-mean` and `mean` the face takes the inverse of the
+mean of the inverse metrics of the cell and of its image, whose columns along
+the face are the mean edges of the two cells, not the differences of the
+centres: where the cell size grows along the face by a ratio $q$ the
+derivatives along the face carry the factor $(1+q)^2/(4q)$ of the note
+*Tangential derivatives* above, a relative error of $(q-1)^2/(4q)$
+($8.3\times10^{-3}$ at $q = 1.2$), and in the first row next to an axis with
+symmetry (`300`), whose ghost cell is the mirror image of the cell, $(3+q)/4$, a
+relative error of $(q-1)/4$ ($5\times10^{-2}$ at $q = 1.2$); refinement at a fixed
+ratio does not reduce them. For $u_r = U r$, whose viscous force is zero, the
+radial viscous force of a cell of the wedge is, with `inverse-mean`, that
+relative error times the hoop term $\tau_{\theta\theta}/r$ on top of the error
+of order $\delta^2$ above, and with `stencil` that error alone,
+$\sin^2(\delta/2)$ of the hoop term in every cell (test `MMSResiduals`).
 A viscous run on a sector whose axis nodes are
 exactly at $r = 0$ stops at setup, as on the wedge, with every
-`diffusive-metric`: behind faces of zero area the periodic faces of the first
-row of cells would see half of $\partial u_r/\partial r$. Put the axis nodes at
-a small radius. On a planar 2-D mesh (faces 5 and 6 parallel, no wedge angle)
+`diffusive-metric`: behind faces of zero area the ghost cells copy the cells,
+and with `inverse-mean` and `mean` the periodic faces of the first row of cells
+would see half of $\partial u_r/\partial r$ ($1/6$ of the hoop term in Homann's
+flow; with `stencil` $1.6\times10^{-6}$ next to the periodic faces, as with the
+axis at a small radius). Put the axis nodes at a small radius. On a planar 2-D mesh (faces 5 and 6 parallel, no wedge angle)
 type `200` makes the image the cell itself, and the fluxes of the two faces
 cancel.
 

@@ -83,8 +83,9 @@ contains
           'vanalbada, minmod, superbee, vanleer, mc', .false. )
     call reg%add( trim(section), 'diffusive-metric', obj_space_scheme%diffusive_metric, 'stencil', &
                   'Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of '// &
-                  'the cell centres as the face gradient, exact for a linear field on any mesh except at the k faces '// &
-                  'of type 200 and at the chimera faces (102), which take inverse-mean with every value; inverse-mean takes the '// &
+                  'the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the '// &
+                  'k faces of type 200 for the linear fields that they allow) except at the chimera faces (102), which take '// &
+                  'inverse-mean with every value; inverse-mean takes the '// &
                   'mean edges of the two cells, exact on a stretching normal to the face only; mean also overstates '// &
                   'the gradient by (1+r)^2/(4r) at a cell-size ratio r; inverse-mean and mean do not converge next to '// &
                   'a symmetry plane (300) that bounds a sector of a polar mesh', &

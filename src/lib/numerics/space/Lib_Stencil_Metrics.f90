@@ -14,7 +14,10 @@
 !>
 !> Rows kept from the inverse-mean metric, so that its bits do not change where nothing has to: the row across the face
 !> (1/2 (a_L + a_R) is x_R - x_L with the centre as the mean of the eight nodes), and the rows of the index directions with
-!> one cell (a 1-D case, the k direction of a 2-D mesh or wedge): there the field does not vary, D phi = 0.
+!> one cell (a 1-D case, the k direction of a 2-D mesh or of a wedge). On a 1-D case and a plane 2-D mesh the field does
+!> not vary along them, D phi = 0. On a wedge the k neighbours are the cell turned by -delthe and +delthe, so the velocity
+!> differs across them, and that row, the mean edge of the cells, is the difference of the turned positions divided by
+!> cos^2(delthe/2): the error of order delthe^2 of the azimuthal derivatives (docs/theory/numerics.md, Axisymmetric Wedge).
 !>
 !> Positions: the centre of a cell is the mean of its eight nodes; the first layer of ghost cells takes the position at
 !> which its value is right for a linear field: the centre of the cell across a face between blocks (plus the translation of
@@ -24,8 +27,9 @@
 !> (Ghost_Extrapolate: 408, 502, ...; 2 x1 - x2, or x1, in a block with two cells, or one, across the face; in a RANS run
 !> the turbulence variables of an SRM grain, 502, at 2 x_f - x1, as they take their wall values), the cell itself
 !> behind the zero-gradient faces (0, 401-407, 420), its mirror image across a symmetry face (300; the cell itself on a face
-!> of zero area, an axis, where the ghost value is a copy of the cell), and on the k faces of a 3-D sector (200) the cell of
-!> the other end rotated by the angle of the sector, or, on a translated sector, translated from its outer face to this face
+!> of zero area, an axis, where the ghost value is a copy of the cell), and on the k faces of a wedge or of a 3-D sector
+!> (200) the source of the ghost cell, the cell next to the opposite k face of the block (on a wedge the cell itself),
+!> rotated by the angle of the wedge or sector, or, on a translated sector, translated from its outer face to this face
 !> as across a periodic pair. Chimera (102) and mapped (410) faces take the
 !> extrapolated position too, an approximation: their values come from donor cells or from a file. Behind a wall the two
 !> positions of a ghost cell give the faces with that ghost cell in their stencil one metric per group of quantities
@@ -227,6 +231,8 @@ contains
       select case ( domain % bc(r) % type )
         case (101, 201)
           call Connection_Face_Metric ( domain, xc, r, nfill(:,b) )
+        case (200)
+          call Rotational_Face_Metric ( domain, xc, r, nfill(:,b) )
         case (300)
           call Symmetry_Face_Metric ( domain % blk(b), xc(b), domain % bc(r) )
       end select
@@ -278,11 +284,13 @@ contains
         call Face_Centre_Normal ( domain % blk(b) % node, Im, Jm, Km, Fm, xf, nf )
         xc(b) % x(:,Ig,Jg,Kg) = Mirror ( x1, xf, nf )
 
-      case (200)                                ! wedge (one cell in k: unused) or 3-D sector, turned or translated
-        if ( ndir == 3 .and. domain % blk(b) % dim(3) > 1 ) then
+      case (200)                                ! k faces of a wedge or of a 3-D sector, turned or translated
+        if ( Fm >= 5 .and. ( ndir == 3 .or. .not. ( delthe >= 0d0 .and. delthe <= 0d0 ) ) ) then
+          ! The source of the ghost cell (Ghost_Axysimmetry), the cell next to the opposite k face of the block (on a wedge,
+          ! one cell in k, the cell itself), moved by the periodicity
           Ks = domain % blk(b) % dim(3) - Km + 1
           y = xc(b) % x(:,Im,Jm,Ks)
-          if ( Fm >= 5 .and. delthe >= 0d0 .and. delthe <= 0d0 ) then
+          if ( delthe >= 0d0 .and. delthe <= 0d0 ) then
             ! Translated sector (no angle: Check_Mesh_Type found the last k node plane of the block to be the first one
             ! translated, node by node): the cell of the other end plus the translation from its outer face (11 - Fm) to
             ! this face, the same operations as for a periodic pair (Connection_Ghost_Position)
@@ -295,7 +303,7 @@ contains
             xc(b) % x(:,Ig,Jg,Kg) = [ y(1), y(2)*cos(ang) - y(3)*sin(ang), y(2)*sin(ang) + y(3)*cos(ang) ]
           end if
         else
-          xc(b) % x(:,Ig,Jg,Kg) = x1
+          xc(b) % x(:,Ig,Jg,Kg) = x1             ! a plane 2-D mesh, where these faces carry no viscous flux
         end if
 
       case (103, 104, 301, 302, 400, 503:505)   ! walls and 400 (Ghost_Wall): x1 + s (x1 - x2) for the extrapolated
@@ -470,7 +478,58 @@ contains
   end function Connection_Mixed
 
 
-  !> Number of the faces of direction d of block b (interior, and between blocks) with a wall ghost cell in their stencil.
+  !> Record r is a face of type 200 whose viscous flux BC_Rotational_Periodic_Visc computes: faces 5 and 6 of a wedge (a
+  !> 2-D mesh turned about the x axis), face 6 of a 3-D sector, turned or translated (it computes the face for the two
+  !> cells). The same two tests as there and as Rotational_Periodic_Face_Metric.
+  logical function Rotational_Flux_Face ( domain, r ) result ( flux )
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m, only: ndir
+    use MOSE_Lib_Metrics, only: delthe
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    integer, intent(in) :: r
+
+    flux = .false.
+    if ( domain % bc(r) % type /= 200 .or. domain % bc(r) % f < 5 ) return
+    if ( ndir < 3 .and. ( delthe >= 0d0 .and. delthe <= 0d0 ) ) return
+    if ( ndir == 3 .and. domain % bc(r) % f /= 6 ) return
+    flux = .true.
+
+  end function Rotational_Flux_Face
+
+
+  !> Face of type 200 of record r: a wall ghost cell among the neighbours along the face that its gradient takes, in the row
+  !> of the cell or in the row of its source (the cell next to the opposite k face, the cell itself on a wedge), whose
+  !> values, turned, are those of the row of the image (BC_Rotational_Periodic_Visc).
+  logical function Rotational_Mixed ( domain, xc, r ) result ( mixed )
+    use MOSE_Advanced_Types_m
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    type(centres_t), intent(in) :: xc(:)
+    integer, intent(in) :: r
+    ! Local
+    integer :: b, Im, Jm, Km, Ks, t, s, n(3), e(3)
+
+    mixed = .false.
+    b  = domain % bc(r) % b
+    Im = domain % bc(r) % i ; Jm = domain % bc(r) % j ; Km = domain % bc(r) % k
+    n  = domain % blk(b) % dim
+    Ks = n(3) - Km + 1
+    do t = 1, 2
+      if ( n(t) == 1 ) cycle
+      e = 0
+      e(t) = 1
+      do s = -1, 1, 2
+        if ( Wall_Ghost(xc(b), Im+s*e(1), Jm+s*e(2), Km) ) mixed = .true.
+        if ( Wall_Ghost(xc(b), Im+s*e(1), Jm+s*e(2), Ks) ) mixed = .true.
+      enddo
+    enddo
+
+  end function Rotational_Mixed
+
+
+  !> Number of the faces of direction d of block b (interior, between blocks, and of type 200) with a wall ghost cell in
+  !> their stencil.
   integer function Group_Faces ( domain, xc, b, d ) result ( nf )
     use MOSE_Advanced_Types_m
     implicit none
@@ -490,8 +549,13 @@ contains
     do f = 2*d - 1, 2*d                                                 ! the records of the two faces of direction d
       do ii = domain % local_bf_first(b,f), domain % local_bf_first(b,f) + domain % local_bf_count(b,f) - 1
         r = domain % local_bf_idx(ii)
-        if ( domain % bc(r) % type /= 101 .and. domain % bc(r) % type /= 201 ) cycle
-        if ( Connection_Mixed(domain, xc, r) ) nf = nf + 1
+        select case ( domain % bc(r) % type )
+          case (101, 201)
+            if ( Connection_Mixed(domain, xc, r) ) nf = nf + 1
+          case (200)
+            if ( .not. Rotational_Flux_Face(domain, r) ) cycle
+            if ( Rotational_Mixed(domain, xc, r) ) nf = nf + 1
+        end select
       enddo
     enddo
 
@@ -774,6 +838,76 @@ contains
     blk % dir(dir) % Mf(fi,fj,fk) % c = Face_Inverse ( JT, rec % b, Im, Jm, Km, Fm, 'symmetry' )
 
   end subroutine Symmetry_Face_Metric
+
+
+  !> Face metric of a face of type 200 of record r whose viscous flux BC_Rotational_Periodic_Visc computes (Rotational_Flux_Face:
+  !> the k faces of a wedge, face 6 of a 3-D sector), stored on the face of the block as for the faces between blocks. The
+  !> gradient takes the cell and its image across the face, the ghost cell, whose values are those of its source (the cell
+  !> next to the opposite k face of the block, the cell itself on a wedge) turned by the angle of the periodicity (no turn on
+  !> a translated sector), and along the face the central differences of the row of the cell and of the row of the image,
+  !> which are those of the row of the source turned in the same way. The metric takes the same differences of the
+  !> positions: across the face the image, at the position of Ghost_Position, minus the cell along growing k; along the face
+  !> the differences of the row of the cell and those of the row of the source turned. So the face gradient is exact for the
+  !> linear fields that the periodicity allows, u(R x) = R u(x) for a turn R about x, a velocity periodic along the period of a
+  !> translated sector (docs/theory/numerics.md), on any mesh. An index direction with one cell keeps the column of the mean
+  !> edges of the cell and of its image (Inverse3 of the inverse-mean metric of the record, bc%rM). With a wall ghost cell
+  !> among the neighbours along the face, in the row of the cell or of the source, one metric per group of quantities, as at
+  !> the interior faces.
+  subroutine Rotational_Face_Metric ( domain, xc, r, nfill )
+    use MOSE_Advanced_Types_m
+    use MOSE_Parameters_m, only: guide
+    use MOSE_Lib_Metrics, only: delthe
+    use MOSE_Lib_Diffusive, only: Inverse3
+    use MOSE_Lib_BC_Fluxes, only: Face_Index
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    type(centres_t), intent(in) :: xc(:)
+    integer, intent(in) :: r
+    integer, intent(inout) :: nfill(3)
+    ! Local
+    integer :: b, Im, Jm, Km, Fm, Kg, Ks, dir, fi, fj, fk, t, g, n(3), modfm2
+    integer :: e(3,3)
+    real(R8) :: JT(3,3), JTg(3,3), Rt(3,3), ang
+
+    if ( .not. Rotational_Flux_Face(domain, r) ) return
+    b  = domain % bc(r) % b
+    Im = domain % bc(r) % i ; Jm = domain % bc(r) % j ; Km = domain % bc(r) % k
+    Fm = domain % bc(r) % f
+    n  = domain % blk(b) % dim
+    e  = reshape ( [1,0,0, 0,1,0, 0,0,1], [3,3] )
+    Kg = Km - guide(Fm,3)
+    Ks = n(3) - Km + 1
+    modfm2 = 1 - 2 * mod(Fm,2)                   ! +1 on face 6 (the cell on the low side of the face), -1 on face 5
+    call Face_Index ( Fm, dir, Im, Jm, Km, fi, fj, fk )
+    ! The turn of the periodicity behind face Fm, as in Ghost_Position: +delthe behind face 6, -delthe behind face 5
+    ang = delthe
+    if ( Fm == 5 ) ang = -delthe
+    Rt = reshape ( [1d0, 0d0, 0d0, 0d0, cos(ang), sin(ang), 0d0, -sin(ang), cos(ang)], [3,3] )
+
+    JT = Inverse3 ( domain % bc(r) % rM )
+    JT(:,3) = ( xc(b) % x(:,Im,Jm,Kg) - xc(b) % x(:,Im,Jm,Km) ) * modfm2
+    do t = 1, 2
+      if ( n(t) == 1 ) cycle
+      JT(:,t) = 0.25d0 * ( ( xc(b) % x(:,Im+e(1,t),Jm+e(2,t),Km) - xc(b) % x(:,Im-e(1,t),Jm-e(2,t),Km) ) &
+                         + matmul ( Rt, xc(b) % x(:,Im+e(1,t),Jm+e(2,t),Ks) - xc(b) % x(:,Im-e(1,t),Jm-e(2,t),Ks) ) )
+    enddo
+    domain % blk(b) % dir(dir) % Mf(fi,fj,fk) % c = Face_Inverse ( JT, b, Im, Jm, Km, Fm, 'type 200' )
+
+    ! A wall ghost cell in the stencil: one metric per group of quantities, with the positions of the group
+    if ( .not. Rotational_Mixed(domain, xc, r) ) return
+    nfill(dir) = nfill(dir) + 1
+    domain % blk(b) % dir(dir) % ig(fi,fj,fk) = nfill(dir)
+    do g = 1, NG
+      JTg = JT
+      do t = 1, 2
+        if ( n(t) == 1 ) cycle
+        JTg(:,t) = 0.25d0 * ( ( Pos(xc(b), Im+e(1,t), Jm+e(2,t), Km, g) - Pos(xc(b), Im-e(1,t), Jm-e(2,t), Km, g) ) &
+                            + matmul ( Rt, Pos(xc(b), Im+e(1,t), Jm+e(2,t), Ks, g) - Pos(xc(b), Im-e(1,t), Jm-e(2,t), Ks, g) ) )
+      enddo
+      domain % blk(b) % dir(dir) % Mg(:,:,g,nfill(dir)) = Face_Inverse ( JTg, b, Im, Jm, Km, Fm, 'type 200' )
+    enddo
+
+  end subroutine Rotational_Face_Metric
 
 
   !> Wall faces with diffusive-metric = stencil (types 301, 302, and 503-505 when they do not ablate; not the coupled walls

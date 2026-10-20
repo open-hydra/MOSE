@@ -10,10 +10,11 @@
 #  r/dt of an Euler step from the same state (OUTPUT/diagnostic.tec).
 #  - ring: the sector from -45 to 45 degrees against the sector from -90 to 90
 #    degrees that holds it, where the faces at +-45 degrees are interior, with
-#    diffusive-metric = inverse-mean; a velocity periodic for a turn by 90
-#    degrees with normal stress and shear on the meridian planes (radial
-#    field, potential vortex, axial harmonic field). In every cell, momentum
-#    and energy, the viscous forces must agree within 1e-9 of their scale.
+#    diffusive-metric = inverse-mean and with stencil; a velocity periodic for
+#    a turn by 90 degrees with normal stress and shear on the meridian planes
+#    (radial field, potential vortex, axial harmonic field). In every cell,
+#    momentum and energy, the viscous forces must agree within 1e-9 of their
+#    scale, with each metric.
 #  - mirror: the radial field alone, k faces 200 against 300 (the field is its
 #    own mirror image across the planes); away from the j faces the residuals
 #    must agree within 0.02 of the normal stress (2/3) mu U A/V.
@@ -24,6 +25,18 @@
 #    at the same place (that cell translated by the period), so in every cell
 #    the step of rho, momentum, energy and rho nu~ must agree within 1e-9 of
 #    its largest value.
+#  - stretch: the mirror sector with stretched radii (as the ring, and growing
+#    by 1.2), k faces 200, the default metric (stencil), the radial field, a
+#    linear field that the rotation allows: away from the j faces the viscous
+#    force must vanish below 1e-11 of (2/3) mu U A/V, next to the periodic
+#    faces too.
+#  - wall: a translated sector with tilted k faces next to a wall 301, cells
+#    growing from the wall and bent lines, so that the ghost cells of the wall
+#    hold the velocity and the temperature at two positions: linear velocity
+#    zero on the wall (wallmom) and linear temperature with its heat flux on
+#    the wall (wallene); a Navier-Stokes step against one with mu = k = 1e-30.
+#    In every cell with no face 400, the wall cells included, the viscous force
+#    and the heat conduction must vanish below 1e-11 of their scales.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -97,18 +110,22 @@ step() {
 status=0
 
 echo "-- ring: the sector of 90 degrees against the same cells inside the sector of 180 degrees --"
-for m in 45 90; do
-  python3 -B make_case.py case "ring$m" || exit 1
-  step navier-stokes "ring$m-ns" inverse-mean
-  step euler "ring$m-eu" inverse-mean
+for metric in inverse-mean stencil; do
+  sfx=""
+  [[ $metric == stencil ]] && sfx="-stencil"
+  for m in 45 90; do
+    python3 -B make_case.py case "ring$m" || exit 1
+    step navier-stokes "ring$m-ns$sfx" $metric
+    step euler "ring$m-eu$sfx" $metric
+  done
+  if python3 -B make_case.py ring OUTPUT/diagnostic-ring45-ns$sfx.tec OUTPUT/diagnostic-ring45-eu$sfx.tec \
+                                  OUTPUT/diagnostic-ring90-ns$sfx.tec OUTPUT/diagnostic-ring90-eu$sfx.tec; then
+    echo "  [ok  ] $metric: the periodic faces carry the viscous flux of the interior faces of the annulus"
+  else
+    echo "  [FAIL] $metric: the viscous force next to the periodic faces is not that of the whole annulus"
+    status=1
+  fi
 done
-if python3 -B make_case.py ring OUTPUT/diagnostic-ring45-ns.tec OUTPUT/diagnostic-ring45-eu.tec \
-                                OUTPUT/diagnostic-ring90-ns.tec OUTPUT/diagnostic-ring90-eu.tec; then
-  echo "  [ok  ] the periodic faces carry the viscous flux of the interior faces of the annulus"
-else
-  echo "  [FAIL] the viscous force next to the periodic faces is not that of the whole annulus"
-  status=1
-fi
 
 echo "-- mirror: radial flow, k faces 200 against symmetry planes 300 --"
 for t in 200 300; do
@@ -133,6 +150,54 @@ else
   echo "  [FAIL] the k faces of a translated sector and the periodic pairs give different steps"
   status=1
 fi
+
+echo "-- stretch: the radial field on stretched radii, k faces 200, the default metric --"
+for law in pot geo; do
+  python3 -B make_case.py case "stretch$law" || exit 1
+  step navier-stokes "stretch$law-ns"
+  step euler "stretch$law-eu"
+  if python3 -B make_case.py linear "stretch$law" OUTPUT/diagnostic-stretch$law-ns.tec OUTPUT/diagnostic-stretch$law-eu.tec; then
+    echo "  [ok  ] stretch$law: no viscous force of the linear field, next to the periodic faces too"
+  else
+    echo "  [FAIL] stretch$law: a viscous force of the linear field"
+    status=1
+  fi
+done
+
+# wall_step <run> <tag>: a Navier-Stokes step with INPUT/bc-<tag>.txt; for the reference (ref) mu = k = 1e-30
+wall_step() {
+  write_ini navier-stokes
+  cp "INPUT/bc-$2.txt" INPUT/bc.txt
+  rm -f INPUT/transport.dat
+  if [[ $2 == ref ]]; then
+    ln -sf transport-ref.dat INPUT/transport.dat
+  else
+    ln -sf "../$VISC/transport.dat" INPUT/transport.dat
+  fi
+  rm -f OUTPUT/diagnostic.tec
+  "$LOCAL" > "OUTPUT/$1-$2.log" 2>&1
+  if [[ ! -f OUTPUT/diagnostic.tec ]] || grep -a -qE 'NaN|Integration failed' "OUTPUT/$1-$2.log"; then
+    echo "  [FAIL] the $2 step of $1 did not complete (see OUTPUT/$1-$2.log)"
+    echo "SectorViscous: FAILED"
+    exit 1
+  fi
+  cp OUTPUT/diagnostic.tec "OUTPUT/diagnostic-$1-$2.tec"
+}
+
+echo "-- wall: a translated sector next to a wall, one metric per group of quantities at the periodic faces --"
+for run in wallmom wallene; do
+  python3 -B make_case.py case $run || exit 1
+  wall_step $run ns
+  wall_step $run ref
+  if python3 -B make_case.py wall $run OUTPUT/diagnostic-$run-ns.tec OUTPUT/diagnostic-$run-ref.tec; then
+    echo "  [ok  ] $run: the linear field is exact in every cell, next to the wall and the periodic faces too"
+  else
+    echo "  [FAIL] $run: the linear field is not exact next to the wall or the periodic faces"
+    status=1
+  fi
+done
+rm -f INPUT/transport.dat
+ln -sf "../$VISC/transport.dat" INPUT/transport.dat
 
 if [[ $status -eq 0 ]]; then
   echo "SectorViscous: all checks passed"
