@@ -799,3 +799,22 @@ mose_add_mr_group(MultirateShocks 3300 shocks "sod;shock;rpost;cfl4;positivity" 
 # with fixed-macro-step the level map is that of the macro step taken (fixedstep); the stage sequence of one macro step
 # against the reference sequence of the recursion (trace).
 mose_add_mr_group(MultirateInput 1020 input "reject;fixedstep;trace" "multirate;validation;implementation;1D;2D;3D")
+# I17 (builds with USE_MPI=ON): 1 x 1 against P x T byte by byte, single rate and multirate (a connection with the
+# orientation -1 0 0 1 among the cases, also against the same case without the turn), on the laminar plate, on the plate
+# with Spalart-Allmaras and with SST, on the hot cube in 3-D (a vertex of eight blocks inside the cells of level 1) and on
+# Euler cases; the block-to-rank map, conservation, the redo and the stops across the processes and, with the probe library
+# of MPIThreadFunnel (built on Linux only), no MPI call from a thread other than the main one; the timers of the multirate
+# on 2 processes with unequal work (hybrid); exact restart on 2 processes x 2 threads (restart-hybrid).
+if(USE_MPI)
+    mose_add_mr_group(MultirateHybrid 3000 hybrid "hybrid;restart-hybrid" "multirate;needs-mpi;implementation;1D;2D;3D")
+    if(TEST MultirateHybrid)
+        set_tests_properties(MultirateHybrid PROPERTIES PROCESSORS 8)
+        set_property(TEST MultirateHybrid APPEND PROPERTY ENVIRONMENT
+            "MOSE_MPIEXEC=${MPIEXEC_EXECUTABLE};MOSE_MPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}")
+        # the probe library of MPIThreadFunnel is built on Linux only: elsewhere mr-hybrid leaves out its part PROBE
+        if(TARGET mpi_thread_probe)
+            set_property(TEST MultirateHybrid APPEND PROPERTY ENVIRONMENT
+                "MOSE_MPI_THREAD_PROBE=$<TARGET_FILE:mpi_thread_probe>")
+        endif()
+    endif()
+endif()

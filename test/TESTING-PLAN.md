@@ -347,6 +347,22 @@ checks of an entry of the smaller of two runs of each (shared 192-thread machine
   `levels = fixed`, and with a `macro-step-target` within the step of the slowest cells the map is the one built for
   the target (the depth the target gives); the stage sequence of one macro step equals the reference sequence.
   < 1 min.
+- ☑ **I17 — Multirate on MPI ranks and OpenMP threads** (`MultirateHybrid`, needs-mpi): 1×1 = P×T bit for bit for
+  the single rate and the multirate, the 1×1 multirate runs with cells on more than one level (laminar, Spalart–Allmaras and SST plates in 2×2 blocks, the 3-D hot cube in 2×2×2
+  blocks, the laminar plate in two blocks
+  joined with the orientation -1 0 0 1, Euler cases in blocks, maps whose depth comes from the largest local step of all
+  the processes, also where the blocks of one process alone span fewer octaves, a face
+  between levels one cell from a rank boundary, the block-to-rank map, a blast tube in blocks whose attempts take states
+  that are not physical, the stop below 2^-10 of the first attempt on 3 processes, the stop at `max-attempts` on 1×1,
+  3×1 and 3×2 and the stop on a local step that is not a positive finite number on 3 processes, which holds in the
+  builds without floating-point traps, TESTING and RELEASE, each process stopping with the others), the plate with
+  Spalart–Allmaras and SA-RC with `max-level` 0 on 2 ranks equal to 1×1, conservation
+  ≤ 1e-12, with the probe library of `MPIThreadFunnel` (built on Linux only) no MPI call from a
+  thread other than the main one and the largest MPI tag ≤ 32767; the plate joined with -1 0 0 1 equal to the plate without the
+  turn within 1e-10 of the scale of each variable; the exchange wait, the exchange start and the compute spread of the `Timing`
+  block and the times per level over the ranks on 2 ranks with unequal work by a map that the log names, on 1 and 2 threads; exact
+  restart on 2 ranks × 2 threads. ~6 min (one run,
+  gfortran 13.2 TESTING with Intel MPI).
 
 ---
 
