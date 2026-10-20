@@ -84,7 +84,7 @@ test/
 │   │   └── isentropic-vortex/ # Isentropic vortex convection (N1): order of accuracy on 32/64/128 grids
 │   └── viscous/               # Viscous cases
 │       ├── flat-plate-laminar/
-│       ├── flat-plate-turbulent/
+│       ├── flat-plate-turbulent/  # Subdirs: SA/ SST/ Wilcox2006/
 │       ├── ablating-wall/     # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column
 │       ├── mms/                   # residuals/: right-hand sides on manufactured fields (RANS, wedge); skewed/: order on skewed grids (validation tier)
 │       ├── wedge-axis-step/       # Local time step next to the axis of the wedge (validation tier)

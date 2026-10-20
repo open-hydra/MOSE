@@ -331,7 +331,7 @@ pp. 26–27): the limits are those of the interior.
 | `RK3` | $[-2.5127, 0]$ | 1.17 | 1.25 | 0.62 | 1/2 |
 | explicit Euler (`euler`) | $[-2, 0]$ | unstable | 1 | 1/2 | 1/2 |
 
-On the 2-D axisymmetric wedge (type `200` on the $k$ faces) the stress on the wedge faces adds to the
+On the 2-D axisymmetric wedge (type `200` or `300` on the $k$ faces) the stress on the wedge faces adds to the
 rows of $u_r$ and $u_\theta$ of every cell terms that grow as $1/r^2$ next to the axis: in the row of
 $u_r$ the diagonal $-\tfrac{4}{3}\nu_e/r^2$ and couplings $\tfrac{2}{3}\nu_e|\nabla\xi_d\cdot\mathbf{e}_r|/(2r)$
 to the $u_r$ and $\tfrac{2}{3}\nu_e|\nabla\xi_d\cdot\mathbf{e}_x|/(2r)$ to the $u_x$ of the neighbours $d\pm1$, in the
@@ -393,7 +393,10 @@ so that $\Delta t\,(4D_{\max}\sum_d|\nabla\xi_d|^2 + s_h) = 4\,\text{VNN}$. What
 
 Next to the axis of square cells $s_h = 8\,\nu/\Delta r^2$; far from it $s_h$ vanishes as $1/r$. The wedge stress, and with it $s_h$, applies
 with either sign of the wedge angle (a right-handed mesh with the axis on the last $j$ face has a negative one). Test
-`WedgeAxisStep`.
+`WedgeAxisStep`. The step takes $s_h$ on every 2-D mesh with a wedge angle, whatever the type of its $k$ faces: the viscous
+flux of faces of type `200` and that of symmetry faces (`300`), whose mirror image of a cell is, without swirl, the cell
+turned by the wedge angle, both carry this stress; null (`0`) $k$ faces carry none, and there $s_h$ only makes the step
+smaller than it needs to be.
 
 These limits are linear (von Neumann, smooth solutions). With the limiter, positivity (a maximum principle:
 in more than one dimension a second-order scheme is not TVD, Goodman et al. 1985 as cited in [9], p. 15 of the
@@ -451,7 +454,8 @@ a bound $\hat d_i$ of their stiffness, the derivative $d_i$ of the destruction t
 the start of the step alone: $1/\Delta t_i$ gains the term $\hat d_i$, so that
 $\Delta t\,d_i \le \Delta t\,\hat d_i \le 1$ and no stage makes $\tilde\nu$, $k$ or $\omega$ negative through their
 destruction
-([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)).
+([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)). The Reynolds-stress model SSG/LRR, which the key
+`turbulence` does not select in this version, has no such bound: its $\hat d_i$ is zero.
 
 !!! tip "CFL ramp-up"
 

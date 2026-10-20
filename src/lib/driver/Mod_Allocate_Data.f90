@@ -143,8 +143,8 @@ contains
     !! Without `keep`, every block gets everything.
     !!
     !! The excluded blocks still need geometry because set-up reads the mesh
-    !! of blocks this rank does not own: `Check_Mesh_Type` reads `blk(1)%node`
-    !! everywhere, `BC_Connect_Metrics` builds ghost metrics from a possibly
+    !! of blocks this rank does not own: `Check_Mesh_Type` reads the nodes of
+    !! every block, `BC_Connect_Metrics` builds ghost metrics from a possibly
     !! remote donor's nodes, and `Compute_Yn` minimises over every wall face in
     !! the domain.  `deallocate_remote_computation_data` releases the geometry
     !! too, once metrics are built.

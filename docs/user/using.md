@@ -250,7 +250,7 @@ set the threshold. An input written for the absolute test of earlier versions
 keeps its stop with `res-threshold` divided by the density residual of the
 first iteration, R₁: Rₙ ≤ (ε/R₁) R₁ is Rₙ ≤ ε. R₁ is the first row of
 `residual-history.dat` when `res-diter` is 1 (ten digits) and the
-`MOSE_RES_REFERENCE` of the vtk solutions (all its bits); this holds on one
+`MOSE_RES_REFERENCE` of the solutions (all its bits); this holds on one
 grid level, since a sequence of grids measures each level from its own first
 residual. A residual that rises before it falls is still measured
 from the first iteration: the run goes on until the residual is

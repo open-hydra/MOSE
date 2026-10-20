@@ -730,7 +730,7 @@ A 2-D axisymmetric case is a wedge of the 3-D mesh: one cell in $k$, whose two
 $k$ faces lie in the meridional planes $\theta = \mp\delta/2$ and carry the
 boundary type `200`. MOSE integrates the 3-D equations on the wedge; there are
 no axisymmetric source terms. The ghost cell across each wedge face is the cell
-itself rotated by $\pm\delta$ about the $x$ axis, so every face flux follows
+itself rotated by $\mp\delta$ about the $x$ axis, so every face flux follows
 from the state of the cell:
 
 - inviscid: the pressure and the momentum carried by the cell state rotated to

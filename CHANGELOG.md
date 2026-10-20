@@ -146,7 +146,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   when its residual has fallen by that factor, and the default, `1e-10`, is a fall of ten orders. The test compared the residual
   as it is, which scales with the level of density and with the square root of the number of cells: the same flow stopped at
   different iterations in different units, and a flow at low density could stop after its first iteration, unconverged. Every
-  steady run that ends on `res-threshold` ends at another iteration (the PrandtlMeyer case of the test suite runs 761 iterations
+  steady run that ends on `res-threshold` ends at another iteration (the PrandtlMeyer case of the test suite runs 767 iterations
   instead of 555); runs that end on `iter-threshold` do not change. `residual-history.dat` and the screen still report the
   residual as it is. A restart from a solution that holds no reference measures the threshold from its own first iteration, with a
   warning. An input written for the absolute test keeps its stop with `res-threshold` divided by the density residual of the first
@@ -480,8 +480,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `MPI_THREAD_FUNNELED`, the thread level MOSE requests, requires. Inside the parallel region of the Runge–Kutta stages the halo
   exchange and the exchange of the smoothed residuals were wrapped in `single` constructs, which any thread of the team may
   execute: with more than one thread per rank, MPI calls could come from threads other than the primary one. They are now
-  `master` constructs, which the primary thread executes, each followed by the barrier that the `single` construct implied.
-  Results do not change.
+  `master` constructs, which the primary thread executes, each followed by the barrier that the `single` construct implied
+  (none after the block that posts the sends, which was `single nowait`). Results do not change.
 - MOSE builds and runs with gfortran 10 or later and an MPI library whose Fortran interface gives no explicit interface for the
   routines with choice buffers, such as Intel MPI 2021.12 with gfortran 13. The build stopped with errors in `Mod_MPI.f90` (the
   same routine called with buffers of different types and ranks), and a build forced through them crashed in

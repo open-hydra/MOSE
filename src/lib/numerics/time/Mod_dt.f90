@@ -33,9 +33,12 @@ contains
     ! only), and a bound of their stiffness on the current state of each cell enters the step
     explicit_sources = obj_time_scheme%time_accurate .and. model == 2
 
-    ! 2-D axisymmetric wedge (type 200 on the k faces): the stress on the wedge faces enters the rows of u_r and u_theta
-    ! with terms that grow as 1/r^2 next to the axis, and the step must see them (compute, s_h). Same guard as the wedge
-    ! stress (Lib_BC_Fluxes_Rotational): delthe is negative on a right-handed mesh with the axis on the j = jm face.
+    ! 2-D axisymmetric wedge (every 2-D mesh with a wedge angle, whatever the type of its k faces): the viscous stress on
+    ! the wedge faces enters the rows of u_r and u_theta with terms that grow as 1/r^2 next to the axis, and the step
+    ! must see them (compute, s_h). Faces of type 200 (Lib_BC_Fluxes_Rotational) and symmetry faces 300
+    ! (Lib_BC_Fluxes_Symmetry: without swirl the mirror image of the cell is the cell turned by the wedge angle) carry
+    ! that stress; null k faces carry none, and there s_h only makes the step smaller than needed. Same guard as the
+    ! stress of the faces of type 200: delthe is negative on a right-handed mesh with the axis on the j = jm face.
     ! delthe exactly zero written as two ordered comparisons (no real equality test).
     wedge = ndir == 2 .and. .not. ( delthe >= 0d0 .and. delthe <= 0d0 ) .and. model > 0
 

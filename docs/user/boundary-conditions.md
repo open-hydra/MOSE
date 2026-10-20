@@ -140,7 +140,7 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 
 !!! note "Axisymmetry (200)"
     With one cell in $k$, type `200` on faces 5 and 6 makes the mesh a 2-D axisymmetric wedge: the two faces lie at
-    $\theta = \mp\delta/2$ and the ghost cell across each is the cell rotated by $\pm\delta$ about the $x$ axis. The
+    $\theta = \mp\delta/2$ and the ghost cell across each is the cell rotated by $\mp\delta$ about the $x$ axis. The
     inviscid flux gives the pressure and centrifugal terms; with the Navier–Stokes equations the viscous stress of the
     faces is applied as well ($-\tau_{\theta\theta}/r$ in the radial momentum, see
     [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge-bc-200)). Keep the wedge thin: the azimuthal

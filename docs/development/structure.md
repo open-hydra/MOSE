@@ -162,7 +162,10 @@ Each call to `Explicit_Step` performs one complete time step:
 4. **Compute residual** and write diagnostics.
 
 The RK stages run inside one OpenMP parallel region. The MPI calls made inside it (the halo
-exchange in `Fill_Ghost_Cell`, the residual exchange of the implicit residual smoothing) are made
+exchange in `Fill_Ghost_Cell`, the exchange of the fluxes of the faces between ranks in
+`Connection_Fluxes`, the exchange of the velocity gradient of the rotation–curvature correction
+(SA-RC, SST-RC) in `Ghost_Velocity_Gradient`, the residual exchange of the implicit residual
+smoothing) are made
 by the primary thread only, in `!$omp master` blocks (OpenMP 5.1 added the `masked`
 construct and deprecated `master`), each followed by an explicit
 `!$omp barrier` wherever the other threads use its result. MOSE initialises MPI with

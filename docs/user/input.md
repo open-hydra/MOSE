@@ -111,7 +111,8 @@ the additive rule stays stable for any `cfl` and `vnn` up to these values:
 | `RK3` | 1.17 | 0.62 |
 | `euler` | 1 with `first-order` reconstruction (unstable with `MUSCL`) | 0.5 |
 
-These are linear limits. With the limiter, positivity and the TVD property are guaranteed
+These are linear limits. With the limiter, positivity (a maximum principle; the scheme is not TVD in more than one
+dimension) is guaranteed
 only up to `cfl = 0.5` and `vnn = 0.5`, with Heun and with RK3
 ([theory](../theory/time-integration.md#local-time-step)), and the `vnn` limits are sharp: a run
 a little beyond them blows up. Suggested values:
