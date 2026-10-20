@@ -53,6 +53,7 @@ contains
       call check_mpi_error(ierr)
       if (provided < MPI_THREAD_FUNNELED) then
         write(*,'(A)') ' ERROR: MPI does not support the required threading level (MPI_THREAD_FUNNELED)'
+        call flush_output_units()
         call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
       end if
     end if
@@ -621,24 +622,43 @@ contains
     integer :: abort_ierr
     if (ierr /= 0) then
       write(*,'(A,I4,A,I6)') ' [RANK ', mpi_rank_, '] MPI error code: ', ierr
+      call flush_output_units()
       call MPI_ABORT(MPI_COMM_WORLD, 1, abort_ierr)
     end if
 #endif
   end subroutine check_mpi_error
 
 
-  !> MPI-aware abort: prints message, then aborts all ranks.
+  !> MPI-aware abort: prints message, writes out the output of this process (flush_output_units), then aborts all
+  !> ranks.
   subroutine mpi_abort_all(message)
     character(len=*), intent(in) :: message
 #ifdef USE_MPI
     integer :: ierr
     write(*,'(A,I4,A,A)') ' [RANK ', mpi_rank_, '] ABORT: ', trim(message)
+    call flush_output_units()
     call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
 #else
     write(*,'(A,A)') ' ABORT: ', trim(message)
     error stop
 #endif
   end subroutine mpi_abort_all
+
+
+#ifdef USE_MPI
+  !> Internal: write out what this process still holds for output_unit and error_unit, before MPI_ABORT. MPI_ABORT
+  !> makes only a "best attempt" to abort the processes (MPI-4.1, section 11.4.2) and need not end this one through
+  !> the end of the Fortran program, where the run-time library writes out its units: built with gfortran and run
+  !> with Open MPI 4.1.4 as one process with its output on a file, a run lost the message, everything written before
+  !> it and the lines on error_unit (where FLINT writes its warnings). Called before every MPI_ABORT of MOSE. It
+  !> writes out the units of this process only: what the other ranks still hold when the run is aborted is not
+  !> written out by this call.
+  subroutine flush_output_units()
+    use iso_fortran_env, only: error_unit
+    flush(output_unit)
+    flush(error_unit)
+  end subroutine flush_output_units
+#endif
 
 
   !> Stop of every rank on an error that every rank has found, a decision taken

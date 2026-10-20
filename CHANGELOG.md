@@ -585,6 +585,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   all, and the first rank that found the error writes it, with its rank. Rank 0 decided alone, so a run in which rank 1 could not
   read its copy of the file went on to its end; and with the lean read of a `.szplt` file, where each rank reads the variables of
   its own blocks after that decision, an error of that read was never looked at.
+- With MPI, a rank that stops every rank with `MPI_ABORT` (an error that it finds alone, such as a folded or degenerate cell,
+  the axis at r = 0, a wall face of zero area or a probe of an unknown variable) writes out its output and its error output
+  first. Built with gfortran and run with Open MPI 4.1.4 as one process with its output on a file, as CTest runs the fast
+  tests in an MPI build, the run ended without writing them out: the message, the output that the process still held before
+  it and the warnings on the error output were lost, and the log of a stop at set-up held only the lines of Open MPI. With
+  Intel MPI 2021.12 nothing was lost. Builds without MPI do not change.
 - With MPI, rank 0 reads `input.ini`, at set-up and whenever it is read again during the run, and passes its text to every rank,
   which parses it: every rank takes the same values. Every rank read the file on its own, so a file rewritten while the ranks
   read it again could give them different values, and a different `sol-diter`, `res-diter` or `ini-diter` made the ranks call

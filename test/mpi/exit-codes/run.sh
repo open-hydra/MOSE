@@ -51,6 +51,19 @@
 #  once with the rank that found it, and the STOP line of both ranks: the
 #  ranks decide together on the error of the read. The processes left
 #  behind are handled as above.
+#
+#  A rank that stops every rank with MPI_ABORT (an error that it finds
+#  alone, here a probe of an unknown variable) writes out what it holds for
+#  its output and its error output first: the Sod tube in air with
+#  chemistry = finite-rate, whose set-up writes a warning of FLINT on the
+#  error output, and a probe with the variables "p foo", run as one process
+#  without the launcher with its output on a file (as CTest runs the fast
+#  tests in an MPI build), must end within 60 s with exit code 1 to 128 and
+#  keep in its log the message, the line "Boundary conditions OK" of the
+#  set-up summary, written before it, and the warning of FLINT. Built with
+#  gfortran and run with Open MPI 4.1.4, the process ended without writing
+#  them out and the log held only the lines of Open MPI; with Intel MPI
+#  2021.12 nothing was lost.
 #===============================================================================
 set -uo pipefail
 
@@ -315,6 +328,54 @@ else
 fi
 if [[ -n $left ]]; then
   echo "  [FAIL] mpi-ic-read, MOSE processes of this run left behind by the launcher, now stopped: $left"
+  fail=1
+fi
+
+echo "-- a rank that stops every rank with MPI_ABORT writes out its output first (one process without the launcher) --"
+python3 -B ../../fast/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
+cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 2
+newrun = true
+
+[MOSE-Physics]
+equations = euler
+chemistry = finite-rate
+
+[MOSE-Numerics]
+cfl = 0.9
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+
+[MOSE-Chemistry]
+ode-solver = sdirk4b
+
+[MOSE-Probes]
+probe1 = pA
+
+[pA]
+variables = p foo
+diter = 1
+position = 0.5 0.0 0.0
+EOI
+timeout -k 10 60 "$LOCAL" > OUTPUT/mpi-abort-log.log 2>&1
+rc=$?
+message=missing; summary=missing; warning=missing
+grep -a -q -F -- 'unknown probe variable "foo"' OUTPUT/mpi-abort-log.log && message=found
+grep -a -q -E 'Boundary conditions +OK' OUTPUT/mpi-abort-log.log && summary=found
+grep -a -q -F -- 'FLINT Assign_Mechanism: explicit procedure for' OUTPUT/mpi-abort-log.log && warning=found
+if [[ $rc -ge 1 && $rc -le 128 && $rc -ne 124 && $message == found && $summary == found && $warning == found ]]; then
+  echo "  [ok  ] mpi-abort-log, one process without the launcher, stopped with MPI_ABORT: exit code $rc; in its log the" \
+       "message, the line of the set-up summary written before it and the warning of FLINT on the error output"
+else
+  echo "  [FAIL] mpi-abort-log, one process without the launcher, stopped with MPI_ABORT: exit code $rc (required 1 to" \
+       "128 within 60 s; 124 is the time limit), the message (unknown probe variable) $message, the line Boundary" \
+       "conditions OK of the set-up summary $summary, the warning of FLINT on the error output $warning (see" \
+       "OUTPUT/mpi-abort-log.log)"
   fail=1
 fi
 if [[ $fail -eq 0 ]]; then

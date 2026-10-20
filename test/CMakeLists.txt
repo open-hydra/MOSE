@@ -471,6 +471,10 @@ if(USE_MPI)
     # A value of the initial condition that is not finite stops both ranks with exit
     # code 1, also when rank 1 alone holds it; so does an initial condition that
     # rank 1 alone cannot read (two folders).
+    # A rank that stops every rank with MPI_ABORT writes out its output first: one
+    # process without the launcher, its output on a file, keeps in its log the
+    # message (a probe of an unknown variable), the set-up summary before it and a
+    # warning that FLINT writes on the error output.
     mose_add_mpi_script(MPIExitCodes mpi/exit-codes "needs-mpi;implementation;1D")
     # input.ini read again during the run: rank 0 reads it and every rank parses
     # its text. sol-diter = 7 written in the input.ini of rank 0 alone (each
