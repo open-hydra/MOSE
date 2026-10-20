@@ -4,7 +4,7 @@ Reference plan for expanding the MOSE test suite to cover **physics**, **numeric
 and **implementation**, plus a fast tier suitable for a `git push` pre-push hook
 running on GitHub's CI runner.
 
-> Status legend: ☐ to do · ◐ in progress · ☑ done
+> Status legend: ☐ not covered · ◐ partial (the item names what it does not cover) · ☑ covered
 
 ---
 
@@ -169,13 +169,13 @@ of the case:
 - ☐ **I1 — Freestream preservation / GCL**: uniform flow on a stretched, curvilinear,
   multi-block mesh; assert residual stays at machine-zero.
 - ◐ **I2 — Single-block vs multi-block equivalence**: same problem as 1 block and 2×2
-  blocks; fields identical to round-off. Direct halo/interface-flux test. *Done for two
+  blocks; fields identical to round-off. Direct halo/interface-flux test. *Covered for two
   blocks:* `test/fast/connections/connection-flux` (`Connections`/`ConnectionFlux`, a periodic shock tube as one and
   as two blocks, bit for bit, and conservation) and `test/fast/connections/connection-order`
   (`Connections`/`ConnectionOrder`, two 2-D blocks with permuted index directions, the `bc.txt` records
   sorted and reversed); with one block per MPI rank, `test/mpi/connection-flux`
   (`MPIConnectionFlux`) and `test/mpi/connection-order` (`MPIConnectionOrder`), needs-mpi
-  tier. Four blocks at a vertex and 3-D faces with permuted directions are not covered.
+  tier. *Not covered:* four blocks at a vertex and 3-D faces with permuted directions.
 - ☑ **I3 — Restart round-trip**: N steps vs (N/2 → write → restart → N/2); match to
   ~2e-15. *Done:* `test/fast/restart` (restart = `newrun=false`, reads OUTPUT/field.tec).
   With `sol-format = vtk raw` the same test asks for identical bits, iteration counters
@@ -360,10 +360,9 @@ grids and of N8, take ~76 s, ~20 s and ~72 s of CPU time at one thread: they are
 The current blocker is that only 2 cases are in CTest. Restructure before adding cases:
 
 1. ◐ **Wire cases into [`test/CMakeLists.txt`](CMakeLists.txt)** with `LABELS` via the
-   `mose_add_test()` / `mose_add_fast_script()` helpers. *Done:* the dependency-free
-   cases with proper exit codes (Sod79, Einfeldt91, Noh87, Toro99, PrandtlMeyer) plus
-   the new fast scripts. *Remaining:* the `verify.py` cases that don't yet exit non-zero
-   on failure (most 2-D/viscous cases) and the `needs-*` heavy cases.
+   `mose_add_test()` / `mose_add_fast_script()` helpers. *Covered:* the case folders of
+   the table of section 2 that have a CTest name, and the fast scripts. *Not covered:*
+   the case folders marked *outside* in that table.
 2. ☑ **Pre-push hook** → `ctest -L fast` ([`.githooks/pre-push`](../.githooks/pre-push)).
 3. ☑ **PR CI** → `ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi|verification"`
    ([`ctest.yml`](../.github/workflows/ctest.yml)); a second job with `USE_MPI=ON`
