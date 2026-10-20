@@ -99,8 +99,11 @@ of the case:
 ### Numerics (biggest gap: order-of-accuracy verification)
 - ☑ **N1 — Isentropic vortex convection** (2D, smooth, periodic): convect one period,
   grid-refine 32²/64²/128², **measure observed order** (→2 with MUSCL). *Done:*
-  `test/2D/euler/isentropic-vortex` (`IsentropicVortex`, validation tier). Normalised
-  L2 density error 2.56 → 0.56 → 0.17 %, observed order 2.18 then 1.75 (≈2). Meshes/ICs/BCs
+  `test/2D/euler/isentropic-vortex` (`IsentropicVortex`, validation tier). With MOSE at
+  commit `10b59003b72c`, `verify.py` gives a normalised L2 density error of 2.49 → 0.61 →
+  0.17 % and observed orders 2.04 then 1.84 against the exact vortex at t = 10; the runs
+  end slightly after t = 10 (the last time step is not cut), and against the exact vortex
+  at the time each run ends the orders are 2.15 and 2.13. Meshes/ICs/BCs
   pre-generated with GRIB + `build_ic.py` + ATLAS BCB (periodic). *Possible extension:*
   a Riemann × limiter sweep.
 - ☑ **N2 — Method of Manufactured Solutions (NS)**: source-term forcing, grid refine,
@@ -357,7 +360,7 @@ grids and of N8, take ~76 s, ~20 s and ~72 s of CPU time at one thread: they are
 
 ## 5. Infrastructure (do this first)
 
-The current blocker is that only 2 cases are in CTest. Restructure before adding cases:
+Restructure before adding cases:
 
 1. ◐ **Wire cases into [`test/CMakeLists.txt`](CMakeLists.txt)** with `LABELS` via the
    `mose_add_test()` / `mose_add_fast_script()` helpers. *Covered:* the case folders of
