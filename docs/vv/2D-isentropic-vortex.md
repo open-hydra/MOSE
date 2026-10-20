@@ -64,8 +64,13 @@ $p = \log_2\!\big(e(N)/e(2N)\big)$.
 | $128^2$ | 0.17 % | 1.75 |
 
 The error decreases at close to second order (mean $p \approx 2$), confirming the
-MUSCL/RK3 scheme is second-order accurate on smooth flow. The slight drop on the
-finest pair is the Van Leer limiter mildly clipping the smooth vortex core.
+MUSCL/RK3 scheme is second-order accurate on smooth flow. The lower order of the
+finest pair does not come from the scheme. The runs do not cut their last time
+step at $t = 10$ and end slightly later ($t = 10.056$, $10.001$ and $10.007$ for
+the three grids of the table, measured with the code of commit `b29130b`, which
+gives the table again), while `verify.py` measures the error against the
+exact vortex at $t = 10$. Against the exact vortex at the time each run ends, the
+errors are 2.51 %, 0.562 % and 0.128 % and the observed orders 2.16 and 2.13.
 
 <figure>
   {% include "vv/images/IsentropicVortex.svg" %}
