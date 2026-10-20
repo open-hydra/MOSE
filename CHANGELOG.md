@@ -645,9 +645,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ghost layer vanish where the second cell is 1.5 times as wide as the first, and the first layer at twice: a run stopped on a
   determinant of exactly zero, or went on with a metric as large as 1/det, and at chimera faces (`102`) the viscous flux took an
   infinite, undefined or reversed value where the second cell is three times the first or more. A cell whose determinant is
-  below 1e-12 of the product of its edges, or a ghost cell turned over or degenerate against the first cell, now stops the run
-  at set-up with its block, cell, face and ratio, and the message gives the thresholds and the remedy (index lines that change
-  smoothly across the first two node layers at the face). Every run changes in the last bits next to such faces, and by
+  below 1e-12 of the product of its edges, or a ghost cell of the first layer behind a chimera face turned over or degenerate
+  against the first cell, now stops the run at set-up with its block, cell, face and ratio, and the message gives the
+  thresholds and the remedy (index lines that change smoothly across the first two node layers at the face). Behind the
+  other faces no flux reads the metric of the ghost cells, and only a ghost cell of zero size stops: a mesh whose edges along
+  such a face grow 3 times or more across the first cell runs. Every run changes in the last bits next to such faces, and by
   O(r − 1) where the cells are stretched across them.
 - A cell folded at one of its corners, or turned against the orientation of its block, stops the run at set-up, naming block,
   cell, corner node, the Jacobian there and the bound; the coarse levels of a sequence of grids are checked too. Such a cell

@@ -203,7 +203,8 @@ mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D"
 # Viscous stencil of chimera faces (F9): one evaluation of the residual of a
 # linear field next to chimera faces, also at the edges of the block face, in
 # 2-D, in 3-D and on a 2-D axisymmetric wedge (against the same mesh as one
-# block).
+# block); a chimera face whose first layer of extrapolated ghost cells is
+# turned over stops the run at set-up.
 # Faces between blocks (101, 201): one flux per face. A periodic shock tube as
 # one block and as two blocks gives the same bits, and conserves mass,
 # momentum and energy, with and without shock sensor and preconditioning.
@@ -322,12 +323,12 @@ endif()
 # have zero viscous force and heat conduction in every cell, so the face
 # gradients must give zero to round-off on meshes with nodes moved at random,
 # folds between blocks, a fan of index lines at a wall (the second layer of
-# extrapolated ghost cells turned over), points shared by 3 and 5 blocks, symmetry planes and
+# extrapolated ghost cells turned over, and both layers), points shared by 3 and 5 blocks,
+# symmetry planes and
 # walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
 # against an independent replica of their formulas. ViscousWallPatch: the
 # cells next to walls of prescribed temperature varying along the wall.
-# Cost: 40 and 61 one-step solver runs, about 9 s and 13 s of CPU time at
-# one thread.
+# Cost: 44 and 63 one-step solver runs, about 10 s and 14.5 s at one thread.
 mose_add_fast_script(ViscousPatch fast/viscous-patch "fast;numerics;2D;3D")
 
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,

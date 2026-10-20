@@ -3,7 +3,8 @@
 #  Patch test of the viscous fluxes next to walls of prescribed temperature
 #  (fast tier): the cells with a face of type 302 on the meshes of
 #  ViscousLinearPatch, with T linear, so that T_w varies along the walls, on
-#  skewed cells; a velocity that is linear and zero on a no-slip wall,
+#  skewed cells, and behind a wall whose two layers of extrapolated ghost
+#  cells are turned over (fan4); a velocity that is linear and zero on a no-slip wall,
 #  the wall cells with nodes moved at random (momw), and the same on a wall
 #  that does not turn with a rotating frame, where the velocity in the frame
 #  is -Omega x r, varying along the wall (momr; also with the face metrics

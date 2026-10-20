@@ -10,7 +10,9 @@
 #  dyadic coordinates, where the ghost cells must not degenerate), a fan of
 #  index lines at a face (the edges along it growing 7/4 times across the
 #  first cell: the second layer of extrapolated ghost cells, which no flux
-#  reads, turned over), points shared by 3 and by 5 blocks,
+#  reads, turned over; 4 times: both layers turned over, of which only the
+#  viscous flux of a chimera face would read the first), points shared by
+#  3 and by 5 blocks,
 #  a 3-D pair of blocks, a symmetry plane under skewed cells. One explicit
 #  step with the Navier-Stokes equations and one reference step (Euler, or
 #  Navier-Stokes with mu = k = 1e-30 next to walls) from the same state: the
@@ -80,7 +82,7 @@ step() {
 status=0
 if [[ $NAME == ViscousWallPatch ]]; then
   echo "-- viscous patch test: cells next to walls of prescribed temperature (302), T varying along the wall --"
-  for mesh in fold2 jump jump2 star3 star5 box3d sym paraT; do
+  for mesh in fold2 jump jump2 fan4 star3 star5 box3d sym paraT; do
     python3 -B "$MC" case "$mesh" ene > /dev/null || exit 1
     step ns "$mesh" ene
     step ref "$mesh" ene
@@ -137,7 +139,7 @@ if [[ $NAME == ViscousWallPatch ]]; then
   python3 -B "$MC" limits OUTPUT/paraT-hot-ns.log || status=1
 else
   echo "-- viscous patch test: linear velocity (mom) and linear temperature (ene) --"
-  for mesh in fold2 jump jump2 fan star3 star5 box3d sym; do
+  for mesh in fold2 jump jump2 fan fan4 star3 star5 box3d sym; do
     for run in mom ene; do
       python3 -B "$MC" case "$mesh" "$run" > /dev/null || exit 1
       step ns "$mesh" "$run"

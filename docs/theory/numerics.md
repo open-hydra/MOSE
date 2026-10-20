@@ -310,16 +310,21 @@ mean of the nodes of the face, $\mathbf{x}_1$ that of the cell). Their edges
 along the face are extrapolated as well, and turn a layer over where they change
 sharply across the first cell, as where the index lines across the face spread
 apart away from it: on a plane 2-D mesh where they grow 3 times or more the
-first layer, from 5/3 times the second. The first layer is the ghost cell of the
-face (its metric enters the viscous flux of chimera faces), and such a mesh
-stops at setup (below); the remedy is the mesh, with index lines that change
-smoothly across the first two node layers at that face. Of the second layer the
-solver reads only the length across the face, in the MUSCL reconstruction of
-chimera and mapped faces, and that is the length of the first cell whatever the
-edges along the face: its sign is not checked. A cell whose determinant is zero
-to $10^{-12}$ of the product of its edge lengths, or a ghost cell of the first
-layer whose determinant is not that of the first cell in sign and to $10^{-12}$
-in size, stops the run at setup, with its block, cell and face. So does a cell folded at
+first layer, from 5/3 times the second. Behind a chimera face (102) the first
+layer is the ghost cell of the face, whose metric enters its viscous flux, and
+such a mesh stops at setup (below); the remedy is the mesh, with index lines
+that change smoothly across the first two node layers at that face (a ghost
+cell built as the mirror image of the first cell would not turn over: not done).
+Behind the other faces no flux reads the metric of either layer: walls take the
+metric of the cell, or the stencil of positions, the other faces carry no
+viscous flux that needs it, and the wedge rotates the cell. The solver reads
+only the length across the face, in the MUSCL reconstruction, and that is the
+length of the first cell whatever the edges along the face: their sign is not
+checked. A
+cell whose determinant is zero to $10^{-12}$ of the product of its edge lengths,
+or a ghost cell of the first layer behind a chimera face whose determinant is not
+that of the first cell in sign and to $10^{-12}$ in size, stops the run at setup,
+with its block, cell and face. So does a cell folded at
 one of its corners, or turned against its block, with its block, cell and corner
 node: a cell is the image of the unit cube by the trilinear map of its eight
 nodes, and at a corner the Jacobian of that map is

@@ -143,7 +143,8 @@ contains
                                      domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg, 1 )
         case default  ! Rientra qui anche chimera
           call BC_Extrapolate_Metrics ( Im, Jm, Km, Fm, domain % blk(Bm), &
-                                        domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg, Bm )
+                                        domain % bc(i) % Mg, domain % bc(i) % dlg, domain % bc(i) % volg, Bm, &
+                                        chimera = ( domain % bc(i) % type == 102 ) )
       end select
     enddo
     !$omp end do

@@ -467,7 +467,8 @@ contains
     type(MOSE_vector_3D_type), intent(out) :: dl
     real(R8), intent(out)             :: vol
     real(R8), optional, intent(in)    :: det1     ! ghost cell: det of the first cell, whose sign and size it must keep
-                                                  ! (0: no such check: the second layer, and behind a face of zero area)
+                                                  ! (0: no such check: the second layer, the first behind a face that
+                                                  ! is not a chimera face, and behind a face of zero area)
     integer,  optional, intent(in)    :: loc(5)   ! block, cell i j k, face of a ghost cell (0 otherwise): stop message
     real(R8), optional, intent(in)    :: ratio    ! ghost cell: r = dl_2/dl_1 of the first two cells (stop message)
     ! Local
@@ -549,8 +550,8 @@ contains
     end if
     ! The volume has the sign of det: det J has the sign of the block in every point of a cell that is not turned over,
     ! and so has its integral. A cell turned over away from its centre can keep det at the centre and give a volume of
-    ! the other sign or zero. Not checked where det1 = 0 (the second ghost layer, and behind a face of zero area), whose
-    ! size alone is checked.
+    ! the other sign or zero. Not checked where det1 = 0 (the second ghost layer, the first behind a face that is not a
+    ! chimera face, and behind a face of zero area), whose size alone is checked.
     check_vol = .true.
     if ( present(det1) ) check_vol = det1 /= 0d0
     if ( check_vol ) bad = bad .or. .not. ( v * det > 0d0 )
@@ -580,8 +581,9 @@ contains
       if ( present(det1) ) then
         if ( det1 /= 0d0 ) write(*,'(A,ES12.4)') ' [ERROR]   det of the first cell next to the face: ', det1
         write(*,'(A)') ' [ERROR]   The ghost cells take the edge across the face of the first cell, and their edges along the'
-        write(*,'(A)') ' [ERROR]   face are extrapolated: the first layer turns over where those edges change sharply across'
-        write(*,'(A)') ' [ERROR]   the first cell (on a plane 2-D mesh, growing 3 times or more); a layer of zero size stops too.'
+        write(*,'(A)') ' [ERROR]   face are extrapolated: behind a chimera face (102), whose viscous flux takes its metric, the'
+        write(*,'(A)') ' [ERROR]   first layer turns over where those edges change sharply across the first cell (on a plane'
+        write(*,'(A)') ' [ERROR]   2-D mesh, growing 3 times or more); behind any face a layer of zero size stops too.'
         write(*,'(A)') ' [ERROR]   Remedy: index lines that change smoothly across the first two node layers at that face.'
       else
         write(*,'(A)') ' [ERROR]   Check the mesh, or the precision of the restart file.'
@@ -2230,15 +2232,20 @@ contains
   !> along the index lines, N(-g) = 2 N(-g+1) - N(-g+2): every ghost layer has the edge across the face of the first
   !> cell, so its size across the face never vanishes nor turns over; its edges along the face are extrapolated too, and
   !> turn a layer over where they change sharply across the first cell (on a plane 2-D mesh, growing 3 times or more
-  !> turns the first layer, 5/3 times the second). The first layer must keep the sign and the size of the first cell
-  !> (Compute_Metric_Tensor stops otherwise): its metric is the ghost metric of the viscous flux of chimera faces
-  !> (BC_Connection_Visc). Of the second layer the solver reads only the length across the face, in the MUSCL
-  !> reconstruction of chimera and mapped faces (BC_Connection_Eul), and that is the length of the first cell whatever
-  !> the edges along the face: its sign is not checked, only a zero size stops (no infinite metric). The first layer is centred at
+  !> turns the first layer, 5/3 times the second). Behind a chimera face (chimera true) the first layer must keep the
+  !> sign and the size of the first cell (Compute_Metric_Tensor stops otherwise): its metric is the ghost metric of the
+  !> viscous flux of chimera faces (BC_Connection_Visc), the one flux that reads the metric of an extrapolated ghost
+  !> cell. Behind the other faces no flux reads it: the walls (301, 302, 502-505) take the metric of the cell, or the
+  !> stencil of positions, the other faces carry no viscous flux that needs it, and the wedge (200) rotates the cell,
+  !> exactly when its node planes lie at theta = -+delthe/2 (otherwise the ghost cell is flat and the check of its size
+  !> stops the run). Of the ghost layers the solver then reads only the length across the face, in the MUSCL reconstruction
+  !> (the interior faces next to the boundary that of the first layer, BC_Connection_Eul of chimera and mapped faces
+  !> that of both), and that is the length of the first cell whatever the edges along the face: there their sign is not
+  !> checked, only a zero size stops (no infinite metric). The first layer is centred at
   !> 2 x_f - x_1 (x_f the mean of the nodes of the face, x_1 that of the cell): the position of the ghost values with a
   !> wall value (Ghost_Wall), and the MUSCL distance l0 of the first interior face is dl_1. The 2-D axisymmetric wedge
   !> rotates the cell (exact).
-  subroutine BC_Extrapolate_Metrics( Im, Jm, Km, Fm, blk, Mg, dlg, volg, b )
+  subroutine BC_Extrapolate_Metrics( Im, Jm, Km, Fm, blk, Mg, dlg, volg, b, chimera )
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout) :: blk
@@ -2246,6 +2253,7 @@ contains
     type(MOSE_vector_3D_type), intent(out)    :: dlg(2)
     real(R8), intent(out)                :: volg(2)
     integer, intent(in)                  :: b     ! the block, for the stop message of Compute_Metric_Tensor
+    logical, intent(in)                  :: chimera   ! a chimera face (102): the sign of the first layer is checked
     ! Local
     integer :: g, loc(5), d, x(3)
     real(R8) :: d1, rr
@@ -2267,6 +2275,9 @@ contains
     x = [Im, Jm, Km]
     if ( mod(Fm,2) == 1 ) x(d) = x(d) - 1
     if ( blk % dir(d) % f(x(1),x(2),x(3)) % a == 0d0 ) d1 = 0d0
+    ! Behind a face that is not a chimera face no flux reads the metric of the first layer: no check of its sign
+    ! either, as for the second layer (docs/theory/numerics.md, metrics of the ghost cells)
+    if ( .not. chimera ) d1 = 0d0
 
     select case (Fm)
       case(1)

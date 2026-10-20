@@ -25,12 +25,19 @@ uniform:
             ghost row, the chimera face takes half of the v/r of the divergence.
   wedgeref  the same wedge as one block of 2 NI - OVER cells in x, where the chimera faces are interior faces: the
             momentum residual of every cell of the two blocks of wedge must be that of the same cell here.
+  fanchim   plane with the y spacing of block 1 growing 4 times across its last cell (H/4 on the chimera face 2,
+            H from the node plane before it): the first layer of ghost cells extrapolated behind that face is turned
+            over, and the viscous flux of a chimera face takes its metric: the run must stop at set-up with
+            "ghost cell behind face 2: degenerate or inverted" and a non-zero exit code (a control). The centres of
+            those ghost cells fall at negative y, outside block 2: harmless, as the donors are given by index and the
+            run stops at set-up, before any ghost cell is filled.
 The scale S = mu G / H of the residuals per unit volume is the x momentum residual of the cell (2, 1) of block 1 in plane,
 whose one viscous x momentum flux is mu G H^2 through its upper face.
 
 Usage (from the test directory):
-  python3 -B make_case.py case NAME     INPUT/ic.tec and INPUT/bc.txt of plane, plane3d, wedge or wedgeref
+  python3 -B make_case.py case NAME     INPUT/ic.tec and INPUT/bc.txt of plane, plane3d, wedge, wedgeref or fanchim
   python3 -B make_case.py check         the checks, on OUTPUT/diagnostic-NAME.tec of the four cases; exit code 1 on a failure
+  python3 -B make_case.py stopped LOG   exit code 0 when LOG (fanchim) stopped at set-up on the ghost cell behind face 2
 """
 import math
 import os
@@ -63,6 +70,8 @@ def nodes(case, b):
                 if case.startswith("wedge"):
                     r, th = R0 + H * j, (k - 0.5) * WEDGE
                     row.append((x0 + H * i, r * math.cos(th), r * math.sin(th)))
+                elif case == "fanchim" and b == 1 and i == ni:
+                    row.append((x0 + H * i, 0.25 * H * j, H * k))     # the chimera face 2: a fan across the last cell
                 else:
                     row.append((x0 + H * i, H * j, H * k))
             out[k].append(row)
@@ -76,7 +85,7 @@ def centre(nd, i, j, k):
 
 def state(case, x, y, z):
     rho = P0 / (RGAS * T0)
-    if case == "plane":
+    if case in ("plane", "fanchim"):
         return rho, G * y, 0.0, 0.0, P0
     if case == "plane3d":
         return rho, G * (y + z), 0.0, 0.0, P0
@@ -105,7 +114,7 @@ def write_case(case):
             cells = [state(case, *centre(nd, i, j, k)) for k in range(nk) for j in range(nj) for i in range(ni)]
             for m in range(5):
                 f.write("".join(f" {c[m]:.17E}\n" for c in cells))
-    kfaces = {"plane": 0, "plane3d": 400}.get(case, 200)
+    kfaces = {"plane": 0, "fanchim": 0, "plane3d": 400}.get(case, 200)
     rows = []
     for b, nd in enumerate(blocks, 1):
         nk, nj, ni = len(nd) - 1, len(nd[0]) - 1, len(nd[0][0]) - 1
@@ -214,9 +223,20 @@ def check():
     return ok
 
 
+def stopped(log):
+    """fanchim: the run stopped at set-up on a ghost cell of the first layer behind the chimera face 2."""
+    with open(log, errors="replace") as f:
+        text = f.read()
+    hit = re.search(r"block 1, cell +\d+ +\d+ +\d+, ghost cell behind face 2: degenerate or inverted", text) is not None
+    print(f"  [{'ok  ' if hit else 'FAIL'}] fanchim: stop at set-up on the turned-over ghost cell behind the chimera face 2")
+    return hit
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "case":
         write_case(sys.argv[2])
+    elif len(sys.argv) == 3 and sys.argv[1] == "stopped":
+        sys.exit(0 if stopped(sys.argv[2]) else 1)
     elif len(sys.argv) == 2 and sys.argv[1] == "check":
         sys.exit(0 if check() else 1)
     else:

@@ -25,6 +25,11 @@ paraQ):
          first cell (from 1/16 at x = 0 to 7/64 at x = 1/8, then uniform), unit 2^-7 m (dyadic coordinates, as jump2):
          the ghost cells extrapolated behind the face 1 have edges along it of 1/4 and -1/2 of those of the face, the
          first layer narrower than the first cell, the second turned over (no flux reads its metric);
+  fan4   as fan with the j spacing growing 4 times across the first cell (1/16 at x = 0, 1/4 from x = 1/8 on): the
+         ghost cells behind the face 1 have edges along it of -2 and -5 times those of the face (-1/2 and -5/4 of
+         those of the node plane after it), both layers turned over (det -1/5 and -7/5 of the first cell); only the
+         viscous flux of a chimera face (102) would read the metric of the first, and the face 1 is a 400 face (mom)
+         or a wall 302 (ene);
   star3  a triangle cut into 3 blocks of 8 x 8 cells that meet at its centre (a point shared by 3 blocks);
   star5  a pentagon cut into 5 blocks of 8 x 8 cells that meet at its centre (a point shared by 5 blocks);
   box3d  two blocks of 6 x 6 x 6 cells joined at x = 0.5, the j lines of block 2 rising as y = t + 0.2 s t;
@@ -125,14 +130,14 @@ P_WORK = 1.0                        # momr on paraT and paraQ, whose energy is c
                                     # fluxes, (rho e + p) u (face area)/volume, is 1e-13 of the scale of the work at 1 Pa,
                                     # 1e-12 at 10 Pa (gfortran; 1e-12 and 4e-12 with ifx)
 LREF = 1.0e-2                       # m
-LREF2 = 2.0**-7                     # m, jump2 and fan: dyadic coordinates
+LREF2 = 2.0**-7                     # m, jump2, fan and fan4: dyadic coordinates
 OFFSET = np.array([1.0, 2.0, 0.0])  # unit coordinates: keep y > 0 away from the axis
 TOL = 1.0e-11
 TOL_REPLICA = 1.0e-10
 N_ULP_T = 6                         # momr on paraT: the temperature of a cell next to the 302 wall can differ from T_w by up
                                     # to 6 units in the last place of T_w (see work)
 FMT = '{: .17E}'
-MESHES = ('fold2', 'jump', 'jump2', 'fan', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
+MESHES = ('fold2', 'jump', 'jump2', 'fan', 'fan4', 'star3', 'star5', 'box3d', 'sym', 'paraT', 'paraQ', 'rand1')
 RUNS = ('mom', 'ene', 'rk3', 'momw', 'momr', 'enep', 'hot', 'ene103', 'ene104', 'mom103', 'mom104')
 BC_CONNECT, BC_SYM, BC_Q, BC_T, BC_OPEN = 101, 300, 301, 302, 400
 BC_COUPLED = (103, 104)                    # walls coupled to another solver (104: with the donor cells of a chimera)
@@ -202,12 +207,13 @@ def mesh_jump2(n=8):
     return [extrude(np.stack([S + 0.5 * T, T], axis=-1), 1.0 / n)]
 
 
-def mesh_fan(n=8):
-    """The j spacing 1/16 on the face x = 0 and 7/64 from the next node plane on: a fan across the first cell."""
+def mesh_fan(n=8, top=7.0 / 64.0):
+    """The j spacing 1/16 on the face x = 0 and top (7/64, or 1/4 for fan4) from the next node plane on: a fan across the
+    first cell."""
     XY = np.zeros((n + 1, n + 1, 2))
     for i in range(n + 1):
         XY[i, :, 0] = i / n
-        XY[i, :, 1] = np.arange(n + 1) * (1.0 / 16.0 if i == 0 else 7.0 / 64.0)
+        XY[i, :, 1] = np.arange(n + 1) * (1.0 / 16.0 if i == 0 else top)
     return [extrude(XY, 1.0 / n)]
 
 
@@ -281,6 +287,8 @@ def build(mesh, run):
         return [LREF2 * (X + OFFSET) for X in mesh_jump2()]
     elif mesh == 'fan':
         return [LREF2 * (X + OFFSET) for X in mesh_fan()]
+    elif mesh == 'fan4':
+        return [LREF2 * (X + OFFSET) for X in mesh_fan(top=0.25)]
     elif mesh == 'star3':
         blocks = mesh_star(3, n2)
     elif mesh == 'star5':
@@ -321,7 +329,7 @@ def outer_type(mesh, run, b, face):
     # ene
     if mesh == 'fold2':
         return {(0, 1): BC_T, (0, 3): BC_Q, (0, 4): BC_T, (1, 2): BC_OPEN, (1, 3): BC_T, (1, 4): BC_Q}[(b, face)]
-    if mesh in ('jump', 'jump2', 'fan', 'rand1'):
+    if mesh in ('jump', 'jump2', 'fan', 'fan4', 'rand1'):
         return {1: BC_T, 2: BC_Q, 3: BC_T, 4: BC_OPEN}[face]
     if mesh == 'paraT':
         return {1: BC_OPEN, 2: BC_OPEN, 3: BC_T, 4: BC_T}[face]
