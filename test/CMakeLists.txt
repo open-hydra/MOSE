@@ -703,3 +703,49 @@ if(USE_MPI)
         set_tests_properties(MPIRuntimeInput PROPERTIES TIMEOUT 120)
     endif()
 endif()
+
+# ===========================================================================
+#  Multirate integrator ([MOSE-Multirate], src/lib/numerics/time/explicit/Mod_Multirate.f90)
+#  Label "multirate" on all of them: ctest -L multirate -LE verification runs them without the longer forms (label
+#  verification), ctest -L multirate with them. The checks live in test/multirate/mr-<check>; each builds its
+#  small cases with test/multirate/mr-common/gen_mr_cases.py and needs only numpy. One fast smoke test; the other
+#  checks are grouped by subject in the validation and needs-mpi tiers (test/TESTING-PLAN.md: F31, I15-I18, N5, N6, P7, P8;
+#  cases, checks and thresholds in docs/vv/multirate.md).
+# ===========================================================================
+# Helper: like mose_add_fast_script, with its own timeout.
+function(mose_add_mr_script NAME DIR TIMEOUT)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/test/${DIR}/run.sh")
+        add_test(
+            NAME    ${NAME}
+            COMMAND bash -c "./run.sh"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${DIR}"
+        )
+        set_tests_properties(${NAME} PROPERTIES
+            LABELS      "${ARGN}"
+            TIMEOUT     ${TIMEOUT}
+            ENVIRONMENT "${_MOSE_TEST_ENV}"
+        )
+    endif()
+endfunction()
+
+# Helper: a group of checks of test/multirate (GROUP, the list CHECKS of the directories mr-<check>), run one after
+# the other by run_group.sh: every check runs, the group fails if one of them fails and names it.
+function(mose_add_mr_group NAME TIMEOUT GROUP CHECKS)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/run_group.sh")
+        add_test(
+            NAME    ${NAME}
+            COMMAND bash ./run_group.sh ${GROUP} ${CHECKS}
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate"
+        )
+        set_tests_properties(${NAME} PROPERTIES
+            LABELS      "${ARGN}"
+            TIMEOUT     ${TIMEOUT}
+            ENVIRONMENT "${_MOSE_TEST_ENV}"
+        )
+    endif()
+endfunction()
+
+# F31, fast: one level = single-rate step bit for bit, conservation with four levels, exact restart, and a
+# configuration outside the scope stopped at set-up, on two 1-D cases of 284 cells; the lines of the gas entering through
+# 400 faces, with one level as with the single rate, on a tube of 8 cells.
+mose_add_mr_script(MultirateSmoke multirate/mr-smoke 300 "multirate;fast;implementation;1D")

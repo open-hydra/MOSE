@@ -339,7 +339,10 @@ time; before the first instant it uses the first value, after the last instant t
 periodic). Steady runs evaluate the data at time $-1$: with a periodic table this time is wrapped into the period, so
 a steady run should use a constant table (or type `401`). In time-accurate runs the data of `402` and `410` are
 evaluated at the time of each Runge–Kutta stage (see
-[Time Integration](../theory/time-integration.md#stage-times-and-time-dependent-boundary-data)). A table that cannot
+[Time Integration](../theory/time-integration.md#stage-times-and-time-dependent-boundary-data)). With the multirate
+integrator (`[MOSE-Multirate] enabled = .true.`) a boundary record is evaluated at the stages of the level of its cell,
+at the stage times of that level (see
+[Multirate Time Stepping](../theory/time-integration.md#blocks-and-boundary-conditions)). A table that cannot
 be opened, holds no pair, holds a time or a value that is not finite (NaN or infinity: the message gives its line and
 column) or has decreasing times stops the run at set-up, and so does a `402` line with fewer values than listed above
 or with an empty one.

@@ -29,6 +29,7 @@ contains
     use MOSE_Lib_Newstate,   only: Report_Negative_Turbulence
     use MOSE_Lib_Ghost,      only: Report_Wall_Ghosts
     use MOSE_Lib_BC_Fluxes_Extrapolation, only: Report_400_Entering
+    use MOSE_Mod_Multirate,  only: mr_output_landed
     use IR_precision
     implicit none
     type(MOSE_simulation_type), intent(inout) :: simulation
@@ -102,10 +103,13 @@ contains
       ! it takes the next output number and, when due by time only, sets the time of the last output, which the final
       ! solution below then holds for a restart. With sol-overwrite = true the final solution is that output, written
       ! once. Collective: every rank evaluates the same condition. A run ends on the finest level only (Explicit_Step
-      ! sets TODO = 3 at level 1), whose domain and file names the block takes: the guard keeps it there
+      ! sets TODO = 3 at level 1), whose domain and file names the block takes: the guard keeps it there. With the
+      ! multirate integrator the solution due by time is that of the macro step that landed on t_k = k*sol-dtime, as at
+      ! TODO == 2: the time is then t_k exactly, and the sum time_from_call + sol-dtime can round above it
       iter_based = ( mod (simulation%domain(1) % iter, obj_io%sol_diter) == 0 )
-      if ( level == 1 .and. ( iter_based .or. &
-           simulation%domain(1) % time >= obj_sim_param%time_from_call + obj_io%sol_dtime ) ) then
+      if ( level == 1 .and. ( iter_based .or. ( obj_multirate%enabled .and. mr_output_landed ) .or. &
+           ( .not. obj_multirate%enabled .and. &
+             simulation%domain(1) % time >= obj_sim_param%time_from_call + obj_io%sol_dtime ) ) ) then
         obj_io%output_number = obj_io%output_number + 1
         if ( .not. iter_based ) obj_sim_param%time_from_call = simulation%domain(1) % time
         if ( .not. obj_io%sol_overwrite ) then
@@ -212,8 +216,9 @@ contains
         endif
         if (level == 1 .and. .not. obj_time_scheme%time_accurate) &
           call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
-      ! Time-based solution
-      elseif ( simulation%domain(level) % time >= obj_sim_param%time_from_call + obj_io%sol_dtime ) then
+      ! Time-based solution (multirate: at the macro step that landed on t_k = k*sol-dtime)
+      elseif ( ( obj_multirate%enabled .and. mr_output_landed ) .or. ( .not. obj_multirate%enabled .and. &
+               simulation%domain(level) % time >= obj_sim_param%time_from_call + obj_io%sol_dtime ) ) then
         obj_sim_param%time_from_call = simulation%domain(level) % time
         if (mpi_is_root) write(*,*) ' ... writing time-based solution'
         call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )

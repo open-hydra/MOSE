@@ -257,6 +257,16 @@ against its criterion, *runs* where it has none (the run ends with exit status 0
   0, 110 blocks, fewer blocks than ranks) gives the one-rank field, and a map for other
   ranks stops every rank with the same message.
 
+### Multirate integrator (`[MOSE-Multirate]`, label `multirate`)
+The checks live in `test/multirate/mr-<check>` and build their own small cases with
+`test/multirate/mr-common/gen_mr_cases.py` (numpy only); each entry below is a group of them, run one after the other
+by `test/multirate/run_group.sh`. Cases, checks and thresholds: [`docs/vv/multirate.md`](../docs/vv/multirate.md).
+`ctest -L multirate -LE verification` runs the entries below without their longer forms (label `verification`),
+`ctest -L multirate` with them.
+Costs: CPU time with one thread in the build of the CI job without MPI (gfortran 13.2, TESTING), the sum over the
+checks of an entry of the smaller of two runs of each (shared 192-thread machine, load 93–155); I17 is wall time on
+2–4 MPI processes. The fast entry is F31.
+
 ---
 
 ## 4. Pre-push fast suite (GitHub-runner friendly)
@@ -317,6 +327,7 @@ less at one thread (the rule of a row, below the table), assert
 | N12 | Face values of the MUSCL reconstruction, a unit check of Reconstruction with each limiter: with van Leer, MC and superbee a cell 1.25 times its neighbour across a face (values 1, 0.01, 0, 0), its mirror image, and one forward Euler step at Courant number 1/2 of a cell of length 1 next to cells of 0.01 (h = 0.01, 0.01, 1, 1, 1; w = 0, 0, 1, 1000, 1000); 50000 random lines of four cells (lengths in ratios up to 100, values over 14 orders of magnitude and zero, beta = 1 and below 1) and 50000 with values from 1e-33 to 1e-8 times the largest length; lines of equal cells, data linear along the line, five cells for the two faces of a cell; 50000 pairs of slopes for the call with the bounds 2 and 2 | every face value within 8 ulp of the values of the two cells of its face (van Albada where the ratio of the slopes is positive; values below 1e-13 times the largest length left out); the cell not below zero after the step; the bounded slope with the sign of the slope without bounds and not larger; one slope for the two faces of a cell; on equal cells and for linear data the limiter's own slope; the call with the bounds 2 and 2 equal to the formulas of the limiters where the build keeps the order of evaluation of the source (printed with `-ffast-math`) | ☑ `MusclFaceBounds` | <1 s |
 | N13 | Face pressure of a reflective (symmetry) treatment, a unit check of the mirror pair of `BC_Symmetry_Eul` with the exact solver and HLLC (the default): N2 at 1e5 Pa and 300 K moving along the normal at 10 m/s (the low speed of a blown gas) and at 100 m/s (where the relations of a rarefaction and of a shock differ beyond the tolerance), away from the face and towards it | away from the face, the face pressure below that of the cell, towards it above; the exact solver within 1e-5 p (its stopping rule) of the exact solution, two rarefactions | ☑ `ReflectivePressure` | <1 s |
 | F30 | Supersonic inlet (`405`) with the flow direction `normal` (1-D tube of air, one forward Euler step, first order, the inlet at Mach 2, the gas of the tube moving in through it at 0.1 a): `normal, normal` on the faces 1 and 2 of the tube along x and of its mirror image (i along −x), and on face 1 of the tube turned so that its axis is (1, 1, 1)/√3; `normal, 0` on face 2; `0.3, normal` on the faces 1 and 2 of a tube along z; `0, normal` and `0.2, normal` on the faces 1 and 2, and `normal, 0.3` on face 1 of the tube along z | mass flux into the domain and velocity of the inlet cell along the normal into the domain = those of `0, 0` on face 1 within 1e-9 of rho a and of a, velocity across that normal below 1e-9 a; the records with one angle `normal` that do not enter along the normal: the mass flux and the velocity of the angles the token stands for on that face, within 1e-9 of rho a and of a | ☑ `BoundaryConditions`/`SupersonicInlet` | ~1 s |
+| F31 | Multirate smoke (1-D acoustic wave and Sod tube of 284 cells): one level = single-rate step, 20 steps; four levels, 20 macro steps; the same run as 10 + restart + 10; cfl 1.2 with `max-level` 3; the Sod tube with one level and cfl 20; a tube of 8 cells with `400` ends and the gas entering through face 1 at 0.5 a, 20 Heun steps with one level and with the single rate | bit-identical fields and residual; mass and energy drift ≤ 1e-12 with four levels used; bit-identical output trees; set-up stop with a non-zero exit code and the message; for the diverging run exit code 1, the message of the state check and no solution; the lines of the gas entering and the end line of the run with one level those of the single rate (one line, 40 evaluations) | ☑ `MultirateSmoke` | ~1.4 s (load average 45) |
 
 **Rule of a row.** The ~Cost of a row is its CPU time at one thread in the build of the
 first CI job (gfortran, `TESTING`), the part run alone as its area runs it
@@ -355,7 +366,8 @@ as CPU time at one thread on the same machine at a load average of ~100 to ~250.
 tests of main keep their tier: measured the same way at a load average of 140 to 145,
 `AblatingWall` takes 10.6 s, `Noh87` 8.5 s and `PrandtlMeyer` 8.4 s.
 
-Current `ctest -L fast`: **27 tests, ~135 s of CPU time** at one thread, one test at a
+Current `ctest -L fast`: **28 tests**, the 27 below and `MultirateSmoke` (F31). The 27 took
+~135 s of CPU time at one thread, one test at a
 time (gfortran 13 `TESTING`, a machine with 192 logical CPUs: the other 25 tests ~134 s
 at a load average of 150-156, `MusclFaceBounds` 0.45 s at 144; `ReflectivePressure` 0.002 s, gfortran 13 `RELEASE` on a
 machine with 12 logical CPUs at a load average of 1.6-4.8). The 27 tests: Sod79, Einfeldt91,
@@ -363,7 +375,8 @@ Noh87, Toro99, ShuOsher, PrandtlMeyer, RiemannSmoke,
 NumericsSmoke, InputChecks, TimeIntegration, BoundaryConditions, Conservation,
 OpenMPEquiv, Connections, Restart, OutputFiles, MMSResiduals, ViscousPatch, AblatingWall,
 MeshGeometry, QCR2000Stress, CellVolume, VolatileOrder, BilinearDistance, RemoteBlocks,
-MusclFaceBounds, ReflectivePressure. MPI
+MusclFaceBounds, ReflectivePressure. `MultirateSmoke`
+takes ~1.4 s of CPU time (the smaller of two runs, on the same machine at a load average of 45). MPI
 builds also register the `needs-mpi` tier (`test/mpi/`; `MPIConnectionFlux`,
 `MPIConnectionOrder`: the two-block cases with one block per rank;
 `MPIDecompositionMap`).

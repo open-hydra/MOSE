@@ -50,8 +50,8 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 | Parameter | Default | Allowed | Required | During the run | Description |
 |-----------|---------|---------|----------|----------------|-------------|
 | time-scheme | euler | euler, RK2, RK3 | yes | fixed | Time integration solver |
-| cfl | 0.5 | > 0 | yes | taken | CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17) |
-| vnn | 0.3 | > 0 |  no | taken | Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62) |
+| cfl | 0.5 | > 0 | yes | taken | CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17; at most 1 with the multirate integrator on ([MOSE-Multirate] enabled = .true., max-level > 0 and nonlocal-cfl = redo, levels = recompute and no fixed-macro-step)) |
+| vnn | 0.3 | > 0 |  no | taken | Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62; at most 0.5 in a Navier-Stokes run with the multirate integrator on ([MOSE-Multirate] enabled = .true., max-level > 0 and nonlocal-cfl = redo, levels = recompute and no fixed-macro-step)) |
 | cfl-rise-threshold | 0 | >= 0 |  no | taken | CFL rise threshold |
 | time-accurate | .false. | logical | yes | fixed | Time accurate switch |
 | integration-variables | cons | cons, prim, prec |  no | fixed | Integration variables (cons/prim/prec) |
@@ -78,6 +78,24 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 | level1-iter | 0 | >= 0 |  no | taken | Iterations for multigrid level 1 |
 | level2-iter | 0 | >= 0 |  no | taken | Iterations for multigrid level 2 |
 | prolongated-diter | 0 | >= 0 |  no | taken | Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write) |
+
+## MOSE-Multirate
+
+| Parameter | Default | Allowed | Required | During the run | Description |
+|-----------|---------|---------|----------|----------------|-------------|
+| enabled | .false. | logical |  no | fixed | Multirate local time stepping: recursive Heun (SSP-RK2) with a level per cell, time-accurate runs only |
+| max-level | 10 | in [0, 50] |  no | fixed | Deepest level allowed (at most 50): the map of the adaptive step takes L = max-level levels below level 0, or fewer when the local steps span fewer octaves or macro-step-target gives a shorter H, so that H stays within the step of the slowest cells divided by safety; the finest cells advance with H/2^L |
+| safety | 2.0 | >= 1 |  no | fixed | Safety factor sigma: every cell advances with a sub-step h <= dtcap/sigma (dtcap = local CFL/VNN step); the default 2 keeps every cell, at the start of a macro step, within the admissible step of each face neighbour without the interface margin |
+| macro-step-target | 0.0 | >= 0 |  no | fixed | Target macro step H [s]; 0 = none (H set by the level map, within the step of the slowest cells divided by safety) |
+| levels | recompute | fixed, recompute |  no | fixed | Level map: computed at the first macro step and kept (fixed) or recomputed from the local steps (recompute) |
+| recompute-every | 1 | > 0 |  no | fixed | Macro steps between two recomputations of the level map (levels = recompute) |
+| fixed-macro-step | 0.0 | >= 0 |  no | fixed | Fixed macro step as a multiple of the dt_min of the first macro step; 0 = adaptive (verification runs) |
+| conservative-correction | .true. | logical |  no | fixed | Conservative flux correction at the faces between levels (.false. only as a positive control) |
+| trace | .false. | logical |  no | fixed | Print the stage sequence, the level map and the halo lists of the first macro step (standard output) |
+| nonlocal-cfl | redo | off, count, redo |  no | fixed | Condition (4) of Gnedin et al. checked at every sub-step start: off; count (counts only); redo (a macro step that fails it is redone from its start with finer levels or a smaller H, with the interface margin; a macro step in which a cell or a face takes a state that is not physical is redone with H halved (with more than one level)) |
+| interface-margin | .false. | logical |  no | fixed | Faces between levels: the coarse step within dtcap/kappa of the fine cell, kappa = max(cfl (1 + theta) of the limiter, 1.1) (always on with nonlocal-cfl = redo) |
+| force-redo | .false. | logical |  no | fixed | Test device of nonlocal-cfl = redo: the first attempt of every macro step is rejected and redone with the same macro step and level map, so the results must not change |
+| max-attempts | 21 | >= 1 |  no | fixed | nonlocal-cfl = redo: attempts of a macro step at most (an attempt rejected by force-redo is not counted); when they are all rejected the run stops with the rejections by cause |
 
 ## MOSE-Physics
 

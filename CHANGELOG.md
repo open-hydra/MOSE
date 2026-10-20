@@ -91,6 +91,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The patch test of the viscous fluxes checks the cells next to inlets and outlets too (`ViscousPatch`, part
   `ViscousOpenPatch`, fast tier): the ghost cells of `401`–`408` and `420` must sit, in the metric of the face gradients, where
   their values belong. The solver does not change.
+- A multirate (local time stepping) integrator for time-accurate runs, `[MOSE-Multirate] enabled = .true.`: every cell
+  advances with a sub-step close to its own stability limit, the step H/2^l of the macro step H for a cell of level l,
+  instead of the smallest step of the mesh. The scheme is the recursive Heun scheme of Jeanmasson, Mary and Mieussens
+  (2019) with the interpolant of the coarse data of Hoang, Ju, Leng and Wang (2020) and a conservative correction of the
+  fluxes at the faces between levels: mass, momentum and energy are conserved to round-off, and the macro step is of
+  second order in time on a fixed mesh with a fixed level map (Appendix A of `docs/theory/time-integration.md`). The
+  keys of `[MOSE-Multirate]` set the deepest level allowed (10 by default; the map takes fewer levels when the local
+  steps span fewer octaves, so that the macro step stays within the step of the slowest cells divided by the safety
+  factor), the safety factor, a target or a fixed macro step, the level map (rebuilt from the local steps, by default at
+  every macro step, or kept) and the check of the non-local condition (4) of Gnedin, Semenov and Kravtsov (2018) at the
+  start of every sub-step (`nonlocal-cfl = count` or `redo`): by default (`redo`) a macro step that violates it is redone
+  with finer levels or a smaller macro step,
+  and the coarse cell of a face between levels runs within 1/kappa of the limit of the finer cell, kappa = max(cfl (1 +
+  theta), 1.1), so that, with kappa at most the safety factor (the default 2 with cfl up to 1), a rejection for a
+  violation of condition (4) needs a fall of more than 1 - 1/kappa of the admissible
+  step of a cell within the macro step (proven in Appendix A; the value 1.1 is a practice taken from Castro, the fall that its check of the step
+  tolerates, not a value that the scheme gives; below cfl (1 + theta) = 1.1 no key turns it off),
+  and a macro step in which a cell or a face takes a state that is not physical (a value that is not finite, a total
+  density that is not positive, a negative pressure or a temperature outside the tables of the gas) is redone with half
+  the macro step on the same levels when the map has more than one level; a face that is not physical already at the
+  start of the macro step stops the run, as in the single-rate step. A macro step whose H falls below 2^-10 of its first
+  attempt, or whose attempts are all rejected up to `max-attempts` (21 by default), stops the run with its rejections by
+  cause, and at the start of every macro step a local step that is not a positive finite number (zero, negative,
+  infinite or not a number) stops the run with the first such cell. The integrator runs the Euler and the Navier–Stokes
+  equations, laminar or with the Spalart–Allmaras model (`SA`, `SA-R`) or the SST model (with `k-energy-coupling` and
+  either `sst-production`), and with `max-level` 0 also `SA-RC` and `SST-RC`, with the SRM grain (`502`) in its
+  mode 2, an inflow, on several blocks (the 2-D axisymmetric wedge included)
+  and on several MPI processes, each with OpenMP threads, with the same output bits as on one process; the macro step
+  lands on the output instants, and with `levels = recompute` a restart from a `vtk raw` or a `tecplot ascii` solution
+  goes on bit for bit as the run in one go. The configurations outside its scope stop the run at set-up or at its first
+  macro step with a message `[MOSE-Multirate] <item>` and a non-zero exit code; with `max-level` > 0 and
+  `nonlocal-cfl = redo`, with `levels = recompute` and no `fixed-macro-step`, so do a `cfl` above 1 and, in a Navier–Stokes
+  run, a `vnn` above 0.5, the linear stability limits of Heun on the checkerboard mode, with every limiter, up to which the
+  check of condition (4) admits a sub-step within the macro step (with `off` and `count`, and where the certificate only
+  counts, nothing bounds those sub-steps, and the set-up checks neither value). `safety` takes
+  every value of at least 1 (2 by default). The keys of `[MOSE-Multirate]`
+  keep the values of the set-up for the whole run: a reading of `input.ini` during the run that changes one, or that takes
+  `cfl`, `vnn`, `time-accurate` or `cfl-rise-threshold` out of the scope of the integrator, is an error
+  of the reading, which `ini-error` decides. In the `Timing` block and in the `MOSE Timing` and `MOSE Ranks` lines the
+  exchange wait counts the wait for the messages of the exchanges of the integrator and their copy from the receive
+  buffers, and the collective wait its reductions; the start of the exchanges (receives and sends posted, send buffers
+  filled) is part of the compute and has its own line, `Exchange start`, in the `Timing` block of a run on several
+  processes; the wall times per level are read with the clock of these timers, in
+  builds with and without OpenMP, and a run on several processes ends with the minimum, mean and maximum over the
+  processes, per level, of the wall time of the stages without their exchanges and of the time of the exchanges. With
+  the multirate disabled, the default, the results do not change (the `Timing` block changes as the entry under Changed
+  says).
 
 ### Changed
 
@@ -105,6 +152,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the mode new. The boundary-condition builder of ATLAS writes this line (its logical key `grain-wall` sets the mode: `T`
   mode 1, a wall; `F`, the default, mode 2, an inlet); a file of the
   former line (`T_af, a, n, p_ref, rho_grain, SF_geo, massf`) is read wrong, and mostly refused by the checks below.
+- The collective wait of the `Timing` block, and of the `MOSE Timing` lines with `timer-diter`, counts the reduction of the
+  local time steps of every iteration too, as it counts the reduction of the residual: on several MPI processes it grows by
+  the time the processes wait there for the slowest one, and the compute spread over ranks changes by as much. The results
+  do not change.
 - **Breaking:** the `p0_file` table of an inlet `402` is read in Pa, as written, like every other input of MOSE (SI units
   throughout). It was read in bar and multiplied by $10^5$. An old table written in bar must be multiplied by $10^5$.
 - The CI jobs that build and test MOSE run on Ubuntu 24.04 (`runs-on: ubuntu-24.04`) instead of `ubuntu-latest`, which

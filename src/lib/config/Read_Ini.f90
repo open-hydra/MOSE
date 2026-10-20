@@ -100,7 +100,8 @@ contains
   !> faces of the rotating frame, an axis or origin that is not finite or does not read, an axis of zero length, implicit
   !> residual smoothing switched on in a run started without it, whose arrays exist only when it is on at set-up, values
   !> that a check of the set-up between keys refuses, riemann-solver with riemann-options-Mco and schmidt with the table of
-  !> the binary diffusion coefficients) stops
+  !> the binary diffusion coefficients and, with the multirate integrator, cfl, vnn and cfl-rise-threshold
+  !> (Multirate_Reading_Error)) stops
   !> the run with ini-error = stop, as at set-up. With ini-error = warn, the default, the reading is not taken: a warning
   !> gives the iteration and the error (Write_Not_Taken), and the run goes on with every value it had before the reading,
   !> those of the keys of the same reading that were right too (Save_Values before Load_Ini, Restore_Values on the
@@ -119,7 +120,8 @@ contains
     use MOSE_Assign_Setup,   only: IRS_On, Riemann_Mco_Error, Schmidt_Error
     use MOSE_Input_Registry
     use MOSE_Parameters_m,   only: codename
-    use MOSE_Config_Types_m, only: obj_io, obj_irs
+    use MOSE_Config_Types_m, only: obj_io, obj_irs, obj_multirate
+    use MOSE_Mod_Multirate,  only: Multirate_Reading_Error
     use MOSE_Mod_MPI,        only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8, mpi_stop_all
     use iso_fortran_env,     only: R8 => real64
     implicit none
@@ -159,6 +161,8 @@ contains
     ! run values that its set-up refuses
     if (index(out,'ERROR') == 0) out = Refused_Value(trim(codename)//'-Numerics', 'riemann-options-Mco', Riemann_Mco_Error())
     if (index(out,'ERROR') == 0) out = Refused_Value(trim(codename)//'-Physics', 'schmidt', Schmidt_Error())
+    ! and, with the multirate integrator, its checks of the set-up on cfl, vnn and cfl-rise-threshold
+    if (index(out,'ERROR') == 0 .and. obj_multirate%enabled) out = Multirate_Reading_Error()
     flag = 0.0_R8
     if (index(out,'ERROR') > 0) flag = 1.0_R8
     call mpi_allreduce_max_r8(flag, flag_all)

@@ -35,6 +35,7 @@ contains
                                         mpi_is_root, mpi_bcast_logical, mpi_bcast_integer
     use MOSE_Mod_Timers,          only: timer_iter_begin, timer_iter_end, timer_report, &
                                         timer_sync_begin, timer_sync_end
+    use MOSE_Mod_Multirate,       only: Multirate_Advance, Multirate_Report, mr_output_landed
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain(obj_multigrid%MGL)
     external :: External_Function
@@ -54,6 +55,11 @@ contains
 
     accurate = obj_sim_param%HYDRA_time_accurate .or. obj_time_scheme%time_accurate
     time_old = domain(level) % time
+
+    if (obj_multirate%enabled) then
+      ! Multirate: one macro step of all levels (MOSE_Mod_Multirate); residual and controls as below
+      call Multirate_Advance ( domain(level) )
+    else
 
     if (obj_sim_param%HYDRA_time_accurate) then
       call Set_Global_dt ( domain(level) )
@@ -147,6 +153,8 @@ contains
     domain(level) % time = time_new                          ! end of the step
     if ( Chemistry_Failed () ) call Chemistry_Failure_Stop ( level, obj_multigrid%MGL )
 
+    endif
+
     ! Save residuals
     if ( (obj_sim_param%iter_from_call == 1) .or. (mod (domain(level) % iter, obj_io%res_diter) == 0) ) then
       ! Sums in a fixed order, the same for any number of threads and ranks: over the cells of each block
@@ -200,8 +208,13 @@ contains
            .or. ( domain(level) % time >= obj_sim_param%time_threshold )
       endif
 
-      iosim  = ( mod (domain(level) % iter, obj_io%sol_diter) == 0) &
-          .or. ( domain(level) % time >= obj_sim_param%time_from_call + obj_io%sol_dtime )
+      if (obj_multirate%enabled) then
+        ! multirate: the time-based solution is written at the macro step that landed on t_k = k*sol-dtime
+        iosim = ( mod (domain(level) % iter, obj_io%sol_diter) == 0) .or. mr_output_landed
+      else
+        iosim = ( mod (domain(level) % iter, obj_io%sol_diter) == 0) &
+           .or. ( domain(level) % time >= obj_sim_param%time_from_call + obj_io%sol_dtime )
+      endif
 
       if ( endsim ) then
         obj_sim_param%TODO = 3
@@ -220,6 +233,8 @@ contains
     call mpi_bcast_integer(obj_sim_param%TODO)
     call mpi_bcast_logical(obj_multigrid%change_MG)
     call timer_sync_end()
+    ! multirate: the lines of the whole run (largest ratios, certificate, redo, times per level), when the run ends
+    if (obj_multirate%enabled .and. obj_sim_param%TODO == 3) call Multirate_Report ()
 
     ! Wall-clock report (collective: every rank runs the same iteration counter)
     call timer_iter_end()
