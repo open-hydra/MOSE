@@ -54,11 +54,15 @@ module MOSE_Lib_SST
   cr2 = 2.d0, &
   cr3 = 1.d0
 
+  !> C of the asymptotic omega wall condition, omega_wall = C nu/d**2: the limit 6/beta_1 of the omega equation as y -> 0,
+  !> where the blending of the model is 1 (NASA Turbulence Modeling Resource, SST page)
+  real(R8), parameter, public :: SST_omega_wall_asymptotic = 6d0/beta_1
+
 contains
 
   subroutine SST_Source_Terms ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rans
+    use MOSE_Config_Types_m, only: obj_rans, obj_time_scheme
     use MOSE_Lib_SpalartShur, only : Compute_Velocity_Gradient, Compute_RC_Terms
     use MOSE_Mod_MPI, only: is_local_block
 
@@ -66,10 +70,13 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: b
-    logical :: SpalartShur, k_energy_coupling
+    logical :: SpalartShur, k_energy_coupling, point_implicit
       
     SpalartShur       = obj_rans%SpalartShur
     k_energy_coupling = obj_rans%k_energy_coupling
+    ! The point-implicit factor serves steady runs only: in time-accurate runs the sources are explicit and their
+    ! stiffness enters the time step (Compute_dt)
+    point_implicit = obj_rans%point_implicit .and. .not. obj_time_scheme%time_accurate
 
     if ( SpalartShur ) then
       call Compute_Velocity_Gradient ( domain )
@@ -88,17 +95,18 @@ contains
                      domain % blk(b) % rc_term1,     &
                      domain % blk(b) % rc_term2,     &
                      domain % blk(b) % dtlocal,      &
+                     domain % blk(b) % stiff,        &
                      domain % blk(b) % dim,          &
                      SpalartShur, k_energy_coupling, &
-                     obj_rans%point_implicit, obj_rans%sst_compressible )
+                     point_implicit, obj_rans%sst_compressible )
 
     end do
 
   end subroutine SST_Source_Terms
 
 
-  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, point_implicit, &
-                       compressible )
+  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, stiff, n, SpalartShur, k_energy_coupling, &
+                       point_implicit, compressible )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -115,15 +123,16 @@ contains
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
+    real(R8), dimension(n(1), n(2), n(3)), intent(out) :: stiff  ! largest destruction rate: max(beta* omega, 2 beta omega)
     ! Local
     integer :: i, j, k, ii, jj
     real(R8) :: rho, Rgas, mil, kap, ome, dist, Gradvel(3,3), Divel, Sij(3,3), S, Wij(3,3), diag, mi_t, F(2)
-    real(R8) :: vort(3), O, rstar, D, rtilde, frot, fr1
+    real(R8) :: vort(3), O, D, rtilde, frot, fr1
     real(R8) :: Tij(3,3), Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2), fk, fw
 
     !$omp do collapse (3) private ( rho, Rgas, mil, kap, ome, dist, Gradvel, Divel, Sij, S, Wij, diag, mi_t, F ), &
     !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj ), &
-    !$omp private ( vort, O, rstar, D, rtilde, frot, fr1 )
+    !$omp private ( vort, O, D, rtilde, frot, fr1 )
     
     do k = 1, n(3)
     do j = 1, n(2)
@@ -183,10 +192,11 @@ contains
 
       ! Rotation/curvature correction, Smirnov & Menter (2009), TMR SST-RC
       if ( SpalartShur ) then
-        rstar = rc1(i,j,k)
+        ! rc1 is 2 r*/(1 + r*) (Compute_RC_Terms); where the vorticity vanishes rc2 is zero, and so is rtilde
         D = sqrt( max ( S**2, 0.09d0*ome**2) )
-        rtilde = rc2(i,j,k) / ( max(O, 1d-30)*D**3 )
-        frot = (1.d0 + cr1)*(2.d0*rstar/(1.d0 + rstar))*(1.d0 - cr3*atan(cr2*rtilde)) - cr1
+        rtilde = 0d0
+        if ( O > 0d0 ) rtilde = rc2(i,j,k) / ( O*D**3 )
+        frot = (1.d0 + cr1)*rc1(i,j,k)*(1.d0 - cr3*atan(cr2*rtilde)) - cr1
         fr1 = max ( min(frot, 1.25d0), 0d0 )
         Prod(1) = fr1*Prod(1)
       end if
@@ -214,11 +224,19 @@ contains
       Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
 
-      ! Point-implicit (Patankar) treatment of the destruction terms.
+      ! Stiffness of the destruction terms (derivatives with respect to k and omega)
+      stiff(i,j,k) = max ( beta_star * ome, 2d0 * beta * ome )
+
+      ! Point-implicit factors of steady runs. Each multiplies the whole increment of its row: the fluxes already in
+      ! Res (Internal_Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not depend
+      ! on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1;
+      ! T. H. Pulliam, AIAA Paper 93-3360, eq. 8)
       fk = 1d0 ; fw = 1d0
       if ( point_implicit ) then
         fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
         fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
+        Res(nt,  i,j,k) = Res(nt,  i,j,k) * fk
+        Res(nt+1,i,j,k) = Res(nt+1,i,j,k) * fw
       end if
 
       Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
@@ -297,7 +315,7 @@ contains
 
     rkw(1) = 0d0 ! Solid surface condition on k
     ! Smooth-surface BC: omega_wall = C*mi_l/dist**2, with C set by omega-wall-bc
-    ! (800 = Menter practical, 80 = asymptotic y->0 limit). See Setup_RANS_Model.
+    ! (800 = Menter practical, 6/beta_1 = 80 = asymptotic y->0 limit). See Setup_RANS_Model.
     rkw(2) = obj_rans%omega_wall_coef * mi_l / ( dist**2 )
 
   end subroutine SST_Set_Wall_Values

@@ -6,7 +6,11 @@
 #  density and pressure stay positive and finite.  This is a crash/robustness
 #  smoke test that guarantees every solver at least executes — not an accuracy
 #  check.  It reuses the coarse 1-D Sod inputs (test/1D/Sod79/INPUT) so no new
-#  mesh/IC/BC data is stored here.
+#  mesh/IC/BC data is stored here.  The two outer branches of HLLC: the Sod
+#  tube moved by u = +3, where the flux of every face is that of its left state
+#  (S_L >= 0), and its mirror image moved by u = -3, where it is that of its
+#  right state (S_R <= 0); the second must be the mirror image of the first
+#  (mirror_sod.py).
 #===============================================================================
 set -uo pipefail
 
@@ -88,9 +92,28 @@ EOF
   fi
 done
 
+# --- HLLC: the left state (S_L >= 0) and the right state (S_R <= 0) ---------
+echo "  [HLLC] the Sod tube moved by u = +3 and its mirror image moved by u = -3"
+for sign in plus minus; do
+  python3 -B mirror_sod.py case "$sign" 3.0 || { fail=1; break; }
+  sed 's/^riemann-solver = .*/riemann-solver = HLLC/' input.ini > input-mirror.ini && mv input-mirror.ini input.ini
+  rm -f OUTPUT/field.tec
+  if ! "$LOCAL" > "OUTPUT/solve_HLLC_$sign.log" 2>&1 || [[ ! -f OUTPUT/field.tec ]]; then
+    echo "  [HLLC $sign] FAIL: solver exited non-zero or wrote no field"
+    fail=1
+    break
+  fi
+  cp OUTPUT/field.tec "OUTPUT/field-$sign.tec"
+done
+rm -f INPUT/ic.tec
+ln -sf "../$SOD/INPUT/ic_x1.tec" INPUT/ic.tec
+if [[ -f OUTPUT/field-plus.tec && -f OUTPUT/field-minus.tec ]]; then
+  python3 -B mirror_sod.py compare OUTPUT/field-plus.tec OUTPUT/field-minus.tec || fail=1
+fi
+
 if [[ $fail -ne 0 ]]; then
   echo "RiemannSmoke: FAILED"
   exit 1
 fi
-echo "RiemannSmoke: all $(( ${#SOLVERS[@]} )) solvers passed"
+echo "RiemannSmoke: all $(( ${#SOLVERS[@]} )) solvers passed; HLLC gives the mirror image on its two outer branches"
 exit 0

@@ -40,7 +40,7 @@ contains
 
   subroutine Spalart_Source_Terms ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rans
+    use MOSE_Config_Types_m, only: obj_rans, obj_time_scheme
     use MOSE_Lib_Fluid, only : Vorticity_Vector, Vorticity_Tensor
     use MOSE_Lib_SpalartShur, only : Compute_Velocity_Gradient, Compute_RC_Terms
     use MOSE_Mod_MPI, only: is_local_block
@@ -49,11 +49,14 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: b
-    logical :: SpalartShur, SAR, SAcomp
+    logical :: SpalartShur, SAR, SAcomp, point_implicit
 
     SpalartShur = obj_rans%SpalartShur
     SAR         = obj_rans%SAR
     SAcomp      = obj_rans%SAcomp
+    ! The point-implicit factor serves steady runs only: in time-accurate runs the source is explicit and its
+    ! stiffness enters the time step (Compute_dt)
+    point_implicit = obj_rans%point_implicit .and. .not. obj_time_scheme%time_accurate
 
     if ( SpalartShur ) then
       call Compute_Velocity_Gradient ( domain )
@@ -73,16 +76,18 @@ contains
                            domain % blk(b) % rc_term1,     &
                            domain % blk(b) % rc_term2,     &
                            domain % blk(b) % dtlocal,      &
+                           domain % blk(b) % stiff,        &
                            domain % blk(b) % dim,          &
                            SpalartShur, SAR, SAcomp,       &
-                           obj_rans%point_implicit         )
+                           point_implicit                  )
     
     end do
 
   end subroutine Spalart_Source_Terms
 
 
-  subroutine SA_Source_Blk ( Prim, Res, M, yn, k_rough, vol, gradv, rc1, rc2, dt, n, SpalartShur, SAR, SAcomp, point_implicit )
+  subroutine SA_Source_Blk ( Prim, Res, M, yn, k_rough, vol, gradv, rc1, rc2, dt, stiff, n, SpalartShur, SAR, SAcomp, &
+                             point_implicit )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -100,14 +105,15 @@ contains
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
+    real(R8), dimension(n(1), n(2), n(3)), intent(out) :: stiff  ! d(destruction)/d(nu~) = 2 cw1 fw nu~/d^2
     ! Local
     integer :: i, j, k
     real(R8) :: rho, Rgas, nit, mil, Gradvel(3,3), Gradnit(3), omega(3), Om, abs_Eij, Wij(3,3)
-    real(R8) :: Eij(3,3), chi, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, rstar, D2, rtilde
-    real(R8) :: Production, Diffusion, Destruction, Source, fnu, d, fv2_
+    real(R8) :: Eij(3,3), chi, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, D2, rtilde
+    real(R8) :: Production, Diffusion, Destruction, Source, fnu, d, fv2_, Gradrho(3)
 
-    !$omp do collapse (3) private ( rho, Rgas, nit, mil, Gradvel, Gradnit, omega, Om, abs_Eij, Wij ), &
-    !$omp private ( Eij, chi, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, rstar, D2, rtilde ), &
+    !$omp do collapse (3) private ( rho, Rgas, nit, mil, Gradvel, Gradnit, omega, Om, abs_Eij, Wij, Gradrho ), &
+    !$omp private ( Eij, chi, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, D2, rtilde ), &
     !$omp private ( Production, Diffusion, Destruction, Source, fnu, d, fv2_, i, j, k)
     
     do k = 1, n(3)
@@ -159,10 +165,11 @@ contains
       if ( SpalartShur ) then
 
         Wij = Vorticity_Tensor ( omega )
-        rstar = rc1(i,j,k)
+        ! rc1 is 2 r*/(1 + r*) (Compute_RC_Terms); where strain and vorticity both vanish rc2 is zero, and so is rtilde
         D2 = 0.5d0*(abs_Eij**2 + Om**2)
-        rtilde = rc2(i,j,k) / D2**2
-        fr1 = (1.d0 + cr1)*(2.d0*rstar/(1.d0 + rstar))*(1.d0 - cr3*datan(cr2*rtilde)) - cr1
+        rtilde = 0d0
+        if ( D2 > 0d0 ) rtilde = rc2(i,j,k) / D2**2
+        fr1 = (1.d0 + cr1)*rc1(i,j,k)*(1.d0 - cr3*datan(cr2*rtilde)) - cr1
         Production = fr1 * cb1 * Stilde * nit
 
       elseif ( SAR ) then
@@ -187,7 +194,18 @@ contains
 
       Gradnit2 = Sum ( Gradnit**2 )              ! ni-tilde gradient squared
 
-      Diffusion = cb2 / sigma * Gradnit2         ! Non-conservative Diffusion term
+      ! Density gradient, same differences
+      Gradrho(1) = ( sum( Prim(1:nsc,i+1,j,k) ) - sum( Prim(1:nsc,i-1,j,k) ) ) * 0.5d0
+      Gradrho(2) = ( sum( Prim(1:nsc,i,j+1,k) ) - sum( Prim(1:nsc,i,j-1,k) ) ) * 0.5d0
+      Gradrho(3) = ( sum( Prim(1:nsc,i,j,k+1) ) - sum( Prim(1:nsc,i,j,k-1) ) ) * 0.5d0
+      Gradrho = Matmul ( Gradrho, M(i,j,k) % c )
+
+      ! Diffusion terms outside the flux div((mu + rho nu~) grad nu~)/sigma: the cb2 term and, with variable density,
+      ! -(nu + nu~) grad rho . grad nu~ / sigma, which makes this conservation form equal to the original equation
+      ! (S. R. Allmaras, F. T. Johnson, P. R. Spalart, ICCFD7-1902, 2012, eq. 9). The source below is multiplied by
+      ! rho, so the second term enters divided by rho.
+      Diffusion = cb2 / sigma * Gradnit2 &
+                - ( mil / rho + nit ) * Dot_Product ( Gradrho, Gradnit ) / ( sigma * rho )
 
       ! Destruction term computation
       r_Fun = nit / ( Stilde * cK**2 * d**2 )
@@ -199,10 +217,18 @@ contains
       if ( SAcomp ) call Compressibility_Correction &
       ( nit, rho, chi, Prim(1:nsc,i,j,k), Prim(np,i,j,k), Rgas, Om, Production )
 
-      ! Point-implicit (Patankar) treatment of the SA destruction term
+      ! Stiffness of the destruction term (its derivative with respect to nu~ at fixed fw)
+      stiff(i,j,k) = 2d0 * cw1 * fw * nit / d**2
+
+      ! Point-implicit factor of steady runs. It multiplies the whole increment of the row: the fluxes already in
+      ! Res(nt) (Internal_Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not
+      ! depend on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986,
+      ! eq. 3.1; T. H. Pulliam, AIAA Paper 93-3360, eq. 8)
       fnu = 1d0
-      if ( point_implicit ) &
+      if ( point_implicit ) then
         fnu = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * cw1 * fw * nit / d**2 )
+        Res(nt,i,j,k) = Res(nt,i,j,k) * fnu
+      end if
 
       ! Source multiplied by rho since the SA equation is integrated in conservative form
       Source = rho * ( Production + Diffusion - Destruction ) * vol(i,j,k) * fnu
@@ -237,6 +263,8 @@ contains
 
 
   ! Compressibility correction Paciorri-Sabetta https://doi.org/10.2514/2.3967
+  ! Not reached: turbulence = SAcomp stops at set-up (Assign_Setup), since staux, a speed, is set against the number
+  ! c^2 f(c), which makes the result depend on the units
   subroutine Compressibility_Correction ( nit, rho, chi, rhoi, p, Rgas, om, prod )
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic

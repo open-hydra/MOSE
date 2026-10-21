@@ -6,7 +6,7 @@
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | newrun | true | true , false |  no | Start a new simulation (false = restart) |
-| res-threshold | 1e-10 | > 0 |  no | Residual convergence threshold |
+| res-threshold | 1e-10 | > 0 |  no | Residual convergence threshold (steady runs only) |
 | time-threshold | 1e30 | > 0 |  no | Maximum simulation time |
 | iter-threshold | 1000000000 | > 0 |  no | Maximum number of iterations |
 
@@ -47,8 +47,8 @@
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | time-scheme | euler | euler, RK2, RK3 | yes | Time integration solver |
-| cfl | 0.5 | > 0 | yes | CFL number |
-| vnn | 0.3 | > 0 |  no | VNN parameter |
+| cfl | 0.5 | > 0 | yes | CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17) |
+| vnn | 0.3 | > 0 |  no | Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62) |
 | cfl-rise-threshold | 0 | >= 0 |  no | CFL rise threshold |
 | time-accurate | .false. | logical | yes | Time accurate switch |
 | integration-variables | cons | cons ,  prim , prec |  no | Integration variables (cons/prim/prec) |
@@ -105,8 +105,8 @@
 |-----------|---------|---------|----------|-------------|
 | Prt | 0.85 | > 0 |  no | Turbulent Prandtl number |
 | Sct | 0.90 | > 0 |  no | Turbulent Schmidt number |
-| point-implicit | .true. | logical |  no | Point-implicit (Patankar) treatment of turbulence destruction source terms |
-| omega-wall-bc | practical | practical, asymptotic |  no | Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2)) or asymptotic (6*nu/(beta1*y^2), exact y->0 limit, for wall-resolved meshes) |
+| point-implicit | .true. | logical |  no | Point-implicit factor 1/(1 + dt d) on the increment of the turbulence equations, steady runs only (time-accurate runs: explicit sources, stiffness in the time step) |
+| omega-wall-bc | practical | practical, asymptotic |  no | Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2), beta1 of SST, for both models) or asymptotic (6*nu/(beta*y^2), exact y->0 limit with the beta of the model, beta1 for SST and beta0 for Wilcox2006, for wall-resolved meshes) |
 | sst-production | incompressible | incompressible, compressible |  no | SST production (NASA TMR naming): incompressible (P = mu_t*S^2, SST-2003m) or compressible (P = tau_ij*du_i/dx_j, SST-2003e, as OpenFOAM kOmegaSST: adds -2/3*mu_t*divU^2 - 2/3*rho*k*divU, and -2/3*gamma*rho*omega*divU to the omega equation) |
 | k-energy-coupling | .false. | logical |  no | Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants |
 

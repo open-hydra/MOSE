@@ -176,6 +176,15 @@ MOSE | Iter =      384 | Global iter =      384 | Density residual = 0.998459E-1
  =========================================================================================
 ```
 
+### Stopping criteria
+
+A run ends after `iter-threshold` iterations, at `time-threshold` (time-accurate
+runs) or, in steady runs only, when the density residual falls below
+`res-threshold`. The density residual is the L2 norm, over all the cells, of
+the change of density in one iteration: it is not normalized, so a suitable
+`res-threshold` depends on the density level and on the number of cells. In
+time-accurate runs it is reported but does not end the run.
+
 ### Timing
 
 Every run closes with the block above. `Solver` is the time spent inside the

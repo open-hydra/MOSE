@@ -5,6 +5,12 @@ module MOSE_Mod_Explicit
   private
   public :: Explicit_Step
 
+  ! Stage k of the Runge-Kutta scheme with n_RK stages (coefficients in Lib_RK.f90) evaluates the residual of an
+  ! approximation of the solution at t^n + RKtheta(n_RK,k)*dt: forward Euler 0; Heun 0, 1; SSP RK3 0, 1, 1/2.
+  real(R8), parameter :: RKtheta(3,3) = reshape([ 0._R8, 0._R8,  0._R8, &
+                                                  0._R8, 1._R8,  0._R8, &
+                                                  0._R8, 1._R8, 0.5_R8 ], shape(RKtheta), order=[2,1])
+
 contains
 
   subroutine Explicit_Step ( domain, External_Function )
@@ -30,9 +36,9 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain(obj_multigrid%MGL)
     external :: External_Function
     ! Local
-    logical  :: endsim, iosim, endmg
+    logical  :: endsim, iosim, endmg, accurate
     integer  :: i_rk, i_strang, b, level, aaa
-    real(R8) :: average(nres)
+    real(R8) :: average(nres), time_old, time_new
 
     call timer_iter_begin()
 
@@ -41,6 +47,9 @@ contains
     domain(level) % iter = domain(level) % iter + 1
     obj_sim_param%iter_from_call = obj_sim_param%iter_from_call + 1
     obj_sim_param%iter_general   = obj_sim_param%iter_general + 1
+
+    accurate = obj_sim_param%HYDRA_time_accurate .or. obj_time_scheme%time_accurate
+    time_old = domain(level) % time
 
     if (obj_sim_param%HYDRA_time_accurate) then
       call Set_Global_dt ( domain(level) )
@@ -53,6 +62,7 @@ contains
         domain(level) % time = domain(level) % time + domain(level) % dtglobal 
       endif
     endif
+    time_new = domain(level) % time
 
     !$omp parallel
     strang: do i_strang = 1, obj_chemistry%N_strang ! Strang splitting: L = L_rk(dt/2) * L_chem(dt) * L_rk(dt/2)
@@ -66,6 +76,15 @@ contains
       call Copy_State ( domain(level) )
 
       rk: do i_rk = 1, obj_time_scheme%n_RK
+
+        ! Time-dependent boundary data (BC 402, 410) read domain%time: during a stage of a time-accurate step it is
+        ! the stage time t^n + (i_strang - 1 + theta) * strangcoeff * dt (Carpenter et al., ICASE Report 93-83)
+        if (accurate) then
+          !$omp single
+          domain(level) % time = time_old + ( real(i_strang - 1, R8) + RKtheta(obj_time_scheme%n_RK, i_rk) ) &
+                                          * obj_chemistry%strangcoeff * domain(level) % dtglobal
+          !$omp end single
+        endif
 
         call Zero_Residuals ( domain(level) )                ! Zero residuals
         call Fill_Ghost_Cell ( domain(level) )               ! Fill ghost cells
@@ -102,6 +121,7 @@ contains
 
     enddo strang
     !$omp end parallel
+    domain(level) % time = time_new                          ! end of the step
 
     ! Save residuals
     if ( (obj_sim_param%iter_from_call == 1) .or. (mod (domain(level) % iter, obj_io%res_diter) == 0) ) then
@@ -125,13 +145,14 @@ contains
     if (mpi_is_root) then
       endsim = .false.
       endmg  = .false.
+      ! res-threshold is a convergence test of steady runs: the change per iteration does not end a time-accurate run
       if (level == 1) then
         endsim = ( obj_sim_param%iter_from_call >= domain(1) % itermax ) &
-            .or. ( obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
+            .or. ( .not. accurate .and. obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
             .or. ( domain(1) % time >= obj_sim_param%time_threshold )
       else
         endmg = ( obj_sim_param%iter_from_call >= domain(level) % itermax ) &
-           .or. ( obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
+           .or. ( .not. accurate .and. obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
            .or. ( domain(level) % time >= obj_sim_param%time_threshold )
       endif
 
