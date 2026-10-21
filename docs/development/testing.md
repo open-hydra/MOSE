@@ -266,9 +266,9 @@ bit-for-bit reproducibility) on tiny meshes — no digitized references, no
 plotting, no optional dependencies. Each of its parts takes about 10 s of CPU
 time or less at one thread in the build of the first CI job, the rule of a row
 of the [test plan](https://github.com/open-hydra/MOSE/blob/main/test/TESTING-PLAN.md)
-(section 4, with its tolerance and the conditions of the measurements), and the
-tier about 120 s in all. Three parts of these areas take more and run in the
-`validation` tier under their own names, `ExitCodes`, `RuntimeInput` (both in
+(section 4, with its tolerance, the total of the tier and the conditions of the
+measurements). Three parts of these areas take more and run in the `validation`
+tier under their own names, `ExitCodes`, `RuntimeInput` (both in
 `test/fast/input-checks`) and `ViscousWallPatch` (`test/fast/viscous-patch`);
 their rows stay in the table, marked *(validation)*.
 
