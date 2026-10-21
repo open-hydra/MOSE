@@ -26,8 +26,6 @@ A typical MOSE run follows the following phases (using ATLAS):
 3. **Solve** — advance the solution in time (explicit time integration)
 4. **Postprocess** — write solution files, wall data, probes, and diagnostics
 
-All configuration is driven by the INI file (`input.ini`).
-
 ---
 
 ## Case Directory Structure
@@ -150,77 +148,8 @@ MOSE prints diagnostic information to the console during loading and iteration. 
     TecIO: «You can not read in binary format without compiling against TecIO»). Check the end of the log, not only the
     exit code, when a run reads or writes binary files.
 
-```
- =========================================================================================
- Loading
- =========================================================================================
-   Thermodynamics                 OK
-   Transport                      OK
-   Chemistry                      OK
-   Input file                     OK
-   Initial conditions             OK
-   Boundary conditions            OK
- =========================================================================================
-
- =========================================================================================
- Set-up
- =========================================================================================
- Domain
-   Blocks                         1
-   Cells                          2500
-   Boundary faces                 5200
-
- Boundary conditions
-   Inflow/outflow                 50
-   Symmetry                       50
-   Extrapolation                  100
-
- Input/Output
-   Initial conditions file        INPUT/ic.tec
-   Solution format                tecplot ascii
-   Probes number                  1          
- =========================================================================================
-
- =========================================================================================
- Physical model
- =========================================================================================
- Gas model
-   Equations                      Euler
-   Equation of state              Ideal
-   Thermodynamics                 Thermally perfect gas
-   Species                        1
- =========================================================================================
-
- =========================================================================================
- Numerical scheme
- =========================================================================================
- Space
-   Reconstruction                 MUSCL
-   Flux limiter                   Van Leer
-
- Time
-   Scheme                         Third-order Runge-Kutta
-   Integration variables          Conservative
-   Implicit residual smoothing    Beta set to 0.500000E+00
-
- Fluxes
-   Riemann solver                 HLLE
- =========================================================================================
-
-MOSE | Iter =      100 | Global iter =      100 | Density residual = 0.125027E-03
-MOSE | Iter =      200 | Global iter =      200 | Density residual = 0.231340E-06
-MOSE | Iter =      300 | Global iter =      300 | Density residual = 0.221740E-08
-MOSE | Iter =      384 | Global iter =      384 | Density residual = 0.998459E-10
-
- =========================================================================================
- Timing
- =========================================================================================
-   Iterations                     384
-   Solver                          4.75813E+00 s
-   Solver per iteration            1.23910E-02 s
-   Elapsed                         4.79402E+00 s
- =========================================================================================
-```
+The [Quick Start](../getting-started/quick-start.md) shows the screen of a whole run, from the loading checks
+to the lines after the timing block.
 
 ### Stopping criteria
 
@@ -248,11 +177,11 @@ time-accurate runs the residual is reported but does not end the run.
 
 ### Timing
 
-Every run closes with the block above. `Solver` is the time spent inside the
-iteration loop and is the figure to quote when timing the code; `Elapsed` adds
-what happens between iterations, which is dominated by solution output. On more
-than one rank the block also reports load imbalance and the fraction of time
-blocked on halo exchanges and on collectives.
+At the end of a run MOSE prints a `Timing` block. `Solver` is the time spent
+inside the iteration loop and is the figure to quote when timing the code;
+`Elapsed` adds what happens between iterations, which is dominated by solution
+output. On more than one rank the block also reports load imbalance and the
+fraction of time blocked on halo exchanges and on collectives.
 
 For a running report rather than a single summary, set `timer-diter` in
 `[MOSE-IO]` to the number of iterations between reports:

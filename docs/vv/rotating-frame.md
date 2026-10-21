@@ -93,4 +93,4 @@ The fluid does not come fully to rest. A tangential velocity remains in the cell
     the core; the ranges of $p$ and $T$ move by about 1 Pa and 0.002 K. The change comes from the commits
     between `b29130b` and `10b59003b72c`.
 
-**Sensitivity note.** At $\omega = 100$ rad/s the rim Mach number is $\omega r_{\rm out}/\sqrt{\gamma R T} \approx 0.04$, giving a pressure variation of only $\sim 0.1\%$ across the annulus. Verification at this setting requires tight residual convergence and a precise mass-conservation pinning of $p_{\rm ref}$; running at higher $\omega$ (e.g. 1000 rad/s, $\sim 10\%$ variation) gives the comparison more dynamic range.
+**Sensitivity note.** At $\omega = 100$ rad/s the rim Mach number is $\omega r_{\rm out}/\sqrt{\gamma R T} \approx 0.04$, giving a pressure variation of only $\sim 0.1\%$ across the annulus. Verification at this setting requires tight residual convergence and a precise mass-conservation pinning of $p_{\rm ref}$.

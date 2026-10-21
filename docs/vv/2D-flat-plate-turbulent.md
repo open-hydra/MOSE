@@ -54,12 +54,6 @@ Boundary conditions:
 - **Top** ($y = 1$, type `300`): symmetry
 - **Outlet** ($x = 2$, type `406`): back pressure 1.0 × 10⁵ Pa
 
-## Turbulence models
-
-1. **Spalart–Allmaras (SA)**: One-equation model; computationally efficient for wall-bounded flows
-2. **Shear Stress Transport (SST)**: Two-equation model; blends k-ω near-wall and k-ε in the freestream
-3. **Wilcox k-ω**: Traditional two-equation model; excellent wall-layer resolution
-
 ## Differences from the TMR case
 
 The case runs at the Mach and Reynolds numbers of the TMR zero-pressure-gradient flat plate ($M = 0.2$, $Re = 5\times10^6$ per unit length) on two of its grids, but it is not the TMR setup:

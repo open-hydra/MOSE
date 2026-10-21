@@ -88,7 +88,7 @@ messages name the file of that level.
 The following table lists all numeric BC type codes used in `bc.txt`, their physical meaning, and the format of the required data line.
 
 !!! info "BC types and ATLAS"
-    More details on these BC types and their parameters can be found in the ATLAS documentation, which defines the expected format and semantics of the BC file. The above table serves as a reference for users preparing BC files manually or interpreting the output from ATLAS.
+    More details on these BC types and their parameters can be found in the ATLAS documentation, which defines the expected format and semantics of the BC file. The tables below serve as a reference for users preparing BC files manually or interpreting the output from ATLAS.
 
 ### Connection
 
@@ -163,7 +163,9 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
     `[MDB-Parameters]`, or of `[MDB-Block<n>]` for block $n$) says otherwise, and keeps each record of type `200` on
     its face: a block closed by type `200` that it cuts along $k$ gives blocks with type `200` on one $k$ face only, and
     the run stops at setup. Give such a block `split-directions` without $k$ (for example `ij`); a ring whose blocks
-    are joined by `101`, the junction at $\theta = 2\pi$ included, can be cut along $k$.
+    are joined by `101`, the junction at $\theta = 2\pi$ included, can be cut along $k$. MDB does not split the file
+    of a `410` face and does not rewrite the keys of `input.ini` that name blocks: see
+    [Parallel Execution](parallel.md#block-to-rank-assignment).
 
 !!! note "Degenerate directions (1-D and 2-D cases)"
     A direction of one cell (the $k$ direction of a 2-D case, $j$ and $k$ of a 1-D case) has two faces across it: the null
@@ -256,7 +258,17 @@ is that of the first cell. The cell across the face is taken as wide as the firs
 
 **Time-varying data (`402`, `410`).** The `p0_file` of an inlet `402` is a text file of pairs `time [s]  p0 [bar]`,
 one per line, in increasing time (two equal times make a jump); a first line holding the word `periodic` makes the
-table repeat. The name is taken as written on the line, directories included (for example `INPUT/p0.dat`, relative to
+table repeat. Its pressures are in bar: MOSE multiplies them by $10^5$, while every pressure of a line of `bc.txt`,
+the $p_0$ of `401` and `407` among them, is read as written, in Pa. MOSE does not check the unit: a table written in
+Pa gives a $p_0$ $10^5$ times too large. For example, a $p_0$ that rises from 1 bar to 5 bar over the first 10 ms and
+then stays at 5 bar:
+
+```
+0.00   1.0
+0.01   5.0
+```
+
+The file name is taken as written on the line, directories included (for example `INPUT/p0.dat`, relative to
 the directory of the run), up to 256 characters; a name with blanks goes in quotes. MOSE interpolates linearly in
 time; before the first instant it uses the first value, after the last instant the last one (unless the table is
 periodic). Steady runs evaluate the data at time $-1$: with a periodic table this time is wrapped into the period, so
@@ -326,7 +338,7 @@ the surface reactions alone.
 | `Ti_wall`   | Initial temperature of the solid [K]                                                              |
 | `dh_wall`   | Latent heat of melting [J/kg]                                                                     |
 | `q_rad`     | Radiative heat flux absorbed by the surface [W/m²]                                                |
-| `eps_wall`  | Wall emissivity — **parsed but currently unused**                                                 |
+| `eps_wall`  | Wall emissivity — **parsed, not used**                                                            |
 | `pyro_id`   | Pyrolysis model: `1` = HTPB, `2` = HDPE, `3` = PP                                                 |
 | `reac_id`   | Surface reaction mechanism: `1` = carbon (Bradley)                                                |
 | `massf_s`   | Composition of the material leaving the surface (one value per species)                           |

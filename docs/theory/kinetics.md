@@ -148,11 +148,9 @@ The four Troe parameters ($a$, $T^*$, $T^{**}$, $T^{***}$) are fitted to experim
 
 The species production rates form a stiff system of ordinary differential equations that must be integrated at each grid cell during operator-split time advancement. MOSE uses the stiff ODE solvers provided by the [OSLO](https://github.com/MarcoGrossi92/OSLO) library:
 
-| Solver | Type | Description |
-|--------|------|-------------|
-| `H-radau5` | Implicit Runge-Kutta | Radau IIA method, 5th order (default) |
-| `sdirk4b` | Singly-DIRK | 4th-order L-stable SDIRK |
-| `ros4` | Rosenbrock | 4th-order Rosenbrock method |
+`ode-solver` of `[MOSE-Chemistry]` selects one of the twenty integrators of OSLO (see the
+[registry](../user/registry.md#mose-chemistry)); the default is `H-radau5`, the Radau IIA method of order 5.
+`cvode` needs OSLO built with SUNDIALS, and `H-dopri5` is explicit, for non-stiff mechanisms only.
 
 ---
 

@@ -55,17 +55,18 @@ Three reference Mach numbers are tested: $M_{\rm ref} = 0.1,\ 0.01,\ 0.001$.
 | Parameter | Value |
 |---|---|
 | Time scheme | RK3 (time-accurate) |
-| CFL | 0.3 |
-| Space reconstruction | MUSCL |
-| Flux limiter | minmod |
+| Final time | $t = 1$ |
+| CFL | 0.6 |
+| Space reconstruction | first order |
 | Low-Mach cutoff | $M_{co} = 0.005$ ($\approx 5\,M_{\rm peak}$) |
-| **Riemann solvers tested** | **HLLC (baseline), LMRoe, AUSM+M** |
+| **Riemann solvers tested** | **AUSM+M** (`input.ini`), **HLLC** (baseline), **LMRoe** |
 
 The cutoff $M_{co}$ is the shared low-Mach dissipation floor described in
 [Low-Mach Cutoff Mach $M_{co}$](../theory/riemann-solvers.md#low-mach-cutoff-mach-m_co).
 **HLLC** is the *control*: it carries no low-Mach treatment and shows what the
 baseline upwind dissipation does to the vortex. **LMRoe** and **AUSM+M** are the
-low-Mach-corrected schemes.
+low-Mach-corrected schemes. HLLC and LMRoe run with `riemann-solver` changed in
+`input.ini`.
 
 ## Grid structure
 

@@ -164,7 +164,7 @@ $$
     $\beta = 1$ recovers the full second-order MUSCL scheme.
     $\beta = 0$ reduces reconstruction to first order (donor-cell),
     which is used in the immediate vicinity of shocks.
-    The shock-detection sensor (see below) smoothly modulates $\beta$.
+    The shock-detection sensor (see below) sets $\beta$.
 
 At the first interior face the slope behind the first cell, $s_0$ or $s_2$,
 takes the ghost cell of the boundary face. Behind a zero-gradient face (`0`,
@@ -265,7 +265,7 @@ All non-trivial limiters fall within Sweby's TVD region in the $(r,\,\phi)$ diag
 
 ## Shock Detection
 
-Near strong shocks the MUSCL reconstruction can produce oscillations even with TVD limiters. This is the case of the well-knwon shock carbuncle. MOSE uses a Jameson-type pressure sensor to detect shocks and smoothly degrade to first order in their vicinity.
+Near strong shocks the MUSCL reconstruction can produce oscillations even with TVD limiters. MOSE uses a Jameson-type pressure sensor to detect shocks and degrade to first order in their vicinity.
 
 The key `shock-detector` of `input.ini` turns on the sensor below (`Tramel`) or that of Chen (`Chen`); without it, HLLC+Tramel and HLLE++ take the sensor below, HLLC+Chen and AUSM+M that of Chen, and the other Riemann solvers none ($\beta = 1$).
 
@@ -289,7 +289,7 @@ $$
 
 ### Blending function
 
-A smooth blending is applied using a tuneable threshold $\Delta = 20$:
+The sensor (`Tramel`) gives $\beta$ with the threshold $\Delta = 20$, a constant of the code:
 
 $$
 \beta =
@@ -300,8 +300,10 @@ $$
 \end{cases}
 $$
 
-- $\beta \to 1$ in smooth flow — full second-order reconstruction
-- $\beta \to 0$ at shocks — first-order (no reconstruction)
+Where the first case applies $\sigma/\Delta < 1/\Delta^2$, so the tanh term is below $2\cdot10^{-7}$:
+
+- $\beta = 1$, to within $2\cdot10^{-7}$, where $\sigma < 1/\Delta$ — full second-order reconstruction
+- $\beta = 0$ elsewhere — first-order (no reconstruction)
 
 This $\beta$ is passed directly to the MUSCL reconstruction step, where
 it multiplies the limited slope.
@@ -836,6 +838,24 @@ radius (test `MMSResiduals`). The stop stays with every metric, a declared
 limit: the axis at $r = 0$ is not treated completely (ghost cells beyond the
 axis, not copies).
 
+The value of a cell is the mean of the solution over the cell, and the mean of
+a linear field over a cell is its value at the centroid of the cell volume
+[13, Eq. (3.1) and (3.12)]. MOSE places the value at the cell centre, the mean
+of the eight nodes. The two points coincide on a parallelepiped, but not next
+to the axis of a wedge: in the first row of cells, whose inner nodes are on the
+axis or at a small radius, the centroid lies at two thirds of the height of the
+cell from the axis and the cell centre at one half, at every refinement. There
+the operators that take the cell centres are not exact for a linear field given
+by its cell means: with uniform radial spacing and `stencil`, the radial
+gradient at the faces between the first and the second row is $1/9$ too small
+($1/45$ between the second and the third), the cell gradient of the turbulence
+sources of the first row is off by $1/9$, and the term $u_r/r$ of the hoop
+stress is $1/3$ too large in the first row ($1/27$ in the second). These errors
+do not decrease as the mesh is refined. In a one-dimensional model of the
+viscous terms of the radial momentum next to the axis, with these positions,
+the error of the solution decreases at first order in the first row and at
+second order in its mean weighted by the volume.
+
 Next to the axis the hoop stress also stiffens the explicit step. In the radial
 momentum of the first row of cells, at $r \approx \Delta r/2$, it is a damping
 $(2\mu+\lambda)\,u_r/r^2 \approx \tfrac{16}{3}\,\mu\,u_r/\Delta r^2$ ($\mu$ with
@@ -1011,6 +1031,6 @@ of the records or of the threads.
     leaves out the cross-derivative terms, which gfluxv1.F adds).
 13. H. Jasak, *Error Analysis and Estimation for the Finite Volume Method with
     Applications to Fluid Flows*, PhD thesis, Imperial College, University of
-    London, 1996, Eq. (3.32).
+    London, 1996, Eq. (3.1), (3.12) and (3.32).
 14. D. J. Mavriplis, "Revisiting the Least-squares Procedure for Gradient
     Reconstruction on Unstructured Meshes," NASA/CR-2003-212683, 2003, p. 14.

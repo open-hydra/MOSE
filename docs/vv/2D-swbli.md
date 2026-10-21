@@ -62,7 +62,7 @@ Boundary conditions:
 - **Inlet**: supersonic inflow (Mach 5, prescribed thermodynamic state)
 - **Lower wall**: isothermal no-slip wall
 - **Upper boundary**: symmetry upstream, isothermal wall downstream (the shock generator)
-- **Outlet**: supersonic outlet extrapolation
+- **Outlet** (`406` with `p_back = 0`): every variable extrapolated from the cell
 
 ---
 

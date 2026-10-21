@@ -36,7 +36,7 @@ The mesh is composed of two structured blocks:
 
 Boundary conditions:
 
-- Inlet: Riemann invariant extrapolation with Mach 3 state
+- Inlet (`405`): supersonic, $M = 3$, $p = 1$, $T = 1$
 - Step wall: slip wall (symmetry)
 - Upper boundary: symmetry
 - Exit: zero-gradient extrapolation

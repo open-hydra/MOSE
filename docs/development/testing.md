@@ -499,7 +499,7 @@ The 1-D reference solutions are generated using
 Riemann-problem solvers for canonical test cases (Sod, Toro, Einfeldt,
 Noh, etc.).
 
-ExactPack is not on PyPI and is no longer carried as a submodule; install
+ExactPack is not on PyPI and is not a submodule: install
 it from LANL's GitHub, pinned to the tag CI uses:
 
 ```bash

@@ -46,7 +46,7 @@ where $\boldsymbol{r}_{\perp} = \boldsymbol{r} - (\boldsymbol{r} \cdot \boldsymb
 
 ### Energy Equation
 
-The energy equation (with specific total energy $E = c_v T + \frac{1}{2} |\boldsymbol{w}|^2$) receives a source term:
+The energy equation (with specific total energy $E = e + \frac{1}{2} |\boldsymbol{w}|^2$, $e$ the specific internal energy of the gas) receives a source term:
 
 $$\frac{\partial (\rho E)}{\partial t} + \nabla \cdot (\rho E \boldsymbol{w}) = -\nabla \cdot p\boldsymbol{w} + \nabla \cdot (\boldsymbol{\tau} \cdot \boldsymbol{w}) - \nabla \cdot \boldsymbol{q} + \boldsymbol{w} \cdot \boldsymbol{S}_{\text{mom}}$$
 
@@ -70,7 +70,7 @@ follows from $\nabla\times(\boldsymbol{\Omega}\times\boldsymbol{r}) = 2\boldsymb
 | SA + Spalart–Shur (SA-RC) | $\tilde r$ in the rotation/curvature factor $f_{r1}$ |
 | Menter SST $k$–$\omega$ | $O = \sqrt{2 W_{ij}W_{ij}}$ in the SST-RC denominator and $f_{r1}$ |
 | Wilcox 2006 $k$–$\omega$ | $f_\beta$ vortex-stretching limiter, $W_{ij}W_{jk}\hat S_{ki}$ |
-| SSG–LRR (RSM) | $W_{ij}^{\rm abs}$ in the $C_5$ pressure-strain term |
+| SSG–LRR (RSM; in the source code, `turbulence` does not accept it) | $W_{ij}^{\rm abs}$ in the $C_5$ pressure-strain term |
 
 In SA-RC and SST-RC the rate of change of the strain in $\tilde r$ is its steady convective part $\mathbf{u}\cdot\nabla S_{ij}$: the frame enters through the absolute vorticity, but the frame-rotation term $(\epsilon_{imn}S_{jn} + \epsilon_{jmn}S_{in})\,\Omega_m$ of the published $\tilde r$ is not included.
 
@@ -144,7 +144,7 @@ For steady-state turbomachinery flows, a steady rotating-frame solution avoids t
   read as numbers, a `stationary-face-<n>` value that does not read, or an axis of zero length, is an error of the reading
   too. With `ini-error = warn`, the default, a reading with an error is not taken and the frame goes on as it was; with
   `ini-error = stop` the run stops ([Input](../user/input.md)).
-- The origin of the coordinate system (where $\boldsymbol{r} = \boldsymbol{0}$) should coincide with the axis of rotation.
+- The axis of rotation passes through `origin` of `[MOSE-Rotating-Frame]` (the origin of the coordinates by default), and $\boldsymbol{r}$ is measured from it.
 - All flux routines (convective and viscous) operate on the relative velocity without modification.
 
 The rotating-frame verification cases are documented in [the V&V section](../vv/rotating-frame.md).

@@ -6,8 +6,8 @@ turbulent flows, selected at run time via the `turbulence` key in the
 described in detail below range from the one-equation Spalart–Allmaras
 model (with several variants) to the two-equation Menter SST and
 Wilcox 2006 $k$–$\omega$ models.  A full Reynolds-stress closure
-(SSG–LRR) and an algebraic non-linear correction (QCR2000) are also
-available — see [Other models](#other-models).
+(SSG–LRR) and an algebraic non-linear correction (QCR2000) are in the
+code, but `turbulence` does not accept them — see [Other models](#other-models).
 
 ---
 
@@ -195,15 +195,19 @@ Activated when compressibility effects on turbulence are significant
     The correction (the code cites doi:10.2514/2.3967) is not available: use
     `SA` or another model.
 
-#### SAR — Rotation Correction
+#### SA-R — Rotation Correction
 
-Adds a rotation term proportional to the difference between the strain
-rate and the vorticity magnitude:
+`turbulence = SA-R` replaces $\tilde S$ in the production by $\tilde S + C_\text{rot}\min(0,\,S - \Omega)$,
+with the strain-rate magnitude $S = \sqrt{2\,S_{ij}\,S_{ij}}$:
 
 $$
-P_\text{SAR} = P_\text{SA} + c_\text{rot}\,(\lVert S\rVert - \Omega)
-\qquad (c_\text{rot} = 2.0)
+P_\text{SA-R} = c_{b1}\,\bigl[\tilde{S} + C_\text{rot}\,\min(0,\,S - \Omega)\bigr]\,\rho\tilde\nu
+\qquad (C_\text{rot} = 2)
 $$
+
+The production is reduced where the vorticity exceeds the strain rate, as in vortex cores, and
+unchanged where it does not (NASA Turbulence Modeling Resource, Spalart–Allmaras page, SA-R, after
+Dacles-Mariani et al., *AIAA J.* 33(9), 1995).
 
 #### SA-RC — Spalart–Shur Rotation-Curvature Correction
 
@@ -599,8 +603,8 @@ $$
 
 ### SSG–LRR (Reynolds-stress model)
 
-In addition to the eddy-viscosity closures above, MOSE provides the
-**SSG–LRR** differential Reynolds-stress model (`turbulence = SSGLRR`),
+In addition to the eddy-viscosity closures above, the code has the
+**SSG–LRR** differential Reynolds-stress model (`Lib_SSGLRR`),
 which transports the six independent components of the Reynolds-stress
 tensor together with a length-scale variable instead of assuming the
 Boussinesq relation. It blends the Speziale–Sarkar–Gatski (SSG)
@@ -608,6 +612,8 @@ pressure–strain model away from walls with the Launder–Reece–Rodi (LRR)
 model near walls. Being anisotropy-resolving, it captures secondary
 flows and strong streamline-curvature effects that the two-equation
 models miss, at the cost of the additional transport equations.
+`turbulence` does not accept the name `SSGLRR` (its allowed values are listed
+in the [registry](../user/registry.md)), so no run uses it.
 
 ### QCR2000 (non-linear constitutive correction)
 
@@ -697,9 +703,10 @@ and next to a zero-gradient face the normal component is half the one-sided diff
 
 ### Blowing / wall-suction correction
 
-An optional correction (`blowing_corr`) modifies the wall boundary-layer
-treatment for SST and Wilcox 2006 models in the presence of wall
-injection or suction.
+The code has a wall value of $\omega$ for walls that inject or suck gas
+(`SST_Blowing_Correction`, used by SST and Wilcox 2006), which the suffix
+`-blowcorr` of the model name selects; `turbulence` does not accept such a
+name, so no run uses it.
 
 ### Wall distance
 

@@ -474,10 +474,13 @@ destruction
 
 !!! tip "CFL ramp-up"
 
-    During the initial transient MOSE supports a linear CFL ramp from a
-    low starting value to the target CFL over a user-specified number of
-    iterations (`rampa_iter`).  This improves robustness when the initial
-    condition is far from the steady state.
+    `cfl-rise-threshold` (`[MOSE-Numerics]`, 0 by default: no ramp) ramps the time step
+    linearly over the first iterations: at iteration $n$ below $N$ = `cfl-rise-threshold`
+    the local step of every cell is multiplied by $n/N$, with $n$ the iteration number of
+    the grid level (1 at its first iteration). This improves robustness when the initial
+    condition is far from the solution, and a time-accurate start of a $k$–$\omega$ model
+    far from the wall value of $\omega$ needs it
+    ([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)).
 
 ---
 
@@ -516,7 +519,7 @@ update.
 ### Smoothing equation
 
 In each coordinate direction $d$ the smoothed residual $\mathbf{R}^\ast$
-satisfies
+satisfies, with $\varepsilon$ = `irs-beta` of `[MOSE-Numerics]`,
 
 $$
 \mathbf{R}^\ast_i =
@@ -531,8 +534,8 @@ sweeps**, which is sufficient for practical convergence.
 ### Acceleration effect
 
 The smoothing amplifies the stable CFL limit by approximately
-$1 + 2\varepsilon$.  Typical values of the smoothing parameter $\varepsilon$
-range from 0.1 to 0.2.
+$1 + 2\varepsilon$. The cases of the repository that use IRS take
+$\varepsilon = 0.5$ (0.3 in the frozen rocket nozzle).
 
 ### Steady runs only
 

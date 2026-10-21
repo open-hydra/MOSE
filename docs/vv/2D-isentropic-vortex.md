@@ -91,25 +91,6 @@ The case fixes the **Van Leer** limiter on purpose. Only the *smooth* limiters
 aggressive **MC** and **Superbee** do not — which is expected limiter behaviour,
 **not** a loss of accuracy of the base scheme.
 
-Two effects are at play:
-
-- **Godunov barrier.** The vortex core is a *smooth
-  extremum*, where the upwind/downwind slopes have opposite signs
-  ($r = \Delta_\text{up}/\Delta_\text{down} < 0$). Every TVD limiter returns
-  $\phi = 0$ there, so all of them locally drop to first order at the core. This
-  is fundamental to TVD reconstruction and unavoidable.
-- **Behaviour in the smooth, monotone regions.**
-    - *Van Leer* $\phi=\dfrac{r+|r|}{1+|r|}$ and *Van Albada*
-      $\phi=\dfrac{r^2+r}{1+r^2}$ are **smooth ($C^1$ at $r=1$)** and
-      non-compressive: away from the tiny core the reconstruction is cleanly
-      second order, so the global $L_2$ error converges at $\approx 2$.
-    - *MC* $\phi=\max\!\big(0,\min(2r,\tfrac{1+r}{2},2)\big)$ is
-      **piecewise-linear (kinked)** and steeper, so it clips the smooth extremum
-      harder — the observed order dips (a marginal, coarse-grid effect that
-      recovers toward 2 as the core is better resolved).
-    - *Superbee* $\phi=\max\!\big(0,\min(2r,1),\min(r,2)\big)$ sits on the
-      **maximally compressive edge** of the TVD region. It is anti-diffusive by
-      design and artificially steepens smooth gradients into staircases
-      ("terracing"), so its error barely converges — Superbee is a known poor
-      choice for smooth-accuracy tests (it targets keeping contact
-      discontinuities sharp, the opposite regime).
+At the vortex core, a smooth extremum, the slopes on the two sides have opposite signs and every TVD
+limiter returns $\phi = 0$: all of them drop locally to first order there. The limiter functions are in
+[Flux Limiters](../theory/numerics.md#flux-limiters).

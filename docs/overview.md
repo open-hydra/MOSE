@@ -72,15 +72,15 @@ MOSE supports two chemistry modes that can be used independently or together:
 
 ### Turbulence
 
-All turbulence models are RANS eddy-viscosity closures selected at run time. The Boussinesq hypothesis links the Reynolds stress tensor to the mean strain rate via the turbulent viscosity $\mu_t$.
+The models that `turbulence` selects at run time are RANS eddy-viscosity closures. The Boussinesq hypothesis links the Reynolds stress tensor to the mean strain rate via the turbulent viscosity $\mu_t$.
 
 | Model | Type | Key feature |
 |-------|------|-------------|
-| Spalart–Allmaras (SA) | 1-equation | Rotation/curvature correction (SARC) |
+| Spalart–Allmaras (SA) | 1-equation | Rotation correction (`SA-R`) and rotation/curvature correction (`SA-RC`) |
 | Menter SST | 2-equation | $k$–$\omega$ / $k$–$\varepsilon$ blending; robust in adverse pressure gradients |
 | Wilcox k-$\omega$ 2006 | 2-equation | Updated cross-diffusion; improved freestream sensitivity |
-| SSGLRR | Reynolds-stress (7-equation) | Speziale–Sarkar–Gatski / Launder–Reece–Rodi |
-| QCR2000 | Algebraic correction | Non-linear Boussinesq (Quadratic Constitutive Relation) |
+| SSGLRR | Reynolds-stress (7-equation) | Speziale–Sarkar–Gatski / Launder–Reece–Rodi; in the source code, `turbulence` does not accept it |
+| QCR2000 | Algebraic correction | Non-linear Boussinesq (Quadratic Constitutive Relation); in the source code, `turbulence` does not accept it |
 
 ### Gas-Surface Interaction (GSI)
 
@@ -121,7 +121,7 @@ Typical applications: turbomachinery (impellers, rotors), swirling jets, and pro
 | Framework | Cell-centred finite volume on structured multi-block hexahedral grids |
 | Reconstruction | MUSCL — first- and second-order accurate |
 | Flux limiters | van Leer · van Albada · minmod · MC · superbee |
-| Riemann solvers | HLLC / HLLC+ · HLLE / HLLE++ · SLAU / SLAU2 · AUSM+ / AUSM+M · LMRoe / MiczekRoe · Godunov (exact) · Lax-Friedrichs |
+| Riemann solvers | HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC · HLLE, HLLE++ · SLAU, SLAU2 · AUSM+, AUSM+M · LMRoe, MiczekRoe · Godunov (`exact`) · local Lax–Friedrichs (`LLF` or `Rusanov`) |
 | Diffusive fluxes | 10-point stencil with face-metric tensor mapping |
 
 ### Time integration
@@ -141,7 +141,7 @@ Typical applications: turbomachinery (impellers, rotors), swirling jets, and pro
 | Hybrid | OpenMP + MPI combined runs on HPC clusters — the recommended mode beyond one socket |
 
 Measured strong scaling on a 6.8 M-cell case, with the processor clock held
-constant: **above 95 % parallel efficiency up to half a node, 87–89 % from one
+constant: **94.9–99.6 % parallel efficiency up to half a node, 87–89 % from one
 to three full nodes**, and 99–101 % of ideal when crossing node boundaries at a
 fixed per-node layout. Efficiency depends strongly on how ranks and threads are
 placed — see [Parallel Execution](user/parallel.md).

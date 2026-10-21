@@ -111,7 +111,7 @@ Inverse transformation ($\mathbf{U} \to \mathbf{P}$): Recovering primitive varia
    Newton–Raphson iterations with the implicit relation:
    $$T^{(k+1)} = T^{(k)} + \frac{e - e(T^{(k)})}{c_v(T^{(k)})}$$
    where $e(T)$ and $c_v(T)$ are from NASA polynomial fits.  
-   Iterate until relative error drops below $10^{-6}$ or a specified tolerance.
+   Iterate until $|e(T^{(k)}) - e| < 10^{-6}\,|e|$, with at most 20 iterations (`cons2prim` of FLINT).
    
 5. Compute pressure:  
    From the ideal-gas equation of state,
@@ -214,7 +214,7 @@ turbulence, and soot formation. These are summarized below:
 
 | Physical Process | Affected Variables | Integration Strategy |
 |--------|-------------------|----------|
-| Chemical kinetics | Species partial densities $\rho_s$ | Strang operator splitting; finite-rate or quasi-steady-state chemistry |
+| Chemical kinetics | Species partial densities $\rho_s$ | Strang operator splitting; finite-rate or equilibrium chemistry |
 | Turbulence | RANS variables $k, \omega, \tilde{\nu}$, etc. | Explicit source in spatial residual; wall-bounded corrections |
 | Soot transport | Soot volume fraction $f_\text{soot}$ | Explicit source; includes nucleation, surface reactions, coagulation |
 

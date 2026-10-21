@@ -43,7 +43,7 @@ Three grain materials are implemented, spanning the two families used in practic
 
 ### Solid rocket propellant
 
-For a solid rocket motor the propellant burning surface itself is not directly modelled due to the complex burning phenomen occurring in a very thin space. Instead, a boundary condition is used to impose mass and energy fluxes. MOSE implements the standard APN law, the mathematical shorthand for Saint Robert’s Law (also called Vieille’s Law), which dictates the linear burning rate of a solid propellant as a function of combustion chamber pressure:
+For a solid rocket motor the propellant burning surface itself is not directly modelled due to the complex burning phenomena occurring in a very thin space. Instead, a boundary condition is used to impose mass and energy fluxes. MOSE implements the standard APN law, the mathematical shorthand for Saint Robert’s Law (also called Vieille’s Law), which dictates the linear burning rate of a solid propellant as a function of combustion chamber pressure:
 
 $$
 \dot{r} = a\,p^n
@@ -118,9 +118,9 @@ The wall temperature is therefore either imposed by the physical model or determ
 
 ---
 
-# Thermally GSI physics
+## Thermally coupled surface models
 
-## Melting
+### Melting
 
 The melting model represents a surface held at a prescribed melting temperature,
 
@@ -153,7 +153,7 @@ Thus the implemented melting model represents **phase-change-driven ablation**: 
 
 ---
 
-## Pyrolysis
+### Pyrolysis
 
 The pyrolysis model represents thermal decomposition of a solid fuel: the polymer chain is broken by heat into gaseous fragments, which leave the surface and burn in the boundary layer.
 
@@ -178,7 +178,7 @@ The wall temperature is therefore an unknown of the coupled problem. The bracket
 
 All three models share the same interface — given $T_w$ they return $\dot m$, the species source terms $\omega_s = \dot m Y_s$, and $q_{\mathrm{surf}}$ — and differ only in the kinetic law. The product composition $Y_s$ is **prescribed per boundary**, not derived from a decomposition mechanism: the user supplies the mass fractions of the pyrolysis gas, which then reacts in the gas phase through the ordinary finite-rate [kinetics](kinetics.md).
 
-### HTPB
+#### HTPB
 
 HTPB is the workhorse hybrid fuel and the binder of AP/Al composite solid propellants. Its decomposition proceeds by two distinct chemical routes — depolymerisation of the butadiene backbone at lower temperature, and scission of the resulting fragments above it — so the regression rate is fitted by a **two-branch Arrhenius law** in the surface regression velocity $\dot r$, converted to a mass flux through the solid density:
 
@@ -210,7 +210,7 @@ $$
 
 The two branches are matched at $T_s$: evaluated there they agree to within 0.2 %, so $\dot r(T_w)$ is continuous to the precision of the fit and the secant iteration does not see a jump when it crosses the switch. The high-temperature branch is much less sensitive to $T_w$ ($E_2 \approx E_1/2.7$), which is the physical statement that above $T_s$ the rate is limited by heat supply rather than by chemistry.
 
-### HDPE
+#### HDPE
 
 HDPE is described by a single Arrhenius-type law returning the mass flux directly, without an explicit solid density:
 
@@ -233,7 +233,7 @@ $$
 !!! note "The factor of two in the exponent"
     The $2\mathcal R T_w$ in the denominator is not a typographical quirk: it is the signature of a **thermal-wave** (in-depth) pyrolysis analysis, in which the regression rate comes out as the square root of the volumetric reaction rate, $\dot r \propto \sqrt{A'\exp(-E/\mathcal R T_w)}$, halving the effective activation energy. The HDPE law is that result with the remaining thermal factors absorbed into $A$; the PP law below keeps them explicit.
 
-### PP
+#### PP
 
 Polypropylene uses the same thermal-wave physics written out in full. The pyrolysis front is treated as a reaction zone embedded in the conduction wave that precedes it, and the regression rate follows from balancing the two:
 
@@ -274,7 +274,7 @@ $\Theta$ is a weak, slowly varying function of $T_w$, so the temperature depende
 
 ---
 
-## Solid propellant combustion
+### Solid propellant combustion
 
 The grain combustion model stands apart from the other three: it is the only one whose mass flux does **not** come from a surface energy balance. A solid propellant carries its own oxidizer, so the surface is a deflagration front whose rate is set by the flame standing off it, and both the rate and the flame temperature are supplied as measured properties of the propellant rather than derived from the gas state.
 
@@ -296,14 +296,14 @@ $$
 
 | Symbol | Input | Description |
 |---|---|---|
-| $T_{\mathrm{af}}$ | `Taf` | adiabatic flame temperature of the propellant, imposed as the wall temperature |
+| $T_{\mathrm{af}}$ | `T_af` | adiabatic flame temperature of the propellant, imposed as the wall temperature |
 | $a$ | `a` | burn-rate coefficient, as a **mass flux** in kg/(m²·s) |
 | $n$ | `n` | pressure exponent |
-| $p_{\mathrm{ref}}$ | `pRef` | reference pressure at which $a$ is quoted |
-| $Y_{s,\mathrm{af}}$ | `massf(1:nsc)` | mass fractions of the combustion products |
+| $p_{\mathrm{ref}}$ | `p_ref` | reference pressure at which $a$ is quoted |
+| $Y_{s,\mathrm{af}}$ | `[massf_1 … massf_ns]` | mass fractions of the combustion products |
 
 !!! warning "The coefficient is a mass flux, not a linear rate"
-    Burn-rate data is normally tabulated as a *linear* rate $\dot r = a_r\,p^n$ in mm/s. The input expected here is $a = \rho_p\,a_r$, evaluated at $p_{\mathrm{ref}}$ and expressed in kg/(m²·s). The grain density is **not** applied internally — `rhoGrain` is read from the data line but never used — so supplying a linear coefficient underestimates the injected mass by three orders of magnitude.
+    Burn-rate data is normally tabulated as a *linear* rate $\dot r = a_r\,p^n$ in mm/s. The input expected here is $a = \rho_p\,a_r$, evaluated at $p_{\mathrm{ref}}$ and expressed in kg/(m²·s). The grain density is **not** applied internally — `rho_grain` is read from the data line but never used — so supplying a linear coefficient underestimates the injected mass by three orders of magnitude.
 
 Unlike the gasifying surfaces, whose wall composition is inherited from the adjacent cell under the boundary-layer assumption, the grain surface imposes the **product composition** on the wall state, and the wall transport properties used for the conductive flux are evaluated from it. This is the physically right choice here: the gas at a burning grain surface *is* the flame product mixture.
 
@@ -318,11 +318,11 @@ Unlike the gasifying surfaces, whose wall composition is inherited from the adja
 
 ---
 
-## Heterogeneous surface reactions
+### Heterogeneous surface reactions
 
 The surface-reaction model represents the heterogeneous attack of a **carbon surface** — graphite or carbon–carbon, as used for nozzle throat inserts — by the oxidizing species of the gas. Unlike pyrolysis, no material property is prescribed: the mass flux is an outcome of the reaction mechanism and the local gas composition, and the product composition is fixed by stoichiometry rather than by the user.
 
-### Reaction set
+#### Reaction set
 
 Five surface reactions consume solid carbon:
 
@@ -336,7 +336,7 @@ Five surface reactions consume solid carbon:
 
 This requires the gas mixture to contain $\mathrm{H}$, $\mathrm{OH}$, $\mathrm{CO}$, $\mathrm{CO_2}$, $\mathrm{H_2}$, $\mathrm{H_2O}$, $\mathrm{O_2}$ and $\mathrm{O}$ — the species set of a hydrocarbon or hydrogen combustion product. The steam and Boudouard routes usually dominate in a solid-motor throat, since $\mathrm{H_2O}$ and $\mathrm{CO_2}$ are major products while free $\mathrm{O}$, $\mathrm{OH}$ and $\mathrm{O_2}$ are minor.
 
-### Rate laws
+#### Rate laws
 
 Rates are written in terms of **partial pressures in atmospheres**, $p_s = \rho_s R_s T_w / p_{\mathrm{ref}}$ with $p_{\mathrm{ref}}$ = 1.01325 × 10⁵ Pa, and return a carbon mass flux in kg/(m²·s):
 
@@ -363,7 +363,7 @@ The half-order dependence of the steam and Boudouard routes reflects dissociativ
 
 The very large activation temperatures of the $\mathrm{H_2O}$ and $\mathrm{CO_2}$ routes are why throat erosion is negligible at moderate wall temperature and grows abruptly once the insert approaches its operating temperature.
 
-### Oxidation: two-site mechanism
+#### Oxidation: two-site mechanism
 
 Molecular oxygen is handled with a two-site surface mechanism — the Nagle–Strickland-Constable form — in which the carbon surface presents reactive sites of two types whose relative population shifts with temperature and oxygen pressure:
 
@@ -387,7 +387,7 @@ where $\chi$ is the fraction of the surface covered by the more reactive site ty
 
 The positive exponent of $k_6$ is physical, not a sign slip: it describes desorption-controlled coverage, which *falls* with temperature.
 
-### Source terms and surface energy
+#### Source terms and surface energy
 
 Each route contributes to the gas-phase species according to its stoichiometry, scaled by the molecular-weight ratio to the carbon atom consumed:
 
@@ -403,7 +403,7 @@ The net mass flux is the **sum of the species sources**, which is exactly the ca
 
 ---
 
-# Coupling to the gas phase
+## Coupling to the gas phase
 
 The surface models modify the gas through the boundary fluxes.
 
@@ -433,14 +433,14 @@ For turbulent calculations, the blowing associated with the reactive surface is 
 
 Because the wall injects mass, an ablating face is **not** closed with the reflective (symmetry) flux used for an impermeable wall: the complete boundary flux is assembled from the wall state, carrying the true wall pressure, the viscous stress and the enthalpy of the injected gas. Substituting a mirror-state flux leaves an error in the wall-adjacent cell that does not vanish under mesh refinement, identifying it as a flux inconsistency rather than discretization error; the [verification case](../vv/2D-ablating-wall.md#results) checks the injected mass flux through the wall-adjacent cell for exactly this reason.
 
-## Inert surfaces
+### Inert surfaces
 
 Nothing guarantees that a GSI boundary is ablating: if the surface is a net *loser* of heat, the melting balance returns a non-positive mass flux, and the wall would otherwise be made to swallow gas. Every GSI face is therefore tested before its flux is applied, and a non-ablating face falls back to an impermeable wall — reflective in the inviscid flux, isothermal at the surface temperature in the viscous flux.
 
 !!! note "Pyrolysis never switches off exactly"
     An Arrhenius law returns a strictly positive rate at any finite temperature, so a pyrolysing surface always blows *something*. The guard protects against non-physical or non-converged states rather than against a cold wall; at low temperature the mass flux simply becomes negligible.
 
-## Surface recession
+### Surface recession
 
 The mass, species and energy leaving the solid are supplied to the gas, but **the surface itself does not move**: the mesh is fixed and the grain port does not open up over the burn. Regression rate is a reported output, not a geometric evolution. Motor-scale simulations over a significant fraction of the burn therefore require the geometry to be updated externally.
 

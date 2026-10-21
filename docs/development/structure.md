@@ -47,7 +47,6 @@ MOSE/
 │   ├── 1D/                  # 1-D shock tube cases
 │   ├── 2D/                  # 2-D steady and unsteady cases
 │   ├── 3D/                  # 3-D cases
-│   ├── Pressure_Centrifugal_eq/  # Rotating-frame equilibrium cases
 │   └── common/              # Shared thermodynamic databases
 │
 ├── docs/                    # MkDocs documentation source
@@ -272,21 +271,21 @@ face, so their metrics do not depend on the number or on the order of the OpenMP
 
 ## RANS Turbulence Models
 
-At run time `Assign_Setup` reads `turbulence_model` from the input file
-and binds the selected implementation to four procedure pointers in `Mod_RANS`:
+At run time `Assign_Setup` reads `turbulence` from the input file and, in
+`Setup_RANS_Model` (`Mod_RANS`), binds the selected implementation to procedure pointers, among them
 `Eddy_Viscosity`, `RANS_Diffusive_Flux`, `Stress_Vector`, and `RANS_Set_Wall_Values`.
 
 | Key | Implementation | Description |
 |-----|---------------|-------------|
 | `SA` | `Lib_Spalart` | Baseline Spalart–Allmaras |
 | `SAcomp` | `Lib_Spalart` | + compressibility correction (stops at set-up: its result depends on the units) |
-| `SAR` | `Lib_Spalart` | + rotation correction |
+| `SA-R` | `Lib_Spalart` | + rotation correction |
 | `SA-RC` | `Lib_SpalartShur` | Rotation–curvature (Shur) correction |
 | `SST` | `Lib_SST` | Menter k-ω SST (SST-2003) |
 | `SST-RC` | `Lib_SST`, `Lib_SpalartShur` | SST + rotation–curvature correction (Smirnov–Menter) |
 | `Wilcox2006` | `Lib_Wilcox2006` | Wilcox k-ω (2006 revision) |
-| `SSGLRR` | `Lib_SSGLRR` | Speziale–Sarkar–Gatski RSM |
-| `QCR2000` | `Lib_QCR2000` | Quasi-curvilinear correction |
+| `SSGLRR` | `Lib_SSGLRR` | Speziale–Sarkar–Gatski RSM; in the source code, `turbulence` does not accept it |
+| `QCR2000` | `Lib_QCR2000` | Quadratic Constitutive Relation; in the source code, `turbulence` does not accept it |
 
 ### Wall distance
 
@@ -453,7 +452,6 @@ cmake --preset default && cmake --build build
 | `USE_SUNDIALS` | OFF | SUNDIALS | Alternative ODE solvers for chemistry |
 | `USE_CANTERA` | OFF | Cantera | Alternative chemistry backend |
 | `USE_TECIO` | OFF | TecIO | Enable Tecplot binary output |
-| `BASIC_TEST` | OFF | — | Build unit tests in `src/test/` |
 
 ### Dependency paths
 

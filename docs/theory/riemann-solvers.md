@@ -101,6 +101,76 @@ low-Mach solvers.
 
 ---
 
+## SLAU Family
+
+**Physical principle:**
+SLAU (Simple Low-dissipation AUSM) combines aspect-ratio-preserving Mach splitting with compressibility-dependent dissipation. The key innovation is a compressibility parameter $\chi = (1 - \tilde{M})^2$ that suppresses artificial viscosity near $M \to 0$ while maintaining shock-capturing at high Mach.
+
+**Mathematical structure:**  
+- **Mass flux:** Upwind-weighted convection based on Mach-dependent splitting  
+- **Pressure reconstruction:** Blends AUSM+ splitting with compressibility-aware dissipation  
+- **Low-Mach limit:** $\chi \to 1$ reduces dissipation to near-incompressible accuracy  
+- **High-Mach limit:** $\chi \to 0$ recovers good shock resolution
+
+The SLAU solvers are designed for all-speed flows, from incompressible subsonic through hypersonic regimes. They provide superior accuracy at low Mach while maintaining robustness at shocks, a difficult balance to achieve.
+
+**Unique advantage:** Single solver suitable for entire Mach range without solver switching.
+
+### Common Low-Mach Stabilization Parameters
+
+Both SLAU variants use Mach-dependent scaling to suppress dissipation in low-speed flows:
+
+**Density-weighted velocity scale:**
+$\bar{V}_n = \frac{\rho_L\,|v_{n,L}| + \rho_R\,|v_{n,R}|}{\rho_L + \rho_R}$
+
+**Reference Mach number** (capped at unity):
+$\tilde{M} = \min\!\left(1,\;\sqrt{\frac{|\mathbf{v}|^2}{2\,a_F^2}}\right)$
+where $a_F = \sqrt{a_L\,a_R}$ is the face sound speed.
+
+**Compressibility parameter** (vanishes at $\tilde{M} \to 0$):
+$\chi = (1 - \tilde{M})^2$
+
+### SLAU (Shima & Kitamura, 2011)
+
+Simple low-dissipation AUSM with Mach-dependent scaling.
+
+**Mass flux:** Weighted average of left/right contributions with velocity correction:  
+
+$$ \dot{m}_L = \rho_L\,v_{n,L},\quad \dot{m}_R = \rho_R\,v_{n,R} $$
+
+$$ \dot{m} = \frac{1}{2}(\dot{m}_L + \dot{m}_R) + \frac{1}{2}(\dot{m}_L - \dot{m}_R)\,\text{sgn}(v_{n,L} + v_{n,R}) - \frac{\chi}{2a_F}(p_R - p_L) $$
+
+where the third term provides compressibility-dependent pressure correction.
+
+**Interface pressure:** Weighted by pressure-splitting functions:  
+
+$$  p_{\frac{1}{2}} = \frac{1}{2}(p_L + p_R) + \frac{1}{2}(\beta_L^+ - \beta_L^-)(p_L - p_R)  $$
+
+with 
+$\beta^{+}(M) = \tfrac{1}{4}(2 - M)(M + 1)^2, \quad \beta^{-}(M) = \tfrac{1}{4}(2 + M)(M - 1)^2 \quad (|M| < 1)$
+
+**Characteristics:** Clean formulation, excellent subsonic accuracy, simple implementation.
+
+### SLAU2 (Kitamura & Shima, 2013)
+
+Enhanced SLAU with velocity-based shock detection for better shock resolution.
+
+**Interface pressure:** Improves dissipation scaling near normal shocks:  
+
+$$ p_{\frac{1}{2}} = \frac{1}{2}(p_L + p_R) + \frac{1}{2}(\beta_L^+ - \beta_L^-)(p_L - p_R) + (\beta_L^+ + \beta_L^- - 1) \cdot f_v \cdot a_F \cdot \frac{1}{2}(\rho_L + \rho_R) $$
+
+where the shock-detection term $f_v = \sqrt{\frac{1}{2}(|\mathbf{v}_L|^2 + |\mathbf{v}_R|^2)}$ represents a velocity-based shock indicator normalizing the dissipation strength.
+
+**Key improvement:** The velocity weighting $f_v$ provides automatic strong dissipation near normal shocks (high velocity magnitude = shock present) while maintaining low-dissipation accuracy in smooth regions.
+
+**Advantages:**  
+- Best low-Mach performance in SLAU family (subsonic flows)
+- Converges to exact solver near strong normal shocks
+- Seamless all-speed handling from incompressible to hypersonic
+- Conservative and naturally handles multi-species flows
+
+---
+
 ## HLL Family
 
 **Physical principle:**
@@ -207,6 +277,23 @@ $$
 
 **Recommendation:** Use HLLC+Tramel instead for adaptive shock-aware fallback.
 
+### HLLC-PC
+
+HLLC with the signal speeds of the preconditioned system (`Riemann_HLLCprec` in `Lib_Riemann_HLL.f90`):
+
+$$
+S_{L,R} = v^\ast \mp c^\ast,\qquad
+v^\ast = v_n\,(1-\alpha),\qquad
+c^\ast = \sqrt{\alpha^2 v_n^2 + U_r^2},\qquad
+\alpha = \tfrac{1}{2}\bigl(1 - U_r^2/a^2\bigr),
+$$
+
+taken on the left (right) state and on the average of the two with the weights $\sqrt\rho$, and bounded by
+zero, before the star states of HLLC. $U_r$ is the reference velocity of the Weiss–Smith preconditioning, at most
+$a$ ([Time Integration](time-integration.md#reference-velocity-of-the-preconditioning)); where $U_r = a$ the
+speeds are $v_n \mp a$. The solver needs `integration-variables = prec`, without which MOSE stops at set-up,
+and preconditioned runs are steady.
+
 ### HLLC+Chen (Chen et al., 2020)
 
 A genuine **all-speed** HLLC (Chen, Lin, Li & Yan, *SIAM J. Sci. Comput.* 42(4),
@@ -256,9 +343,11 @@ $$\mathbf{F}_{\frac{1}{2}} = \beta\,\mathbf{F}_{\text{HLLC}} + (1-\beta)\,\mathb
 
 | Regime | $\beta$ | Solver | Characteristic |
 |:------:|:-------:|:------:|----------------|
-| Smooth flow (no shock) | $\approx 1.0$ | HLLC | Sharp contact waves, lower dissipation |
-| Weak shock | $0.4 \text{--} 1.0$ | HLLC dominant | Balanced |
-| Strong shock / discontinuity | $\approx 0.0$ | HLLE | Maximum dissipation, unconditionally stable |
+| Smooth flow (no shock) | 1 | HLLC | Sharp contact waves, lower dissipation |
+| Shock / discontinuity | 0 | HLLE | Maximum dissipation, unconditionally stable |
+
+With the sensor of Tramel, which HLLC+Tramel takes unless `shock-detector` names another, $\beta$ has only
+these two values ([Shock Detection for Hybrid Solvers](#shock-detection-for-hybrid-solvers)).
 
 **Use cases:**  
 - Flows with shock-boundary layer interactions  
@@ -295,6 +384,8 @@ For acoustic eigenvalues, Harten–Hyman entropy correction is applied.
 - Less robust at strong normal shocks than HLLE
 
 ### Rotated HLLC / HLLE
+
+`riemann_HLLCHLLE` (`Lib_Riemann_HLL.f90`) is in the source code; `riemann-solver` does not accept it.
 
 Alternative hybrid approach using a **frame rotation** aligned with the local
 velocity-difference direction.
@@ -465,108 +556,17 @@ $$
 
 ---
 
-## SLAU Family
-
-**Physical principle:**
-SLAU (Simple Low-dissipation AUSM) combines aspect-ratio-preserving Mach splitting with compressibility-dependent dissipation. The key innovation is a compressibility parameter $\chi = (1 - \tilde{M})^2$ that suppresses artificial viscosity near $M \to 0$ while maintaining shock-capturing at high Mach.
-
-**Mathematical structure:**  
-- **Mass flux:** Upwind-weighted convection based on Mach-dependent splitting  
-- **Pressure reconstruction:** Blends AUSM+ splitting with compressibility-aware dissipation  
-- **Low-Mach limit:** $\chi \to 1$ reduces dissipation to near-incompressible accuracy  
-- **High-Mach limit:** $\chi \to 0$ recovers good shock resolution
-
-The SLAU solvers are designed for all-speed flows, from incompressible subsonic through hypersonic regimes. They provide superior accuracy at low Mach while maintaining robustness at shocks, a difficult balance to achieve.
-
-**Unique advantage:** Single solver suitable for entire Mach range without solver switching.
-
-### Common Low-Mach Stabilization Parameters
-
-Both SLAU variants use Mach-dependent scaling to suppress dissipation in low-speed flows:
-
-**Density-weighted velocity scale:**
-$\bar{V}_n = \frac{\rho_L\,|v_{n,L}| + \rho_R\,|v_{n,R}|}{\rho_L + \rho_R}$
-
-**Reference Mach number** (capped at unity):
-$\tilde{M} = \min\!\left(1,\;\sqrt{\frac{|\mathbf{v}|^2}{2\,a_F^2}}\right)$
-where $a_F = \sqrt{a_L\,a_R}$ is the face sound speed.
-
-**Compressibility parameter** (vanishes at $\tilde{M} \to 0$):
-$\chi = (1 - \tilde{M})^2$
-
-### SLAU (Shima & Kitamura, 2011)
-
-Simple low-dissipation AUSM with Mach-dependent scaling.
-
-**Mass flux:** Weighted average of left/right contributions with velocity correction:  
-
-$$ \dot{m}_L = \rho_L\,v_{n,L},\quad \dot{m}_R = \rho_R\,v_{n,R} $$
-
-$$ \dot{m} = \frac{1}{2}(\dot{m}_L + \dot{m}_R) + \frac{1}{2}(\dot{m}_L - \dot{m}_R)\,\text{sgn}(v_{n,L} + v_{n,R}) - \frac{\chi}{2a_F}(p_R - p_L) $$
-
-where the third term provides compressibility-dependent pressure correction.
-
-**Interface pressure:** Weighted by pressure-splitting functions:  
-
-$$  p_{\frac{1}{2}} = \frac{1}{2}(p_L + p_R) + \frac{1}{2}(\beta_L^+ - \beta_L^-)(p_L - p_R)  $$
-
-with 
-$\beta^{+}(M) = \tfrac{1}{4}(2 - M)(M + 1)^2, \quad \beta^{-}(M) = \tfrac{1}{4}(2 + M)(M - 1)^2 \quad (|M| < 1)$
-
-**Characteristics:** Clean formulation, excellent subsonic accuracy, simple implementation.
-
-### SLAU2 (Kitamura & Shima, 2013)
-
-Enhanced SLAU with velocity-based shock detection for better shock resolution.
-
-**Interface pressure:** Improves dissipation scaling near normal shocks:  
-
-$$ p_{\frac{1}{2}} = \frac{1}{2}(p_L + p_R) + \frac{1}{2}(\beta_L^+ - \beta_L^-)(p_L - p_R) + (\beta_L^+ + \beta_L^- - 1) \cdot f_v \cdot a_F \cdot \frac{1}{2}(\rho_L + \rho_R) $$
-
-where the shock-detection term $f_v = \sqrt{\frac{1}{2}(|\mathbf{v}_L|^2 + |\mathbf{v}_R|^2)}$ represents a velocity-based shock indicator normalizing the dissipation strength.
-
-**Key improvement:** The velocity weighting $f_v$ provides automatic strong dissipation near normal shocks (high velocity magnitude = shock present) while maintaining low-dissipation accuracy in smooth regions.
-
-**Advantages:**  
-- Best low-Mach performance in SLAU family (subsonic flows)
-- Converges to exact solver near strong normal shocks
-- Seamless all-speed handling from incompressible to hypersonic
-- Conservative and naturally handles multi-species flows
-
----
-
 ## Shock Detection for Hybrid Solvers
 
-Several solvers (HLLC+Tramel, HLLE++) employ adaptive dissipation controlled by
-a shock-detection parameter $\beta \in [0,1]$. This parameter is computed from local pressure gradients using a **Jameson-type sensor**:
-
-$$
-s = \max\!\left( \left| \frac{p_E - 2p_C + p_W}{p_E + 2p_C + p_W} \right|,
-       \left| \frac{p_N - 2p_C + p_S}{p_N + 2p_C + p_S} \right|,
-       \left| \frac{p_T - 2p_C + p_B}{p_T + 2p_C + p_B} \right| \right)
-$$
-
-where subscripts denote center (C), east (E), west (W), north (N), south (S),
-top (T), bottom (B) cells.
-
-**Shock detection formula:**
-
-$$
-\beta = \begin{cases}
-1 - \tanh(10\phi^3) & \text{if } s < 1/\Delta \quad (\text{smooth region}) \\
-0 & \text{if } s \ge 1/\Delta \quad (\text{shock detected})
-\end{cases}
-$$
-
-where $\phi = \max(s/\Delta, 0)$ and $\Delta = 20$ is a calibration parameter.
-
-**Interpretation:**
+HLLC+Tramel blends its two fluxes, and HLLE++ its eigenvalues, with the parameter $\beta \in [0,1]$ of the
+[shock detector](numerics.md#shock-detection), computed from the pressures of the cell and of its six neighbours.
+With the Jameson-type sensor of Tramel, which both take unless `shock-detector` names another, $\beta$ is 1, to
+within $2\cdot10^{-7}$, where the sensor value is below $1/\Delta = 0.05$, and 0 elsewhere:
 
 | $\beta$ | Region Type | Solver Behavior |
 |:-------:|:----------:|-----------------|
-| $\beta \approx 1.0$ | Smooth flow, no shock | Use HLLC (contact-capturing) or HLLE++ (shear-capturing) |
-| $0 < \beta < 1$ | Weak shock, transition zone | Blend toward dissipative scheme |
-| $\beta \approx 0.0$ | Strong shock | Use HLLE (maximum stability) |
+| 1 | Smooth flow, no shock | HLLC (contact-capturing) or HLLE++ with the Roe eigenvalues (shear-capturing) |
+| 0 | Shock | HLLE (maximum stability) |
 
 This adaptive approach **combines accuracy in smooth regions with robustness at shocks**,
 making hybrid solvers like HLLC+Tramel ideal for general-purpose simulations.
