@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Block-to-rank assignment from INPUT/decomposition.map under MPI
-#  (needs-mpi tier)
+#  Block-to-rank assignment from the map that decomposition-map names, under
+#  MPI (needs-mpi tier)
 #
-#  The optional file INPUT/decomposition.map, in the format the ATLAS mesh
-#  decomposer (MDB) writes, gives the MPI rank of every block; without it
-#  MOSE assigns the blocks itself, largest first, each to the least loaded
-#  rank. The assignment must not change the solution: every run below gives
+#  The file INPUT/decomposition.map, named by the key decomposition-map, in the
+#  format the ATLAS mesh decomposer (MDB) writes, gives the MPI rank of every
+#  block; without the key MOSE assigns the blocks itself, largest first, each
+#  to the least loaded rank. The assignment must not change the solution: every run below gives
 #  the field of one rank without a map, bit for bit.
 #   1. A strip of 4 x 1 blocks: 2 ranks without a map; 2 ranks with the map
 #      of MOSE's own assignment, written as MDB writes it; 2 ranks with the
@@ -84,6 +84,12 @@ EOF
 
 fail() { echo "MPIDecompositionMap: FAIL — $*"; exit 1; }
 
+# key <value>: decomposition-map in [MOSE-IO], the last section of input.ini (no value: the key left out)
+key() {
+  sed -i '/^decomposition-map/d' input.ini
+  if [[ -n ${1:-} ]]; then echo "decomposition-map = $1" >> input.ini; fi
+}
+
 # run <ranks> <label>: solve and keep OUTPUT as runs/<label>; status in RC
 run() {
   local np="$1" label="$2"
@@ -112,7 +118,9 @@ same() {
 with_map() {
   local np="$1" label="$2" owners="$3" ref="$4" glob="$5" text="${6:-}"
   python3 -B ../write_map.py $CASE --owners "$owners" > /dev/null || fail "map generation ($owners)"
+  key decomposition.map
   run "$np" "$label"
+  key
   rm -f "$MAP"
   if [[ $RC -ne 0 ]]; then
     echo "  the run $label failed (solve_$label.log)"; status=1; return
@@ -130,7 +138,9 @@ with_map() {
 stops() {
   local np="$1" label="$2" owners="$3" text="$4" k
   python3 -B ../write_map.py $CASE --owners "$owners" > /dev/null || fail "map generation ($owners)"
+  key decomposition.map
   run "$np" "$label"
+  key
   rm -f "$MAP"
   k=$(grep -acF "$text" "solve_$label.log")
   if [[ $RC -ne 0 && $k -ge $np ]]; then

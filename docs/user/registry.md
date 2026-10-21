@@ -16,6 +16,7 @@
 |-----------|---------|---------|----------|-------------|
 | ic-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw |  no | Initial condition (INPUT/ic.*) format |
 | sol-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw |  no | Solution (OUTPUT/field.*) format |
+| decomposition-map | none |  |  no | Block-to-rank map in INPUT/ (none: MOSE assigns the blocks) |
 | sol-diter | 1000000000 | > 0 |  no | Solution output iter frequency |
 | sol-dtime | 1e30 | > 0 |  no | Solution output time frequency |
 | sol-overwrite | true | true, false |  no | Overwrite solution files |

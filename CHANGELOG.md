@@ -29,11 +29,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tier: `MMSViscous3DFull`, the full form of `MMSViscous3D` with the grid with walls (about a day at one thread, an
   estimate; TIMEOUT three days). The PR CI leaves the label out, and `ctest -L verification` runs it on request: a plain
   `ctest` now runs it too, so the whole suite without it is `ctest -LE verification`.
-- MPI runs take the rank of every block from `INPUT/decomposition.map` (with the phase prefix of `bc.txt` in multi-phase runs)
-  when the case has one: the decomposition map that the ATLAS mesh decomposer (MDB) writes next to the split mesh. A map that
-  does not fit the mesh or the run stops the run at set-up, on every rank, with exit code 1; the map is read in every build, so
-  a map made for more ranks also stops a serial run. With fewer blocks than ranks some ranks idle, with a warning, as without a
-  map. Without the file nothing changes; with it only the rank of each block does, not the solution.
+- The key `decomposition-map` of `[MOSE-IO]` names a file of `INPUT/` that gives the MPI rank of every block (with the phase
+  prefix of `bc.txt` in multi-phase runs), in the format of the decomposition map that the ATLAS mesh decomposer (MDB) writes
+  next to the split mesh; with `none`, the default, MOSE assigns the blocks itself and reads no map. A map that does not fit the
+  mesh or the run, a named file that is not there, or a value with a folder stops the run at set-up, on every rank, with exit
+  code 1; a named map is read in every build, so a map made for more ranks also stops a serial run. With fewer blocks than ranks
+  some ranks idle, with a warning, as without a map. The map changes only the rank of each block, not the solution.
 - At set-up MOSE warns, with the line number, about every `key = value` of `input.ini` that the reader does not take in its
   section: such a key is not read, and its parameter keeps its default. The guide says that a key lost this way is an error in
   the input. Inputs whose keys are all read do not change.

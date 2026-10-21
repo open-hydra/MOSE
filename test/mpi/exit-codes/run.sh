@@ -19,7 +19,8 @@
 #  A value of the initial condition that is not finite must stop every rank,
 #  also when one rank alone holds it: the Sod tube with a NaN velocity in one
 #  cell (make_case.py nan), its one block on rank 1 (INPUT/decomposition.map,
-#  ../write_map.py), so that rank 1 alone holds the state of its cells and
+#  ../write_map.py, named by decomposition-map), so that rank 1 alone holds
+#  the state of its cells and
 #  rank 0 only its nodes, and the tube with an infinite coordinate of one
 #  node (make_case.py inf), which both ranks hold, must end within 60 s with
 #  exit code 1, the place of the value, written once, and the STOP line of
@@ -152,6 +153,9 @@ integration-variables = cons
 space-reconstruction = MUSCL
 flux-limiter = vanleer
 riemann-solver = HLLC
+
+[MOSE-IO]
+decomposition-map = decomposition.map
 EOI
 python3 -B ../write_map.py --layout 1x1 --cells 100 1 --owners list:1 > /dev/null || exit 1
 for tag in mpi-nan-ic mpi-inf-node; do

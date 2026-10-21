@@ -95,10 +95,12 @@ contains
   !> Partition nb blocks across MPI ranks.
   !> blk_ncells(b) = total number of cells in block b; blk_dims(:,b) = its cells
   !> along i, j, k.
-  !> When map_file names a decomposition map that exists, the rank of every block
-  !> is read from it (read_decomposition_map). Otherwise blocks are walked
-  !> largest-first (LPT), so the balance depends only on the cell counts and not
-  !> on the order the blocks appear in the mesh file.
+  !> When map_file is given (the decomposition map that the key decomposition-map
+  !> names), the rank of every block is read from it (read_decomposition_map); a
+  !> file that cannot be read, or that does not fit the mesh or the run, stops the
+  !> run. Otherwise blocks are walked largest-first (LPT), so the balance depends
+  !> only on the cell counts and not on the order the blocks appear in the mesh
+  !> file.
   subroutine partition_blocks(nb, blk_ncells, blk_dims, map_file)
     integer, intent(in) :: nb
     integer, intent(in) :: blk_ncells(nb)
@@ -141,7 +143,7 @@ contains
     end do
     deallocate(order)
 
-    ! The assignment of a decomposition map, when the case has one, replaces it
+    ! The assignment of the decomposition map, when one is named, replaces it
     from_map = .false.
     if (present(blk_dims) .and. present(map_file)) then
       allocate(map_owner(nb))
@@ -237,9 +239,10 @@ contains
   !> whatever the map, with a warning (report_partition_balance), as without a
   !> map. A directory in place of the file is an error too.
   !> Rank 0 reads the file and broadcasts what it
-  !> found, so that every rank takes the same decision: no file (found false),
-  !> the assignment in owner (found true), or an error, which every rank prints
-  !> before every rank stops (mpi_stop_all, exit code 1).
+  !> found, so that every rank takes the same decision: the assignment in owner
+  !> (found true), or an error, which every rank prints before every rank stops
+  !> (mpi_stop_all, exit code 1). A file that does not exist is an error: the
+  !> map is read only when the key decomposition-map names it.
   subroutine read_decomposition_map(path, nb, blk_dims, blk_ncells, owner, found)
     character(len=*), intent(in) :: path
     integer, intent(in)  :: nb
@@ -295,18 +298,20 @@ contains
     integer :: unit, ios, nline, nrow, v(13), b
     logical :: exists, is_dir, in_rows
 
-    status = MAP_ABSENT
-    ! A directory of that name is not a missing map. gfortran reports it as existing
-    ! (and path/. too); ifx does not, but opens it.
+    ! The map is read only when the key decomposition-map names it: a file that does
+    ! not exist is an error (it cannot be opened, below), and so is a directory of
+    ! that name. gfortran reports a directory as existing (and path/. too); ifx does
+    ! not, but opens it.
+    status = MAP_ERROR
     inquire(file=path, exist=exists)
     inquire(file=trim(path)//'/.', exist=is_dir)
     if (.not. exists .and. .not. is_dir) then
       open(newunit=unit, file=path, status='old', action='read', iostat=ios)
-      if (ios /= 0) return                      ! no map
-      close(unit)
-      is_dir = .true.
+      if (ios == 0) then
+        close(unit)
+        is_dir = .true.
+      end if
     end if
-    status = MAP_ERROR
     if (is_dir) then
       message = trim(path)//': is a directory, not a file'
       return

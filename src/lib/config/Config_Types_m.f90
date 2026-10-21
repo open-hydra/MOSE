@@ -69,6 +69,7 @@ module MOSE_Config_Types_m
     integer              :: shell_diter  ! Shell update
     integer              :: ini_diter    ! input.ini update
     integer              :: timer_diter  ! Wall-clock timing report (0 = off)
+    character(len=llen)  :: decomposition_map   ! Block-to-rank map in INPUT/ (none: MOSE assigns the blocks)
     ! Useful variables
     character(len=llen)  :: nameinit  ! Initial file name
     logical              :: write_thermo, write_transport, write_composition

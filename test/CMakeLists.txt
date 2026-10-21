@@ -331,10 +331,11 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # the set-up warnings say so.
 # Implicit residual smoothing is a steady-state accelerator: a time-accurate
 # run that asks for it (irs = true or irs-beta > 0) is refused at set-up.
-# Block-to-rank assignment from INPUT/decomposition.map on one rank: a map
-# with every block on rank 0, also one written by the mesh decomposer (MDB)
-# itself, gives the bits of the run without it; maps that do not fit the mesh
-# or the run stop it at setup with the fault named.
+# Block-to-rank assignment from the map that decomposition-map names in INPUT/,
+# on one rank: a map with every block on rank 0, also one written by the mesh
+# decomposer (MDB) itself, gives the bits of the run without it; maps that do
+# not fit the mesh or the run, a missing named file and a name with a folder
+# stop it at setup with the fault named; a map without the key is not read.
 # input.ini read again during a run (ini-diter): a value out of the rules of
 # the registry stops the run with its message, as at setup; read again
 # unchanged, with keys left out or written, it gives the run without readings.
@@ -532,7 +533,7 @@ if(USE_MPI)
     # reversed records give the one-rank bits.
     mose_add_mpi_script(MPIConnectionOrder mpi/connection-order "needs-mpi;implementation;2D")
 
-    # Block-to-rank assignment from INPUT/decomposition.map: on 2 and 4 ranks
+    # Block-to-rank assignment from the map named by decomposition-map: on 2 and 4 ranks
     # every map (MOSE's own assignment as MDB writes it, permutations, an idle
     # rank 0, 110 blocks, fewer blocks than ranks) gives the one-rank field; a
     # map for other ranks stops every rank with the same message.
