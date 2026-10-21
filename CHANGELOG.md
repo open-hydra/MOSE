@@ -38,6 +38,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - At set-up MOSE warns, with the line number, about every `key = value` of `input.ini` that the reader does not take in its
   section: such a key is not read, and its parameter keeps its default. The guide says that a key lost this way is an error in
   the input. Inputs whose keys are all read do not change.
+- The key `ini-error` of `[MOSE-IO]` decides what an error of `input.ini` read again during the run does (a file that cannot be
+  read, a value that does not read, is out of its rule or is not finite, a change of the model or of the stationary faces of
+  the rotating frame, a value of its axis or origin that is not finite or does not read, a stationary face that does not read,
+  an axis of zero length). With `warn`, the default, the reading is not taken: a warning gives the iteration and the error,
+  which names the key, and the run goes on with every value it had before the reading, those of the keys of the same reading
+  that were right too, on every MPI rank. With `stop` the run stops, on every rank, with the message and exit code 1. The
+  value in force when the reading starts decides. At set-up every error stops the run, whatever the key says.
 - A restart goes on exactly as the run in one go would, from a solution in any format: every field solution stores the counters
   of the run (the global iteration count `CYCLE`; `MOSE_ITERATION`, `MOSE_OUTPUT_NUMBER`, `MOSE_GRID_LEVEL`,
   `MOSE_LAST_OUTPUT_TIME` and `MOSE_RES_REFERENCE`), and a restart reads them back: the run split in two parts writes the same
@@ -109,12 +116,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   only when the reservoir can push it in (see Fixed), that case is not reached, and p0 is used as given. Results change at
   most at round-off.
 - When `input.ini` is read again during a run (every `ini-diter` iterations, 10 000 by default), a value outside the rule of its
-  key stops the run with the message of the rule, as it does at set-up; it was taken without a word (a negative `cfl` written
+  key is an error of the reading, as it is at set-up: with `ini-error = warn` the reading is not taken, with `stop` the run
+  stops with the message of the rule (see Added); it was taken without a word (a negative `cfl` written
   during a steady run made the residual grow until the run stopped on a negative pressure nine iterations later). The keys that
   the file leaves out keep their values: the set-up no longer writes the names of its summary into the values of
   `integration-variables`, `riemann-solver` and `flux-limiter`, and the summary prints the same names as before.
-- A key of `input.ini` whose value does not read as the type of its parameter stops the run, at set-up and when the file is read
-  again during the run, with exit code 1 and a message that gives the file, the section, the key and the value as written: a
+- A key of `input.ini` whose value does not read as the type of its parameter stops the run at set-up, with exit code 1 and a
+  message that gives the file, the section, the key and the value as written, and read again during the run it is an error of
+  the reading (see Added): a
   number that is not one (a word, `NaN`, `Infinity`, a decimal comma such as `0,5`), an integer written with a period or an
   exponent (`2.0`, `1e3`: gfortran refused it, ifx cut the fraction, `2.7` read as 2), a logical that does not start with `T` or
   `F`, a list with more values than its parameter holds, a key with no value; so does `levels` of `[MOSE-Multigrid]`. Such a key
@@ -541,9 +550,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A value of `axis` or `origin` of the rotating frame that is not finite (NaN or infinity) stops the run at set-up, in every
   build, with a message that names the key (the run went on to the divergence check, or stopped with the message of an axis of
   zero length, or with SIGFPE in a DEBUG build). So does a real parameter of `input.ini` read as an infinity (gfortran reads
-  `1e999` as one), with a rule or without, at the start and when `input.ini` is read again: a bound such as `> 0` let it through.
-- An `input.ini` that cannot be read stops the run with the reason, at set-up and when it is read again during the run, on every
-  MPI rank and with exit code 1: a file that cannot be opened, that holds no line that is not blank, or that the INI reader
+  `1e999` as one), with a rule or without, at the start, and read again during the run it is an error of the reading (see Added):
+  a bound such as `> 0` let it through.
+- An `input.ini` that cannot be read stops the run at set-up with the reason, on every MPI rank and with exit code 1, and read
+  again during the run it is an error of the reading (see Added): a file that cannot be opened, that holds no line that is not blank, or that the INI reader
   rejects. A missing, unreadable or comments-only file stopped the run on the first required key without naming the file, an
   empty one ended the run inside the reader, and a file that could not be read again during the run left the values of the
   previous reading in place, without a word.
@@ -565,7 +575,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   read it again could give them different values, and a different `sol-diter`, `res-diter` or `ini-diter` made the ranks call
   their collective operations in different orders: the run hung until the time limit of the job (two ranks in two folders, the
   value changed in the `input.ini` of rank 1 alone). A file that rank 0 cannot read stops every rank once rank 0 has written
-  why; the `input.ini` in the folders of the other ranks is not read.
+  why, or, read again during the run with `ini-error = warn`, is not taken on any rank; the `input.ini` in the folders of the
+  other ranks is not read.
 - The VTK outputs are well-formed XML: the variable names were written with the double quotes of the Tecplot lists
   (`Name=""rho(1)""`), not well-formed XML (Python's xml.etree, which parses with expat, stops on them), and a reader
   that takes the text between the first two quotes
@@ -608,13 +619,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   frame is taken by every term of the frame: the centrifugal source and the torque file took the new `omega`, while the Coriolis
   source, the velocity of the stationary walls, of the inlets and of the far field, and the absolute vorticity of the turbulence
   models kept the old one, and a new axis or origin did not enter at all. A new `rotational-frame`, or a
-  `stationary-face-<k>` key that names another face or that the set-up does not have, stops the run with a message, on
-  every MPI rank together: they were ignored without a word. The `stationary-face-<k>` keys that the file read again
+  `stationary-face-<k>` key that names another face or that the set-up does not have, is an error of the reading (see
+  Added), on every MPI rank together: they were ignored without a word. The `stationary-face-<k>` keys that the file read again
   leaves out keep their faces, as every key left out keeps its value.
 - A value of `axis` or `origin` of the rotating frame that is not finite (NaN or infinity), written in `input.ini` during the
-  run, stops the run when the file is read again, every rank at that reading, with a message that names the key; in a gnu TESTING
+  run, is an error of the reading when the file is read again (see Added), with a message that names the key; in a gnu TESTING
   build it went into every term of the frame and the run failed at the next iteration; a DEBUG build stopped with SIGFPE at that
   reading, an ifx RELEASE build with the message of an axis of zero length.
+- A value of `axis`, `origin` or of a `stationary-face-<k>` key of the rotating frame that does not read as numbers, written in
+  `input.ini` during the run, is an error of the reading when the file is read again (see Added), with a message that names the
+  key and its value: it ended the run with an error of the run-time library at that reading.
 - A run that ends where a numbered or time-based solution or a probe row is due writes it, with its wall and diagnostic files,
   before the final solution, whose counters follow it: the last iteration wrote the final solution only, so the run in one go
   lacked its last numbered solution and probe rows, and a restart from a first part that ended there numbered the solutions

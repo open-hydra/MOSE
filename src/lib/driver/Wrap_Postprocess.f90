@@ -293,7 +293,7 @@ contains
 
     ! Update input data
     if ( mod (simulation%domain(level) % iter, obj_io%ini_diter) == 0d0 ) then
-      call Read_Inifile_Runtime()
+      call Read_Inifile_Runtime( simulation%domain(level)%iter )
     end if
     
 

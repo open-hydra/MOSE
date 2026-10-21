@@ -137,11 +137,13 @@ For steady-state turbomachinery flows, a steady rotating-frame solution avoids t
   stationary walls, of the inlets and of the far field, and the power of the torque file. The frame is taken at constant
   $\boldsymbol{\Omega}$ between two readings: the force $-\rho\,\dot{\boldsymbol{\Omega}} \times \boldsymbol{r}$ of a
   frame that speeds up is not modelled. A change of `rotational-frame` or of the stationary faces, which changes the
-  equations or the boundary conditions, stops the run: a `stationary-face-<n>` key that names another face, or one that
+  equations or the boundary conditions, is an error of the reading: a `stationary-face-<n>` key that names another face, or one that
   the set-up does not have. A key that the file read again leaves out keeps its face, as every parameter left out keeps
   its value. The keys are counted from 1 up to the first one missing, at the start and at every reading: a key after a
-  gap of the numbering is not read. A value of `axis` or `origin` read again that is not finite (NaN or infinity) stops
-  the run too.
+  gap of the numbering is not read. A value of `axis` or `origin` read again that is not finite (NaN or infinity) or does not
+  read as numbers, a `stationary-face-<n>` value that does not read, or an axis of zero length, is an error of the reading
+  too. With `ini-error = warn`, the default, a reading with an error is not taken and the frame goes on as it was; with
+  `ini-error = stop` the run stops ([Input](../user/input.md)).
 - The origin of the coordinate system (where $\boldsymbol{r} = \boldsymbol{0}$) should coincide with the axis of rotation.
 - All flux routines (convective and viscous) operate on the relative velocity without modification.
 

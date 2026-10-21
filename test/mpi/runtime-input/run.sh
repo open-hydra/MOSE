@@ -33,7 +33,14 @@
 #    cfl  cfl = -1 (out of its rule);
 #  rank 1 must not take it: each run must end within 60 s with exit code 0 at
 #  iteration 40, and the files in the OUTPUT folder of rank 0 must be those of
-#  the same run with no change, byte for byte (ref). The change must be in
+#  the same run with no change, byte for byte (ref). Last, the input.ini of
+#  rank 0 gets
+#    cfl-rank0  cfl = -1 (out of its rule), with ini-error left out (warn);
+#  no rank may take the reading: the run must end within 60 s with exit
+#  code 0 at iteration 40, with the warning that the reading of iteration 20
+#  is not taken, and the files in the OUTPUT folder of rank 0 must be those
+#  of ref, byte for byte (a rank that took it, or stopped alone, would change
+#  them or leave the run hanging). The change must be in
 #  place before the run writes its solution of iteration 20, which comes
 #  before the reading of iteration 20; if it is not (a host too slow to poll),
 #  the test says so and fails. The cases run one after the other and the test
@@ -197,7 +204,7 @@ run_case() {
   fi
   if [[ $c == ref ]]; then
     echo "  [ok  ] ref, no change: exit code 0 at iteration 40"
-  elif [[ $2 == A ]]; then
+  elif [[ $2 == A && $3 == sol-diter ]]; then
     cyc=$(cycles "$A/OUTPUT")
     if [[ $cyc != "10 20 21 28 35" || ! -f $A/OUTPUT/field.vtm ]]; then
       echo "  [FAIL] $c, $3 = $4 in the input.ini of rank 0 alone: numbered solutions of iterations ${cyc:-none}" \
@@ -220,14 +227,26 @@ run_case() {
         return
       fi
     done < <(cd "$RUNS/ref/A/OUTPUT" && find . -type f | sort)
-    echo "  [ok  ] $c, $3 = $4 in the input.ini of rank 1 alone: exit code 0 at iteration 40, the files of ref byte for byte"
+    if [[ $2 == A ]]; then
+      if ! grep -a -q -F "[WARNING] input.ini read again at iteration 20 is not taken: cfl must be > 0" "runs/$c.log"; then
+        echo "  [FAIL] $c, $3 = $4 in the input.ini of rank 0: no warning that the reading of iteration 20 is not taken" \
+             "(see runs/$c.log)"
+        fail=1
+        return
+      fi
+      echo "  [ok  ] $c, $3 = $4 in the input.ini of rank 0, ini-error left out: no rank takes the reading, exit code 0 at" \
+           "iteration 40, the files of ref byte for byte"
+    else
+      echo "  [ok  ] $c, $3 = $4 in the input.ini of rank 1 alone: exit code 0 at iteration 40, the files of ref byte for byte"
+    fi
   fi
 }
 
 echo "-- input.ini read again: every rank takes the values of the file of rank 0 (2 ranks, two folders) --"
 run_case ref
 # One case after the other, up to the first that fails: a run that hangs lasts up to 70 s (its time limit)
-for args in "sol-rank0 A sol-diter 7" "sol B sol-diter 7" "res B res-diter 7" "ini B ini-diter 30" "cfl B cfl -1"; do
+for args in "sol-rank0 A sol-diter 7" "sol B sol-diter 7" "res B res-diter 7" "ini B ini-diter 30" "cfl B cfl -1" \
+            "cfl-rank0 A cfl -1"; do
   [[ $fail -eq 0 ]] || break
   run_case $args
 done

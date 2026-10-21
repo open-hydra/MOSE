@@ -25,6 +25,7 @@
 | res-diter | 1 | > 0 |  no | Residual history iter frequency |
 | shell-diter | 1 | > 0 |  no | Shell update iter frequency |
 | ini-diter | 10000 | > 0 |  no | input.ini update iter frequency |
+| ini-error | warn | warn, stop |  no | input.ini read again with an error: warn and keep the values held before the reading, or stop (at set-up every error stops) |
 | timer-diter | 0 | >= 0 |  no | Wall-clock timing report iter frequency (0 = off) |
 
 ## MOSE-Probes

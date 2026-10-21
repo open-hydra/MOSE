@@ -27,7 +27,8 @@
 #  both ranks.
 #
 #  A value out of its rule written during the run must stop every rank when
-#  input.ini is read again: two ranks launched as two programs (MPMD), each
+#  input.ini is read again with ini-error = stop: two ranks launched as two
+#  programs (MPMD), each
 #  in its own folder with its own input.ini (mpmd/runs/A for rank 0,
 #  mpmd/runs/B for rank 1), on the 2x2-block viscous box of RuntimeInput
 #  (../make_case.py, 48 x 48 cells per block), input.ini read again every 20
@@ -177,7 +178,8 @@ for tag in mpi-nan-ic mpi-inf-node; do
 done
 rm -f INPUT/decomposition.map
 
-echo "-- a value out of its rule written in the input.ini of rank 0 stops every rank when it is read again (2 ranks, two folders) --"
+echo "-- a value out of its rule written in the input.ini of rank 0 stops every rank when it is read again with ini-error = stop" \
+     "(2 ranks, two folders) --"
 SOLVER="$(cd bin && pwd -P)/MOSE"
 M=mpmd
 write_box_ini() {  # <folder> <cfl>: the input.ini of the cfl case of RuntimeInput, written whole, then moved in place
@@ -206,6 +208,7 @@ sol-diter     = 10
 sol-overwrite = false
 ini-diter     = 20
 shell-diter   = 1000000000
+ini-error     = stop
 EOF
   mv "$1/input.ini.new" "$1/input.ini"
 }

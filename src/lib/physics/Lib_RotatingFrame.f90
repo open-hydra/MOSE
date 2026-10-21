@@ -180,26 +180,32 @@ contains
   !> read again enter every term of the frame together, as at set-up: the unit axis, the origin and Omega_vec, which the
   !> Coriolis and centrifugal sources, the velocity of the stationary walls and of the inlets and far field, and the power
   !> of the torque file read at each use. The same arithmetic as Setup_RotatingFrame, so values read again unchanged leave
-  !> every bit as it was. The model and the stationary faces change the equations and the boundary conditions: a change
-  !> of rotational-frame, or of the stationary faces, stops the run. The registry holds the stationary-face-<k> keys of
-  !> the set-up, and a key that the file read again leaves out keeps its face, as every value left out does (Load_Ini):
-  !> the faces change only when a key up to the number of the set-up names another face, or when the file lists more
-  !> keys than the set-up (n_file of them, counted as at set-up, up to the first missing: a key after a gap of the
-  !> numbering is counted neither there nor here). A value of axis or origin that is not finite stops the run too: read
-  !> as a number, it would enter every term of the frame, and the test of the length of the axis compares, which a NaN
-  !> passes as false (Not_Finite reads the bits). Every rank checks the values that rank 0 read again and passed to it
-  !> (Load_Input_File in Read_Ini), the same on every rank; the ranks still take the decision to stop together (the
-  !> largest of a flag), so that every rank stops, or none (a rank that stopped alone would wait for the others in
-  !> mpi_stop_all).
-  subroutine Reload_RotatingFrame ( n_file )
+  !> every bit as it was. The model and the stationary faces change the equations and the boundary conditions and cannot
+  !> change during the run: a change of rotational-frame, or of the stationary faces, is an error of the reading. The
+  !> registry holds the stationary-face-<k> keys of the set-up, and a key that the file read again leaves out keeps its
+  !> face, as every value left out does (Load_Ini): the faces change only when a key up to the number of the set-up names
+  !> another face, or when the file lists more keys than the set-up (n_file of them, counted as at set-up, up to the first
+  !> missing: a key after a gap of the numbering is counted neither there nor here). A value of axis or origin that is
+  !> not finite is an error of the reading too: read as a number, it would enter every term of the frame, and the test of
+  !> the length of the axis compares, which a NaN passes as false (Not_Finite reads the bits); so are an axis of zero
+  !> length and a value of axis, origin or of a stationary face that does not read as numbers (a read without IOSTAT
+  !> would end the run there). On an error the frame is left as it was and taken is false: with warn (ini-error = warn)
+  !> the caller does not take the reading and puts back every value it had before it (Read_Inifile_Runtime); without,
+  !> every rank stops. Every rank checks the values that rank 0 read again and passed to it (Load_Input_File in
+  !> Read_Ini), the same on every rank; the ranks take the decision together (the largest of a flag), so that every
+  !> rank stops or none does (a rank that stopped alone would wait for the others in mpi_stop_all).
+  subroutine Reload_RotatingFrame ( n_file, warn, taken, reason )
     use MOSE_Finite_m, only: Not_Finite
     use MOSE_Mod_MPI, only: mpi_is_root, mpi_allreduce_max_r8, mpi_stop_all
     implicit none
-    integer, intent(in) :: n_file
+    integer,          intent(in)  :: n_file
+    logical,          intent(in)  :: warn     !< ini-error = warn: an error leaves the frame as it was, with no stop
+    logical,          intent(out) :: taken    !< The values read again are taken: no rank found an error
+    character(len=*), intent(out) :: reason   !< The error this rank finds, blank if none
     ! Local
-    integer  :: k, face(2)
+    integer  :: k, face(2), ios
     real(R8) :: axis(3), origin(3), norm, omega_vec(3), flag, flag_all
-    character(len=256) :: reason   ! The error this rank finds, blank if none
+    character(len=12) :: kk
 
     reason = ''
     if ( obj_rot%model /= obj_rot%model_setup ) then
@@ -211,14 +217,28 @@ contains
                  ' have: the stationary faces cannot change during the run'
       do k = 1, obj_rot%n_stationary
         if ( len_trim(reason) > 0 ) exit
-        read(obj_rot%stationary_face_str(k), *) face(1), face(2)
-        if ( any ( face /= obj_rot%stationary_face(:,k) ) ) &
+        read(obj_rot%stationary_face_str(k), *, iostat=ios) face(1), face(2)
+        if ( ios /= 0 ) then
+          write(kk, '(I0)') k
+          reason = '[ERROR] Rotating frame: stationary-face-'//trim(kk)//' = '//trim(obj_rot%stationary_face_str(k))// &
+                   ' in input.ini read again does not read as a block and a face'
+        else if ( any ( face /= obj_rot%stationary_face(:,k) ) ) then
           reason = '[ERROR] Rotating frame: input.ini read again does not list the stationary-face keys of'// &
                    ' the set-up: the stationary faces cannot change during the run'
+        end if
       end do
       if ( len_trim(reason) == 0 ) then
-        read(obj_rot%axis_str, *)   axis
-        read(obj_rot%origin_str, *) origin
+        read(obj_rot%axis_str, *, iostat=ios) axis
+        if ( ios /= 0 ) then
+          reason = '[ERROR] Rotating frame: axis = '//trim(obj_rot%axis_str)// &
+                   ' in input.ini read again does not read as three numbers'
+        else
+          read(obj_rot%origin_str, *, iostat=ios) origin
+          if ( ios /= 0 ) reason = '[ERROR] Rotating frame: origin = '//trim(obj_rot%origin_str)// &
+                                   ' in input.ini read again does not read as three numbers'
+        end if
+      end if
+      if ( len_trim(reason) == 0 ) then
         if ( any(Not_Finite(axis)) ) then
           reason = '[ERROR] Rotating frame: a value of axis in input.ini read again is not finite (NaN or infinity)'
         else if ( any(Not_Finite(origin)) ) then
@@ -232,7 +252,9 @@ contains
     flag = 0.0_R8
     if ( len_trim(reason) > 0 ) flag = 1.0_R8
     call mpi_allreduce_max_r8 ( flag, flag_all )
-    if ( flag_all > 0.0_R8 ) then
+    taken = .not. ( flag_all > 0.0_R8 )
+    if ( .not. taken ) then
+      if ( warn ) return
       if ( len_trim(reason) > 0 ) call mpi_stop_all ( trim(reason) )
       call mpi_stop_all ( 'stopped with the ranks that found an error in input.ini read again (rotating frame)' )
     end if

@@ -68,6 +68,7 @@ module MOSE_Config_Types_m
     character(len=llen)  :: sol_variables, wall_variables   ! Variables to be printed in solution and wall files
     integer              :: shell_diter  ! Shell update
     integer              :: ini_diter    ! input.ini update
+    character(len=llen)  :: ini_error    ! input.ini read again with an error: warn (the reading not taken) or stop
     integer              :: timer_diter  ! Wall-clock timing report (0 = off)
     character(len=llen)  :: decomposition_map   ! Block-to-rank map in INPUT/ (none: MOSE assigns the blocks)
     ! Useful variables

@@ -336,9 +336,13 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # decomposer (MDB) itself, gives the bits of the run without it; maps that do
 # not fit the mesh or the run, a missing named file and a name with a folder
 # stop it at setup with the fault named; a map without the key is not read.
-# input.ini read again during a run (ini-diter): a value out of the rules of
-# the registry stops the run with its message, as at setup; read again
-# unchanged, with keys left out or written, it gives the run without readings.
+# input.ini read again during a run (ini-diter): an error of the reading (a
+# value out of the rules of the registry, that does not read or that is not
+# finite, a file that cannot be read, a change of the model or of the
+# stationary faces of the rotating frame) stops the run with its message with
+# ini-error = stop; with warn, the default, the reading is not taken and the
+# run goes on with the values before it, byte for byte; read again unchanged,
+# with keys left out or written, it gives the run without readings.
 mose_add_parts_script(InputChecks fast/input-checks
     PARTS limiter-defaults irs-time-accurate decomposition-map
     LABELS fast implementation numerics 1D 2D)
@@ -545,7 +549,7 @@ if(USE_MPI)
     # every rank, stops them within 60 s, with exit code 1 to 128; a value out of
     # its rule written during the run in the input.ini of rank 0, which rank 0
     # reads again and passes to every rank (each rank in its own folder), stops
-    # both ranks with exit code 1.
+    # both ranks with exit code 1 with ini-error = stop.
     # A value of the initial condition that is not finite stops both ranks with exit
     # code 1, also when rank 1 alone holds it; so does an initial condition that
     # rank 1 alone cannot read (two folders).
@@ -558,8 +562,10 @@ if(USE_MPI)
     # its text. sol-diter = 7 written in the input.ini of rank 0 alone (each
     # rank in its own folder, an MPMD launch) gives every rank the solutions of
     # iterations 21, 28 and 35; sol-diter, res-diter, ini-diter and cfl written
-    # in the input.ini of rank 1 alone change nothing: exit code 0 within 60 s
-    # and the files of the run without the change, byte for byte. A run whose
+    # in the input.ini of rank 1 alone change nothing, and cfl = -1 in the
+    # input.ini of rank 0 is not taken on any rank (ini-error left out): exit
+    # code 0 within 60 s and the files of the run without the change, byte for
+    # byte. A run whose
     # ranks took different values would hang in its collectives: the test stops
     # at the first case that fails, and its own TIMEOUT stops it in 120 s.
     mose_add_mpi_script(MPIRuntimeInput mpi/runtime-input "needs-mpi;implementation;2D")
