@@ -105,7 +105,8 @@ is therefore off-limits for pre-push and PR CI — those belong in a nightly/loc
 - ☑ **I4 — Conservation invariant**: closed slip-wall box, shock-tube IC; total mass
   conserved to round-off (~2e-13). *Done:* `test/fast/conservation`. (Energy invariant
   is a possible future addition.)
-- ☑ **I5 — Serial vs OpenMP equivalence**: 1 vs 4 threads bit-identical. *Done:*
+- ☑ **I5 — Serial vs OpenMP equivalence**: 1 vs 4 threads bit-identical, also with chimera faces meeting at
+  the edges of a block. *Done:*
   `test/fast/openmp-equiv`. (MPI variant → nightly.)
 
 ---
@@ -123,15 +124,20 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F4 | Single- vs multi-block equivalence | identical field | ☐ | <3 s |
 | F5 | Riemann smoke matrix | no NaN, ρ,p>0 | ☑ `RiemannSmoke` | ~4 s |
 | F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
-| F6 | Restart round-trip | identical to uninterrupted run | ☑ `Restart` | ~1 s |
-| I5 | Serial vs OpenMP equivalence | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~1 s |
+| F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart` | ~1 s |
+| I5 | Serial vs OpenMP equivalence: the Sod tube; a chimera case, a block overset on another whose four chimera faces meet at its edges (Navier–Stokes; it passes on the parent of its commit too: the race it guards shows under ThreadSanitizer with Archer, in three runs of three) | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~3 s |
+| F9 | Viscous stencil of chimera faces: two blocks of 8 x 6 cells (8 x 6 x 4 in 3-D) overlapping by 4 cells in x, each ghost cell on a cell of the other block; one step of a steady run with u = G y (2-D), u = G (y + z) (3-D), and a radial velocity on a 2-D wedge of 1 degree against the same wedge as one block | y and z momentum residual zero within 1e-9 of μ G / H, also in the cells at the ends of the chimera faces (1/4 of it with the ghost cell copied beyond the edge); on the wedge the momentum residual of every cell that of the one block within 1e-9 of μ G / H (half of v/r at the chimera faces with the ghost cell as its own k neighbour) | ☑ `Connections`/`ChimeraFace` | ~1 s |
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
 | F8 | Shu–Osher coarse (N=200) | L1 vs N=1600 ref < 5 %, finite | ☑ `ShuOsher` | ~2 s |
-| P1 | Ablative wall BCs (503/504) | wall state vs closed form, both face orientations, inert-surface fallback | ☑ `AblatingWall` | ~8 s |
+| P1 | Ablative wall BCs (503/504); the melting column also without `schmidt` (default 0: one species needs no `diffusion.dat`) | wall state vs closed form, both face orientations, inert-surface fallback | ☑ `AblatingWall` | ~11 s |
+| I9 | Exit codes of the error stops: the Sod tube as a viscous mixture of four species without `schmidt` and without `diffusion.dat` ([thermo](../docs/theory/thermo.md)); the Sod tube in air with a probe of an unknown variable; a steady run with the soot model LL91, with and without Spalart–Allmaras (six species with C(gr)); the Sod tube in air, steady, with sol-variables = none | non-zero exit code and the diffusion-table error, no solution; exit status 1 and the name of the variable, no solution; exit status 0 and a diagnostic output that names every variable it writes, the local time step under dt; exit status 1 and a message that names thermo or transport | ☑ `InputChecks`/`ExitCodes` | ~4 s |
 
-Current `ctest -L fast`: **12 tests, ~30 s** (Sod79, Einfeldt91, Noh87, Toro99,
+Current `ctest -L fast`: **14 tests, ~51 s** (Sod79, Einfeldt91, Noh87, Toro99,
 ShuOsher, PrandtlMeyer, RiemannSmoke, NumericsSmoke, Conservation, OpenMPEquiv,
-Restart, AblatingWall).
+Connections, Restart, InputChecks, AblatingWall).
+
+The time is CPU time at one thread, one test at a time, measured on one machine
+(load average ~190 on 192 logical CPUs), where the 12 fast tests of main take ~41 s.
 
 These catch most regressions (metrics, interfaces, solver crashes, restart/IO,
 conservation) with no reference data or heavy dependencies.

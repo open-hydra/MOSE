@@ -62,6 +62,7 @@ python3 verify.py
 | `htpb`, `hdpe`, `pp` | 504 | the three pyrolysis models |
 | `melting-top`, `hdpe-top` | 503 / 504 | the same walls on the opposite face, which exercises the other branch of the face-orientation bookkeeping |
 | `melting-inert` | 503 | a surface that *cannot* ablate: no radiation and a gas colder than the wall, so the melting energy balance returns a non-positive mass flux and the boundary condition has to fall back to an impermeable isothermal wall |
+| `default-schmidt` | 503 | the `melting` column with no `schmidt` in `input.ini`, run in `default-schmidt/`: the default, 0, is mixture-averaged multicomponent diffusion, which needs the binary diffusion table `INPUT/diffusion.dat` only with more than one species, so this single-species gas runs without it |
 
 ## Why the whole column is checked, wall cell included
 

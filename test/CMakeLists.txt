@@ -117,13 +117,39 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
 mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")
 
-# Serial vs OpenMP equivalence (I5): 1 vs 4 threads bit-identical.
+# Serial vs OpenMP equivalence (I5): 1 vs 4 threads bit-identical, the Sod tube
+# and a chimera case whose chimera faces meet at the edges of a block.
 mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D")
 
-# Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run.
+# Faces between blocks (Connections): the parts below, each in its folder of
+# test/fast/connections, run one after the other by
+# test/fast/connections/run.sh.
+# Viscous stencil of chimera faces (F9): one evaluation of the residual of a
+# linear field next to chimera faces, also at the edges of the block face, in
+# 2-D, in 3-D and on a 2-D axisymmetric wedge (against the same mesh as one
+# block).
+mose_add_fast_script(Connections fast/connections "fast;numerics;2D")
+
+# Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
+# at a restart a missing probe file is written again, an existing one appended,
+# with the probe rows of the uninterrupted run.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
+
+# Input checks (InputChecks): the parts below, each in its folder of
+# test/fast/input-checks, run one after the other by
+# test/fast/input-checks/run.sh.
+# Exit codes of the error stops: a run that MOSE stops on an error ends with a
+# non-zero exit code and its message. Default Schmidt number (schmidt = 0,
+# multicomponent diffusion): the Sod tube as a viscous mixture of four species,
+# without a diffusion table, stops at setup; so does a probe of an unknown
+# variable. A steady run with a soot model ends normally and its diagnostic
+# output names every variable it writes; a steady single-species run without
+# thermo or transport output stops with a message that says so.
+mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
 
 # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
 # which is an exact steady solution, checked against its closed form. These
 # boundary conditions have no other coverage in the suite.
+# The melting column also runs without schmidt: the default, 0, needs no
+# diffusion table with a single species.
 mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;physics;2D")
