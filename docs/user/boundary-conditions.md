@@ -249,6 +249,11 @@ A `407` face whose gas moves in at $2a/(\gamma-1)$ or faster is an outlet only w
 reservoir that feeds nothing, and then has no flux. `rel_fac` has no effect on these three types: when the gas enters,
 the face state exists with $p_0$ as given.
 
+The inlets `403`, `404`, `405` and `408` make the face a slip wall when the gas of the boundary cell moves out of the
+domain or is at rest, and `420` when that gas moves out or is at rest, or when its pressure is not below `p0`: they
+let no gas out. A duct at rest therefore starts from a `401`, `402` or `407` face, and not from a `403`, `404`, `405`,
+`408` or `420` face, unless something else moves its gas.
+
 **Assigned state (`410`).** The file gives, for each cell of a face of type `410`, the state of the cell across the face,
 as across a face between blocks: the densities of the species, `rho(N)` (a species that the file does not name has zero
 density), and `u`, `v`, `w` and `p`. It gives no other quantity: the turbulence variables and the soot variables of its
