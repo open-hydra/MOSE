@@ -19,7 +19,7 @@ contains
     use MOSE_Global_m
     use MOSE_Mod_dt,              only: Set_Global_dt, Compute_dt
     use MOSE_Lib_Ghost,           only: Fill_Ghost_Cell, Ghost_Wall_Extrapolation
-    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes
+    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes, Zero_W_Residual
     use MOSE_Mod_BC_Fluxes,       only: BC_Fluxes
     use MOSE_Lib_RANS,            only: RANS_Source_Terms
     use MOSE_Mod_Soot,            only: Soot_Source_Terms
@@ -104,6 +104,8 @@ contains
         if (obj_soot%enabled) then
           call Soot_Source_Terms ( domain(level) )           ! RHS of soot equations
         end if 
+
+        if (freeze_w) call Zero_W_Residual ( domain(level) ) ! Quasi-2D, symmetry k faces: w not integrated
 
         call RK_Newstate ( domain(level), i_rk )             ! State update
         call Update_Derived_Variables ( domain(level) )

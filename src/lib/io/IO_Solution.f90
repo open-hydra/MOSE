@@ -321,6 +321,7 @@ contains
     if (mpi_size_ > 1) then
       block
         use mpi
+        use MOSE_Mod_GhostExchange, only: TAG_IO
         integer :: ierr, nreq, n, offset
         integer, allocatable :: reqs(:), stats(:,:)
         real(R8P), allocatable :: buf(:)
@@ -334,7 +335,7 @@ contains
             n = obj_io%Onvar * product(domain%blk(b)%dim)
             nreq = nreq + 1
             call MPI_IRECV(IOfield%block(b)%vars, n, MPI_DOUBLE_PRECISION, &
-                           block_owner(b), b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           block_owner(b), TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           enddo
         else
@@ -351,7 +352,7 @@ contains
             call Fill_Output_Vars ( domain%blk(b), domain%blk(b)%dim, buf(offset+1:offset+n) )
             nreq = nreq + 1
             call MPI_ISEND(buf(offset+1), n, MPI_DOUBLE_PRECISION, &
-                           0, b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           0, TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
             offset = offset + n
           enddo

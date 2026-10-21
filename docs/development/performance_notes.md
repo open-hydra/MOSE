@@ -110,9 +110,10 @@ Combined with `ipow`, Fer14 goes 13185 → 9314 ms, **−29.4%**. `ctest` 14/14.
 grows 2475 → 3530 bytes; the binary shrinks 7.07 → 5.65 MB.
 
 **Correctness under parallelism** — 2 MPI ranks and 4 OpenMP threads both produce
-output bit-identical to serial, same as the non-IPO build. Worth stating because
-`ctest` has no MPI coverage at all: the `needs-mpi` label appears only in the
-header comment of `test/CMakeLists.txt` and is not attached to any test.
+output bit-identical to serial, same as the non-IPO build. Worth stating because,
+when this was measured, `ctest` had no MPI coverage at all. MPI builds now
+register a `needs-mpi` tier that checks ranks × threads against the serial run
+bit for bit ([Testing](testing.md#mpi-tier-contents)).
 
 **Numerics** — IPO changes results at round-off, growing from ~1e-14 relative at
 t = 10 µs to ~3e-9 at 250 µs on Fer14, three orders below the ODE solver's own
@@ -305,6 +306,37 @@ run-time stride test, not on the hot path). The temporaries were one level down,
 inside the callee. **When hunting for this defect class, attribute the calls to
 source lines** — compile with `-S -g` and read the `.loc` directives — rather
 than counting them per file.
+
+### 6. Boundary fluxes walk only the rank's own records
+
+`BC_Fluxes` used to run one worksharing loop for every (block, face) pair of the
+**whole** mesh, on every rank and at every Runge–Kutta stage, and to skip the
+records of blocks owned by other ranks one at a time inside the loop. Every rank
+therefore read every boundary record of the mesh — a large derived type — at
+every stage: work that does not shrink when ranks are added. On an axisymmetric
+wedge mesh the wedge faces are boundary records too, about two per cell, so that
+the scan grows with the whole mesh rather than with the share of a rank.
+
+The loop now walks per-(block, face) lists of the rank's own records, built once
+at set-up next to `local_bc_idx` (`build_local_bc_index`). The (block, face)
+granularity is kept on purpose:
+
+- the records of one face of one block write distinct target cells (the
+  periodic boundary also writes the partner cell on the opposite face, one per
+  record), so one worksharing loop over them is race-free; a single loop over
+  all local records would not be, because a corner cell takes the fluxes of two
+  or three faces into the same `R(:,i,j,k)`;
+- the implicit barrier between faces keeps the face contributions of every
+  cell summed in the order 1, 2, …, 6.
+
+With a `bc.txt` sorted by block and face (the documented format) the solution
+is therefore **bit-identical** to the old loop. With the records in any other
+order the solution is now the one of the sorted file, and deterministic; the
+old loop summed the faces of a corner cell in file order and, with more than
+one thread, could even give a different solution from run to run (two threads
+updating the same corner cell). The wall output (`IO_Wall`) still requires the
+sorted file. `test/mpi/boundary-records` checks ranks × threads layouts and the
+reversed file with and without threads.
 
 ---
 

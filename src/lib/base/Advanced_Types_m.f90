@@ -30,6 +30,11 @@ module MOSE_Advanced_Types_m
     type(MOSE_vector_3D_type)  :: dlg(2)                                    ! Ghost cell average cell length
     real(R8)                   :: volg(2)                                   ! Ghost cell volume
     real(R8), allocatable      :: Pg(:,:)                                   ! Ghost cell primitive stencil
+    ! BC 101/201: record of the same face seen from the other block
+    integer                    :: partner = 0
+    logical                    :: owner = .false.                           ! BC 101/201: this record computes the flux of the face
+    ! BC 101/201: residual of the face for this record's cell, (:,1) inviscid, (:,2) viscous
+    real(R8), allocatable      :: Fc(:,:)
     integer                    :: ni(2)                                     ! BC chimera
     integer, allocatable       :: donorID(:,:)                              ! BC chimera
     real(R8), allocatable      :: volume_fraction(:)                        ! BC chimera
@@ -97,6 +102,11 @@ module MOSE_Advanced_Types_m
     integer, dimension(:), allocatable               :: local_bc_idx
     integer                                          :: n_local_bs = 0
     integer, dimension(:), allocatable               :: local_bs_idx
+    ! The same local BC indices grouped by block and face, for BC_Fluxes: the records of face f
+    ! of block b are local_bf_idx(local_bf_first(b,f) : local_bf_first(b,f) + local_bf_count(b,f) - 1)
+    integer, dimension(:,:), allocatable             :: local_bf_first
+    integer, dimension(:,:), allocatable             :: local_bf_count   ! 0 on blocks of other ranks
+    integer, dimension(:), allocatable               :: local_bf_idx
     integer                                          :: mg_level = 1     ! Multigrid level of this domain (selects exchange schedules)
   end type MOSE_domain_type
 

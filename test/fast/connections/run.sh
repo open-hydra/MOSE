@@ -10,13 +10,16 @@
 #  test:
 #    ChimeraFace (chimera-face): viscous stencil of chimera faces at the
 #      edges of a block face
+#    ConnectionFlux (connection-flux): one flux per face between blocks
+#    ConnectionOrder (connection-order): faces between blocks, whatever the
+#      order of bc.txt
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(chimera-face)
+PARTS=(chimera-face connection-flux connection-order)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

@@ -23,6 +23,7 @@ contains
     use MOSE_Mod_Multigrid,        only: Setup_Multigrid, Restriction
     use MOSE_IO_BC,                only: Setup_BC
     use MOSE_Mod_Metrics,          only: Setup_Metrics
+    use MOSE_Mod_Fluxes,           only: Setup_Quasi2D_W
     use MOSE_IO_Probes,            only: Setup_Probes
     use MOSE_IO_Wall,              only: Initialize_Wall_File
     use MOSE_Lib_Ghost,            only: Fill_Ghost_Cell
@@ -126,6 +127,10 @@ contains
     do m = 1, obj_multigrid%MGL
       call Setup_Metrics ( simulation%domain(m) )
     end do
+
+    ! Quasi-2D case with symmetry k faces: w = 0 and the z momentum is not integrated (needs ndir, the BC types
+    ! and the initial field; before the ghost cells and the coarse multigrid levels are filled)
+    call Setup_Quasi2D_W ( simulation%domain(1) )
 
     ! Free heavy arrays on non-local blocks to save memory
     do m = 1, obj_multigrid%MGL
