@@ -42,76 +42,78 @@ contains
 
     nullify(Riemann)
 
+    ! riemann-solver keeps the value of input.ini, which is read again during the run and checked against its rule; the name
+    ! of the set-up summary, which other checks of the setup read too, goes to obj_riemann%name
     select case (obj_riemann%description)
 
       !! AUSM-type solvers
       case ('AUSM+')
         Riemann => riemann_AUSMp
-        obj_riemann%description = 'AUSM+'
+        obj_riemann%name = 'AUSM+'
       case ('AUSM+M')
         Riemann => riemann_AUSMp_M
-        obj_riemann%description = 'AUSM+M (Chen et al. 2020)'
+        obj_riemann%name = 'AUSM+M (Chen et al. 2020)'
 
       !! Godunov solvers
       case ('exact','Exact')
         Riemann => riemann_exact
-        obj_riemann%description = 'Exact Solver'
+        obj_riemann%name = 'Exact Solver'
 
       !! HLL-type solvers
       case ('HLLE')
         Riemann => riemann_HLLE
-        obj_riemann%description = 'HLLE'
+        obj_riemann%name = 'HLLE'
 
       case ('HLLC-PC')
         Riemann => riemann_HLLCprec
-        obj_riemann%description = 'HLLC-PC'
+        obj_riemann%name = 'HLLC-PC'
 
       case ('HLLC')
-        obj_riemann%description = 'HLLC Batten'
+        obj_riemann%name = 'HLLC Batten'
         Riemann => riemann_HLLC
 
       case ('HLLC+Chen')
         Riemann => riemann_HLLCp_Chen
-        obj_riemann%description = 'HLLC+ (Chen et al. 2020)'
+        obj_riemann%name = 'HLLC+ (Chen et al. 2020)'
 
       case ('HLLC+Tramel')
         Riemann => riemann_HLLCp_Tramel
-        obj_riemann%description = 'HLLC+ (Tramel et al.)'
+        obj_riemann%name = 'HLLC+ (Tramel et al.)'
 
       case('HLLE++')
         Riemann => riemann_HLLEpp
-        obj_riemann%description = 'HLLE++ (Tramel et al.)'
+        obj_riemann%name = 'HLLE++ (Tramel et al.)'
 
       case ('HLLC Rotated')
         Riemann => riemann_HLLCHLLE
-        obj_riemann%description = 'Rotated HLLC Batten / HLLE'
+        obj_riemann%name = 'Rotated HLLC Batten / HLLE'
 
       !! Lax-Friedrichs-type solvers
       case ('LLF','Rusanov')
         Riemann => riemann_LLF
-        obj_riemann%description = 'Local Lax-Friedrichs (Rusanov)'
+        obj_riemann%name = 'Local Lax-Friedrichs (Rusanov)'
 
       !! SLAU-type solvers
       case ('SLAU')
         Riemann => riemann_SLAU
-        obj_riemann%description = 'SLAU'
+        obj_riemann%name = 'SLAU'
       case ('SLAU2')
         Riemann => riemann_SLAU2
-        obj_riemann%description = 'SLAU2'
+        obj_riemann%name = 'SLAU2'
 
       !! Roe-type solvers
       case ('LMRoe')
         Riemann => riemann_LMRoe
-        obj_riemann%description = 'Low-Mach Roe'
+        obj_riemann%name = 'Low-Mach Roe'
 
       case ('MiczekRoe','Miczek')
         Riemann => riemann_MiczekRoe
-        obj_riemann%description = 'Miczek preconditioned Roe (Miczek et al. 2015)'
+        obj_riemann%name = 'Miczek preconditioned Roe (Miczek et al. 2015)'
 
       !! Default
       case default
         Riemann => riemann_HLLC
-        obj_riemann%description = 'HLLC Batten'
+        obj_riemann%name = 'HLLC Batten'
 
     end select
 

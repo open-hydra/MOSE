@@ -10,7 +10,7 @@ This document describes how to obtain and build **MOSE**. The instructions descr
 Before attempting to build MOSE make sure your system provides the following external tools and compilers:
 
 - **CMake** – 3.23 or newer.
-- **Fortran compiler** – either the GNU toolchain (`gfortran`) or Intel/oneAPI (`ifort`/`ifx`) are supported.
+- **Fortran compiler** – the GNU toolchain (`gfortran`) or Intel oneAPI (`ifort`/`ifx`). This version is tested with gfortran 12 and 13 and with ifx 2024.1. ifx 2023.0 is not supported: it stops with an internal compiler error on StringiFor, a library that FiNeR needs, and with Intel MPI 2021.8 its runs on several MPI ranks with several OpenMP threads each do not repeat the bits of the run on one rank.
 - **C++ compiler** – required only if you wish to enable optional components that depend on C++ (Cantera, TecIO).
 - **C compiler** – needed when building SUNDIALS (optional).
 - **OpenMP** – needed for optional parallelization support.
@@ -44,6 +44,9 @@ cd MOSE
 # initialise submodules
 git submodule update --init --recursive
 ```
+
+!!! note "An existing clone"
+    After pulling new commits into an existing clone, run `git submodule update --init --recursive`: CMake initializes a submodule that is missing, but does not update one that is checked out at an older commit. If FiNeR is older than v2.1.0, the first version that reads a comment line holding `=` as a comment (CMake reads the version from its `VERSION` file, which FiNeR has since v2.0.7; MOSE used v2.0.6 before v2.3.0), CMake stops and gives this command.
 
 To fully install MOSE, you may either use the bundled install script or invoke CMake manually. The script is convenient and is the preferred route for most users.
 

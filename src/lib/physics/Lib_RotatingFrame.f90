@@ -104,7 +104,8 @@ contains
   !>        have been loaded by Load_Ini.
   !>
   !> Actions:
-  !>   1. Parse axis_str / origin_str into real(3) arrays.
+  !>   1. Parse axis_str / origin_str into real(3) arrays; a value that is not
+  !>      finite (NaN or infinity, which the read takes as numbers) stops the run.
   !>   2. Parse stationary_face_str(:) into stationary_face(2,N).
   !>   3. Normalise obj_rot%axis to a unit vector.
   !>   4. Compute obj_rot%Omega_vec = omega * axis.
@@ -115,13 +116,16 @@ contains
   !> No FiNeR dependency: all values come from the registry.
 
   subroutine Setup_RotatingFrame()
-  
+    use MOSE_Finite_m, only: Not_Finite
+    use MOSE_Mod_MPI,  only: mpi_stop_all
     implicit none
     ! Local
     integer  :: k
     real(R8) :: norm
 
-    if ( obj_rot%model == "" ) then
+    ! Off unless the model is rigid-body: none (the registry default) or empty. enabled has no
+    ! default initialization, so every model must set it
+    if ( obj_rot%model /= "rigid-body" ) then
       obj_rot%enabled = .false.
       return
     elseif ( obj_rot%model == "rigid-body" ) then
@@ -135,6 +139,12 @@ contains
     ! Parse axis and origin from registry strings
     read(obj_rot%axis_str, *)   obj_rot%axis
     read(obj_rot%origin_str, *) obj_rot%origin
+    ! A value that is not finite stops the run: the test of the length below compares, and every comparison with a NaN
+    ! is false. The test reads the bits (Not_Finite). Every rank reads the same input.ini at set-up
+    if ( any(Not_Finite(obj_rot%axis)) ) &
+      call mpi_stop_all ( '[ERROR] Rotating frame: a value of axis in input.ini is not finite (NaN or infinity)' )
+    if ( any(Not_Finite(obj_rot%origin)) ) &
+      call mpi_stop_all ( '[ERROR] Rotating frame: a value of origin in input.ini is not finite (NaN or infinity)' )
 
     ! Normalise axis
     norm = sqrt( sum(obj_rot%axis**2) )

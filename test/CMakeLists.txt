@@ -110,7 +110,8 @@ function(mose_add_fast_script NAME DIR)
     endif()
 endfunction()
 
-# Riemann smoke-matrix (F5): every shock-capturing solver stays positive.
+# Riemann smoke-matrix (F5): every shock-capturing solver stays positive;
+# shock-detector = Tramel turns the shock sensor on.
 mose_add_fast_script(RiemannSmoke   fast/riemann-smoke  "fast;numerics;1D")
 
 # Numerics smoke (N4): limiter / time-scheme / reconstruction / int-var sweep.
@@ -142,6 +143,11 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # enters (from rest too), subsonic and choked faces, the slip wall of an inlet the
 # reservoir cannot feed, and the outlet of an ambient face it cannot feed with the gas
 # moving in; one step, mass fluxes against the face state.
+# Boundary input: the property lines of bc.txt are read as written or refused
+# (the inlet 402 table under any file name; a missing or decreasing table stops
+# the run).
+# Rotating frame: stationary-face-1, -2, ... of [MOSE-Rotating-Frame] are read
+# and listed, and the run ends (the count of the keys used to loop forever).
 mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;1D;2D")
 
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
@@ -185,13 +191,38 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # test/fast/input-checks, run one after the other by
 # test/fast/input-checks/run.sh.
 # Exit codes of the error stops: a run that MOSE stops on an error ends with a
-# non-zero exit code and its message. Default Schmidt number (schmidt = 0,
-# multicomponent diffusion): the Sod tube as a viscous mixture of four species,
-# without a diffusion table, stops at setup; so does a probe of an unknown
-# variable. A steady run with a soot model ends normally and its diagnostic
-# output names every variable it writes; a steady single-species run without
-# thermo or transport output stops with a message that says so.
-mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;1D")
+# non-zero exit code and its message: the Sod tube as a viscous mixture of four
+# species without a diffusion table, a run that diverges, a NaN or an infinity
+# in the initial condition (a stop at set-up, exit code 1, in every build), in
+# the time table of an inlet 402, in a property line of bc.txt and in the file
+# of a face 410, a file of a face 410 that cannot be read (missing, cut, with a
+# word among its values, an unreadable zone header or a value too many) or
+# whose zones go back in time, an initial condition with too few variables, a
+# rotating frame
+# with a zero axis, or with an axis or an origin that is not finite,
+# chemistry = equilibrium without the elements of the species,
+# a value outside the rule of the registry (an interval, a list of reals, a list
+# of integers), an input.ini that cannot be read (missing, empty, of comment
+# lines only), a key of input.ini whose value does not read as its type, a
+# probe of an unknown variable; a valid run with chemistry and
+# exclude-blocks ends with 0, and a block excluded from chemistry = equilibrium
+# keeps the bits of the run without chemistry, also with multigrid. A steady run
+# with a soot model ends normally and its diagnostic output names every variable
+# it writes; a steady single-species run without thermo or transport output
+# stops with a message that says so.
+# Limiter defaults: the reconstruction that runs is the declared one (MUSCL
+# without flux-limiter = van Leer; first-order ignores a given limiter), and
+# the set-up warnings say so.
+# Implicit residual smoothing is a steady-state accelerator: a time-accurate
+# run that asks for it (irs = true or irs-beta > 0) is refused at set-up.
+# Block-to-rank assignment from INPUT/decomposition.map on one rank: a map
+# with every block on rank 0, also one written by the mesh decomposer (MDB)
+# itself, gives the bits of the run without it; maps that do not fit the mesh
+# or the run stop it at setup with the fault named.
+# input.ini read again during a run (ini-diter): a value out of the rules of
+# the registry stops the run with its message, as at setup; read again
+# unchanged, with keys left out or written, it gives the run without readings.
+mose_add_fast_script(InputChecks fast/input-checks "fast;implementation;numerics;1D;2D")
 
 # Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).
 # Spalart-Allmaras with variable density: the right-hand side of the equation
@@ -302,4 +333,20 @@ if(USE_MPI)
     # The 2-D case of ConnectionOrder with one block per rank: sorted and
     # reversed records give the one-rank bits.
     mose_add_mpi_script(MPIConnectionOrder mpi/connection-order "needs-mpi;implementation;2D")
+
+    # Block-to-rank assignment from INPUT/decomposition.map: on 2 and 4 ranks
+    # every map (MOSE's own assignment as MDB writes it, permutations, an idle
+    # rank 0, 110 blocks, fewer blocks than ranks) gives the one-rank field; a
+    # map for other ranks stops every rank with the same message.
+    mose_add_mpi_script(MPIDecompositionMap mpi/decomposition-map "needs-mpi;implementation;2D")
+
+    # Exit codes under MPI: an input error that rank 0 finds at set-up stops both
+    # ranks of a 2-rank run within 60 s, with exit code 1 and the STOP line of both
+    # ranks; an input.ini that every rank finds it cannot read stops them within 60 s,
+    # with exit code 1 to 128; a value out of its rule in input.ini read
+    # again by rank 1 alone (each rank in its own folder) stops both ranks with exit code 1.
+    # A value of the initial condition that is not finite stops both ranks with exit
+    # code 1, also when rank 1 alone holds it; so does an initial condition that
+    # rank 1 alone cannot read (two folders).
+    mose_add_mpi_script(MPIExitCodes mpi/exit-codes "needs-mpi;implementation;1D")
 endif()

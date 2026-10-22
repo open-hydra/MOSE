@@ -27,7 +27,7 @@ contains
     use MOSE_IO_Probes,            only: Setup_Probes
     use MOSE_IO_Wall,              only: Initialize_Wall_File
     use MOSE_Lib_Ghost,            only: Fill_Ghost_Cell
-    use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_abort_all
+    use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_stop_all, mpi_bcast_logical
     use MOSE_Mod_Timers,           only: timer_run_begin
     use MOSE_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index, &
                                          allocate_exchange_schedules
@@ -36,6 +36,7 @@ contains
     ! Local
     integer :: m, ios
     logical :: partition_first, lean_read
+    logical :: setup_error   ! an error found by a check of rank 0 (Stop_Together)
     logical, allocatable :: keep(:)
 
     !! ------------------------------------------------------
@@ -46,11 +47,15 @@ contains
     ! Load tables (thermo, transport, chemistry)
     call Load_ThermoTransport ()
     call Load_Chemistry ()
-    if (mpi_is_root) call Check_Tables ()
+    setup_error = .false.
+    if (mpi_is_root) call Check_Tables ( setup_error )
+    call Stop_Together ( setup_error, 'thermodynamic, transport or chemistry data error (see above)' )
 
     ! Read input.ini
     call Read_Inifile ()
-    if (mpi_is_root) call Check_Input ()
+    setup_error = .false.
+    if (mpi_is_root) call Check_Input ( setup_error )
+    call Stop_Together ( setup_error, 'input file error (see above)' )
 
     ! Allocate container objects Domain and IOfield.
     allocate ( simulation%domain  ( obj_multigrid%MGL ) )
@@ -61,7 +66,9 @@ contains
     call Assign_Setup ()
 
     ! Stop on configuration errors now, before the (possibly long) initial-condition read.
-    if (mpi_is_root) call Stop_Simulation()
+    setup_error = .false.
+    if (mpi_is_root) call Stop_Simulation ( setup_error )
+    call Stop_Together ( setup_error, 'setup error (see above)' )
 
     ! Read file for initial solution.
     !
@@ -75,10 +82,15 @@ contains
     else
       call Read_IC ( simulation%IOfield(1) )
     end if
-    if (mpi_is_root) call Check_IC ()
+    ! The ranks decide together on an error of the read (Check_IC)
+    call Check_IC ( summary = .true. )
 
     ! Block count and ijk dimensions.  Cheap, and enough to partition on.
     call Setup_Data_Dimensions ( simulation%domain(1), simulation%IOfield(1) )
+    ! The numbers of exclude-blocks name blocks of this mesh (Setup_Chemistry has read them)
+    setup_error = .false.
+    if (mpi_is_root) call Check_Exclude_Blocks ( simulation%domain(1)%nb, setup_error )
+    call Stop_Together ( setup_error, 'input file error (see above)' )
     allocate(obj_sim_param%residuotot(nres))
 
     ! Allocating every block on every rank makes peak setup memory O(full
@@ -91,19 +103,28 @@ contains
 
     if ( .not. partition_first ) then
       call Setup_Data_Fields ( simulation%domain(1), simulation%IOfield(1) )
+      ! Every value that the initial condition gives the domain is finite, before the coarse levels are built from it
+      call Check_IC_Values ( simulation%domain(1), simulation%IOfield(1) )
       ! With multigrid, allocate Grid and IOfield 2,...,MGL
       call Setup_Multigrid ( simulation )
     end if
 
     ! Read Boundary Conditions file
     call Setup_BC ( simulation%domain )
-    if (mpi_is_root) call Check_BC ()
+    setup_error = .false.
+    if (mpi_is_root) call Check_BC ( setup_error )
+    call Stop_Together ( setup_error, 'boundary condition error (see above)' )
 
     ! MPI: partition blocks once on finest-level cell counts (restriction and
     ! prolongation are block-local, so a block must live on the same rank at
     ! every level), then build per-level ghost/chimera communication schedules.
+    ! The rank of every block comes from INPUT/<prefix>decomposition.map when the
+    ! case has one (the map of the ATLAS mesh decomposer), otherwise from the LPT.
     call partition_blocks(simulation%domain(1)%nb, &
-      [(product(simulation%domain(1)%blk(ios)%dim(1:3)), ios=1, simulation%domain(1)%nb)])
+      [(product(simulation%domain(1)%blk(ios)%dim(1:3)), ios=1, simulation%domain(1)%nb)], &
+      reshape([(simulation%domain(1)%blk(ios)%dim(1:3), ios=1, simulation%domain(1)%nb)], &
+              [3, simulation%domain(1)%nb]), &
+      'INPUT/'//trim(MOSE_phase_prefix)//'decomposition.map')
 
     ! Ownership is known: allocate the state arrays only where they are needed.
     ! Every block still gets its mesh -- Setup_Metrics reads donor nodes and
@@ -111,9 +132,15 @@ contains
     if ( partition_first ) then
       keep = blocks_needing_full_arrays ( simulation%domain(1) )
       ! Variable data for the owned blocks only; coordinates for all of them.
-      if ( lean_read ) call Read_IC ( simulation%IOfield(1), zone_mask = keep )
+      if ( lean_read ) then
+        call Read_IC ( simulation%IOfield(1), zone_mask = keep )
+        ! Each rank has read the variables of its own blocks: an error of the read on any rank stops every rank
+        call Check_IC ( summary = .false. )
+      end if
       call Setup_Data_Fields ( simulation%domain(1), simulation%IOfield(1), keep )
       deallocate(keep)
+      ! Every value that the initial condition gives the blocks of this rank is finite
+      call Check_IC_Values ( simulation%domain(1), simulation%IOfield(1) )
     end if
 
     call allocate_exchange_schedules(obj_multigrid%MGL)
@@ -211,7 +238,9 @@ contains
     if (mpi_is_root) call Print_Warnings ()
 
     ! If errors are found, print error messages and stop the simulation.
-    if (mpi_is_root) call Stop_Simulation()
+    setup_error = .false.
+    if (mpi_is_root) call Stop_Simulation ( setup_error )
+    call Stop_Together ( setup_error, 'setup error (see above)' )
 
     ! Set-up is over: start the solver clock
     call timer_run_begin()
@@ -246,9 +275,9 @@ contains
     end subroutine Print_Header
 
 
-    subroutine Check_Tables()
+    subroutine Check_Tables ( has_error )
       implicit none
-      logical :: has_error
+      logical, intent(out) :: has_error
 
       has_error = .false.
 
@@ -283,35 +312,133 @@ contains
         write(*,'(A,T35,A)') '   Chemistry', 'OK'
       endif
 
-      if (has_error) call mpi_abort_all('thermodynamic, transport or chemistry data error (see above)')
-
     end subroutine Check_Tables
 
 
-    subroutine Check_IC()
+    !> An error of the read of the initial condition (Read_IC, the reader writes it in obj_io%error_message) stops the run.
+    !> Every rank reads the file, the whole of it or, with the lean read of a .szplt file, the headers of its blocks and
+    !> then the variables of the blocks whose state it holds, which differ from rank to rank; and a rank can fail to read
+    !> what rank 0 reads. So the ranks take the decision together (the largest of a flag): with summary, rank 0 writes the
+    !> line of the set-up summary with the verdict of all ranks; the first rank that found an error writes it (with its
+    !> rank when the run has more than one), and every rank stops with mpi_stop_all, exit code 1.
+    subroutine Check_IC ( summary )
+      use MOSE_Mod_MPI, only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8
       implicit none
+      logical, intent(in) :: summary   ! write the line of the set-up summary
+      real(R8) :: flag, flag_all, first
 
-      if (index(obj_io%error_message,'ERROR')>0) then
-        write(*,'(A,T35,A)') '   Initial conditions', 'FAIL'
-        write(*,'(4X,A)') trim(obj_io%error_message)
-        call mpi_abort_all('initial condition error (see above)')
-      else
-        write(*,'(A,T35,A)') '   Initial conditions', 'OK'
+      flag = 0.0_R8
+      if ( index(obj_io%error_message,'ERROR') > 0 ) flag = 1.0_R8
+      call mpi_allreduce_max_r8 ( flag, flag_all )
+      if ( summary .and. mpi_is_root ) then
+        if ( flag_all > 0.0_R8 ) then
+          write(*,'(A,T35,A)') '   Initial conditions', 'FAIL'
+        else
+          write(*,'(A,T35,A)') '   Initial conditions', 'OK'
+        endif
+      endif
+      if ( flag_all > 0.0_R8 ) then
+        call mpi_allreduce_min_r8 ( merge(real(mpi_rank_, R8), huge(1.0_R8), flag > 0.0_R8), first )
+        if ( flag > 0.0_R8 .and. nint(first) == mpi_rank_ ) then
+          if ( mpi_size_ > 1 ) then
+            write(*,'(4X,A,I0,A)') trim(obj_io%error_message)//' (rank ', mpi_rank_, ')'
+          else
+            write(*,'(4X,A)') trim(obj_io%error_message)
+          endif
+        endif
+        call mpi_stop_all ( 'initial condition error (see above)' )
       endif
 
     end subroutine Check_IC
 
 
-    subroutine Check_Input()
+    !> The initial condition, or the solution that a restart reads, gives the domain the coordinates of its nodes and the
+    !> variables of its cells, and a value there that is not finite (NaN, infinity) stops the run at set-up, with the place
+    !> of the value. Not_Finite reads the bits of each value, an operation on integers that raises no floating-point
+    !> exception: a build that traps the invalid operations (the DEBUG build; a comparison with a NaN is one) stopped
+    !> with SIGFPE at the first such operation on the value, at the end of the set-up, and -ffast-math cannot fold the
+    !> test away. Each rank checks the values it holds: the nodes of every block, the cells of the blocks whose state it
+    !> holds (on one grid level with MPI, its own blocks and their chimera donors). The ranks take the decision together
+    !> (the largest of a flag), the first rank that found a value writes it, and every rank stops with mpi_stop_all:
+    !> exit code 1, in every build.
+    subroutine Check_IC_Values ( domain, IOfield )
+      use Lib_ORION_data,    only: ORION_data
+      use MOSE_Finite_m,     only: Not_Finite
+      use MOSE_Mod_MPI,      only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8
+      implicit none
+      type(MOSE_domain_type), intent(in) :: domain
+      type(ORION_data), intent(in)       :: IOfield
+      ! Local
+      character(len=1), parameter :: axis(3) = ['x', 'y', 'z']
+      character(len=hlen) :: what
+      character(len=40)   :: name
+      integer  :: b, i, j, k, d, off
+      real(R8) :: flag, flag_all, first
+
+      what = ''
+      blocks: do b = 1, domain%nb
+        do k = 0, domain%blk(b)%dim(3)
+          do j = 0, domain%blk(b)%dim(2)
+            do i = 0, domain%blk(b)%dim(1)
+              do d = 1, 3
+                if ( Not_Finite(domain%blk(b)%node(i,j,k)%c(d)) ) then
+                  write(what,'(3A,I0,A,2(I0,A),I0)') 'coordinate ', axis(d), ' of block ', b, ', node i, j, k = ', &
+                    i, ', ', j, ', ', k
+                  exit blocks
+                end if
+              end do
+            end do
+          end do
+        end do
+        if ( .not. allocated(domain%blk(b)%P) ) cycle
+        do k = 1, domain%blk(b)%dim(3)
+          do j = 1, domain%blk(b)%dim(2)
+            do i = 1, domain%blk(b)%dim(1)
+              do d = 1, nprim
+                if ( Not_Finite(domain%blk(b)%P(d,i,j,k)) ) then
+                  ! The name of the variable when the file gives the names (Tecplot ASCII), which come after the coordinates
+                  name = ''
+                  if ( allocated(IOfield%varnames) .and. allocated(IOfield%block(1)%vars) ) then
+                    off = size(IOfield%varnames) - size(IOfield%block(1)%vars, 1)
+                    if ( off >= 0 .and. off + d <= size(IOfield%varnames) ) &
+                      name = ' ('//trim(adjustl(IOfield%varnames(off + d)))//')'
+                  end if
+                  write(what,'(A,I0,2A,I0,A,2(I0,A),I0)') 'variable ', d, trim(name), ' of block ', b, &
+                    ', cell i, j, k = ', i, ', ', j, ', ', k
+                  exit blocks
+                end if
+              end do
+            end do
+          end do
+        end do
+      end do blocks
+
+      flag = 0.0_R8
+      if ( len_trim(what) > 0 ) flag = 1.0_R8
+      call mpi_allreduce_max_r8 ( flag, flag_all )
+      if ( flag_all > 0.0_R8 ) then
+        ! Written once, by the first rank that found a value (rank 0 when every rank holds it)
+        call mpi_allreduce_min_r8 ( merge(real(mpi_rank_, R8), huge(1.0_R8), flag > 0.0_R8), first )
+        if ( flag > 0.0_R8 .and. nint(first) == mpi_rank_ ) &
+          write(*,'(A)') ' [ERROR] '//trim(obj_io%nameinit)//' holds a value that is not finite (NaN or infinity): '// &
+                         trim(what)
+        call mpi_stop_all ( 'initial condition error (see above)' )
+      end if
+
+    end subroutine Check_IC_Values
+
+
+    subroutine Check_Input ( has_error )
       use MOSE_Input_Registry
       implicit none
+      logical, intent(out) :: has_error
       character(len=hlen) :: out
 
       out = Validate_Registry()
-      if (index(out,'ERROR')>0) then
+      has_error = index(out,'ERROR') > 0
+      if ( has_error ) then
         write(*,'(A,T35,A)') '   Input file', 'FAIL'
         write(*,'(4X,A)') trim(out)
-        call mpi_abort_all('input file error (see above)')
       else
         write(*,'(A,T35,A)') '   Input file', 'OK'
       endif
@@ -319,13 +446,14 @@ contains
     end subroutine Check_Input
 
 
-    subroutine Check_BC()
+    subroutine Check_BC ( has_error )
       implicit none
+      logical, intent(out) :: has_error
 
-      if (index(obj_io_bc%error_message,'ERROR')>0) then
+      has_error = index(obj_io_bc%error_message,'ERROR') > 0
+      if ( has_error ) then
         write(*,'(A,T35,A)') '   Boundary conditions', 'FAIL'
         write(*,'(4X,A)') trim(obj_io_bc%error_message)
-        call mpi_abort_all('boundary condition error (see above)')
       else
         write(*,'(A,T35,A)') '   Boundary conditions', 'OK'
       endif
@@ -360,9 +488,9 @@ contains
     end subroutine Print_Warnings
 
 
-    subroutine Stop_Simulation()
+    subroutine Stop_Simulation ( has_error )
       implicit none
-      logical :: has_error
+      logical, intent(out) :: has_error
 
       has_error = .false.
 
@@ -379,6 +507,9 @@ contains
       if (index(obj_soot%error_message,'ERROR')>0) then
         write(*,'(A)') obj_soot%error_message;       has_error = .true.
       endif
+      if (index(obj_chemistry%error_message,'ERROR')>0) then
+        write(*,'(A)') obj_chemistry%error_message;  has_error = .true.
+      endif
       ! Numerical scheme errors
       if (index(obj_time_scheme%error_message,'ERROR')>0) then
         write(*,'(A)') obj_time_scheme%error_message;  has_error = .true.
@@ -393,9 +524,45 @@ contains
         write(*,'(A)') obj_irs%error_message;          has_error = .true.
       endif
 
-      if (has_error) call mpi_abort_all('setup error (see above)')
-
     end subroutine Stop_Simulation
+
+
+    !> A number of exclude-blocks beyond the blocks of the mesh names no block: it used to be ignored, in silence.
+    subroutine Check_Exclude_Blocks ( nb, has_error )
+      implicit none
+      integer, intent(in)  :: nb
+      logical, intent(out) :: has_error
+      integer :: i
+
+      has_error = .false.
+      if (.not. allocated(obj_chemistry%no_chem_list)) return
+      do i = 1, size(obj_chemistry%no_chem_list)
+        if ( obj_chemistry%no_chem_list(i) > nb ) then
+          write(*,'(A,I0,A,I0,A)') ' [ERROR] input.ini, [MOSE-Chemistry] exclude-blocks = '// &
+            trim(adjustl(obj_chemistry%exclude_blocks_str))//': block ', obj_chemistry%no_chem_list(i), &
+            ' is not a block of the mesh (1 to ', nb, ')'
+          has_error = .true.
+          return
+        end if
+      end do
+
+    end subroutine Check_Exclude_Blocks
+
+
+    !> A check of the set-up that runs on rank 0 alone writes what it finds there. Rank 0 broadcasts whether it found an
+    !> error, and on an error every rank stops together (mpi_stop_all): rank 0 has written its message before any rank
+    !> ends, and the run ends with exit code 1. With MPI_ABORT from rank 0 alone, which makes only a best attempt to stop
+    !> the processes (MPI-4.1, section 11.4.2), the launcher could end while rank 0 was still writing: with Intel MPI
+    !> 2021.12 a run ended once in ten with exit code 141 (128 + SIGPIPE) and without the line of the abort.
+    subroutine Stop_Together ( found, why )
+      implicit none
+      logical, intent(inout)       :: found
+      character(len=*), intent(in) :: why
+
+      call mpi_bcast_logical ( found )
+      if ( found ) call mpi_stop_all ( why )
+
+    end subroutine Stop_Together
 
 
     subroutine Print_Shell_Info()
@@ -534,8 +701,8 @@ contains
       write(*,'(A)') ' ========================================================================================='
       write(*,'(A,T35,A)') ' Space'
       write(*,'(A,T35,A)') '   Reconstruction', trim(obj_space_scheme%description)
-      if (len_trim(obj_space_scheme%flux_limiter)>0) &
-        write(*,'(A,T35,A)') '   Flux limiter',trim(obj_space_scheme%flux_limiter)
+      if (len_trim(obj_space_scheme%limiter_name)>0) &
+        write(*,'(A,T35,A)') '   Flux limiter',trim(obj_space_scheme%limiter_name)
       if (model>0) &
         write(*,'(A,T35,A)') '   Viscous face metric',trim(obj_space_scheme%diffusive_metric)
       if (obj_shock_detector%id/=0) &
@@ -543,12 +710,12 @@ contains
       write(*,*)  
       write(*,'(A,T35,A)') ' Time'
       write(*,'(A,T35,A)') '   Scheme', trim(obj_time_scheme%description)
-      write(*,'(A,T35,A)') '   Integration variables', trim(obj_time_scheme%integration_variables)
+      write(*,'(A,T35,A)') '   Integration variables', trim(obj_time_scheme%integration_name)
       if (len_trim(obj_irs%description)>0) &
         write(*,'(A,T35,A)') '   Implicit residual smoothing', trim(obj_irs%description)
       write(*,*)
       write(*,'(A,T35,A)') ' Fluxes'
-      write(*,'(A,T35,A)') '   Riemann solver', trim(obj_riemann%description)
+      write(*,'(A,T35,A)') '   Riemann solver', trim(obj_riemann%name)
       write(*,'(A)') ' ========================================================================================='
       write(*,*)
 

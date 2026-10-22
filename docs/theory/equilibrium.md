@@ -6,6 +6,8 @@ MOSE can compute chemical equilibrium compositions for multi-component gas mixtu
 
 The implementation follows the NASA CEA (Chemical Equilibrium with Applications) methodology developed by Gordon and McBride [1,2], which is the standard approach for aerospace and combustion equilibrium calculations. The solver is provided by the [FLINT](https://github.com/MarcoGrossi92/FLINT) library.
 
+The solver keeps the amount of each chemical element, so with `chemistry = equilibrium` it needs the elements of the species, which `INPUT/composition.txt` gives: the number of elements, their names one per line, a blank line, the word `composition`, then one line per species, in the order of `phase.txt`, with the number of atoms of each element. Without that file MOSE stops at the start with a message.
+
 ---
 
 ## Mathematical Formulation
