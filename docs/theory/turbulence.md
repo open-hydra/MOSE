@@ -904,8 +904,9 @@ point-implicit = .true.   ; (default) point-implicit factor on the turbulence in
 
 ### Time-accurate runs: explicit sources
 
-In time-accurate runs the factor is not applied, whatever `point-implicit` says, and a warning at
-start-up recalls it. Since $(F + S)/(1 + \Delta t\,d) = (F + S)(1 - \Delta t\,d) + O(\Delta t^2)$, the factor
+In time-accurate runs the factor is not applied, whatever `point-implicit` says; when `input.ini`
+sets `point-implicit = .true.`, a warning at start-up recalls it (a run that leaves the key out
+takes the default and gets no warning). Since $(F + S)/(1 + \Delta t\,d) = (F + S)(1 - \Delta t\,d) + O(\Delta t^2)$, the factor
 would make the turbulence equations, and the mean flow through $\mu_t$, first-order accurate in
 time. With the $k$–$\omega$ models the error of the factor would not even vanish when the mesh and the
 step are refined together, as in an explicit run, whose global step goes as $h^2$ in the wall cells: in

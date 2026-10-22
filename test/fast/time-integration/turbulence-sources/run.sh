@@ -10,8 +10,12 @@
 #           time (the step is set by cells whose state does not change), and
 #           the observed order must be at least 1.8 with Heun and 2.7 with RK3;
 #    warn   one step of SST-RC with RK3 on the case of SST, with no
-#           cfl-rise-threshold: the start-up warnings of the k-omega models and
-#           of the rotation-curvature correction must both be printed;
+#           cfl-rise-threshold and no point-implicit in the input: the
+#           start-up warning of the rotation-curvature correction must be
+#           printed, and none about the CFL ramp or point-implicit; the same
+#           step with point-implicit = true in the input: the warning that the
+#           factor is not applied in time-accurate runs must be printed, and
+#           with point-implicit = false not;
 #    pos    near-wall turbulence far above its equilibrium decays faster than
 #           the transport acts: no stage may make nu~, k or omega negative
 #           (the solver counts the cell updates in which a stage did, in a line
@@ -76,10 +80,11 @@ ln -sf "../$VISC/transport.dat" INPUT/transport.dat
 
 fail=0
 
-# solve <case> <time scheme> <cfl> <vnn> <steps> <tag>: time-accurate run of the case written by make_case.py;
-# the final field is kept as OUTPUT/<tag>.tec and the solver output as OUTPUT/<tag>.log
+# solve <case> <time scheme> <cfl> <vnn> <steps> <tag> [<line>]: time-accurate run of the case written by make_case.py,
+# with <line> added to [MOSE-Turbulence]; the final field is kept as OUTPUT/<tag>.tec and the solver output as
+# OUTPUT/<tag>.log
 solve() {
-  local model=${1#*-} wall=asymptotic
+  local model=${1#*-} wall=asymptotic extra=${7:-}
   [[ $1 == pos-SST ]] && wall=practical
   cat > input.ini <<EOF
 [MOSE-Parameters]
@@ -94,6 +99,7 @@ schmidt = 0.7
 
 [MOSE-Turbulence]
 omega-wall-bc = $wall
+$extra
 
 [MOSE-Numerics]
 cfl = $3
@@ -170,14 +176,27 @@ EOF
 echo "-- start-up warnings, SST-RC, RK3, no cfl-rise-threshold, one step --"
 python3 -B make_case.py order-SST || exit 1
 if solve order-SST-RC RK3 0.8 0.4 1 warn-SST-RC; then
-  if grep -a -q '^\[WARNING\] k-omega, time-accurate, no cfl-rise-threshold' OUTPUT/warn-SST-RC.log &&
-     grep -a -q '^\[WARNING\] The rotation-curvature correction (-RC)' OUTPUT/warn-SST-RC.log; then
-    echo "  [ok  ] the k-omega and the -RC warnings are both printed"
+  if grep -a -q '^\[WARNING\] The rotation-curvature correction (-RC)' OUTPUT/warn-SST-RC.log &&
+     ! grep -a -q 'cfl-rise-threshold' OUTPUT/warn-SST-RC.log &&
+     ! grep -a -q '^\[WARNING\] point-implicit' OUTPUT/warn-SST-RC.log; then
+    echo "  [ok  ] the -RC warning is printed, and none about the CFL ramp or point-implicit (not in the input)"
   else
-    echo "  [FAIL] a start-up warning is missing (see OUTPUT/warn-SST-RC.log)"
+    echo "  [FAIL] the start-up warnings are not those of the input (see OUTPUT/warn-SST-RC.log)"
     fail=1
   fi
 fi
+for pi in true false; do
+  solve order-SST-RC RK3 0.8 0.4 1 "warn-pi-$pi" "point-implicit = $pi" || continue
+  n=$(grep -a -c '^\[WARNING\] point-implicit is not applied in time-accurate runs' "OUTPUT/warn-pi-$pi.log")
+  want=0
+  [[ $pi == true ]] && want=1
+  if [[ $n -eq $want ]]; then
+    echo "  [ok  ] point-implicit = $pi in the input: warnings that the factor is not applied in time-accurate runs: $n"
+  else
+    echo "  [FAIL] point-implicit = $pi in the input: warnings about the factor: $n, expected $want (see OUTPUT/warn-pi-$pi.log)"
+    fail=1
+  fi
+done
 
 for model in SA SST; do
   python3 -B make_case.py "order-$model" || exit 1

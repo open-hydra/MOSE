@@ -93,11 +93,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - In time-accurate RANS runs the turbulence sources are explicit, and the local time step includes the stiffness of their
   destruction, so that no Runge–Kutta stage can make ν̃, k or ω negative through it; where the destruction is faster than the
   transport the local step of those cells is smaller. The point-implicit factor (`point-implicit`, true by default) applies to
-  steady runs only, and a time-accurate run with it prints a warning: it made the turbulence equations, and the mean flow
-  through μ_t, first-order accurate in time (now about 2 with Heun and 3 with RK3). Steady runs do not change. A
-  time-accurate run with SST or Wilcox 2006 and no CFL ramp (`cfl-rise-threshold`), and one with a rotation–curvature (-RC)
-  correction, print a warning; at the end of a RANS run in which a stage made ν̃, k or ω negative before the realizability
-  floor, a line gives the number of such cell updates.
+  steady runs only, and a time-accurate run whose `input.ini` sets it to true prints a warning: it made the turbulence
+  equations, and the mean flow through μ_t, first-order accurate in time (now about 2 with Heun and 3 with RK3). Steady runs do
+  not change. A time-accurate run with a rotation–curvature (-RC) correction prints a warning; at the end of a RANS run in
+  which a stage made ν̃, k or ω negative before the realizability floor, a line gives the number of such cell updates.
 - `res-threshold` ends steady runs only; time-accurate runs end on `time-threshold` or `iter-threshold`. The density residual
   that `res-threshold` reads says nothing about the convergence of a transient: a time-accurate run started from a steady state
   stopped after one step. A time-accurate case that ended on `res-threshold`, with the key or with its default, now runs to
