@@ -13,13 +13,14 @@
 #    ConnectionFlux (connection-flux): one flux per face between blocks
 #    ConnectionOrder (connection-order): faces between blocks, whatever the
 #      order of bc.txt
+#    SectorRadial (sector-radial): rotational periodicity of a 3-D sector
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(chimera-face connection-flux connection-order)
+PARTS=(chimera-face connection-flux connection-order sector-radial)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

@@ -132,7 +132,6 @@ contains
             case (401) ! inlet: T0 + p0 (stagnation conditions)
               call BC_Inlet_StagnCond ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
                                         domain % bc(i) % T0, domain % bc(i) % p0, &
-                                        domain % bc(i) % rel_fac, &
                                         domain % bc(i) % alpha, domain % bc(i) % beta, &
                                         domain % bc(i) % ci(nrans+1:nrans+nsc), &
                                         domain % bc(i) % ci(1:nrans), &
@@ -144,7 +143,6 @@ contains
                 domain % bc(i) % p0 = domain % bc(i) % p0time % update(domain % time)
               call BC_Inlet_StagnCond ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
                                         domain % bc(i) % T0, domain % bc(i) % p0, &
-                                        domain % bc(i) % rel_fac, &
                                         domain % bc(i) % alpha, domain % bc(i) % beta, &
                                         domain % bc(i) % ci(nrans+1:nrans+nsc), &
                                         domain % bc(i) % ci(1:nrans), &
@@ -191,7 +189,6 @@ contains
               call BC_FarField ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
                                       domain % bc(i) % T0, domain % bc(i) % p0, &
                                       domain % bc(i) % pamb, &
-                                      domain % bc(i) % rel_fac, &
                                       domain % bc(i) % alpha, domain % bc(i) % beta, &
                                       domain % bc(i) % ci(nrans+1:nrans+nsc), &
                                       domain % bc(i) % ci(1:nrans), &

@@ -78,6 +78,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The two records of a face between blocks (`101`, `201`) must point at each other: a record that points at a cell and face
   with no connection record, at its own cell and face, or at a record that does not point back at it stops the run at set-up
   with a message. Such records were accepted, and each side computed the face with its own ghost cells.
+- `rel_fac` no longer acts on the inlets at total conditions (`401`, `402`) and on the ambient boundary (`407`); it stays in
+  their data lines. When the equation of the face state had no real root it moved p0 towards the pressure of the cell, and
+  with `rel_fac = 1` it repeated the same computation 1000 times and then set the discriminant to zero. Now that the gas enters
+  only when the reservoir can push it in (see Fixed), that case is not reached, and p0 is used as given. Results change at
+  most at round-off.
 
 ### Removed
 
@@ -244,6 +249,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The wall distance is the minimum over the images of the wall across periodic boundaries too (periodic connections `201`, slabs
   closed in k by type `200`, rotational periodicity of 3-D sectors). It was measured to the wall inside the mesh only, so near
   the end of a period it could be several times too large (by 9.8 times the exact distance in a test channel). A mesh without
-  periodic boundaries costs nothing more. With a turbulence model, periodic translations that cannot be the images of one wall
-  stop the run with a message: not integer combinations of each other, more than three independent ones, more than 1e5 images, or not along x on a
-  wedge or with sectors.
+  periodic boundaries costs nothing more, and the images searched are bounded whatever the size of the mesh against its
+  periods: every wall face and every cell centre is moved into one cell of the lattice of the periodic translations, reduced
+  pairwise and three at a time. With a turbulence model, periodic translations that cannot be the images of one wall stop
+  the run with a message: not integer combinations of each other, more than three independent ones, a number of images too
+  large for an integer, or not along x on a wedge or with sectors. Translations that differ by at most 1 % of the thinnest
+  cell across the periodic boundaries are the same, as the two sides of a periodic boundary match only to the round-off of
+  the coordinates: a channel periodic in x, turned by 30 degrees and written with 4 significant digits, runs.
+- On a 3-D mesh closed in k by type `200` (a sector turned about the x axis, or a slab whose last k node plane is the first
+  one translated), the ghost cell beyond face 5 holds the state of the cell next to face 6 turned back by the sector angle
+  (copied, on a translated slab): its w was the opposite of the turned one (face 6 was right). The second-order
+  reconstruction of the faces next to face 5 reads that ghost cell, and so do the viscous fluxes of the cells next to it;
+  a radial flow that is its own mirror image departed from it by 1.8e-2 of its scale in 20 steps. Results change on 3-D
+  sectors wherever the velocity next to face 6, turned by the sector angle, has a z component, and on translated slabs
+  wherever w is not zero.
+- The inlets at total conditions (`401`, `402`) and the ambient boundary (`407`) let the gas in when the reservoir can push it
+  in: when p0 is above p_stop = p (R/a)^(2γ/(γ−1)), the pressure that the gas of the boundary cell reaches when the outgoing
+  wave brings it to rest (R the outgoing Riemann invariant). The choice followed the sign of the velocity of the cell: a tube at
+  rest never started from a `401` or `402`, a `407` at rest took its outflow branch and computed an inflow outside its own
+  domain (0.854 instead of 0.770 ρa at p0 = 2 p), and an inlet with p0 below p_stop let gas out. When the gas does not enter,
+  a `401` or `402` face is a slip wall and a `407` face an outlet at p_back, as before for gas moving out; with the gas of the
+  cell moving in, at min(p_back, p_stop), where the face velocity points out. Results change where the sign of the cell
+  velocity and the criterion disagree.
+- An inflow at total conditions whose face state would be supersonic across, built on an invariant that can no longer reach
+  the face, takes the choked state, normal Mach 1. Past a pressure ratio (p0/p = 6.12 for a cell at rest at the reservoir
+  temperature, normal inflow) the subsonic equations gave such a face: at p0 = 36 p normal Mach 1.85 and a mass flux of
+  13.9 ρa, below the 20.8 ρa of the choked face. Results change for inlets at high pressure ratios, `401` and `402` included.

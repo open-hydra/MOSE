@@ -74,7 +74,13 @@ my_case/
     any angle, three are not in general. A 2-D block nearer a turn than a translation, or nearer
     a translation than a turn, but not to 1 %, stops the run: write its coordinates with more digits, or make its $k$
     planes parallel for a plane mesh. The set-up summary names the type, as `Mesh type`: 1-D, 2-D plane, 2-D
-    axisymmetric wedge with its angle in degrees, 3-D, or 3-D with the angle of its sectors.
+    axisymmetric wedge with its angle in degrees, 3-D, or 3-D with the angle of its sectors. The periodic images of
+    the wall in the wall distance of the turbulence models follow the same rule: the translations of the periodic
+    connections (`201`), and of the slabs closed in $k$ by type `200`, are the same when they differ by at most 1 % of
+    the thinnest cell across the periodic boundaries, and translations that do not form a lattice to that stop the
+    run: the two sides of each periodic boundary must match to that, with enough digits. A channel periodic in $x$
+    and turned by 30 degrees about $z$ gives translations that differ by 1.1e-4 of its cells with five digits, by
+    8.8e-4 with four, and by 0.15 with two, which stops the run.
 
 ---
 

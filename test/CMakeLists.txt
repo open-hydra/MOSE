@@ -136,8 +136,11 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # test/fast/boundary-conditions/run.sh.
 # Inlet boundary conditions: the far-field inlet (407) with the flow direction
 # normal gives the field of the equivalent angles, to the bit, with no
-# transverse velocity.
-mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;2D")
+# transverse velocity; inlets at total conditions (401, 407): when the gas
+# enters (from rest too), subsonic and choked faces, the slip wall of an inlet the
+# reservoir cannot feed, and the outlet of an ambient face it cannot feed with the gas
+# moving in; one step, mass fluxes against the face state.
+mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;1D;2D")
 
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
 mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")
@@ -160,7 +163,9 @@ mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D"
 # the other, index directions permuted): the record that computes the flux
 # of the face does not follow the order of bc.txt; sorted and reversed
 # records give the same bits.
-mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;1D;2D")
+# Sector radial: a 3-D sector closed by the rotational periodicity (type 200 on
+# the k faces) keeps a radial flow its own mirror image.
+mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;1D;2D;3D")
 
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
 # at a restart a missing probe file is written again, an existing one appended,
@@ -221,7 +226,9 @@ mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;phys
 # test/fast/mesh-geometry/run.sh.
 # Wall distance: the distance to the wall of the turbulence models is the
 # minimum distance to the wall surface (convex corner, curved wall, nozzle lip
-# on an axisymmetric wedge), read back from the Spalart-Allmaras source.
+# on an axisymmetric wedge), and to its periodic images, also when the periods
+# are much shorter than the mesh or nearly dependent, read back from the
+# Spalart-Allmaras source.
 # Mesh type: a plane 2-D mesh, an axisymmetric wedge and a 3-D slab periodic in
 # k are told apart by every node of every block; blocks that disagree stop.
 mose_add_fast_script(MeshGeometry fast/mesh-geometry "fast;implementation;physics;2D")
