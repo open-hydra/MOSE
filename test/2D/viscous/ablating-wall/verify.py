@@ -57,7 +57,7 @@ def read_tec(path):
     names = re.findall(r'"([^"]+)"', header) or re.split(r'[\s,]+', header.strip())
     zone = lines[1]
     I, J, K = (int(re.search(rf'{c}=\s*(\d+)', zone).group(1)) for c in 'IJK')
-    vals = [float(v) for v in ' '.join(lines[2:]).split()]
+    vals = [float(v) for v in ' '.join(l for l in lines[2:] if not l.startswith('DATASETAUXDATA')).split()]
     n_node = I * J * K
     n_cell = max(I - 1, 1) * max(J - 1, 1) * max(K - 1, 1)
     out, pos = {}, 0

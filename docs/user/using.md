@@ -226,11 +226,26 @@ MOSE | Iter =      384 | Global iter =      384 | Density residual = 0.998459E-1
 ### Stopping criteria
 
 A run ends after `iter-threshold` iterations, at `time-threshold` (time-accurate
-runs) or, in steady runs only, when the density residual falls below
-`res-threshold`. The density residual is the L2 norm, over all the cells, of
-the change of density in one iteration: it is not normalized, so a suitable
-`res-threshold` depends on the density level and on the number of cells. In
-time-accurate runs it is reported but does not end the run.
+runs) or, in steady runs only, when the density residual has fallen by the
+factor `res-threshold` from the first iteration of the run (of each grid level
+of a multigrid sequence). The density residual is the L2 norm, over all the
+cells, of the change of density in one iteration; `residual-history.dat` and
+the screen report it as it is, while the convergence test takes it relative to
+the first iteration, so that the density level and the number of cells do not
+set the threshold. An input written for the absolute test of earlier versions
+keeps its stop with `res-threshold` divided by the density residual of the
+first iteration, R₁: Rₙ ≤ (ε/R₁) R₁ is Rₙ ≤ ε. R₁ is the first row of
+`residual-history.dat` when `res-diter` is 1 (ten digits) and the
+`MOSE_RES_REFERENCE` of the vtk solutions (all its bits); this holds on one
+grid level, since a sequence of grids measures each level from its own first
+residual. A residual that rises before it falls is still measured
+from the first iteration: the run goes on until the residual is
+`res-threshold` times that of the first iteration, not times its peak, so it
+ends later than a test relative to the peak would, never earlier. A restart
+from a solution keeps the residual of the first iteration of the
+uninterrupted run, with all its bits in every format (see
+[Restart](initial-conditions.md#restart)). In
+time-accurate runs the residual is reported but does not end the run.
 
 ### Timing
 
@@ -269,7 +284,7 @@ After a run completes, the `OUTPUT/` directory contains:
 | `field.*` | Solution fields ($\rho$, $u$, $v$, $w$, $p$, $T$, …) |
 | `residual-history.dat` | Iteration-by-iteration residual norms |
 | `wall.tec` | Wall quantities (skin friction, heat flux) — viscous cases only |
-| `diagnostic.*` | Per-cell residuals of $\rho$, $\rho u$, $\rho v$, $\rho w$, $\rho E$, of the soot variables and of the RANS variables, local time step `dt`, shock-sensor flag `beta` — steady runs only; with a single species it needs `sol-variables` to name `thermo` (the default) or `transport`, and the run stops at its first solution output otherwise |
+| `diagnostic.*` | Per-cell residuals of $\rho$, $\rho u$, $\rho v$, $\rho w$, $\rho E$, of the soot variables and of the RANS variables (those of the last stage of the iteration written; the wall output, written just before, leaves them alone), local time step `dt`, shock-sensor flag `beta` — steady runs only; with a single species it needs `sol-variables` to name `thermo` (the default) or `transport`, and the run stops at its first solution output otherwise |
 | `<probe>.txt` | Time-history data at probe locations called <probe>|
 
 ### Input/Output Formats
@@ -281,7 +296,9 @@ Controlled by `sol-format` in `[MOSE-IO]`:
 | `tecplot ascii` | Tecplot ASCII (`.tec`) — default |
 | `tecplot binary` | Tecplot binary (`.szplt`) — requires TecIO |
 | `vtk ascii` | VTK ASCII (`.vts`) |
-| `vtk raw` | VTK binary (`.vts`) |
+| `vtk raw` | VTK binary (`.vts`): the data of the field, wall and diagnostic outputs in raw binary, appended to each file |
+
+With the vtk formats each output is a multi-block file, `OUTPUT/field.vtm` for instance, that lists its blocks relative to its own folder: `vtk/fieldBlock1.vts`, ... In every format a restart can reproduce the uninterrupted run exactly (see [Restart](initial-conditions.md#restart)): the binary formats store the bits of every value, the text formats write 17 significant digits. A field solution also holds the counters of a restart: field data in vtk, data set auxiliary data in Tecplot, which a Tecplot ASCII file writes as `DATASETAUXDATA` records after its zones; a script that reads every number after a zone header must stop at them.
 
 ### Output Variables
 
@@ -305,8 +322,10 @@ dtime = 1e-4
 
 Each probe writes a text file named after the probe — here `OUTPUT/exit.txt` — with columns for time (or the iteration, with `diter`) and the requested variables.
 
+A probe records one cell: the cell that `index-position` gives (block, i, j, k), or, when `index-position` is left out, the cell whose centre, the mean of its eight nodes, is the nearest to `position`.
+
 Accepted variables: `rho(n)` (density of species `n`), `u`, `v`, `w`, `p`, `T`, `M` (Mach number) and, with a RANS model, `mi_tilde`, the first turbulence variable, which the solution files name `rhoNuTilde` (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model). An unknown name stops the run at set-up.
 
-A new run replaces the probe files; a restart appends to them, and creates any that are missing (for example a probe added before the restart).
+A new run replaces the probe files; a restart appends to them, and creates any that are missing (for example a probe added before the restart). Time-based rows fall on the multiples of `dtime`, from the first. A restart that goes on in time writes its next time-based row at the first multiple of `dtime` its time has not reached; a restart that goes on from the counters of a solution, in any format, first drops the rows written after that solution (see [Restart](initial-conditions.md#restart)).
 
 ---

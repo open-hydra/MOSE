@@ -20,6 +20,10 @@ set(_MOSE_TEST_ENV
     "OMP_NUM_THREADS=1"
     "KMP_STACKSIZE=100M"
 )
+# The restart tests also write and read the Tecplot binary format (.szplt), which ORION writes with TecIO
+if(USE_TECIO)
+    list(APPEND _MOSE_TEST_ENV "MOSE_TECIO=1")
+endif()
 
 # Helper: register a case that runs "<run-cmd> && python3 -B <verifier>"
 # in a given working directory, with the given labels.
@@ -122,7 +126,9 @@ mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
 # test/fast/time-integration/run.sh.
 # Time control: second order in time with a time-dependent inlet (BC 402,
 # boundary data at the stage times), time tables before their first instant,
-# res-threshold not ending a time-accurate run.
+# res-threshold not ending a time-accurate run, and ending a steady run when the
+# density residual has fallen by that factor from the first iteration, at any
+# level of density and across a restart.
 # Local time step: stable on square and skewed 2-D cells, on cubic 3-D cells
 # and in diffusion-dominated cells (heat conduction, species), with Heun and RK3;
 # heat conduction on 3-D rhombohedra at 115 degrees with Heun at vnn 0.5.
@@ -178,14 +184,28 @@ mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;
 # Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
 # at a restart a missing probe file is written again, an existing one appended,
 # with the probe rows of the uninterrupted run.
+# Restart counters (I3): with vtk raw, steady, time-based-output and multigrid
+# restarts reproduce the uninterrupted runs bit for bit; a multigrid restart from
+# Tecplot goes on with the global iteration count; a time-accurate restart from a
+# steady solution starts at t = 0; a restart from an older solution keeps no
+# residual-history or probe row twice; a first part that ends on an output
+# iteration writes the solution and the probe row due there; a first part
+# killed at its time limit leaves in the history files every row it wrote.
 mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
 
 # Output files (OutputFiles): the parts below, each in its folder of
 # test/fast/output-files, run one after the other by
 # test/fast/output-files/run.sh.
 # Wall output: a vtk raw run with no-slip walls ends, and every wall file has
-# the extent and the points of its face.
-mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
+# the extent, the points and the cell values of its face.
+# VTK outputs (field, wall, diagnostic) are well-formed XML with the right names.
+# vtk raw outputs (field and diagnostic, steady and time-accurate) hold raw
+# appended data in every block file, as sol-format asks.
+# Wall output and residual: the wall output must not change the residual that
+# the diagnostic output prints next (a converged laminar hypersonic plate).
+# Probes given by position record the cell whose centre is the nearest, never
+# a ghost cell: probes at cell centres hold the values of their cells.
+mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 
 # Input checks (InputChecks): the parts below, each in its folder of
 # test/fast/input-checks, run one after the other by
@@ -209,7 +229,8 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;2D")
 # keeps the bits of the run without chemistry, also with multigrid. A steady run
 # with a soot model ends normally and its diagnostic output names every variable
 # it writes; a steady single-species run without thermo or transport output
-# stops with a message that says so.
+# stops with a message that says so. A restart from a solution whose time or a
+# counter is not finite stops at set-up.
 # Limiter defaults: the reconstruction that runs is the declared one (MUSCL
 # without flux-limiter = van Leer; first-order ignores a given limiter), and
 # the set-up warnings say so.
@@ -302,6 +323,11 @@ if(USE_MPI)
             )
         endif()
     endfunction()
+
+    # Exact restart from vtk raw on 2 ranks x 2 threads: 24 + 16 steps, the
+    # first part ending on an output step, give the bits of 40 steps in one
+    # go, output numbering and counters included.
+    mose_add_mpi_script(MPIRestart mpi/restart "needs-mpi;implementation;2D")
 
     # Boundary records: the boundary-flux loop gives the same bits on any
     # ranks x threads layout and for any order of the records in bc.txt.

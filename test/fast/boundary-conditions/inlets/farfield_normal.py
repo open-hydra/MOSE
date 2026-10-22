@@ -7,10 +7,20 @@ pressure (406). The flow direction of the 407 records is given either as the tok
 angles that it stands for: the normal of face 1 is (1, 0, 0), so alpha = atan(n_y / n_x) = 0 and beta = atan(n_z / n_x) = 0.
 The two inputs are the same boundary condition and must give the same fields to the bit.
 
+The flow has no transverse velocity: v comes from rounding alone, and it must stay below V_BOUND = 64 eps (|u| + c), eps = 2**-52
+the spacing of the reals at 1: 5.6e-12 m/s, 99 units in the last place of |u| + c = 397 m/s (2**-44 m/s), |v| / u = 1.1e-13. The
+estimate: a step of duration dt changes v through the y-momentum fluxes of the j faces, of size p, and a rounding of p in one of
+them changes v by up to eps p dt / (rho dy); with the time step of the test (cfl 0.5, dt = 6.7e-6 s) that is 1.3e-14 m/s,
+0.15 eps (|u| + c). Measured after 5 to 40 steps in gnu TESTING, gnu DEBUG and ifx RELEASE builds: |v| at most 1.0 eps (|u| + c),
+8.8e-14 m/s (1.5 units in the last place of |u| + c), as the dissipation of the scheme does not let the roundings add up; the
+bound holds even if four roundings of p in each of the 20 steps of the test added up (12 eps (|u| + c)), and a flow direction off
+the face normal by more than 1.1e-13 rad, whose |v| / u is the angle, crosses it.
+
 Usage (from the test directory):
   python3 -B farfield_normal.py case DIR      INPUT/ic.tec and INPUT/bc.txt, DIR = normal or angle
-  python3 -B farfield_normal.py check FILE    largest |v| over u in FILE (a field.tec)
+  python3 -B farfield_normal.py check FILE    the largest |v| in FILE (a field.tec) against V_BOUND: exit status 1 above it
 """
+import math
 import os
 import re
 import sys
@@ -23,6 +33,8 @@ RGAS = 8314.46261815324 / 28.970418           # universal gas constant of FLINT 
 CP = GAMMA * RGAS / (GAMMA - 1.0)
 T0 = T + U * U / (2.0 * CP)
 P0 = P * (T0 / T) ** (GAMMA / (GAMMA - 1.0))
+C = math.sqrt(GAMMA * RGAS * T)               # speed of sound
+V_BOUND = 64.0 * 2.0 ** -52 * (abs(U) + C)    # the largest |v| that rounding gives (above)
 
 
 def write_case(direction):
@@ -62,13 +74,17 @@ def check(path):
     with open(path) as f:
         lines = f.read().splitlines()
     names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s,"]+)', lines[0].split('=', 1)[1])]
-    values = [float(v) for v in " ".join(lines[2:]).split()]
+    values = [float(v) for v in " ".join(l for l in lines[2:] if not l.startswith("DATASETAUXDATA")).split()]
     nn, nc, out, pos = (NX + 1) * (NY + 1) * 2, NX * NY, {}, 0
     for k, name in enumerate(names):
         cnt = nn if k < 3 else nc
         out[name] = values[pos:pos + cnt]
         pos += cnt
-    print(f"{max(abs(v) for v in out['v']) / U:.3e}")
+    vmax = max(abs(v) for v in out['v'])
+    unit = 2.0 ** -52 * (abs(U) + C)
+    print(f"largest |v| = {vmax:.3e} m/s = {vmax / unit:.2f} eps (|u| + c) (|v| / u = {vmax / U:.3e}), "
+          f"bound {V_BOUND:.3e} m/s = 64 eps (|u| + c)")
+    return 0 if vmax <= V_BOUND else 1
 
 
 def main():
@@ -76,7 +92,7 @@ def main():
     if what == "case":
         write_case(sys.argv[2])
     elif what == "check":
-        check(sys.argv[2])
+        sys.exit(check(sys.argv[2]))
     else:
         sys.exit(f"unknown request {what}")
 

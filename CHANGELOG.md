@@ -33,6 +33,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - At set-up MOSE warns, with the line number, about every `key = value` of `input.ini` that the reader does not take in its
   section: such a key is not read, and its parameter keeps its default. The guide says that a key lost this way is an error in
   the input. Inputs whose keys are all read do not change.
+- A restart goes on exactly as the run in one go would, from a solution in any format: every field solution stores the
+  counters that decide what the run does and writes next (the global iteration count `CYCLE`; `MOSE_ITERATION`,
+  `MOSE_OUTPUT_NUMBER`, `MOSE_GRID_LEVEL`, `MOSE_LAST_OUTPUT_TIME` and `MOSE_RES_REFERENCE`), as field data of the `.vts` files
+  of a vtk solution and as data set auxiliary data of a Tecplot solution, and a restart of the same kind of run reads them back.
+  A restart from such a solution keeps the CFL ramp, the numbering of the solutions, the multigrid level and the convergence
+  test of the uninterrupted run, and drops the rows of `residual-history.dat`, of the probe files and of `torque.dat` written
+  after the solution it reads: the run split in two parts writes the same files as the run in one go, byte for byte, within the
+  limits that the guide lists. A restart from vtk raw solutions did not start at all, and one from Tecplot started its counters
+  again: the numbered solutions of the second part replaced those of the first. A solution written before restarts as before.
 
 ### Changed
 
@@ -117,6 +126,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   missing submodule, but does not update one that is checked out at an older commit, and stops with this command when
   FiNeR is older than v2.1.0. ifx 2023.0 stops with an internal compiler error on StringiFor v1.8.0 and is not supported:
   this version is tested with gfortran 12 and 13 and with ifx 2024.1 (see the installation guide).
+- `res-threshold` is relative to the density residual of the first iteration of a steady run (of each grid level): the run ends
+  when its residual has fallen by that factor, and the default, `1e-10`, is a fall of ten orders. The test compared the residual
+  as it is, which scales with the level of density and with the square root of the number of cells: the same flow stopped at
+  different iterations in different units, and a flow at low density could stop after its first iteration, unconverged. Every
+  steady run that ends on `res-threshold` ends at another iteration (the PrandtlMeyer case of the test suite runs 761 iterations
+  instead of 555); runs that end on `iter-threshold` do not change. `residual-history.dat` and the screen still report the
+  residual as it is. A restart from a solution that holds no reference measures the threshold from its own first iteration, with
+  a warning. An input written for the absolute test keeps its stop with `res-threshold` divided by the density residual of the
+  first iteration (see the user guide, Stopping criteria).
+- With `sol-format = vtk raw` the field solutions hold their data as raw binary appended to each file, as the wall and diagnostic
+  outputs did: they were base64 inside the XML, in a time-accurate run, and in a steady one up to its first diagnostic output.
+  The values are the same, bit for bit; base64 took a third more room.
+- The `.vtm` files of the field and wall solutions list their block files relative to their own folder, `vtk/<name>BlockN.vts`,
+  as VTK readers resolve them; they listed `../vtk//<name>BlockN.vts`, outside `OUTPUT/`. An initial condition `INPUT/ic.vtm`
+  reads its block files where the `.vtm` lists them, so a solution of MOSE copied into `INPUT/` with its `vtk/` folder starts a
+  run; one whose block files are at `INPUT/vtk/field<entry>.vts`, where they were read before, is still read there.
+- The outputs of a steady run carry minus the global iteration count as their time in every format: the vtk `TIME` of the field,
+  wall and diagnostic outputs was −1, and the Tecplot solutions of the coarse grid levels of a sequence carried 0. The Tecplot
+  zones of a steady solution are static (no `STRANDID`), and those of a time-accurate one are in the strand of their block
+  (`STRANDID` = *b*). Tecplot solutions written by earlier versions of MOSE hold the count of a steady run as a positive
+  `SOLUTIONTIME`, with `STRANDID = 0`: a steady restart goes on from them as before, but a time-accurate restart takes them for a
+  solution at time t = count; to start a transient from such a solution, use it as the initial condition (`INPUT/ic.tec`,
+  `newrun = true`), which starts at t = 0. The text formats, `vtk ascii` and `tecplot ascii`, write 17 significant digits, the
+  fewest that give back every 64-bit value.
+- A Tecplot field solution ends with six `DATASETAUXDATA` records, the counters of the restart: a record of the ASCII format that
+  the Tecplot Data Format Guide defines for data of the whole data set. The Python reader of ORION reads such files; a script
+  that takes every number after a zone header must stop at them.
+- The density residual of `residual-history.dat` and the torque of `torque.dat` are summed in a fixed order, the same for any
+  number of OpenMP threads and MPI ranks, so their rows and the convergence test that uses them no longer change with the
+  decomposition. At one thread and one rank the order changes, and the sums can change in their last bits.
+- MOSE uses ORION main a978930 (PR #7 merged; was 8cda645), whose multi-block VTK reader and writer handle field data (`TIME`,
+  `CYCLE` and named scalars), any number of blocks and surface blocks, and whose Tecplot reader and writer handle the solution
+  time with its sign, strands and data set auxiliary data. The vtk wall files now hold the cell values of their faces.
 
 ### Removed
 
@@ -458,3 +500,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   all, and the first rank that found the error writes it, with its rank. Rank 0 decided alone, so a run in which rank 1 could not
   read its copy of the file went on to its end; and with the lean read of a `.szplt` file, where each rank reads the variables of
   its own blocks after that decision, an error of that read was never looked at.
+- The VTK outputs are well-formed XML: the variable names were written with the double quotes of the Tecplot lists
+  (`Name=""rho(1)""`), not well-formed XML (Python's xml.etree, which parses with expat, stops on them), and a reader
+  that takes the text between the first two quotes
+  got empty names. The diagnostic vtk files hold their own columns only; they also held arrays with empty names and stale
+  content of the field. The values written do not change.
+- A restart from a vtk solution reads it: the `.vtm` listed its blocks outside `OUTPUT/`, the restart read the blocks of the
+  initial condition and in base64 whatever the files held, and the time of the solution was dropped, so a time-accurate restart
+  went on from t = 0. With multigrid the coarse levels of a restart took their time and iteration count from themselves, not
+  from the solution read.
+- A restart drops the rows that the run it continues wrote after the solution it reads, and a last row cut in the middle: the
+  rows of those iterations were in `residual-history.dat` and in the probe files twice, and a row cut by hand went on with the
+  first row of the restart. The files end with a newline before the restart appends to them.
+- A restart appends to `torque.dat` of the rotating frame, after the rows of the run it continues: it replaced the file, which
+  then held only the rows of the second part.
+- Every row of `residual-history.dat` and of the probe files is in its file as soon as MOSE writes it, and the run closes these
+  files and `torque.dat` at its end, before MPI is finalized: built with gfortran, the rows waited in the buffers of the files
+  until the process ended normally, so a run killed or stopped at the time limit of a queue lost its last rows, and a restart
+  from its last solution wrote files with a gap; an MPI run whose ranks the launcher ended in the shutdown of MPI (OpenMPI
+  4.1.4 reports such a run as "exiting improperly") could leave probe files empty.
+- A time-accurate restart from a steady Tecplot solution starts its transient at t = 0, as one from vtk does: it started at
+  t = the iteration count of the solution. A steady restart from Tecplot goes on from the iteration count as before.
+- A restart from a solution that holds no time (a vtk file without `TIME`, a Tecplot ASCII file without `SOLUTIONTIME`) stops at
+  set-up with a message that says how to start from it, as an initial condition: it went on from t = 0, or from an iteration
+  count of −huge.
+- A restart from a solution whose time (Tecplot `SOLUTIONTIME`, vtk `TIME`) or one of the counters it holds is not finite (NaN or
+  infinity) stops the run at set-up with exit code 1, in every build, with the file and the name of the value: the tests of the
+  time took a NaN as false (another message, SIGFPE in a DEBUG build, or with ifx a run from a NaN time), and an infinite counter
+  was taken in silence.
+- An initial condition given as `vtk raw` or `vtk ascii` is read in the format its block files declare, and from the folder of
+  its `.vtm`: a solution of MOSE copied into `INPUT/` stopped the run at set-up.
+- Time-based probe rows fall on the multiples of `dtime`, from the first: the time counter of a probe had no initial value, so a
+  new run could write time-based rows from its first step, or none, and a probe with `diter` only wrote time-based rows.
+- A probe given by position records the cell whose centre is the nearest to it: it took the cell that has the nearest node as
+  its upper corner, a ghost cell when that node lies on the first plane of nodes in j or k (as on the mid-plane of a 2-D case
+  or a wedge), otherwise a neighbour of the cell that holds the probe unless that node is its upper corner. The rows of a probe
+  change where the two cells differ; probes given by index do not change.
+- The wall output leaves the residual and the ghost cells of the wall cells as they were: the diagnostic output, written after
+  it, showed in the wall cells the wall shear force and heat flow instead of the residual. The solution does not change.
+- When `input.ini` is read again during a run (every `ini-diter` iterations), a new `omega`, `axis` or `origin` of the rotating
+  frame is taken by every term of the frame: the centrifugal source and the torque file took the new `omega`, while the Coriolis
+  source, the velocity of the stationary walls, of the inlets and of the far field, and the absolute vorticity of the turbulence
+  models kept the old one, and a new axis or origin did not enter at all. A new `rotational-frame` or other
+  `stationary-face-<k>` keys stop the run with a message, on every MPI rank together: they were ignored without a word.
+- A value of `axis` or `origin` of the rotating frame that is not finite (NaN or infinity), written in `input.ini` during the
+  run, stops the run when the file is read again, every rank at that reading, with a message that names the key; in a gnu TESTING
+  build it went into every term of the frame and the run failed at the next iteration; a DEBUG build stopped with SIGFPE at that
+  reading, an ifx RELEASE build with the message of an axis of zero length.
+- A run that ends where a numbered or time-based solution or a probe row is due writes it, with its wall and diagnostic files,
+  before the final solution, whose counters follow it: the last iteration wrote the final solution only, so the run in one go
+  lacked its last numbered solution and probe rows, and a restart from a first part that ended there numbered the solutions
+  after it one lower, shifted the time-based ones and left the state of that iteration in no file. The guide no longer lists
+  this as a limit of the restart.

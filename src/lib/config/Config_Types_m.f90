@@ -25,6 +25,8 @@ module MOSE_Config_Types_m
     integer         :: iter_from_call
     real(R8)        :: time_from_call
     real(R8), allocatable :: residuotot(:)
+    real(R8)        :: res_reference = 0._R8   ! Density residual of the first iteration (grid level), the unit of res-threshold
+    logical         :: res_restored = .false.  ! res_reference read with the restart solution: its first iteration keeps it
     integer         :: nthreads         ! Number of threads for simulation
     integer         :: TODO             ! Decide solve and/or postprocess
     logical         :: HYDRA_time_accurate = .false.
@@ -37,6 +39,23 @@ module MOSE_Config_Types_m
   !! ------------------------------------------------------
   !! Input-Output -----------------------------------------
   !! ------------------------------------------------------
+  !> Counters stored with every solution (field data of the vtk files, data set auxiliary data of
+  !> the Tecplot files) and read back by a restart, so that the restarted run goes on as the uninterrupted one would: CFL ramp and
+  !> output cadence, output numbering, residual history and probe rows, multigrid level,
+  !> convergence test; and what a restart reads of the time of its solution, in every format.
+  type :: restart_counters_t
+    logical   :: found = .false.            ! The restart solution holds the counters
+    logical   :: time_found = .false.       ! The restart solution holds a time (vtk TIME, Tecplot SOLUTIONTIME)
+    logical   :: steady = .false.           ! The restart solution is a steady one: negative time (vtk TIME, Tecplot SOLUTIONTIME)
+    integer   :: cycle = 0                  ! Iteration count over all grid levels (CYCLE)
+    integer   :: iteration = 0              ! Iteration count of the grid level of the solution
+    integer   :: output_number = 0          ! Number of the last numbered solution
+    integer   :: grid_level = 1             ! Grid level being solved
+    real(R8)  :: last_output_time = 0._R8   ! Time of the last time-based solution
+    real(R8)  :: res_reference = 0._R8      ! Density residual of the first iteration of the grid level
+    logical   :: res_found = .false.        ! The solution holds it (vtk solutions written before it was stored do not)
+  end type restart_counters_t
+
   type :: io_t
     character(len=llen)  :: warning_message
     character(len=llen)  :: error_message
@@ -61,6 +80,8 @@ module MOSE_Config_Types_m
     integer              :: Onwall
     integer              :: unitRES             ! Residuals file unit
     character(len=llen)  :: unitRES_format      ! Format for residual_history_file
+    integer              :: output_number = 0   ! Number of the last numbered solution (sol-overwrite = false)
+    type(restart_counters_t) :: restart         ! Counters read with a vtk restart solution
   end type io_t
 
   type :: io_probes_t
@@ -320,6 +341,7 @@ module MOSE_Config_Types_m
     !> Each stationary_face_str(k) = 'block_index face_direction', parsed in setup.
     ! Useful variables
     logical               :: enabled
+    character(len=llen)   :: model_setup = ''   !> The model read at set-up: input.ini read again may not change it
     integer :: n_stationary = 0
     character(len=32), allocatable :: stationary_face_str(:)
     !> Stationary wall patches in the lab frame, stored as (2, N) pairs:

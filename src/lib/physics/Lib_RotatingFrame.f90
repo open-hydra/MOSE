@@ -96,6 +96,11 @@ module MOSE_Lib_RotatingFrame
   use MOSE_Config_Types_m, only : obj_rot
   implicit none
 
+  ! OUTPUT/torque.dat: open on the root from the first row of the run (RF_Torque_Walls) to the end of
+  ! the run (RF_Close_Torque_File)
+  integer, private :: unit_torque
+  logical, private :: torque_open = .false.
+
 contains
 
 
@@ -122,6 +127,9 @@ contains
     ! Local
     integer  :: k
     real(R8) :: norm
+
+    ! The model of the set-up, against which input.ini read again during the run is checked (Reload_RotatingFrame)
+    obj_rot%model_setup = obj_rot%model
 
     ! Off unless the model is rigid-body: none (the registry default) or empty. enabled has no
     ! default initialization, so every model must set it
@@ -165,6 +173,79 @@ contains
     end if
 
   end subroutine Setup_RotatingFrame
+
+
+  !> input.ini read again during the run (Read_Inifile_Runtime, every ini-diter iterations): the omega, axis and origin
+  !> read again enter every term of the frame together, as at set-up: the unit axis, the origin and Omega_vec, which the
+  !> Coriolis and centrifugal sources, the velocity of the stationary walls and of the inlets and far field, and the power
+  !> of the torque file read at each use. The same arithmetic as Setup_RotatingFrame, so values read again unchanged leave
+  !> every bit as it was. The model and the stationary faces change the equations and the boundary conditions: a change
+  !> of rotational-frame, or of the number or the faces of the stationary-face-<k> keys (n_file of them in the file read
+  !> again), stops the run. So does a value of axis or origin that is not finite: read as a number, it would enter every
+  !> term of the frame, and the test of the length of the axis compares, which a NaN passes as false (Not_Finite reads the
+  !> bits). Every rank reads input.ini again on its own, and a file rewritten while the ranks read it can
+  !> give them different contents: the ranks take the decision to stop together (the largest of a flag), so that every
+  !> rank stops, or none (a rank that stopped alone would wait for the others in mpi_stop_all).
+  subroutine Reload_RotatingFrame ( n_file )
+    use MOSE_Finite_m, only: Not_Finite
+    use MOSE_Mod_MPI, only: mpi_is_root, mpi_allreduce_max_r8, mpi_stop_all
+    implicit none
+    integer, intent(in) :: n_file
+    ! Local
+    integer  :: k, face(2)
+    real(R8) :: axis(3), origin(3), norm, omega_vec(3), flag, flag_all
+    character(len=256) :: reason   ! The error this rank finds, blank if none
+
+    reason = ''
+    if ( obj_rot%model /= obj_rot%model_setup ) then
+      reason = '[ERROR] Rotating frame: rotational-frame in input.ini read again is "'//trim(obj_rot%model)// &
+               '", "'//trim(obj_rot%model_setup)//'" at set-up: the model cannot change during the run'
+    else if ( obj_rot%enabled ) then
+      if ( n_file /= obj_rot%n_stationary ) &
+        reason = '[ERROR] Rotating frame: input.ini read again does not list the stationary-face keys of the'// &
+                 ' set-up: the stationary faces cannot change during the run'
+      do k = 1, obj_rot%n_stationary
+        if ( len_trim(reason) > 0 ) exit
+        read(obj_rot%stationary_face_str(k), *) face(1), face(2)
+        if ( any ( face /= obj_rot%stationary_face(:,k) ) ) &
+          reason = '[ERROR] Rotating frame: input.ini read again does not list the stationary-face keys of'// &
+                   ' the set-up: the stationary faces cannot change during the run'
+      end do
+      if ( len_trim(reason) == 0 ) then
+        read(obj_rot%axis_str, *)   axis
+        read(obj_rot%origin_str, *) origin
+        if ( any(Not_Finite(axis)) ) then
+          reason = '[ERROR] Rotating frame: a value of axis in input.ini read again is not finite (NaN or infinity)'
+        else if ( any(Not_Finite(origin)) ) then
+          reason = '[ERROR] Rotating frame: a value of origin in input.ini read again is not finite (NaN or infinity)'
+        else
+          norm = sqrt( sum(axis**2) )
+          if ( norm < 1.0e-14_R8 ) reason = '[ERROR] Rotation axis has zero length (input.ini read again)'
+        end if
+      end if
+    end if
+    flag = 0.0_R8
+    if ( len_trim(reason) > 0 ) flag = 1.0_R8
+    call mpi_allreduce_max_r8 ( flag, flag_all )
+    if ( flag_all > 0.0_R8 ) then
+      if ( len_trim(reason) > 0 ) call mpi_stop_all ( trim(reason) )
+      call mpi_stop_all ( 'stopped with the ranks that found an error in input.ini read again (rotating frame)' )
+    end if
+    if ( .not. obj_rot%enabled ) return
+
+    axis      = axis / norm
+    omega_vec = obj_rot%omega * axis
+    ! A value changed (two ordered comparisons: an exact test with no warning on real equality)
+    if ( mpi_is_root .and. ( any ( omega_vec < obj_rot%Omega_vec .or. omega_vec > obj_rot%Omega_vec ) .or. &
+                             any ( axis < obj_rot%axis .or. axis > obj_rot%axis ) .or.                 &
+                             any ( origin < obj_rot%origin .or. origin > obj_rot%origin ) ) )          &
+      write(*,'(A,ES14.7,A,3(1X,ES14.7),A,3(1X,ES14.7))') '   Rotating frame, input.ini read again: omega = ', &
+        obj_rot%omega, ' rad/s, axis', axis, ', origin', origin
+    obj_rot%axis      = axis
+    obj_rot%origin    = origin
+    obj_rot%Omega_vec = omega_vec
+
+  end subroutine Reload_RotatingFrame
 
 
   ! ---------------------------------------------------------------------------
@@ -505,21 +586,23 @@ contains
     use MOSE_Advanced_Types_m
     use MOSE_Global_m, only: np
     use MOSE_Lib_Ghost, only: Is_Wall
-    use MOSE_Mod_MPI, only: is_local_block, mpi_is_root, mpi_reduce_sum_r8
+    use MOSE_Mod_MPI, only: is_local_block, mpi_is_root, mpi_reduce_sum_r8_array
+    use MOSE_Config_Types_m, only: obj_sim_param
 
     implicit none
     type(MOSE_domain_type), intent(in) :: domain
     integer,  intent(in) :: iter
     real(R8), intent(in) :: time
     ! Local
-    integer,  save :: unit_torque = -1
     logical,  save :: first_call  = .true.
-    integer  :: i, Bm, Im, Jm, Km, Fm, Dir, Fi, Fj, Fk
+    logical  :: exists
+    integer  :: i, b, Bm, Im, Jm, Km, Fm, Dir, Fi, Fj, Fk
     real(R8) :: r_face(3), r_rel(3), F_wall(3), torque_vec(3)
     real(R8) :: T_axial, p_face, sign_fm
     real(R8) :: N_face(3), A_face
+    real(R8) :: T_block(domain%nb)   ! torque of the walls of each block
 
-    T_axial = 0.0_R8
+    T_block = 0.0_R8
 
     do i = 1, domain%nbound
 
@@ -574,21 +657,37 @@ contains
       torque_vec(1) = r_rel(2)*F_wall(3) - r_rel(3)*F_wall(2)
       torque_vec(2) = r_rel(3)*F_wall(1) - r_rel(1)*F_wall(3)
       torque_vec(3) = r_rel(1)*F_wall(2) - r_rel(2)*F_wall(1)
-      T_axial = T_axial + dot_product(obj_rot%axis, torque_vec)
+      T_block(Bm) = T_block(Bm) + dot_product(obj_rot%axis, torque_vec)
 
     end do
 
-    ! Reduce partial torque sums from all ranks to root (blocking collective)
-    call mpi_reduce_sum_r8(T_axial)
+    ! The sum in a fixed order, the same for any number of ranks: the walls of each block in the order of their records, then
+    ! the blocks in turn on the root; each entry of T_block comes from the one rank that holds the block, so its sum over the
+    ! ranks is exact (blocking collective)
+    call mpi_reduce_sum_r8_array(T_block, domain%nb)
+    T_axial = 0.0_R8
+    do b = 1, domain%nb
+      T_axial = T_axial + T_block(b)
+    end do
 
     ! Only root writes the output
     if (mpi_is_root) then
       if (first_call) then
-        open(newunit=unit_torque, file='OUTPUT/torque.dat', &
-             status='replace', form='formatted')
-        write(unit_torque, '(A)') &
-          '#        iter              time   torque_axial (pressure, non-dim)' // &
-          '         power (T*omega, non-dim)'
+        ! A restart goes on after the rows of the run it continues, as residual-history.dat and
+        ! the probe files (Wrap_Setup first drops the rows written after the solution it reads);
+        ! a new run, or a restart without the file, starts it with its header
+        inquire(file='OUTPUT/torque.dat', exist=exists)
+        if (obj_sim_param%newrun .or. .not. exists) then
+          open(newunit=unit_torque, file='OUTPUT/torque.dat', &
+               status='replace', form='formatted')
+          write(unit_torque, '(A)') &
+            '#        iter              time   torque_axial (pressure, non-dim)' // &
+            '         power (T*omega, non-dim)'
+        else
+          open(newunit=unit_torque, file='OUTPUT/torque.dat', &
+               status='old', position='append', form='formatted')
+        end if
+        torque_open = .true.
         first_call = .false.
       end if
 
@@ -597,6 +696,20 @@ contains
     end if
 
   end subroutine RF_Torque_Walls
+
+
+  !> Close OUTPUT/torque.dat at the end of the run, on the root that opened it, before the ranks
+  !> finalize MPI: a unit left open is closed by the Fortran run-time library only when the process
+  !> ends, after MPI_FINALIZE. Every row is already in the file (RF_Torque_Walls flushes it).
+  subroutine RF_Close_Torque_File()
+    implicit none
+
+    if (torque_open) then
+      close(unit_torque)
+      torque_open = .false.
+    end if
+
+  end subroutine RF_Close_Torque_File
 
 
 end module MOSE_Lib_RotatingFrame
