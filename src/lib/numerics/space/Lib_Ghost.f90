@@ -8,7 +8,7 @@ module MOSE_Lib_Ghost
   implicit none
 
   !> Ghost fills of a wall or 400 face (Ghost_Wall) in which the cut of an extrapolated quantity acted, and in which the
-  !> temperature of a 302 wall took the floor T_w/2: reported at the end of the run (Report_Wall_Ghosts)
+  !> temperature of a 302 wall took the floor T_w/2: reported at the end of a run in which either happened (Report_Wall_Ghosts)
   integer(I8) :: n_ghost_cut = 0, n_ghost_floor = 0
 
 contains
@@ -915,9 +915,11 @@ contains
   end subroutine Bounded_Extrapolation
 
 
-  !> One line at the end of a run: the ghost fills of the wall and 400 faces in which the cut of an extrapolated quantity
-  !> acted, and in which the temperature of a 302 wall took the floor T_w/2. Either says that the mesh does not resolve
-  !> the profile next to the face (collective: every rank calls it).
+  !> One line at the end of a run in which the cut of an extrapolated quantity acted in a ghost fill of a wall or 400 face, or
+  !> the temperature of a 302 wall took the floor T_w/2: the fills of each kind, over the whole run, its grid levels and ranks.
+  !> Either says that the mesh does not resolve the profile next to the face; a run in which neither acted prints no line.
+  !> Collective: every rank calls it, and both reductions, in every run, so that no rank takes another MPI path; rank 0
+  !> writes the line when one of the two totals is not zero.
   subroutine Report_Wall_Ghosts ()
     use MOSE_Mod_MPI, only: mpi_is_root, mpi_allreduce_sum_r8
     implicit none
@@ -925,8 +927,9 @@ contains
 
     call mpi_allreduce_sum_r8 ( real(n_ghost_cut, R8), ncut )
     call mpi_allreduce_sum_r8 ( real(n_ghost_floor, R8), nfloor )
-    if ( mpi_is_root ) write(*,'(A,I0,A,I0)') ' Ghost cells of walls and 400 faces, fills with the extrapolation cut: ', &
-                                             nint(ncut, I8), ', with the 302 temperature at T_w/2: ', nint(nfloor, I8)
+    if ( mpi_is_root .and. ( ncut > 0d0 .or. nfloor > 0d0 ) ) &
+      write(*,'(A,I0,A,I0)') ' Ghost cells of walls and 400 faces, fills with the extrapolation cut: ', &
+                             nint(ncut, I8), ', with the 302 temperature at T_w/2: ', nint(nfloor, I8)
 
   end subroutine Report_Wall_Ghosts
 

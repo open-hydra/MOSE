@@ -48,6 +48,9 @@ Usage (from the test directory):
                                                        of the runs at cfl c, c/2 and c/4 (exit status 0 when it is at
                                                        least 1.8 with RK2, 2.7 with RK3)
   python3 -B make_case.py pos CASE CFL VNN LOG         positivity check of a run (exit status 0 when it holds)
+  python3 -B make_case.py count LOG some|none          the count of the cell updates whose stage made nu~, k or omega
+                                                       negative at the end of LOG: one line with a count above zero
+                                                       (some), or no line (none); exit status 0 when it is so
   python3 -B make_case.py wilcox-check FIELD           the change of rho omega in the one step of the case wilcox
                                                        (exit status 0 when it is the one of f_beta within RTOL_W)
   python3 -B make_case.py wall-check MODEL FIELD       the change of rho omega in the wall cells in the one step of the
@@ -386,20 +389,25 @@ def order(model, scheme, f1, f2, f4):
     sys.exit(0 if ok else 1)
 
 
+def count_lines(text):
+    """The lines of the solver output that count the cell updates whose stage made nu~, k or omega negative; the solver
+    prints that line at the end of a run only when the count is not zero."""
+    return [l.strip() for l in text.splitlines() if 'Turbulence variables below zero after a stage' in l]
+
+
 def pos(case, cfl, vnn, log):
-    """The run ends, the solver reports no negative turbulence value after a stage, its step was limited by the
-    turbulence sources at some point (smallest step below half the transport step of the initial state), and its first
-    step is the rule with the bound of the stiffness of each cell (first_step), within 1e-6."""
+    """The run ends (run.sh), the solver prints no count of negative turbulence values after a stage (no stage made
+    one), its step was limited by the turbulence sources at some point (smallest step below half the transport step of
+    the initial state), and its first step is the rule with the bound of the stiffness of each cell (first_step), within
+    1e-6."""
     text = open(log, errors="replace").read()
     ok = True
-    m = re.search(r'Turbulence variables below zero after a stage[^\n]*?(\d+)\s*$', text, re.M)
-    if m is None:
-        print("    [FAIL] no count of negative turbulence values in the solver output")
+    lines = count_lines(text)
+    if lines:
+        print(f"    [FAIL] negative nu~, k or omega after a stage: {'; '.join(lines)}")
         ok = False
     else:
-        n = int(m.group(1))
-        print(f"    negative nu~, k or omega after a stage: {n}")
-        ok = ok and n == 0
+        print("    negative nu~, k or omega after a stage: none (no count in the solver output)")
     steps = [float(s) for s in re.findall(r'Delta t =\s*([-+0-9.Ee]+)', text)]
     if steps:
         tr = transport_step(case, cfl, vnn)
@@ -421,12 +429,29 @@ def pos(case, cfl, vnn, log):
     sys.exit(0 if ok else 1)
 
 
+def count(log, expect):
+    """The count of the cell updates whose stage made nu~, k or omega negative, at the end of a run of the count part:
+    with expect = some, one line with a count above zero; with expect = none, no line."""
+    lines = count_lines(open(log, errors="replace").read())
+    if expect == "some":
+        m = re.search(r'(\d+)\s*$', lines[0]) if len(lines) == 1 else None
+        ok = m is not None and int(m.group(1)) > 0
+        want = "one line, with a count above zero"
+    else:
+        ok = not lines
+        want = "no line"
+    print(f"    count of negative nu~, k or omega after a stage: {'; '.join(lines) or 'no line'} (expected {want})")
+    sys.exit(0 if ok else 1)
+
+
 def main():
     what = sys.argv[1]
     if what == "order":
         order(*sys.argv[2:7])
     elif what == "pos":
         pos(sys.argv[2], float(sys.argv[3]), float(sys.argv[4]), sys.argv[5])
+    elif what == "count":
+        count(sys.argv[2], sys.argv[3])
     elif what in ("order-SA", "order-SST", "pos-SA", "pos-SST"):
         write_case(what)
     elif what == "wilcox":

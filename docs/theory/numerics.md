@@ -709,7 +709,9 @@ Where a limit acts the ghost value is no longer the value of the field at its
 position, and the gradients next to the face are first order there: it happens
 only where a quantity changes by more than a factor two between the first two
 cells, or where the first cell is 1.5 times hotter than a `302` wall. At the
-end of a run one line reports the ghost fills in which either acted:
+end of a run in which either acted, one line reports the ghost fills in which
+each did (one of the two counts can be zero); a run in which neither acted
+prints no such line:
 
 ```
  Ghost cells of walls and 400 faces, fills with the extrapolation cut: <n>, with the 302 temperature at T_w/2: <m>

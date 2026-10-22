@@ -10,9 +10,13 @@ with the faces of the boundary where the gas enters at that stage and their larg
 boundary at a stage is more than 10 times that of its last line, one more line follows, which counts the faces above that:
    400 boundary of block <b>, face <f>, gas entering at iteration <n>, faces with |w|/a above 10 times its last line: <m>,
    largest |w|/a: <x>
-(one line in the output). At its end a run whose case has 400 faces prints the flux evaluations where the gas entered, over the
-stages, and their largest -w1/a1:
+(one line in the output). At its end a run in which the gas entered through 400 faces prints the flux evaluations where it
+entered, over the stages, and their largest -w1/a1:
    400 faces with gas entering, flux evaluations: <n>, largest |w|/a: <x>
+and a run in which no gas entered prints no such line. The ghost cells of the 400 faces extrapolate the boundary cells, with a cut
+where a quantity changes by more than a factor two between the first two cells (docs/theory/numerics.md); a run in which the cut
+never acts prints no line of the ghost cells:
+   Ghost cells of walls and 400 faces, fills with the extrapolation cut: <n>, with the 302 temperature at T_w/2: <m>
 
 Calorically perfect air of test/common/Air (cp = 1004.5 J/(kg K), molar mass 28.970418), p = 1 bar, T = 300 K; the total energy
 per volume is rho E = p/(gamma-1) + rho |q|^2/2 (h = cp T in its table).
@@ -23,7 +27,8 @@ faces carry the pressure only (v = 0) and cancel, the k faces carry nothing, the
 cell state on the 400 faces, for either sign of u0, the boundary cells do not change (every conserved quantity within TOL_CELL of
 rho, rho a, rho a^2) and the flux of each 400 face out of the domain, from the change of its cell, is F(q0) . S within TOL of
 rho a, rho a^2, rho a^3 (S its outward area vector). Lines: one for the face where the gas enters (face 1 for u0 > 0, face 2 for
-u0 < 0), iteration 1, faces 1, x = |u0|/a; none at rest; the end line with 1 evaluation (0 at rest) and the same x.
+u0 < 0), iteration 1, faces 1, x = |u0|/a; none at rest; the end line with 1 evaluation and the same x, none at rest. The state
+is uniform, so the cut of the ghost cells never acts: no line of the ghost cells.
 Part 2, the end count (COUNT): the tube of part 1 with the gas entering through face 1 at 0.5 a, 20 RK3 steps at first order and
 cfl 0.5: the state stays uniform, one line only (x does not grow) and the end line with 60 evaluations (3 stages a step) and x 0.5.
 Part 3, the lines at each factor of 10 (TENFOLD): the tube with the gas at 1e-3 a and the pressure 10 % lower in its right half,
@@ -47,7 +52,7 @@ Part 5, threads (THREADS, run with 1 and with 4 threads): a tube of NT = 130 cel
 fluxes. Both runs give the same lines and the same end line: face 1 (faces 1, x 0.5) and face 3 (faces 130, x 1e-3), 131
 evaluations.
 Part 6, no 400 face (NO400): the tube of part 1 with slip walls (300) on its i faces too, the gas at 0.5 a along x, one forward
-Euler step: no line of the gas entering and no end line.
+Euler step: no line of the gas entering, no end line and no line of the ghost cells.
 
 Usage (from the test directory):
   python3 -B entering_gas.py case NAME              INPUT/ic.tec and INPUT/bc.txt of case NAME
@@ -95,6 +100,7 @@ LATER = "faces with |w|/a above 10 times its last line"
 END = re.compile(r"400 faces with gas entering, flux evaluations:\s*(\d+), largest \|w\|/a:\s*(\S+)")
 IN = re.compile(r"^ 400 boundary of block (\d+), face (\d+)(?:, grid level (\d+))?, gas entering at iteration (\d+), "
                 r"(" + re.escape(FIRST) + "|" + re.escape(LATER) + r"): (\d+), largest \|w\|/a:\s*(\S+)$")
+GHOST = re.compile(r"Ghost cells of walls and 400 faces")
 
 
 def total_energy(rho, vel, p):
@@ -224,6 +230,13 @@ def show(g):
 
 
 def check_end(log, n_want, x_want):
+    """The end line of LOG: once, with n_want evaluations and the largest -w1/a1 x_want; none at all when n_want is 0."""
+    if n_want == 0:
+        with open(log, errors="replace") as f:
+            found = [l for l in f if END.search(l)]
+        ok = not found
+        print(f"    end lines: {len(found)} (expected none: no gas entered){'' if ok else '  <-- differs'}")
+        return ok
     got = end_line(log)
     ok = got is not None and got[0] == n_want and close(got[1], x_want)
     shown = "missing" if got is None else f"{got[0]} evaluations, largest -w1/a1 {got[1]:.5e}"
@@ -240,6 +253,16 @@ def check_lines(log, want):
     shown = "; ".join(show(g) for g in got) or "none"
     wanted = "; ".join(f"block 1 face {f} iteration 1, {FIRST}: {n}, {x:.5e}" for f, n, x in want) or "none"
     print(f"    lines: {shown} (expected {wanted}){'' if ok else '  <-- differs'}")
+    return ok
+
+
+def check_no_ghost(log):
+    """No line of the ghost cells in LOG: the cut of the extrapolation never acts on a uniform state, and the tube has no 302
+    wall."""
+    with open(log, errors="replace") as f:
+        found = [l for l in f if GHOST.search(l)]
+    ok = not found
+    print(f"    lines of the ghost cells: {len(found)} (expected none: neither the cut nor the floor acts){'' if ok else '  <-- differs'}")
     return ok
 
 
@@ -265,6 +288,7 @@ def check_one_step(name, path, log):
     want_lines = [] if u0 == 0.0 else [(1 if u0 > 0.0 else 2, 1, abs(u0))]
     ok &= check_lines(log, want_lines)
     ok &= check_end(log, len(want_lines), abs(u0))
+    ok &= check_no_ghost(log)
     return ok
 
 
@@ -312,12 +336,13 @@ def check_stop(name, log, rc):
 
 
 def check_no400(name, log):
-    """No line that speaks of gas entering, neither a line of a boundary nor the end line: the case has no 400 face."""
+    """No line that speaks of gas entering, neither a line of a boundary nor the end line: the case has no 400 face; and no line
+    of the ghost cells."""
     with open(log, errors="replace") as f:
         found = [l for l in f.read().splitlines() if "gas entering" in l]
     ok = not found
     print(f"    lines about gas entering: {len(found)} (expected none: the case has no 400 face){'' if ok else '  <-- differs'}")
-    return ok
+    return check_no_ghost(log) and ok
 
 
 def check_same(log1, log4):

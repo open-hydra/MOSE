@@ -11,8 +11,10 @@
 #  a block, on each grid level), with the iteration, the faces and the largest
 #  -w1/a1 (a1 the speed of sound of the cell), one more each time that largest
 #  value at a stage is more than 10 times that of the last line of the
-#  boundary, and at the end of a run whose case has 400 faces the flux
+#  boundary, and at the end of a run in which the gas entered the flux
 #  evaluations with gas entering and their largest -w1/a1 (entering_gas.py).
+#  The line of the ghost cells of walls and 400 faces comes only when the cut
+#  of their extrapolation acted, which a uniform state never makes it do.
 #  1. One forward Euler step with first-order reconstruction, a 1-D tube of air
 #     (j faces 300, k faces 0, i faces 400) at a uniform velocity (u0, 0, w0):
 #     the boundary cells do not change (within 1e-12 of rho, rho a, rho a^2)
@@ -23,7 +25,8 @@
 #       sup, supm  u0 = +-1.327 a, w0 = 2 a;
 #       vac, vacm  u0 = +-6 a;
 #     one line for the face where the gas enters (iteration 1, faces 1,
-#     |u0|/a), none at rest, and the end line with 1 evaluation (0 at rest).
+#     |u0|/a), none at rest; the end line with 1 evaluation, none at rest; no
+#     line of the ghost cells.
 #  2. The tube with the gas entering through face 1 at 0.5 a, 20 RK3 steps at
 #     first order: the state stays uniform, one line, and the end line counts
 #     60 evaluations, one a stage (count).
@@ -42,8 +45,8 @@
 #     schedule of 64 of the loops of the boundary fluxes): the same lines and
 #     the same end line, faces: 130 on face 3 (threads).
 #  6. The tube of part 1 with slip walls (300) at its ends, no 400 face, the
-#     gas at 0.5 a, one step: no line of the gas entering and no end line
-#     (no400).
+#     gas at 0.5 a, one step: no line of the gas entering, no end line and no
+#     line of the ghost cells (no400).
 #  Gas: test/common/Air.
 #===============================================================================
 set -uo pipefail

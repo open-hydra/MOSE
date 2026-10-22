@@ -26,12 +26,16 @@
 #                 point changes at every stage.
 #  On 2 and 4 ranks the blocks of each case sit on different ranks, so the
 #  faces between them, and the shared points, are between ranks.
-#  The end line of the 400 faces with gas entering (the flux evaluations,
-#  summed over ranks and threads, and the largest -w1/a1, the maximum over
-#  them) must also be that of 1x1, character for character, and so must the
-#  lines of the gas entering through each 400 boundary, which the rank that
-#  owns the block prints (sorted: the ranks print in any order), with at
-#  least one where the end line counts evaluations with gas entering.
+#  The lines at the end of the run must also be those of 1x1, character for
+#  character: the flux evaluations of 400 faces with gas entering (summed over
+#  ranks and threads) and their largest -w1/a1 (the maximum over them), the
+#  ghost fills of walls and 400 faces with the cut or the floor, and the cell
+#  updates with turbulence values below zero after a stage (both summed).
+#  Rank 0 prints each only when its count is not zero: a line absent on 1x1
+#  must be absent on every layout, and no line may give a count of zero. So
+#  must the lines of the gas entering through each 400 boundary, which the
+#  rank that owns the block prints (sorted: the ranks print in any order),
+#  with at least one where the end line counts evaluations with gas entering.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -124,15 +128,24 @@ same() {
   echo "  identical: $c 1x1 vs $b ($n files)"
 }
 
-# entering <case> <label>: the end line of the 400 faces with gas entering of runs/<case>/solve_<label>.log, once, the same as
-# that of 1x1
-entering() {
-  local c="$1" b="$2" l1 lb
-  l1=$(grep -a '400 faces with gas entering' "runs/$c/solve_1x1.log")
-  lb=$(grep -a '400 faces with gas entering' "runs/$c/solve_$b.log")
-  [[ -n $l1 && $(printf '%s\n' "$l1" | wc -l) -eq 1 && $l1 == "$lb" ]] \
-    || { echo "  400 end lines differ: $c 1x1 [$l1] vs $b [$lb]"; return 1; }
-  echo "  same 400 end line: $c 1x1 vs $b [${l1# }]"
+# endlines <case> <label>: each line at the end of the run of runs/<case>/solve_<label>.log (400 faces with gas entering, ghost
+# cells of walls and 400 faces, turbulence values below zero) the same as that of 1x1: in neither log, or once in each and the
+# same; and in neither log a line whose counts are all zero (rank 0 prints each line only when its count is not zero)
+endlines() {
+  local c="$1" b="$2" p l1 lb shown=""
+  local zero='flux evaluations: 0,|extrapolation cut: 0, with the 302 temperature at T_w/2: 0$|\(set to the floor\): 0$'
+  for p in '400 faces with gas entering' 'Ghost cells of walls and 400 faces' 'Turbulence variables below zero'; do
+    l1=$(grep -a "$p" "runs/$c/solve_1x1.log")
+    lb=$(grep -a "$p" "runs/$c/solve_$b.log")
+    [[ $(printf '%s' "$l1" | grep -c '') -le 1 && $l1 == "$lb" ]] \
+      || { echo "  end lines differ: $c 1x1 [$l1] vs $b [$lb]"; return 1; }
+    [[ -n $l1 ]] && shown="$shown [${l1# }]"
+  done
+  if grep -a -qE "$zero" "runs/$c/solve_1x1.log" "runs/$c/solve_$b.log"; then
+    echo "  an end line with a count of zero: $c 1x1 or $b"
+    return 1
+  fi
+  echo "  same end lines: $c 1x1 vs $b:${shown:- none}"
 }
 
 # lines <case> <label>: the lines of the gas entering through each 400 boundary of runs/<case>/solve_<label>.log, sorted, the
@@ -155,7 +168,7 @@ for c in sa-steady sst-steady sa-unsteady star3 star5; do
   for cfg in $LAYOUTS; do
     run "$c" "${cfg%x*}" "${cfg#*x}"
     same "$c" "$cfg" || status=1
-    entering "$c" "$cfg" || status=1
+    endlines "$c" "$cfg" || status=1
     lines "$c" "$cfg" || status=1
   done
 done
@@ -164,5 +177,5 @@ if [[ $status -ne 0 ]]; then
   echo "MPIBitIdentity: FAIL"
   exit 1
 fi
-echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks: 1x1, 1x4, 2x1, 4x1 and 2x2 bit-identical, with the same 400 lines and end line"
+echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks: 1x1, 1x4, 2x1, 4x1 and 2x2 bit-identical, with the same 400 lines and end lines"
 exit 0

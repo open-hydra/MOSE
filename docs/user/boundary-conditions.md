@@ -128,9 +128,10 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
     $|w|/a$ of that boundary at a stage is more than 10 times that of its last line, one more line follows, with that value
     and the faces above 10 times the last one: a boundary has at most one line for each order of magnitude that its inflow
     grows, not one for each stage. The lines are written at the end of the boundary fluxes of their stage, before the cells
-    are updated, so a run that then stops on an error has them in its output. At the end of a run whose case has `400` faces,
-    one more line reports the flux evaluations of `400` faces where the gas entered, over the stages, grid levels and ranks,
-    and the largest $|w|/a$ among them (0 when no gas entered); a run that stops on an error does not print it. The lines do
+    are updated, so a run that then stops on an error has them in its output. At the end of a run in which the gas entered
+    through `400` faces, one more line reports the flux evaluations of `400` faces where it entered, over the stages, grid
+    levels and ranks, and the largest $|w|/a$ among them; a run in which no gas entered, and a run that stops on an error, do
+    not print it. The lines do
     not say whether or when the inflow ends; the end line says how many flux evaluations it lasted. After a restart the lines
     and the end line count from the restart, with the iteration of the restarted run. $|w|/a$ of about $10^{-9}$ or less:
     only round-off moves the gas towards the domain, as on the side faces of 1-D cases; from $10^{-6}$ to $10^{-3}$: small

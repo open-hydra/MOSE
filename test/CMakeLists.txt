@@ -505,8 +505,10 @@ if(USE_MPI)
     # 2x2-block box with walls, inlets and outlets, Spalart-Allmaras and SST
     # steady with implicit residual smoothing, Spalart-Allmaras time-accurate,
     # and the points shared by 3 and by 5 blocks of ViscousLinearPatch; the
-    # lines of the gas entering through each 400 boundary and the end line of
-    # the 400 faces with gas entering the same as on 1x1.
+    # lines of the gas entering through each 400 boundary and the lines at the
+    # end of the run (400 faces with gas entering, ghost cells of walls and 400
+    # faces, turbulence values below zero) the same as on 1x1, none with a
+    # count of zero.
     mose_add_mpi_script(MPIBitIdentity mpi/bit-identity "needs-mpi;implementation;2D;3D")
 
     # MPI calls only from the main thread (MPI_THREAD_FUNNELED): a probe

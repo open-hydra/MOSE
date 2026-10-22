@@ -163,8 +163,9 @@ mv input.ini input-sa.ini && mv input-sst.ini input.ini
 rm -f OUTPUT/field.tec
 "$LOCAL" > OUTPUT/srm-sst.log 2>&1
 rc=$?
+# k and omega never below zero: the solver prints the count of the cell updates that took them below zero only when there is one
 if [[ $rc -eq 0 && -f OUTPUT/field.tec ]] && ! grep -a -qE 'NaN|Integration failed' OUTPUT/srm-sst.log && \
-   grep -a -q 'Turbulence variables below zero after a stage (set to the floor): 0$' OUTPUT/srm-sst.log; then
+   ! grep -a -q 'Turbulence variables below zero after a stage' OUTPUT/srm-sst.log; then
   echo "  [ok  ] srm-sst: 40 steps with SST, exit code 0, k and omega never below zero"
 else
   echo "  [FAIL] srm-sst: exit code $rc, the run with the grain and SST did not complete as it should (see OUTPUT/srm-sst.log)"

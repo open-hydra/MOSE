@@ -231,7 +231,6 @@ MOSE | Iter =      767 | Global iter =      767 | Density residual = 0.627384E-1
    Solver per iteration            1.16263E-02 s
    Elapsed                         8.94817E+00 s
  =========================================================================================
- Ghost cells of walls and 400 faces, fills with the extrapolation cut: 0, with the 302 temperature at T_w/2: 0
  400 faces with gas entering, flux evaluations: 49162, largest |w|/a:  2.31614E-01
 ```
 

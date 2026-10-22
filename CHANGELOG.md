@@ -13,8 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   through the `400` faces of one face of a block (on each grid level), the run prints a line with the iteration, the faces and
   the largest |w|/a among them (w the velocity of the gas of the cell along the normal out of the domain, a its speed of
   sound), and one more each time that largest value at a stage is more than 10 times that of the last line; at the end of a
-  run whose case has `400` faces, the flux evaluations where the gas entered and their largest |w|/a. The flux of the faces
-  does not change.
+  run in which the gas entered through them, the flux evaluations where it entered and their largest |w|/a. The flux of the
+  faces does not change.
 - The key `diffusive-metric` of `[MOSE-Numerics]` chooses the face metric of the viscous fluxes: `stencil`, the default, from the
   same differences of the cell centres that the face gradient takes of the field (see Changed); `inverse-mean`, the inverse of the
   mean of the inverse metrics of the two cells, whose face-normal edge is the vector between the cell centres; or `mean`, the mean
@@ -96,8 +96,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   steady runs only, and a time-accurate run with it prints a warning: it made the turbulence equations, and the mean flow
   through μ_t, first-order accurate in time (now about 2 with Heun and 3 with RK3). Steady runs do not change. A
   time-accurate run with SST or Wilcox 2006 and no CFL ramp (`cfl-rise-threshold`), and one with a rotation–curvature (-RC)
-  correction, print a warning; at the end of a RANS run a line gives the number of cell updates in which a stage made ν̃, k
-  or ω negative before the realizability floor.
+  correction, print a warning; at the end of a RANS run in which a stage made ν̃, k or ω negative before the realizability
+  floor, a line gives the number of such cell updates.
 - `res-threshold` ends steady runs only; time-accurate runs end on `time-threshold` or `iter-threshold`. The density residual
   that `res-threshold` reads says nothing about the convergence of a transient: a time-accurate run started from a steady state
   stopped after one step. A time-accurate case that ended on `res-threshold`, with the key or with its default, now runs to
@@ -654,8 +654,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   max(2T_w − T₁, T_w/2), and the other quantities an extrapolation kept within [q₁/2, 2q₁]; the density follows from
   p/(R T). The extrapolation 3q₁ − 3q₂ + q₃ of every primitive variable could turn negative and amplify (a negative ghost
   density next to a hot wall), put the wall value on the face only when the profile was linear over three cells, and the source
-  terms read a second set of ghost values. A line at the end of a run counts the ghost fills in which the cut or the floor
-  acted. Results change for every run with a wall or a `400` face, in the first rows of cells next to them.
+  terms read a second set of ghost values. A run in which the cut or the floor acted counts those ghost fills in a line at
+  its end. Results change for every run with a wall or a `400` face, in the first rows of cells next to them.
 - The ghost cells behind the boundary faces other than `101`, `201` and `300` take their nodes by a linear extrapolation along
   the index lines, so that both layers keep the edge across the face of the first cell. The cubic extrapolation made a ghost
   layer vanish where the cells grow 1.5 or 2 times across the face: a run stopped on a zero determinant, or went on with a

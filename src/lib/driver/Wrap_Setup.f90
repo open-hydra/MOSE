@@ -131,8 +131,8 @@ contains
     setup_error = .false.
     if (mpi_is_root) call Check_BC ( setup_error )
     call Stop_Together ( setup_error, 'boundary condition error (see above)' )
-    ! The record of the lines of the gas entering through 400 faces, and whether the case has 400 faces (every rank, from
-    ! the records of every level, which every rank reads)
+    ! The record of the lines of the gas entering through 400 faces on every level, and the counts of the end line set to
+    ! zero (every rank)
     call Setup_400_Entering ( simulation%domain, obj_multigrid%MGL )
     ! The stationary faces of a rotating frame are walls 301 and 302 of the mesh (every rank, as the records)
     call Check_Stationary_Faces ( simulation%domain(1) )

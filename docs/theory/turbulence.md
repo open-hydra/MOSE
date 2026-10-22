@@ -966,11 +966,12 @@ that: during the first step the wall condition raises $\omega$ in the wall cells
 magnitude, and with the full step the explicit destruction overshoots ($\omega < 0$, then the floor
 and a very large $\mu_t$). Start such runs with the CFL ramp (`cfl-rise-threshold`).
 
-At the end of a RANS run MOSE prints how many cell updates had a stage that made $\tilde\nu$, $k$ or
-$\omega$ negative before the realizability floor:
+At the end of a RANS run in which a stage made $\tilde\nu$, $k$ or $\omega$ negative before the
+realizability floor, MOSE prints how many cell updates had such a stage; a run in which none did
+prints no such line:
 
 ```text
- Turbulence variables below zero after a stage (set to the floor): 0
+ Turbulence variables below zero after a stage (set to the floor): <n>
 ```
 
 In a steady run the count covers the whole run: the start, and the fronts of $k$ that the fluxes

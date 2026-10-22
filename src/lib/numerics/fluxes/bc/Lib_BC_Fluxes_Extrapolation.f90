@@ -9,8 +9,8 @@ module MOSE_Lib_BC_Fluxes_Extrapolation
   public
 
   !> Flux evaluations of 400 faces where the gas of the boundary cell moves into the domain, and the largest -w1/a1 among them
-  !> (w1 the velocity of that gas along the normal out of the domain, a1 its speed of sound): reported at the end of the run
-  !> (Report_400_Entering)
+  !> (w1 the velocity of that gas along the normal out of the domain, a1 its speed of sound): reported at the end of a run in
+  !> which the gas entered (Report_400_Entering)
   integer(I8) :: n_400_entering = 0
   real(R8)    :: w_400_entering = 0d0
   !> The lines of the gas entering through each 400 boundary (the 400 faces of face f of block b, on each grid level), written by
@@ -21,8 +21,6 @@ module MOSE_Lib_BC_Fluxes_Extrapolation
   real(R8), allocatable :: w_400_line(:,:)
   real(R8), allocatable :: x_400_line(:,:,:)
   integer :: count_400_line = 0
-  !> Whether the case has 400 faces, on any grid level (Setup_400_Entering): rank 0 writes the end line only then
-  logical :: has_400_faces = .false.
 
 contains
 
@@ -151,15 +149,14 @@ contains
   end subroutine Report_400_Entering_Lines
 
 
-  !> The record of the lines of the gas entering (Report_400_Entering_Lines) for the blocks of the domain on its grid levels, the
-  !> counts of the end line (Report_400_Entering) set to zero, and whether the case has 400 faces on any level, from the records
-  !> of the boundary conditions, which every rank reads whole: every rank, at set-up (the levels have the same blocks)
+  !> The record of the lines of the gas entering (Report_400_Entering_Lines) for the blocks of the domain on its grid levels, and
+  !> the counts of the end line (Report_400_Entering) set to zero: every rank, at set-up (the levels have the same blocks)
   subroutine Setup_400_Entering ( domain, levels )
     implicit none
     integer, intent(in) :: levels
     type(MOSE_domain_type), intent(in) :: domain(levels)
     ! Local
-    integer :: m, nb
+    integer :: nb
 
     nb = domain(1) % nb
     if ( allocated ( n_400_line ) ) deallocate ( n_400_line, w_400_line, x_400_line )
@@ -170,19 +167,16 @@ contains
     count_400_line = 0
     n_400_entering = 0
     w_400_entering = 0d0
-    has_400_faces = .false.
-    do m = 1, levels
-      has_400_faces = has_400_faces .or. any ( domain(m) % bc(:) % type == 400 )
-    end do
 
   end subroutine Setup_400_Entering
 
 
-  !> One line at the end of a run whose case has 400 faces: the flux evaluations of 400 faces where the gas of the boundary cell
-  !> moved into the domain, over every stage, grid level and rank, and the largest -w1/a1 among them: about 1e-9 or less where only
-  !> round-off moves the gas towards the domain, 0.01 and above where the gas really enters, docs/user/boundary-conditions.md.
-  !> Collective: every rank calls it, and both reductions, in every run, with or without 400 faces, so that no rank takes another
-  !> MPI path; rank 0 writes the line when its records have 400 faces
+  !> One line at the end of a run in which the gas entered through 400 faces: the flux evaluations of 400 faces where the gas of
+  !> the boundary cell moved into the domain, over every stage, grid level and rank, and the largest -w1/a1 among them: about 1e-9
+  !> or less where only round-off moves the gas towards the domain, 0.01 and above where the gas really enters,
+  !> docs/user/boundary-conditions.md. A run in which no gas entered prints no line. Collective: every rank calls it, and both
+  !> reductions, in every run, with or without 400 faces, so that no rank takes another MPI path; rank 0 writes the line when the
+  !> total of the evaluations is not zero (only BC_Extrapolation counts them, for the faces of type 400)
   subroutine Report_400_Entering ()
     use MOSE_Mod_MPI, only: mpi_is_root, mpi_allreduce_sum_r8, mpi_allreduce_max_r8
     implicit none
@@ -190,8 +184,8 @@ contains
 
     call mpi_allreduce_sum_r8 ( real(n_400_entering, R8), n )
     call mpi_allreduce_max_r8 ( w_400_entering, x )
-    if ( mpi_is_root .and. has_400_faces ) write(*,'(A,I0,A,ES12.5)') ' 400 faces with gas entering, flux evaluations: ', &
-                                                                     nint(n, I8), ', largest |w|/a: ', x
+    if ( mpi_is_root .and. n > 0d0 ) write(*,'(A,I0,A,ES12.5)') ' 400 faces with gas entering, flux evaluations: ', &
+                                                               nint(n, I8), ', largest |w|/a: ', x
 
   end subroutine Report_400_Entering
 
