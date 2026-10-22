@@ -17,5 +17,6 @@ module MOSE_Global_m
   integer :: gc=2        ! ghost cells
   integer :: model       ! Model index (e.g., 0: Euler, 1: laminar NS, 2: RANS, etc.)
   logical :: freeze_w = .false. ! Planar quasi-2D case, symmetry (300) k faces: w = 0, z momentum not integrated
+  logical :: freeze_v = .false. ! 1-D case, symmetry (300) j faces: v = 0, y momentum not integrated
 
 end module MOSE_Global_m

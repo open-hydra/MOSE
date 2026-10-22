@@ -607,15 +607,102 @@ defined in `Mod_RANS`:
 | `RANS_Diffusive_Flux` | Turbulent diffusion terms for $k$, $\omega$, $\tilde\nu$ |
 | `Stress_Vector` | Viscous + Reynolds stress on a face |
 | `RANS_Set_Wall_Values` | Set turbulence BC at walls |
-| `RANS_Extrapolate_Wall` | Ghost-cell extrapolation for RANS variables |
+| `RANS_Extrapolate_Wall` | Ghost-cell value of the RANS variables at walls, $2Z_\text{wall} - Z_\text{cell}$ |
 
 This design allows switching models at run time without recompilation.
+
+### Wall ghost cells of the turbulence variables
+
+Behind a viscous wall the ghost cell of each turbulence variable takes the value that puts the wall
+value on the face,
+
+$$
+Z_\text{ghost} = 2\,Z_\text{wall} - Z_\text{cell}, \qquad Z = \tilde\nu,\ k,\ \omega ,
+$$
+
+with the wall values of the models above (`RANS_Extrapolate_Wall`). It is the rule of CFL3D,
+«the actual wall boundary conditions for the turbulence quantities (unlike the primitive variables)
+are applied at ghost cells» (S. L. Krist, R. T. Biedron, C. L. Rumsey, *CFL3D User's Manual
+(Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). The wall flux routines set these
+values; the source terms read them in the gradients of the wall cells: the $c_{b2}$ term of SA and
+its term $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST,
+the cross-diffusion of Wilcox 2006. They do so at every stage
+and in the stiffness pass of time-accurate runs (`Turbulence_Stiffness`), which calls the wall flux
+routines for this alone (`Wall_RANS_Ghosts`). With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$
+term of the wall cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell
+that copied the cell, as MOSE did before, gave $a/2$. The other primitive variables are copied into
+the wall ghost cells, with the velocity reversed (`Ghost_Wall_Extrapolation`); the fluxes through the
+first interior faces use the second-order extrapolation of `Fill_Ghost_Cell`.
 
 ### Blowing / wall-suction correction
 
 An optional correction (`blowing_corr`) modifies the wall boundary-layer
 treatment for SST and Wilcox 2006 models in the presence of wall
 injection or suction.
+
+### Wall distance
+
+The distance $y$ of the models (SA, the SST blending functions, the wall
+value of $\omega$) is the minimum distance from the cell centre, the mean of
+its eight nodes, to the wall surface, as the NASA Turbulence Modeling
+Resource requires (ref. 13). It is not the distance to the nearest wall node
+or face centre, which differs from it wherever the grid lines are not normal
+to the wall; next to a convex corner or at the end of a wall it is the
+distance to the corner or the end.
+
+- Each face of a wall boundary (types 301, 302, 503–505) is taken as the four
+  triangles between its centre and its sides, which are the face itself when
+  the face is plane and convex, as on every 2-D and axisymmetric mesh (on a
+  plane face that is not convex, a pathological cell, the centre can fall
+  outside the face, and the triangles are not the face). The distance to a
+  triangle is the distance to its plane when the projection of the point falls
+  inside it, otherwise the distance to the nearest side.
+- On a 2-D axisymmetric wedge (BC 200) the distance is measured in the
+  meridional plane $(x, r)$, $r = \sqrt{y^2+z^2}$, from the cell centre to the
+  wall curve. This is the distance to the wall surface of revolution, and it
+  does not depend on the angle of the wedge. A wall on the faces of the wedge
+  (faces 5–6) stops the run.
+- A k-d tree over the face centres, with the radius of each face, finds the
+  nearest face: the exact distance is computed only for the faces whose centre
+  lies within the best distance found so far plus their radius.
+- Across periodic boundaries the wall goes on: the distance is the minimum over
+  the periodic images of the wall too. A periodic connection (type 201) gives
+  the translation from its source face to its own face, and on a 3-D mesh
+  without sectors so does a block closed in $k$ by type `200` (its last node
+  plane is the first one translated); the images are the integer combinations
+  of these translations (along $x$ on an axisymmetric wedge). The two sides of
+  a periodic boundary match only to the precision of the mesh file:
+  translations that differ by less than $10^{-6}$ of the size of the
+  coordinates are the same. On a 3-D mesh whose sectors are closed by the
+  rotational periodicity (type `200` on faces 5–6) the images are also the
+  turns by multiples of the sector angle about the $x$ axis. An image is
+  searched only when the box around the wall, seen from the cell moved back
+  by the image, is not farther than the distance found so far, so a mesh
+  without periodic boundaries costs nothing more.
+- Each cell takes the sand-grain roughness $k_s$ of the face that gives the
+  minimum distance; between faces at the same distance, the first one in the
+  boundary file.
+
+!!! warning "Twisted wall faces in 3-D"
+    A wall face whose corners $\mathbf{x}_1 \ldots \mathbf{x}_4$ (in cyclic
+    order) are not coplanar is the bilinear surface through them, with twist
+    $\mathbf{T} = \mathbf{x}_1 - \mathbf{x}_2 + \mathbf{x}_3 - \mathbf{x}_4$.
+    The four triangles lie within $|\mathbf{T}|/16$ of it, so the distance is
+    exact only to within $|\mathbf{T}|/16$: a relative error up to
+    $(|\mathbf{T}|/16)/y$, small next to cells thicker than $|\mathbf{T}|/16$
+    and of order one or more in thinner ones. On a unit face twisted by
+    $t = |\mathbf{T}|$, at height $h$ above it, the largest error is 6 % for
+    $t = h = 0.1$, 62 % for $t = 10^{-2}$ and $h = 10^{-3}$, and 62 times the
+    distance for $t = 0.1$ and $h = 10^{-4}$. On a smooth wall $|\mathbf{T}|$
+    falls as the square of the face size, so the error falls with refinement.
+    2-D and axisymmetric meshes are not affected: their wall faces are plane,
+    and the four triangles are the face. At start-up MOSE reports the largest
+    gap bound of the wall faces over the distance of the cell next to the face,
+    $\min(|\mathbf{T}|/16, |\mathbf{T}_n|/2)/y$ with $\mathbf{T}_n$ the part of
+    the twist along the normal of the face (zero on a plane face; the second
+    bound holds on faces convex in that plane), as a warning above 1 %.
+
+Test `MeshGeometry`/`WallDistance`.
 
 ---
 
@@ -743,7 +830,8 @@ $$
 $$
 
 with the rates $d$ of the table, evaluated on the state at the start of the step (one evaluation
-of the sources before the first stage). Then $\Delta t\,d \le 1$: a forward-Euler stage cannot make
+of the sources before the first stage, with the wall ghost cells of the turbulence variables set
+from the wall values as in the stages). Then $\Delta t\,d \le 1$: a forward-Euler stage cannot make
 $\tilde\nu$, $k$ or $\omega$ negative through their destruction, and neither can Heun and RK3, whose
 stages are convex combinations of forward-Euler stages (W. Hundsdorfer, *Numerical Solution of
 Advection–Diffusion–Reaction Equations*, lecture notes, 2000, §6.2, Theorem 6.4; C.-W. Shu,
@@ -837,3 +925,7 @@ fallback when a model's destruction Jacobian is not readily available.
     <https://tmbwg.github.io/turbmodels/implementrans.html>.
 12. D. C. Wilcox, "Formulation of the k-ω turbulence model revisited,"
     *AIAA J.*, 46(11), pp. 2823–2838, 2008, doi:10.2514/1.36541.
+13. NASA Langley Research Center, Turbulence Modeling Resource, "The
+    Spalart–Allmaras Turbulence Model",
+    https://turbmodels.larc.nasa.gov/spalart.html (TMBWG/turbmodels commit
+    20a39f5, consulted 2026-09-29): minimum distance to the wall.

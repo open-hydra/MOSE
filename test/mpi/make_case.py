@@ -27,13 +27,17 @@ vertex of a 2x2 layout), so the flow near the block cuts changes from the
 first stage on.
 
 bc.txt is written grouped by block and, within a block, by face (the order
-the solver documents and IO_Wall relies on). --reverse writes the very same
-records in the reverse order: a permutation of the input that must not
-change the solution computed by the boundary-flux loop.
+the solver documents). --reverse writes the very same records in the reverse
+order: a permutation of the input that must change neither the solution nor
+the wall output.
+
+--turbulence SA adds the Spalart-Allmaras variable rhoNuTilde = rho nu~
+(3 times the molecular viscosity) to the initial state, and the specific
+value nu~ = rhoNuTilde / rho to the data line of the inlet.
 
 Usage:
     make_case.py --layout 4x1 --cells 16 16 --bc channel [--zfaces 300]
-                 [--reverse] [--centre X Y] [--outdir DIR]
+                 [--reverse] [--turbulence SA] [--centre X Y] [--outdir DIR]
 Writes DIR/INPUT/ic.tec and DIR/INPUT/bc.txt.
 """
 
@@ -56,6 +60,7 @@ BC_UNUSED, BC_CONNECT, BC_SYMMETRY, BC_WALL_Q = 0, 101, 300, 301
 BC_INLET_T0P0, BC_OUTLET = 401, 406
 
 FMT = '{: .17E}'                     # 17 significant digits: exact round trip
+MU_TILDE = 3.0 * 1.8467e-5           # rho nu~ of --turbulence SA: 3 mu of air at 300 K [Pa s]
 
 
 def parse():
@@ -74,6 +79,8 @@ def parse():
                     metavar=('X', 'Y'), help='vortex centre [m]')
     ap.add_argument('--reverse', action='store_true',
                     help='write the bc.txt records in reverse order')
+    ap.add_argument('--turbulence', choices=['none', 'SA'], default='none',
+                    help='add the Spalart-Allmaras variable')
     ap.add_argument('--outdir', default='.')
     a = ap.parse_args()
     a.PI, a.PJ = (int(s) for s in a.layout.lower().split('x'))
@@ -101,14 +108,15 @@ def write_ic(path, a):
     xc, yc = a.centre if a.centre else (0.5 * a.PI * BLOCK_SIZE, 0.5 * a.PJ * BLOCK_SIZE)
     radius = 0.25 * BLOCK_SIZE
     with open(path, 'w') as f:
-        f.write('VARIABLES = "x" "y" "z" "rho1" "u" "v" "w" "p"\n')
+        sa = a.turbulence == 'SA'
+        f.write('VARIABLES = "x" "y" "z" "rho1" "u" "v" "w" "p"' + (' "rhoNuTilde"' if sa else '') + '\n')
         for q in range(a.PJ):
             for p in range(a.PI):
                 b = 1 + p + a.PI * q
                 xs, ys = nodes(ni, p * BLOCK_SIZE), nodes(nj, q * BLOCK_SIZE)
                 zs = [0.0, THICKNESS]
                 f.write(f'ZONE T="Block{b}", I={ni + 1}, J={nj + 1}, K=2, '
-                        'DATAPACKING=BLOCK, VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED)\n')
+                        f'DATAPACKING=BLOCK, VARLOCATION=([1-3]=NODAL,[4-{9 if sa else 8}]=CELLCENTERED)\n')
                 for axis in range(3):
                     for k in range(2):
                         for j in range(nj + 1):
@@ -121,6 +129,9 @@ def write_ic(path, a):
                 for var in range(5):
                     for c in cells:
                         f.write(' ' + FMT.format(c[var]) + '\n')
+                if sa:
+                    for c in cells:
+                        f.write(' ' + FMT.format(MU_TILDE) + '\n')
 
 
 def outer_bc(a, face):
@@ -131,9 +142,10 @@ def outer_bc(a, face):
     m2 = (a.u0 / math.sqrt(GAMMA * R_GAS * T_REF))**2
     t0 = T_REF * (1.0 + 0.5 * (GAMMA - 1.0) * m2)
     p0 = P_REF * (t0 / T_REF)**(GAMMA / (GAMMA - 1.0))
+    turb = f'    {MU_TILDE * R_GAS * T_REF / P_REF:.17E},' if a.turbulence == 'SA' else ''   # nu~ = rho nu~ / rho
     return {
         1: (BC_INLET_T0P0, f'    {t0:.17E},    {p0:.17E},         normal,         normal,'
-                           f'    1.000000E+00,    1.000000E+00,'),
+                           f'    1.000000E+00,    1.000000E+00,' + turb),
         2: (BC_OUTLET, f'    {P_REF:.17E},    1.000000E+00,'),
         3: wall,
         4: (BC_SYMMETRY, None),
@@ -191,7 +203,8 @@ def main():
     write_ic(os.path.join(a.outdir, 'INPUT', 'ic.tec'), a)
     n = write_bc(os.path.join(a.outdir, 'INPUT', 'bc.txt'), a)
     print(f'{a.PI}x{a.PJ} blocks of {a.cells[0]}x{a.cells[1]} cells, bc={a.bc}, '
-          f'zfaces={a.zfaces}, {n} boundary records{" (reversed)" if a.reverse else ""}')
+          f'zfaces={a.zfaces}, turbulence={a.turbulence}, '
+          f'{n} boundary records{" (reversed)" if a.reverse else ""}')
 
 
 if __name__ == '__main__':
