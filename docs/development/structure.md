@@ -145,7 +145,14 @@ Each call to `Explicit_Step` performs one complete time step:
 2. **Strang splitting** (if `N_strang = 2`) — wrap the RK stages with two half-step chemistry
    integrations: RK(½Δt) → chemistry ODE(Δt) → RK(½Δt).
 3. **Runge–Kutta loop** (repeated `n_RK` times per step):
-    - Fill ghost cells (boundary and inter-block conditions)
+    - Fill ghost cells (boundary and inter-block conditions). With MPI the halo
+      exchange overlaps local work: receives and sends are posted first, the
+      ghost cells of physical boundaries and of connections between local blocks
+      are filled while the messages travel, then the receives are waited for and
+      unpacked. Only after that are the tangential neighbours of each
+      connection's source cell gathered (`bc%Pg(:,3:6)`, read by the viscous
+      connection flux): at a vertex shared with blocks of other ranks some of
+      them are ghost cells that arrive with the exchange.
     - Evaluate convective fluxes (reconstruction → Riemann solver)
     - Evaluate diffusive fluxes
     - Apply boundary fluxes
@@ -153,6 +160,15 @@ Each call to `Explicit_Step` performs one complete time step:
     - Add soot source terms (if the soot model is active)
     - Update conserved state via `RK_Newstate` (IRS smoothing + RK update)
 4. **Compute residual** and write diagnostics.
+
+The RK stages run inside one OpenMP parallel region. The MPI calls made inside it (the halo
+exchange in `Fill_Ghost_Cell`, the residual exchange of the implicit residual smoothing) are made
+by the primary thread only, in `!$omp master` blocks (OpenMP 5.1 added the `masked`
+construct and deprecated `master`), each followed by an explicit
+`!$omp barrier` wherever the other threads use its result. MOSE initialises MPI with
+`MPI_THREAD_FUNNELED`, which allows MPI calls only from the thread that initialised MPI, and that
+thread is the primary thread of the region. A `single` block may run on any thread of the team,
+so it must not contain MPI calls. The `needs-mpi` test `MPIThreadFunnel` checks this.
 
 ---
 

@@ -144,6 +144,20 @@ or using the `compile` command of the install script as described above.
 
 ## Optional components
 
+### MPI
+
+`-DUSE_MPI=ON` (`--use-mpi`) builds MOSE with MPI through the Fortran wrapper of the MPI library that CMake finds (`mpif90`, `mpiifx`). With GNU Fortran 10 or later the build compiles `Mod_MPI.f90` with `-fallow-argument-mismatch`: it calls the same MPI routine with buffers of different types and ranks.
+
+**gfortran with Intel MPI.** The `mpif90` of Intel MPI 2021.12 puts on the include path the `mpi` module built for ifx, which gfortran cannot read ("Reading module .../include/mpi/mpi.mod ... Unexpected EOF"). Give CMake the modules built for gfortran:
+
+```bash
+cmake .. -DCMAKE_Fortran_COMPILER=gfortran -DUSE_MPI=ON \
+    "-DMPI_Fortran_COMPILER_INCLUDE_DIRS=$I_MPI_ROOT/include/mpi/gfortran/11.1.0;$I_MPI_ROOT/include"
+```
+
+The recipe was tested with gfortran 13.2.1: where `gfortran` is an older version, name the newer compiler, for example
+`-DCMAKE_Fortran_COMPILER=gfortran-13`.
+
 ### TecIO
 
 MOSE can be built with support for TecIO, a library for writing Tecplot files. This is an optional feature shipped with ORION. If enabled, MOSE will be able to read and write output in Tecplot binary format, which can be useful for post‑processing and visualization of large datasets. Enabling TecIO requires a working C++ compiler.

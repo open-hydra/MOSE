@@ -72,7 +72,9 @@ run() {
   if ! "$MPIEXEC" "$NPFLAG" "$1" "$LOCAL" > "runs/$2.log" 2>&1; then
     echo "  [FAIL] the run $2 exited non-zero (see runs/$2.log)"; return 1
   fi
-  if [[ ! -f OUTPUT/field.vtm ]] || grep -a -qE 'NaN|Integration failed|ERROR' "runs/$2.log"; then
+  # MOSE's own error lines only ([ERROR] lines, the stop of a diverging run, the stops of every rank, the runtime errors
+  # of the compilers): the log also holds the output of mpiexec, whose lines (ORTE_ERROR_LOG, ...) are not MOSE's.
+  if [[ ! -f OUTPUT/field.vtm ]] || grep -a -qE 'NaN|Integration failed|\[ERROR\]|ERROR STOP|STOP: |ABORT: |MPI error code|Fortran runtime error|Program received signal|forrtl: ' "runs/$2.log"; then
     echo "  [FAIL] the run $2 did not complete (see runs/$2.log)"; return 1
   fi
   mv OUTPUT "runs/$2"

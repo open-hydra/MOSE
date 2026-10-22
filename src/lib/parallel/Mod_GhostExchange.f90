@@ -883,7 +883,7 @@ contains
 #endif
 
 
-  !> Post persistent P receives. Call from !$omp single.
+  !> Post persistent P receives. Call from !$omp master (primary thread).
   subroutine exchange_ghost_P_post_recv(domain)
     use MOSE_Advanced_Types_m
     implicit none
@@ -909,7 +909,7 @@ contains
   end subroutine exchange_ghost_P_pack
 
 
-  !> Post persistent P sends. Call from !$omp single after pack is complete.
+  !> Post persistent P sends. Call from !$omp master (primary thread) after pack is complete.
   subroutine exchange_ghost_P_post_send(domain)
     use MOSE_Advanced_Types_m
     implicit none
@@ -921,7 +921,7 @@ contains
   end subroutine exchange_ghost_P_post_send
 
 
-  !> Wait for P receives and unpack. Call wait from !$omp single, unpack from !$omp do.
+  !> Wait for P receives and unpack. Call from !$omp master (primary thread: wait and unpack).
   subroutine exchange_ghost_P_wait_unpack(domain)
     use MOSE_Advanced_Types_m
     implicit none
@@ -934,7 +934,7 @@ contains
   end subroutine exchange_ghost_P_wait_unpack
 
 
-  !> Wait for P sends to complete. Call from !$omp single.
+  !> Wait for P sends to complete. Call from !$omp master (primary thread).
   subroutine exchange_ghost_P_wait_send(domain)
     use MOSE_Advanced_Types_m
     implicit none
@@ -1344,12 +1344,12 @@ contains
 
   !> Chimera donor-cell exchange, split like the P exchange so that packing
   !> and unpacking run over the whole thread team:
-  !>   post_recv (single) -> pack (omp do) -> post_send (single)
-  !>   wait_recv (single) -> unpack (omp do) -> wait_send (single)
+  !>   post_recv (master) -> pack (omp do) -> post_send (master)
+  !>   wait_recv (master) -> unpack (omp do) -> wait_send (master)
   !> Unpacked cells land in the kept-alive P arrays of remote donor blocks,
   !> where Ghost_Chimera reads them.
 
-  !> Post chimera receives. Call from !$omp single.
+  !> Post chimera receives. Call from !$omp master (primary thread).
   subroutine exchange_ghost_chimera_post_recv(domain)
     use MOSE_Advanced_Types_m
     implicit none
@@ -1375,7 +1375,7 @@ contains
   end subroutine exchange_ghost_chimera_pack
 
 
-  !> Post chimera sends. Call from !$omp single after packing is complete.
+  !> Post chimera sends. Call from !$omp master (primary thread) after packing is complete.
   subroutine exchange_ghost_chimera_post_send(domain)
     use MOSE_Advanced_Types_m
     implicit none
@@ -1387,7 +1387,7 @@ contains
   end subroutine exchange_ghost_chimera_post_send
 
 
-  !> Wait for chimera receives. Call from !$omp single.
+  !> Wait for chimera receives. Call from !$omp master (primary thread).
   subroutine exchange_ghost_chimera_wait_recv(domain)
     use MOSE_Advanced_Types_m
     implicit none
@@ -1414,7 +1414,7 @@ contains
   end subroutine exchange_ghost_chimera_unpack
 
 
-  !> Wait for chimera sends before the send buffer is reused. Call from !$omp single.
+  !> Wait for chimera sends before the send buffer is reused. Call from !$omp master (primary thread).
   subroutine exchange_ghost_chimera_wait_send(domain)
     use MOSE_Advanced_Types_m
     implicit none
@@ -1706,7 +1706,7 @@ contains
   end subroutine chimera_wait_send
 
 
-  !> Post persistent receives for P field. Call from !$omp single.
+  !> Post persistent receives for P field. Call from !$omp master (primary thread).
   subroutine exchange_P_post_recv()
     use mpi
     implicit none
@@ -1754,7 +1754,7 @@ contains
   end subroutine exchange_P_pack_faces
 
 
-  !> Post persistent sends for P field. Call from !$omp single after pack.
+  !> Post persistent sends for P field. Call from !$omp master (primary thread) after pack.
   subroutine exchange_P_post_send()
     use mpi
     implicit none
@@ -1817,7 +1817,7 @@ contains
   end subroutine exchange_P_unpack_faces
 
 
-  !> Wait for P sends to complete. Call from !$omp single.
+  !> Wait for P sends to complete. Call from !$omp master (primary thread).
   subroutine exchange_P_wait_send()
     use mpi
     implicit none
