@@ -39,7 +39,7 @@ contains
 
     call Assign_Limiter(limiter, obj_space_scheme%limiter_name)
 
-    ! Face metric of the viscous fluxes. With mean, the faces between blocks use inverse-mean (as before); with stencil
+    ! Face metric of the viscous fluxes. With mean, the faces between blocks use inverse-mean; with stencil
     ! every face gets the metric of its stencil (MOSE_Lib_Stencil_Metrics)
     obj_space_scheme%stencil_metric = ( trim(obj_space_scheme%diffusive_metric) == 'stencil' )
     obj_space_scheme%inverse_metric = ( trim(obj_space_scheme%diffusive_metric) == 'inverse-mean' )

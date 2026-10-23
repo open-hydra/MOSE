@@ -654,8 +654,8 @@ contains
   !> Internal: write out what this process still holds for output_unit and error_unit, before MPI_ABORT. MPI_ABORT
   !> makes only a "best attempt" to abort the processes (MPI-4.1, section 11.4.2) and need not end this one through
   !> the end of the Fortran program, where the run-time library writes out its units: built with gfortran and run
-  !> with Open MPI 4.1.4 as one process with its output on a file, a run lost the message, everything written before
-  !> it and the lines on error_unit (where FLINT writes its warnings). Called before every MPI_ABORT of MOSE. It
+  !> with Open MPI 4.1.4 as one process with its output on a file, a run without this call loses the message, what it
+  !> wrote before and the lines on error_unit (where FLINT writes its warnings). Called before every MPI_ABORT of MOSE. It
   !> writes out the units of this process only: what the other ranks still hold when the run is aborted is not
   !> written out by this call.
   subroutine flush_output_units()
@@ -675,7 +675,7 @@ contains
   !> with exit code 1. MPI_ABORT
   !> (mpi_abort_all) makes only a "best attempt" to abort the processes
   !> (MPI-4.1, section 11.4.2): with Intel MPI 2021.12 the launcher at times
-  !> ended before writing out what the ranks printed (measured), and the first
+  !> ends before writing out what the ranks printed (measured), and the first
   !> rank to call it can stop another one before that one prints. A program that
   !> ends normally calls MPI_FINALIZE in every process, which can then give an
   !> exit code (MPI-4.1, section 11.2.2).

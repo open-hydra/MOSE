@@ -10,8 +10,8 @@
 #
 #  Unknown probe variable. A probe that asks for a variable MOSE does not
 #  know must stop the run at set-up with exit status 1 and a message naming
-#  the variable, not crash: the probe pointer stayed undefined and the run
-#  ended on a segmentation fault (exit status 139). The Sod tube of
+#  the variable, not crash: without the check the probe pointer stays undefined
+#  and the run ends on a segmentation fault (exit status 139). The Sod tube of
 #  test/1D/Sod79 in air, one probe with variables "p foo".
 #
 #  Default Schmidt number. schmidt defaults to 0.0, i.e. mixture-averaged
@@ -38,10 +38,10 @@
 #  within 1e-6). Six species with the names the soot model looks for, in a
 #  uniform state on the mesh of the Sod tube (make_case.py soot), with type 0
 #  on its faces 3 and 4, with and without Spalart-Allmaras, two iterations.
-#  With Spalart-Allmaras the output filled the turbulence column from arrays
-#  of different sizes (a run-time error with bounds checking); without it,
-#  it named one variable fewer than it wrote and put the density of C(gr)
-#  under dt.
+#  An output that fills the turbulence column from arrays of different sizes
+#  stops with a run-time error under bounds checking (with Spalart-Allmaras),
+#  and one that names a variable fewer than it writes puts the density of
+#  C(gr) under dt (without Spalart-Allmaras).
 #
 #  turbulence = SAcomp. Its compressibility correction takes c from
 #  c^2 f(c) = 25 Omega nu_t / a, a number against a speed, so its result
@@ -70,14 +70,15 @@
 #  and no solution: the Sod tube with sol-dtime = NaN, Infinity and 0,5 (a
 #  decimal comma), sol-diter = seven and 2.5, sol-overwrite = yes, and
 #  levels = 2.0 in [MOSE-Multigrid], which the reader takes outside the
-#  registry. The run went on with the default of the key, with exit code 0
-#  and "Input file OK"; an integer written 2.5 or 2.0 was refused by
-#  gfortran and cut to 2 by ifx, so the text of an integer is checked too.
+#  registry. Without the check the run would go on with the default of the
+#  key, with exit code 0 and "Input file OK"; an integer written 2.5 or 2.0
+#  is refused by gfortran and cut to 2 by ifx, so the text of an integer is
+#  checked too.
 #
 #  A rotating frame whose axis or origin in input.ini holds a value that is
 #  not finite (axis = NaN 0.0 0.0, origin = 0.0 Infinity 0.0) stops the run
 #  at set-up, in every build, with exit code 1 and a message that names the
-#  key: read as numbers, the values went into every term of the frame.
+#  key: read as numbers, the values would go into every term of the frame.
 #
 #  A value of the initial condition that is not finite stops the run at
 #  set-up, in every build: the tube with a NaN velocity in one cell, and the
@@ -85,9 +86,10 @@
 #  the place of the value (the variable or the coordinate, the block, the
 #  cell or the node) and the STOP line of the set-up, and write no solution.
 #  The check reads the bits of each value, so that it holds in a DEBUG
-#  build, which traps the invalid operations (the NaN case ended there with
-#  SIGFPE, exit code 136, at the end of the set-up), and with -ffast-math,
-#  an option of the RELEASE build, which lets gfortran fold isnan to false.
+#  build, which traps the invalid operations (a test by comparison would end
+#  the NaN case there with SIGFPE, exit code 136, at the end of the set-up),
+#  and with -ffast-math, an option of the RELEASE build, which lets gfortran
+#  fold isnan to false.
 #
 #  A time table of a boundary condition with a time or a value that is not
 #  finite stops the run at set-up, in every build, with the file, the line
@@ -96,8 +98,8 @@
 #  the pressure of line 3 written as NaN and as Infinity, and the time of
 #  line 4 as NaN, must end with exit code 1 and the message, and write no
 #  solution. The check reads the bits: every comparison with a NaN is false,
-#  so the check of decreasing times let a NaN time through, and a NaN
-#  pressure closed the face of the inlet in silence.
+#  so the check of decreasing times lets a NaN time through, and a NaN
+#  pressure would close the face of the inlet in silence.
 #
 #  A value of a property line of bc.txt that is not finite stops the run at
 #  set-up, in every build, with the line, the record, its type and the name of
@@ -106,7 +108,7 @@
 #  inlet 402 of an infinite total temperature, and, with the Navier-Stokes
 #  equations, with a wall 302 on a face cell whose roughness, a value with a
 #  default, is NaN, must end with exit code 1 and the message, and write no
-#  solution. The check of an empty value let a NaN through, as every
+#  solution. The check of an empty value lets a NaN through, as every
 #  comparison with a NaN is false.
 #
 #  A value of the Q2D file of an assigned state (410) that is not finite stops
@@ -122,22 +124,23 @@
 #  the header of the second zone, and with one value more in the first zone
 #  (the line after its data is not the header of the next zone), and so does
 #  a file whose zones go back in time (the first zone at t = 2 s, the second
-#  at t = 1 s). The reader did not check its reads: the values not read kept
-#  those of the zone before, or the zones after it were read shifted; and it
-#  took the times of the zones in the order of the file, where the
-#  interpolation wants them increasing. The run went on.
+#  at t = 1 s). Without these checks the values not read would keep those of
+#  the zone before, or the zones after it would be read shifted; and the times
+#  of the zones would be taken in the order of the file, where the
+#  interpolation wants them increasing. The run would go on.
 #  So does a zone header that gives no I= or no J=, the only form of I and J
 #  that the reader takes (upper case, with no blank before =): the same duct
-#  with I = 3, or j=2, in the header of the second zone. I or J kept its
-#  default, 2, without a word, and the run went on.
+#  with I = 3, or j=2, in the header of the second zone. Without the check I
+#  or J would keep its default, 2, without a word, and the run would go on.
 #  So does a file that lacks a part of the state of the cell across the face,
 #  which the ghost cells of a face of type 410 take whole (the density rho(N)
 #  of at least one species, u, v, w and p), with the file and the variables
 #  it lacks: the same duct with p, with u and w, or with rho(1), the density
-#  of its only species, taken out of the file. The ghost cells took the value
-#  of the cell for a missing p, u or w, and the run ended with exit code 0;
-#  without any rho(N) they had zero density, and the run ended at its first
-#  step with a run-time error (gfortran with bounds checking).
+#  of its only species, taken out of the file. Without the check the ghost
+#  cells would take the value of the cell for a missing p, u or w, and the run
+#  would end with exit code 0; without any rho(N) they would have zero
+#  density, and the run would end at its first step with a run-time error
+#  (gfortran with bounds checking).
 #
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
@@ -154,16 +157,16 @@
 #
 #  And a valid run must end with exit code 0: with finite-rate chemistry and
 #  exclude-blocks = 1 the same tube must run, its set-up summary listing
-#  block 1 under "Inactive blocks" (the setup deallocated that list before it
-#  was ever allocated: exit code 153 with ifx, "allocatable array or pointer
-#  is not allocated"). The air has no reaction (no mechanism file): the
+#  block 1 under "Inactive blocks" (a set-up that deallocates that list before
+#  it is allocated ends with exit code 153 with ifx, "allocatable array or
+#  pointer is not allocated"). The air has no reaction (no mechanism file): the
 #  chemistry leaves the state as it is.
 #  exclude-blocks with a word that is not a block number (x 1, 1 x) or with a
 #  block beyond the mesh (1000) must stop the run at set-up with exit code 1
 #  and a message that names the key, the value and the word or the block,
-#  and write no solution: a word that did not read emptied the list with a
-#  warning, and a word after it was read beyond the emptied list (a run-time
-#  error with bounds checks); a block beyond the mesh named no block.
+#  and write no solution: the words after one that does not read are not read
+#  (a read beyond the list would be a run-time error with bounds checks), and a
+#  block beyond the mesh names no block.
 #  exclude-blocks holds for chemistry = equilibrium too, on every multigrid
 #  level: the tube filled with steam far from equilibrium (0.2 % of hydrogen
 #  and 1.6 % of oxygen, at 1500 and 1200 K; the 13 C-H-O species of

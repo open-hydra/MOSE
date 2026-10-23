@@ -542,7 +542,7 @@ contains
     ! a spurious outflow (w = 4 a0/(gamma+1) with the cell at rest at the reservoir state), and the sign of the
     ! cell velocity cannot choose between them: at rest it would take the larger one on the faces 2, 4, 6.
     ! The max only takes the rounding next to the vacuum limit, where a3 -> 0 and the root is choked. The test of the
-    ! vacuum, -Riem sqrt(D) > g a0, takes no product that the lines above take: with Riem > 0 they round as before
+    ! vacuum, -Riem sqrt(D) > g a0, takes no product that the lines above take: it does not change their rounding
     if ( Riem <= 0d0 .and. - Riem * sqrt ( Coef_D ) > ( Gamma - 1d0 ) / 2d0 * Sound0 ) then
       choked = .true.
     else

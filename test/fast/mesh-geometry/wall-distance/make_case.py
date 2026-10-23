@@ -84,7 +84,7 @@ less their gap |T|/16 from the face (T the twist), are not farther than the leas
 once to twist_exact.txt and twistper_exact.txt (make_case.py exact NAME). It is checked on the cells that do not touch
 the wall (in one step the wall reaches only the cells next to it, through the diffusion across the wall face and the
 central difference of the cb2 term): the largest relative difference must be below 1e-9 (1e-6 in the case noisy). No
-run may print a warning on twisted wall faces (the start-up report of MOSE before the exact distance).
+run may print a warning on twisted wall faces.
 
 Usage (from the test directory):
   python3 -B make_case.py case NAME            INPUT/ic.tec and INPUT/bc.txt of corner, arc, lip, periodic, pipe, sector,
@@ -243,7 +243,7 @@ def segment_distance(p, a, b):
 
 def geometry(name):
     """Per cell (i, j), 1-based: the reference distance, whether its nearest wall point is a wall node (a corner), and the
-    distance of the old method (cell centre to the nearest wall-face centre, in 3-D)."""
+    distance to the nearest wall-face centre (from the cell centre, in 3-D)."""
     ni, nj = SIZES[name]
     xyz = coords(name)
     wall = [plane(name, xyz[(i, 0, 0)]) for i in range(ni + 1)]
@@ -729,7 +729,7 @@ def read_zone(path):
 
 
 def measured(name, path):
-    """Per cell (i, j): d read from the solver, reference, nearest point at a node, old method."""
+    """Per cell (i, j): d read from the solver, reference, nearest point at a node, distance to the nearest face centre."""
     data, ni, nj = read_zone(path)
     assert (ni, nj) == SIZES[name], (ni, nj)
     geo = geometry(name)

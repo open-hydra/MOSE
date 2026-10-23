@@ -16,8 +16,8 @@
 !>   3. a cell whose volume has not the sign of det A at its centre, an inverted cell that the centre does not show, raises
 !>      bad_metric, the flag of a degenerate or inverted cell after which the set-up stops every rank. Its [ERROR] lines are
 !>      expected. bad_metric cannot be reset, so this is the last call.
-!> The five tetrahedra of the volume before (each face cut along one diagonal, the same face of the cell next door along the
-!> other, and each tetrahedron in absolute value) fail check 1 on the cells with twisted faces, and checks 2 and 3.
+!> A volume of five tetrahedra (each face cut along one diagonal, the same face of the cell next door along the
+!> other, and each tetrahedron in absolute value) fails check 1 on the cells with twisted faces, and checks 2 and 3.
 program cell_volume_check
   use iso_fortran_env,   only: R8 => real64
   use MOSE_Base_Types_m, only: MOSE_vector_3D_type, MOSE_tensor_3D_type

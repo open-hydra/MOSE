@@ -143,7 +143,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     ensure_submodule_initialized("${FINER_PATH}")
     # MOSE needs FiNeR v2.1.0 or later: before it, a comment line that holds "=" or a bracket was taken for an option or
     # a section header, and the reading of its section of input.ini ended there. A clone that pulls without
-    # "git submodule update" keeps the FiNeR it had checked out (v2.0.6 before v2.3.0): ensure_submodule_initialized
+    # "git submodule update" keeps the FiNeR it had checked out: ensure_submodule_initialized
     # leaves it as it is, and it would build in silence. FiNeR names its version in a VERSION file ("vX.Y.Z") since
     # v2.0.7; a FiNeR without it is older
     set(finer_version "")

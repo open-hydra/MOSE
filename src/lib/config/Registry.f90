@@ -376,8 +376,8 @@ contains
   !> bits (Not_Finite). Before every rule, a key of input.ini whose value does not read as the type of its parameter
   !> (Load_Ini marks it: a value that does not convert, NaN and Infinity included, an integer written with a period or
   !> an exponent, a list with more values than the parameter holds, no value) stops the run, and so does such a value of
-  !> levels, which the reader takes outside the
-  !> registry (Scan_Ini): the run went on with the default, or with the value of the previous reading, without a word.
+  !> levels, which the reader takes outside the registry (Scan_Ini): without the stop, the run would go on with the
+  !> default, or with the value of the previous reading, without a word.
   !> The message gives the file, the section, the key and the value as written.
   !> What an error does is up to the caller: at set-up it stops the run (Check_Input in Wrap_Setup); in a reading during
   !> the run it is an error of that reading, which ini-error decides (Read_Inifile_Runtime).
@@ -549,9 +549,9 @@ contains
   end subroutine Restore_Values
 
 
-  !> Whether input.ini gives the key name of the section section a value of the type of its parameter (is_set, which
-  !> Load_Ini writes): false for a key that the file leaves out, whose parameter keeps its default, and for a key that is
-  !> not in the registry
+  !> Whether a reading of input.ini taken by the run gave the key name of the section section a value of the type of its
+  !> parameter (is_set, which Load_Ini sets and never clears): false for a key that every such reading left out, whose
+  !> parameter keeps its default, and for a key not in the registry; set once, true also after a reading that leaves it out
   logical function Key_Is_Set(section, name)
 
   implicit none

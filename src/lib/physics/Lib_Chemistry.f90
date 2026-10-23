@@ -70,8 +70,8 @@ contains
     ! exclude-blocks: none, or the numbers of the blocks without chemistry, separated by blanks. Every word must be a
     ! block number, digits only, read whole; any other word stops the run at set-up with the key, the value and the word
     ! (Stop_Simulation, on every rank). The numbers beyond the mesh stop it once the mesh gives the count of its blocks
-    ! (Check_Exclude_Blocks in Wrap_Setup). A word that did not read used to empty the list with a warning, and the read of
-    ! the next word wrote beyond the emptied list; a number read with I3 kept its first three digits.
+    ! (Check_Exclude_Blocks in Wrap_Setup). Each word is checked before it is read: digits only, at most nine, read
+    ! list-directed and whole, never cut to its first digits.
     if (allocated(obj_chemistry%no_chem_list)) deallocate(obj_chemistry%no_chem_list)
     nochem_str = trim(adjustl(obj_chemistry%exclude_blocks_str))
     if (nochem_str == 'none') then

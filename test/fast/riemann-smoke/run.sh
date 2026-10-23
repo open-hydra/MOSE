@@ -13,8 +13,8 @@
 #  (mirror_sod.py). The key shock-detector turns the shock sensor on: with
 #  shock-detector = Tramel, a value of its rule, the set-up summary names the
 #  sensor with HLLC, and HLLC+Tramel, which takes that sensor without the key,
-#  gives the same field.tec, byte for byte, as without it (the setup compared
-#  the key with "tramel" and "chen": the sensor stayed off).
+#  gives the same field.tec, byte for byte, as without it (a set-up that
+#  compares the key with "tramel" and "chen" leaves the sensor off).
 #===============================================================================
 set -uo pipefail
 
