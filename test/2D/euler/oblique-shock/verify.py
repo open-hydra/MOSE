@@ -2,11 +2,12 @@
 Oblique Shock test case
 
 Loads:
-  - MOSE output : OUTPUT/field.tec  (Tecplot BLOCK, 2 structured zones)
+  - MOSE outputs : OUTPUT/field-<solver>.tec  (Tecplot BLOCK, 2 structured zones), one per Riemann solver
 
 Usage:
-    python verify.py           # prints error table, saves figure to OUTPUT/verify.png
-    python verify.py --plot    # shows interactive figure instead
+    python verify.py           # prints the error table, saves OUTPUT/OS-fields.svg and OUTPUT/OS-slice.svg,
+                               # exits with 1 when a solver is outside the threshold
+    python verify.py --plot    # shows the figures instead of saving them
 """
 
 import argparse
@@ -135,13 +136,6 @@ print(f"  r2/r1 = {r2r1_ref:.6f}")
 print()
 
 # -------------------------------------------------------------
-# Command-line arguments
-# -------------------------------------------------------------
-parser = argparse.ArgumentParser(description='Oblique shock verification')
-parser.add_argument('--plot', action='store_true', help='Plot pressure contours and ratio comparison')
-args = parser.parse_args()
-
-# -------------------------------------------------------------
 # Solver files
 # Variable map (x,y,z stripped by read_TEC):
 #   var[0]=rho  var[1]=u  var[2]=v  var[3]=w
@@ -249,27 +243,22 @@ for solver, fpath in zip(solvers, files):
         'x0': x_[0], 'y0': y_[0], 'p0': var_[0][4], 'rho0': var_[0][0],
         'x1': x_[1], 'y1': y_[1], 'p1': var_[1][4], 'rho1': var_[1][0],
         'p2p1': p2p1, 'r2r1': r2r1, 't2t1': t2t1, 'm2': m2,
+        'rho_pre': rho1,
     }
 
 print()
-if any_fail:
-    sys.exit(1)
 
 # -------------------------------------------------------------
 # Optional plots
 # -------------------------------------------------------------
 
-# --- Figure 1: density contours (2×2 grid, both blocks, no mesh) ---
+# --- Figure 1: density of both blocks on their nodes (2×2 grid, one panel per solver) ---
 fig1, axs = plt.subplots(2, 2, figsize=(14, 8))
 axs = axs.ravel()
 
-# Compute global min/max for consistent scaling across all solvers
-all_rho = []
-for solver in solvers:
-    d = fields_data[solver]
-    all_rho.append(d['rho0'][:, :, 0].min())
-    all_rho.append(d['rho1'][:, :, 0].min())
-rhomin_global = min(all_rho)
+# Density scaled by the pre-shock density of each solver; one colour scale for all panels
+vmin = min(min(d['rho0'][:, :, 0].min(), d['rho1'][:, :, 0].min()) / d['rho_pre'] for d in fields_data.values())
+vmax = max(max(d['rho0'][:, :, 0].max(), d['rho1'][:, :, 0].max()) / d['rho_pre'] for d in fields_data.values())
 
 # Increase font sizes
 title_fontsize = 20
@@ -278,33 +267,20 @@ cbar_fontsize = 17
 
 for ax, solver in zip(axs, solvers):
     d = fields_data[solver]
-    # Block 0
-    xn0 = d['x0'][:, :, 0]; yn0 = d['y0'][:, :, 0]; vc0 = d['rho0'][:, :, 0]
-    # Block 1
-    xn1 = d['x1'][:, :, 0]; yn1 = d['y1'][:, :, 0]; vc1 = d['rho1'][:, :, 0]
-    
-    # Normalize by global minimum
-    vc0_norm = vc0 / rhomin_global
-    vc1_norm = vc1 / rhomin_global
-    
-    # Combine bounds
-    vmin = min(vc0_norm.min(), vc1_norm.min())
-    vmax = max(vc0_norm.max(), vc1_norm.max())
-    
-    # Plot both blocks using imshow (lightweight, auto-rasterizes)
-    extent0 = [xn0.min(), xn0.max(), yn0.min(), yn0.max()]
-    extent1 = [xn1.min(), xn1.max(), yn1.min(), yn1.max()]
-    
-    cf = ax.imshow(vc1_norm.T, extent=extent1, origin='lower', cmap='coolwarm', vmin=vmin, vmax=vmax, aspect='auto')
-    
+    # Each block on its own nodes: block 2 is the parallelogram whose lower side is the ramp
+    for xb, yb, rb in ((d['x0'], d['y0'], d['rho0']), (d['x1'], d['y1'], d['rho1'])):
+        cf = ax.pcolormesh(xb[:, :, 0], yb[:, :, 0], rb[:, :, 0] / d['rho_pre'], shading='flat', cmap='coolwarm',
+                           vmin=vmin, vmax=vmax, rasterized=True)
     ax.set_title(f'{solver}', fontsize=title_fontsize, fontweight='bold')
     ax.set_xlabel('x', fontsize=label_fontsize)
     ax.set_ylabel('y', fontsize=label_fontsize)
     ax.tick_params(labelsize=label_fontsize - 2)
-    xticks = np.linspace(extent1[0], extent1[1], 5)
-    ax.set_xticks(xticks)
+    ax.set_aspect('equal')
 
 plt.tight_layout()
+cbar = fig1.colorbar(cf, ax=axs.tolist(), orientation='vertical', fraction=0.03, pad=0.02)
+cbar.set_label(r'$\rho/\rho_1$', fontsize=cbar_fontsize)
+cbar.ax.tick_params(labelsize=cbar_fontsize - 2)
 
 if args.plot:
     plt.show()
@@ -318,21 +294,21 @@ else:
 i_probe = 30
 fig2, ax2 = plt.subplots(figsize=(8, 5))
 
-r2ref = rhomin_global * r2r1_ref
-
 for solver in solvers:
     d    = fields_data[solver]
     yn1  = d['y1']                          # nodes (39, 219, 2)
     rho1 = d['rho1']                        # cells (38, 218, 1)
+    # Exact post-shock density: the pre-shock density times the exact ratio
+    r2ref = d['rho_pre'] * r2r1_ref
     # Cell-centre y at i=i_probe: average the four surrounding nodes
     yc = 0.25 * (yn1[i_probe,   :-1, 0] + yn1[i_probe,   1:, 0] + yn1[i_probe+1, :-1, 0] + yn1[i_probe+1, 1:, 0])
     rho_prof = rho1[i_probe, :, 0]
     ax2.plot(yc, rho_prof/r2ref, label=solver, linewidth=2)
 
 ax2.set_xlim(0.09, 0.12)
-ax2.set_ylim(0.90, 1.10)
+ax2.set_ylim(0.85, 1.15)
 ax2.set_xlabel('y', fontsize=11)
-ax2.set_ylabel('$\\rho/\\rho_{ref}$', fontsize=11)
+ax2.set_ylabel('$\\rho/\\rho_2$', fontsize=11)
 ax2.legend(loc='best', framealpha=0.9)
 ax2.grid(True, alpha=0.3, linestyle='--')
 plt.tight_layout()
@@ -344,3 +320,7 @@ else:
     plt.savefig(out_path, bbox_inches="tight", transparent=True, dpi=100)
     fsize = os.path.getsize(out_path) / 1024
     print(f"  Figure saved to {out_path} ({fsize:.1f} KB)")
+
+# Exit status of the check: 1 when a solver is outside the threshold
+if any_fail:
+    sys.exit(1)
