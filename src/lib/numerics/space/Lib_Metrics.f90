@@ -56,7 +56,7 @@ contains
   !>    about the x axis by the same angle, or translated (delthe = 0); a block closed on itself, a full turn about the x
   !>    axis with its last node plane on the first, is translated by zero. Every node is checked (Node_Planes); blocks
   !>    that disagree stop the run.
-  !>  - The angle is the azimuth turned by the node (0,1) of the block, as it always was, or by the node farthest from
+  !>  - The angle is the azimuth turned by the node (0,1) of the block, or by the node farthest from
   !>    the axis when that one lies on it. The angles of two blocks agree when they differ by at most ETA of the angle.
   !>  - The checks are relative to the move of the nodes per cell in k, measured along the k lines (K_Move_Per_Cell; the
   !>    thickness of a 2-D block), not to the size of the coordinates: the
@@ -192,10 +192,10 @@ contains
     !> from passing for a turn. The move along the k lines, not the chord from the plane 0 to the plane ktop, makes
     !> cell the move per cell of a sector past half a turn too (its arcs in the largest-component norm, between 0.71 and
     !> 1 of the arc; the chord understates it, 4.2 times at 270 degrees), and of a block closed on itself, where the chord
-    !> is zero or round-off. In 2-D the null angle changes only a block whose probe node keeps its azimuth while its plane
-    !> k = 1 is not the plane k = 0 translated to eta, and which the translation did not fit better than the turn by the
-    !> null angle (planes that touch or cross, or a plane k = 1 scaled radially about the axis): it passed for plane,
-    !> and stops here (with crossed planes it stopped at its folded cells, Check_Folded_Cells). fit, fit_move: the
+    !> is zero or round-off. In 2-D a block whose probe node keeps its azimuth while its plane k = 1 is not the plane
+    !> k = 0 translated to eta, and which the translation does not fit better than the turn by the null angle (planes
+    !> that touch or cross, or a plane k = 1 scaled radially about the axis), stops here: without the null angle it would
+    !> pass for plane (with crossed planes it would stop at its folded cells, Check_Folded_Cells). fit, fit_move: the
     !> misfits of the turn and of the translation over cell; nearer_turn: |ang| > tol and the turn fits better than the
     !> translation; nearer_move: the translation fits better than the turn, or |ang| <= tol.
     subroutine Node_Planes ( blk, ktop, sr, tol, eta, turned, ang, moved, fit, nearer_turn, fit_move, nearer_move )
@@ -475,8 +475,8 @@ contains
 
 
   !> True for the first degenerate or inverted cell of this rank, in any OpenMP thread: the flag is shared and set in a
-  !> critical section, so that one thread writes the cell. A STOP there ended the process while the other threads went on
-  !> (with two threads the exit code was at times 0, the message of the cell lost or written twice).
+  !> critical section, so that one thread writes the cell. A STOP there would end the process while the other threads go
+  !> on (with two threads the exit code can be 0, the message of the cell lost or written twice).
   logical function First_Bad_Metric ( ) result ( first )
     !$omp critical (mose_bad_metric)
     first = .not. bad_metric

@@ -1,6 +1,6 @@
 !> @brief State of the manufactured-solution driver read by its source callback, kept in a module rather
 !>        than in the program: the callback is an internal procedure passed to the solver as an argument,
-!>        and reading an allocatable array of the program made ifx build a trampoline on the stack (an
+!>        and reading an allocatable array of the program makes ifx build a trampoline on the stack (an
 !>        executable stack in the binary); a module variable needs no access to the frame of the program.
 module MOSE_MMS_Driver_State
   use MOSE_Base_Types_m, only: R8

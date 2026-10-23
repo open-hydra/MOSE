@@ -8,7 +8,7 @@ only.
 
     python3 cell_volume_exact.py            prints the data block of cell_volume_check.f90
     python3 cell_volume_exact.py --table    prints, for each cell, the exact volume, det A of Compute_Metric_Tensor, the five
-                                            tetrahedra in absolute value (the volume before), whether det J keeps the sign of
+                                            tetrahedra in absolute value, whether det J keeps the sign of
                                             det A on the closed cell (all its Bernstein coefficients, degree 2 in each
                                             variable, of that sign or zero: a sufficient condition) and the twisted faces
 """

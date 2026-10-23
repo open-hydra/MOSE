@@ -4,7 +4,7 @@
 #
 #  With sol-format = vtk raw every .vts file must hold its data as raw binary
 #  appended to the file (format="appended"), as sol-format asks and as the wall
-#  and diagnostic outputs already do. Two runs of the Sod tube of
+#  and diagnostic outputs do. Two runs of the Sod tube of
 #  test/1D/Sod79, 10 iterations each, a numbered solution every 3:
 #     steady     local time stepping, with the diagnostic output after each
 #                solution: the solutions before and after the first diagnostic
