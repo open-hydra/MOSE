@@ -223,10 +223,14 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # enters (from rest too, and with the gas of the cell moving in at 2a/(gamma-1) or
 # faster), subsonic and choked faces, the slip wall of an inlet the
 # reservoir cannot feed, and the outlet of an ambient face it cannot feed with the gas
-# moving in; one step, mass fluxes against the face state.
+# moving in; one step, mass fluxes against the face state. Inlets with a mass
+# flux or a normal velocity (403, 404, 408, and 420 on face 2): g and un
+# positive into the domain on every face, a negative value on face 2 as its
+# magnitude.
 # Boundary input: the property lines of bc.txt are read as written or refused
 # (the inlet 402 table under any file name; a missing or decreasing table stops
-# the run).
+# the run; an inlet on face 1 with g or un negative (404, 408, 420) or zero
+# (403, 404, 408, 420) stops the run).
 # Rotating frame: stationary-face-1, -2, ... of [MOSE-Rotating-Frame] are read
 # and listed, and the run ends (the count stops at the first key missing); a
 # stationary face may be a wall in part and a block connection in part.

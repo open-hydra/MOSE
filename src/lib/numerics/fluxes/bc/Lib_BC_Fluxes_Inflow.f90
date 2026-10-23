@@ -80,7 +80,8 @@ contains
 
   !─────────────────────────────────────────────────────────────────────────────
   ! BC 403: Inlet — total temperature T0 + prescribed mass flux g [kg/m2/s].
-  ! Pressure is extrapolated from the interior.
+  ! Pressure is extrapolated from the interior. g is positive into the domain on every face
+  ! (IO_BC.f90, Need_Inward).
   subroutine BC_Inlet_MassFlux_T0 ( Bm, Im, Jm, Km, Fm, Blk, BC_T0, BC_g, &
                                      BC_rel_fac, BC_alpha, BC_beta, BC_ci, BC_RANS, error )
     use FLINT_Lib_Thermodynamic
@@ -92,7 +93,7 @@ contains
     integer,  intent(inout) :: error
     ! Local
     integer  :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k, s
-    real(R8) :: Normal(3), Area, t_Vec(3), BC_Sign, fmass
+    real(R8) :: Normal(3), Area, t_Vec(3), BC_Sign, fmass, g
     real(R8) :: Bound_Prim(nprim), Int_Prim(nprim)
     real(R8) :: Un, Bound_rho, Bound_Rgas, Bound_Sound, Bound_Gamma, Riem, alpha, beta
     real(R8) :: E1, E2, cp3, Rgas3, T3, rho3, p3, Un3, Ut3, Ub3
@@ -139,13 +140,17 @@ contains
       Rgas3 = Rgas3 + BC_ci(s) * Ri_tab(s)
     end do
 
+    ! The mass flux into the domain, |g|, as its component along Normal, which points toward growing index:
+    ! out of the domain on the faces 2, 4, 6 (BC_Sign = +1), into it on the faces 1, 3, 5 (BC_Sign = -1)
+    g = - BC_Sign * abs(BC_g)
+
     ! T0 is total temperature: recover static T3 iteratively
     !   T3 = T0 - u^2/(2*cp)  with u = g/rho = g*Rgas3*T3/p3
     p3  = Bound_Prim(np)   ! pressure extrapolated from interior
-    T3  = (-cp3 + sqrt(cp3**2 + 2d0*cp3*BC_T0*(BC_g*Rgas3/p3)**2)) * (p3 / (BC_g*Rgas3))**2
+    T3  = (-cp3 + sqrt(cp3**2 + 2d0*cp3*BC_T0*(g*Rgas3/p3)**2)) * (p3 / (g*Rgas3))**2
 
     rho3 = p3 / (Rgas3 * T3)
-    Un3  = BC_g / rho3
+    Un3  = g / rho3
     Ut3  = Un3 * E1
     Ub3  = Un3 * E2
 
@@ -164,7 +169,8 @@ contains
 
   !─────────────────────────────────────────────────────────────────────────────
   ! BC 404: Inlet — static temperature T + prescribed mass flux g [kg/m2/s].
-  ! Pressure is extrapolated from the interior.
+  ! Pressure is extrapolated from the interior. g is positive into the domain on every face
+  ! (IO_BC.f90, Need_Inward).
   subroutine BC_Inlet_MassFlux_T ( Bm, Im, Jm, Km, Fm, Blk, BC_T, BC_g, &
                                     BC_rel_fac, BC_alpha, BC_beta, BC_ci, BC_RANS, error )
     use FLINT_Lib_Thermodynamic
@@ -222,8 +228,10 @@ contains
 
     p3   = Bound_Prim(np)      ! pressure extrapolated from interior
     rho3 = p3 / (Rgas3 * BC_T)
+    ! The mass flux into the domain, |g|, as its component along Normal (as in BC_Inlet_MassFlux_T0)
+    g = - BC_Sign * abs(BC_g)
     ! Relaxed value (partially non-reflecting acoustic channel).
-    g = BC_rel_fac * BC_g + (1d0 - BC_rel_fac) * Un * rho3
+    g = BC_rel_fac * g + (1d0 - BC_rel_fac) * Un * rho3
     Un3  = g / rho3
     Ut3  = Un3 * E1
     Ub3  = Un3 * E2
@@ -243,7 +251,8 @@ contains
 
   !─────────────────────────────────────────────────────────────────────────────
   ! BC 408: Inlet — static temperature T + prescribed velocity un [m/s].
-  ! Pressure is extrapolated from the interior.
+  ! Pressure is extrapolated from the interior. un is positive into the domain on every face
+  ! (IO_BC.f90, Need_Inward).
   subroutine BC_Inlet_un_T ( Bm, Im, Jm, Km, Fm, Blk, BC_T, BC_un, &
                                     BC_rel_fac, BC_alpha, BC_beta, BC_ci, BC_RANS, error )
     use FLINT_Lib_Thermodynamic
@@ -301,8 +310,10 @@ contains
 
     p3   = Bound_Prim(np)      ! pressure extrapolated from interior
     rho3 = p3 / (Rgas3 * BC_T)
+    ! The velocity into the domain, |un|, as its component along Normal (as in BC_Inlet_MassFlux_T0)
+    Un3  = - BC_Sign * abs(BC_un)
     ! Relaxed value (partially non-reflecting acoustic channel).
-    Un3  = BC_rel_fac * BC_un + (1d0 - BC_rel_fac) * Un
+    Un3  = BC_rel_fac * Un3 + (1d0 - BC_rel_fac) * Un
     Ut3  = Un3 * E1
     Ub3  = Un3 * E2
 

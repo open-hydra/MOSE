@@ -13,7 +13,13 @@
 #  A property line with an empty required value must stop the run at set-up,
 #  naming the line of bc.txt, the record, its type and the value; so must a
 #  line short of a value, or with a word for a number, and a flow direction
-#  that is neither a number nor normal. An SRM grain boundary (502) with the
+#  that is neither a number nor normal. The mass flux g of the inlets 403,
+#  404, 420 and the velocity un of 408 are positive into the domain on every
+#  face: the inlet of the duct (face 1) with g or un negative (404, 408, 420)
+#  or zero (403, 404, 408, 420) must stop the run at set-up with exit code 1,
+#  no solution and a message with the line, the record, the type, the value
+#  and the face, and for a negative value the outlet types (make_case.py
+#  sign). An SRM grain boundary (502) with the
 #  Spalart-Allmaras model runs (40 steps), and so with SST, its ghost cells
 #  hold the wall value nu~ = 0 and it is a wall for the wall distance: one
 #  explicit step at rest from a uniform rho nu~ changes it in the cell next to
@@ -140,6 +146,29 @@ bad empty 'bc.txt line 4 \(record 2, type 406\): the value of rel_fac is empty'
 bad short 'bc.txt line 4 \(record 2, type 406\): the line is short or holds a value that is not a number'
 bad word 'bc.txt line 4 \(record 2, type 406\): the line is short or holds a value that is not a number'
 bad angle "bc.txt line 2 \\(record 1, type 402\\): alpha is neither a number nor normal: 'nromal'"
+
+echo "-- inlets whose g or un is zero, or negative on a face 1, 3 or 5 --"
+sign() {   # sign <kind> <pattern>: the run must stop at set-up with exit code 1, a message matching the pattern, no solution
+  python3 -B make_case.py sign "$1" || exit 1
+  rm -f OUTPUT/field.tec
+  timeout 60 "$LOCAL" > "OUTPUT/sign-$1.log" 2>&1
+  local rc=$?
+  if [[ $rc -eq 1 && ! -f OUTPUT/field.tec ]] && grep -a -q -E "$2" "OUTPUT/sign-$1.log"; then
+    echo "  [ok  ] $1: stopped at set-up, exit code 1"
+  else
+    echo "  [FAIL] $1: exit code $rc, the value was not refused as it should (see OUTPUT/sign-$1.log)"
+    fail=1
+  fi
+}
+out='on face 1 means gas leaving the domain: an inlet only lets gas in \((g|un) > 0 into the domain on every face\); give an outlet type \(406, or 400\)'
+num='-[0-9]\.[0-9]{5}E[-+][0-9]{2}'
+sign neg404 "bc.txt line 2 \\(record 1, type 404\\): g = $num $out"
+sign neg408 "bc.txt line 2 \\(record 1, type 408\\): un = $num $out"
+sign neg420 "bc.txt line 2 \\(record 1, type 420\\): g = $num $out"
+sign zero403 'bc.txt line 2 \(record 1, type 403\): g = 0 on face 1: an inlet needs a mass flux into the domain \(g > 0 on every face\)'
+sign zero404 'bc.txt line 2 \(record 1, type 404\): g = 0 on face 1: an inlet needs a mass flux into the domain \(g > 0 on every face\)'
+sign zero408 'bc.txt line 2 \(record 1, type 408\): un = 0 on face 1: an inlet needs a velocity into the domain \(un > 0 on every face\)'
+sign zero420 'bc.txt line 2 \(record 1, type 420\): g = 0 on face 1: an inlet needs a mass flux into the domain \(g > 0 on every face\)'
 
 echo "-- an SRM grain boundary (502) with a RANS model --"
 python3 -B make_case.py srm || exit 1

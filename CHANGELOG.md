@@ -79,6 +79,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The mass flux `g` of the inlets `403`, `404` and `420` and the velocity `un` of the inlet `408` are positive into the domain
+  on every face, the sign of the examples of ATLAS and the only one that ATLAS writes for `420`. They were the components along
+  the face normal of the solver, toward growing index: on the faces 2, 4 and 6 a positive value made the gas leave through the
+  inlet (`403`, `404`, `408`), or stopped the run on a NaN, let almost no gas in or let it out, in the bands below `p_sub`
+  (`420`). On those faces a negative value is taken as its magnitude, so the runs that gave one do not change, bit for bit, nor
+  do those with a positive value on the faces 1, 3 and 5. A value of zero, or a negative value on the faces 1, 3 and 5, stops
+  the run at set-up with the line of `bc.txt`: an inlet only lets gas in. With zero a `403` stopped on a NaN, and a `420` hung
+  at the first step where the gas of a cell entered at a pressure between `p_sup` and `p_sub`.
 - The interior faces of the viscous fluxes no longer take by default the mean of the two metrics, which divided the difference
   across a face by the mean of 1/h instead of the distance between the cell centres: it overstated the face-normal gradient, and
   with it the viscous, conductive and diffusive fluxes, by (1 + r)²/(4r) at a cell-size ratio r (4.2 % at r = 1.5, 8.9 % at

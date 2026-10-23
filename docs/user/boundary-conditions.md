@@ -237,10 +237,17 @@ must be separated by commas.
 |-------|-------------|
 | `alpha` | In-plane flow angle [rad] or the token `normal` (face-normal inflow); anything else stops the run |
 | `beta` | Out-of-plane flow angle [rad] or `normal`; anything else stops the run |
-| `g` | Mass flux through the face [kg/(m²·s)] (types `403`, `404`, `420`) |
+| `g` | Mass flux into the domain [kg/(m²·s)] (types `403`, `404`, `420`), positive on every face |
+| `un` | Velocity into the domain along the face normal [m/s] (type `408`), positive on every face |
 | `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation); no effect on `401`, `402` and `407` |
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
 | `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |
+
+`g` and `un` are positive into the domain on every face; ATLAS writes them as its input gives them, and for a `420`
+given with `Ae_At` computes a positive `g`. On the faces 2, 4
+and 6 (imax, jmax, kmax) a negative value is taken as its magnitude. A value of zero, or a negative value on the faces
+1, 3 and 5, stops the run at set-up with the line of `bc.txt`, the record, its type and the face: an inlet only lets gas
+in, and a face where the gas leaves takes an outlet type (`406`, or `400`).
 
 **Inlets at total conditions (`401`, `402`, `407`).** The gas enters when $p_0$ is above
 $p_\text{stop} = p\,\bigl(1 + \tfrac{\gamma-1}{2}\,w/a\bigr)^{2\gamma/(\gamma-1)}$, the pressure that the gas of

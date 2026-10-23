@@ -14,10 +14,18 @@ order), must stop the run at set-up. Before the first time of a table the inlet 
 starts at t = 1e-4 (late.dat, the rows of p0.dat from the second on) must give the run of the same table with its first
 value repeated at t = 0 (early.dat), bit for bit.
 
+Inlets with a mass flux or a normal velocity. The mass flux g of the inlets 403, 404 and 420 and the velocity un of the
+inlet 408 are positive into the domain on every face: zero, or a negative value on a face 1, 3 or 5, must stop the run at
+set-up (an inlet only lets gas in). The case of p0.dat with its inlet at i = 1 (face 1, record 1) of the type and value
+that SIGN[KIND] gives: neg404, neg408, neg420 a negative value, zero403, zero404, zero408, zero420 zero. The record of the
+nozzle 420 is that of an exit-to-throat area ratio of 2 fed from (T0, P0), calorically perfect (nozzle_record below), with
+-g or 0 as its g.
+
 Usage (from the test directory):
   python3 -B make_case.py case NAME      INPUT/ic.tec, INPUT/bc.txt naming the table NAME, and the table under that name
   python3 -B make_case.py same A B       exit status 0 when the fields A and B hold the same values (cell data, bit for bit)
   python3 -B make_case.py bad KIND       the case of p0.dat with the line of bc.txt that BAD[KIND] gives
+  python3 -B make_case.py sign KIND      the case of p0.dat with its inlet of the type and value that SIGN[KIND] gives
   python3 -B make_case.py srm [rest] [sst]   the duct with a viscous gas and nu~, its inlet an SRM grain boundary (502);
                                          rest: the gas at rest at T0 and PB; sst: k and omega instead of nu~
   python3 -B make_case.py srmcheck DIAG   exit status 0 when the change of rho nu~ over one step is that of the wall value
@@ -102,6 +110,57 @@ def write_bad(kind):
     with open("INPUT/bc.txt") as f:
         lines = f.readlines()
     lines[n] = text
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(lines))
+
+
+CP = 1004.5                                          # test/common/Air: cp, J/(kg K)
+G_IN, UN_IN = 120.0, 100.0                           # a mass flux, kg/(m2 s), and a velocity, m/s
+SIGN = {                                             # record 1 (face 1): type, value (None: -g of the nozzle record)
+    "neg404": (404, -G_IN), "neg408": (408, -UN_IN), "neg420": (420, None),
+    "zero403": (403, 0.0), "zero404": (404, 0.0), "zero408": (408, 0.0), "zero420": (420, 0.0),
+}
+
+
+def nozzle_record(ae_at):
+    """p_sub, p_sup and g of a nozzle of exit-to-throat area ratio ae_at fed from (T0, P0), calorically perfect (cp = CP):
+    the exit pressures of the subsonic and of the supersonic isentropic flows, and g = G*/ae_at, G* the choked mass flux.
+    The exit Mach numbers by bisection on the two branches of the area ratio A/A*(M), decreasing for M < 1 and increasing
+    for M > 1, from brackets that hold the root for 1 < ae_at < 1e5 (200 halvings: the bracket shrinks to the spacing of
+    the doubles)."""
+    gam = CP / (CP - RGAS)
+    e = (gam + 1.0) / (2.0 * (gam - 1.0))
+
+    def area(m):
+        return ((2.0 / (gam + 1.0)) * (1.0 + 0.5 * (gam - 1.0) * m * m)) ** e / m
+
+    def root(lo, hi, increasing):
+        for _ in range(200):
+            mid = 0.5 * (lo + hi)
+            if (area(mid) < ae_at) == increasing:
+                lo = mid
+            else:
+                hi = mid
+        return 0.5 * (lo + hi)
+
+    def pressure(m):
+        return P0 * (1.0 + 0.5 * (gam - 1.0) * m * m) ** (-gam / (gam - 1.0))
+
+    gstar = P0 * math.sqrt(gam / (RGAS * T0)) * (2.0 / (gam + 1.0)) ** e
+    return pressure(root(1.0e-6, 1.0, False)), pressure(root(1.0, 50.0, True)), gstar / ae_at
+
+
+def write_sign(kind):
+    write_case("p0.dat")
+    btype, value = SIGN[kind]
+    with open("INPUT/bc.txt") as f:
+        lines = f.readlines()
+    lines[0] = f"       1       1       1       1       1     {btype}\n"
+    if btype == 420:                                 # T0, p0, p_sub, p_sup, g, rel_fac, mass fraction
+        p_sub, p_sup, g = nozzle_record(2.0)
+        lines[1] = f"{T0}, {P0}, {p_sub:.17E}, {p_sup:.17E}, {-g if value is None else value:.17E}, 1.0, 1.0\n"
+    else:                                            # T0 (403) or T (404, 408), g or un, alpha, beta, rel_fac, mass fraction
+        lines[1] = f"{T0}, {value}, normal, normal, 1.0, 1.0\n"
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(lines))
 
@@ -199,6 +258,8 @@ def main():
         write_case(sys.argv[2])
     elif what == "bad":
         write_bad(sys.argv[2])
+    elif what == "sign":
+        write_sign(sys.argv[2])
     elif what == "srm":
         write_srm("rest" in sys.argv[2:], "sst" in sys.argv[2:])
     elif what == "srmcheck":

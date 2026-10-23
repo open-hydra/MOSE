@@ -29,7 +29,6 @@ contains
 
     pSub = BC_sub
     pSup = BC_sup
-    g = BC_g
     alpha_app = 0.d0
     beta_app = 0.d0
 
@@ -69,6 +68,10 @@ contains
 
     BC_Sign = Real ( modfm2 )  ! =-1 for faces 1,3,5 ; =1 for faces 2,4,6
     
+    ! g of the record is positive into the domain on every face (IO_BC.f90, Need_Inward). The branches take the
+    ! mass flux along Normal, which points toward growing index: out of the domain on the faces 2, 4, 6
+    g = - BC_Sign * abs(BC_g)
+
     ! Compute stuff in the boundary cell
     Un  = dot_product ( Bound_Prim(nu:nw), Normal )  ! velocity normal to the interface
     call co_rotot_Rtot ( Bound_Prim(1:nsc), Bound_rho, Bound_Rgas )
