@@ -46,8 +46,8 @@ $c_p T_w$ and the analysis below is free of table interpolation error.
 
 The run is a pseudo-time march (local time stepping) that is stopped before full convergence. The
 inert-surface check (no blowing, $|\rho v| < 5\times10^{-2}$ kg m⁻² s⁻¹) looks at the start-up flow
-while it decays, so `melting-inert` runs 8000 iterations, in its own directory: with MOSE of commit
-`cd27e88266e5` the largest $|\rho v|$ is 5.450e-2 after 4000 iterations and 4.455e-2 after 8000, when
+while it decays, so `melting-inert` runs 8000 iterations, in its own directory: the largest
+$|\rho v|$ is 5.450e-2 after 4000 iterations and 4.455e-2 after 8000, when
 the largest gas temperature is 530.93 K. The other configurations pass their checks with 4000.
 
 ---
@@ -84,18 +84,26 @@ being sensitive to any sign error in the surface bookkeeping.
 
 ## Results
 
-Wall quantities are reported against the closed form:
+Among its checks, `verify.py` requires that, in every blown configuration,
+$\dot m$ and the $T_w$ of the pyrolysis walls are within $10^{-3}$ (relative) of
+the closed form, the melting wall is at its prescribed $T_w$, the wall state is
+uniform along the wall within $10^{-8}$, and the column stays isothermal, the
+pressure uniform and $|\rho v|$ equal to $\dot m$ in every cell, within
+$5 \times 10^{-3}$, and that `srm` passes the same field checks against
+Saint-Robert's law.
+
+Wall quantities after the 4000 iterations of the case, against the closed form:
 
 | Case | Model | Face | $T_w$ [K] | error | $\dot m$ [kg/m²s] | error |
 |---|---|:---:|---|---|---|---|
-| `melting` | melting, $q_\mathrm{rad}$ = 2 × 10⁵ | 3 | 800.000 | 0 (prescribed) | 0.1744523 | 1.1 × 10⁻⁶ |
-| `htpb` | HTPB, $q_\mathrm{rad}$ = 10⁶ | 3 | 816.41786 | 2.3 × 10⁻⁷ | 0.5139235 | 7.1 × 10⁻⁷ |
-| `hdpe` | HDPE, $q_\mathrm{rad}$ = 10⁶ | 3 | 910.05829 | 1.8 × 10⁻⁷ | 0.2866909 | 2.9 × 10⁻⁶ |
-| `pp` | PP, $q_\mathrm{rad}$ = 10⁶ | 3 | 824.07440 | 1.7 × 10⁻⁷ | 0.2961751 | 2.7 × 10⁻⁶ |
-| `melting-top` | melting, mirrored | 4 | 800.000 | 0 (prescribed) | 0.1744523 | 1.1 × 10⁻⁶ |
-| `hdpe-top` | HDPE, mirrored | 4 | 910.05829 | 1.8 × 10⁻⁷ | 0.2866909 | 2.9 × 10⁻⁶ |
+| `melting` | melting, $q_\mathrm{rad}$ = 2 × 10⁵ | 3 | 800.000 | 0 (prescribed) | 0.1744567 | 2.4 × 10⁻⁵ |
+| `htpb` | HTPB, $q_\mathrm{rad}$ = 10⁶ | 3 | 816.42127 | 7.0 × 10⁻⁷ | 0.5139212 | 2.1 × 10⁻⁶ |
+| `hdpe` | HDPE, $q_\mathrm{rad}$ = 10⁶ | 3 | 910.06371 | 1.9 × 10⁻⁷ | 0.2866921 | 3.1 × 10⁻⁶ |
+| `pp` | PP, $q_\mathrm{rad}$ = 10⁶ | 3 | 824.07923 | 1.8 × 10⁻⁷ | 0.2961761 | 3.0 × 10⁻⁶ |
+| `melting-top` | melting, mirrored | 4 | 800.000 | 0 (prescribed) | 0.1744567 | 2.4 × 10⁻⁵ |
+| `hdpe-top` | HDPE, mirrored | 4 | 910.06371 | 1.9 × 10⁻⁷ | 0.2866921 | 3.1 × 10⁻⁶ |
 
-The field reproduces the exact solution to the same order: the column stays
+The field reproduces the exact solution: the column stays
 isothermal to $3$–$9 \times 10^{-4}$ in $|T - T_w|/T_w$, and the mass flux
 $\rho v$ matches $\dot m$ to $3$–$9 \times 10^{-4}$ through **every** cell, the
 wall-adjacent one included.
@@ -110,7 +118,7 @@ everything is checked on the field, which is the stronger test here.
 
 | Quantity | Reference | Result |
 |---|---|---|
-| Column temperature | $T_{\mathrm{af}}$ = 1500 K | 4.8 × 10⁻⁴ relative |
+| Column temperature | $T_{\mathrm{af}}$ = 1500 K | 4.6 × 10⁻⁴ relative |
 | Mass flux $\rho v$ | $a\,(p/p_{\mathrm{ref}})^n$ = 0.2001 kg/m²s | 4.7 × 10⁻⁴ relative |
 | Blowing speed | $\dot m/\rho$ = 0.8502 m/s | 1.7 × 10⁻³ relative |
 

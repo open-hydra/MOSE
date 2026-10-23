@@ -55,34 +55,26 @@ initial vortex.
 The case is run on three successively refined grids ($32^2$, $64^2$, $128^2$,
 refinement ratio 2) and the normalised $L_2$ density error is measured against
 the exact solution.  The observed order of accuracy is
-$p = \log_2\!\big(e(N)/e(2N)\big)$.
+$p = \log_2\!\big(e(N)/e(2N)\big)$. `verify.py` passes when the error decreases
+monotonically and the observed order of the finest pair is at least 1.6.
 
 | Grid | Normalised $L_2$ density error | Observed order |
 |---|---|---|
-| $32^2$  | 2.56 % | — |
-| $64^2$  | 0.56 % | 2.18 |
-| $128^2$ | 0.17 % | 1.75 |
+| $32^2$  | 2.49 % | — |
+| $64^2$  | 0.607 % | 2.04 |
+| $128^2$ | 0.169 % | 1.84 |
 
-The error decreases at close to second order (mean $p \approx 2$), confirming the
-MUSCL/RK3 scheme is second-order accurate on smooth flow. The lower order of the
-finest pair does not come from the scheme. The runs do not cut their last time
-step at $t = 10$ and end slightly later ($t = 10.056$, $10.001$ and $10.007$ for
-the three grids of the table, measured with the code of commit `b29130b`),
-while `verify.py` measures the error against the
-exact vortex at $t = 10$. Against the exact vortex at the time each run ends, the
-errors are 2.51 %, 0.562 % and 0.128 % and the observed orders 2.16 and 2.13.
+The runs do not cut their last time step at $t = 10$ and end slightly later
+($t = 10.0015$, $10.0129$ and $10.0067$ on the three grids), while `verify.py`
+measures the error against the exact vortex at $t = 10$. Against the exact
+vortex at the time each run ends, the errors are 2.49 %, 0.562 % and 0.128 % and
+the observed orders 2.15 and 2.13: the lower order of the finest pair in the
+table comes from the final time, not from the scheme, which is second-order
+accurate on this smooth flow.
 
 <figure>
   {% include "vv/images/IsentropicVortex.svg" %}
 </figure>
-
-!!! note "Figure and code version"
-    The figure and the table come from July 2026 (commit `0b3b3c64`), and the code of 13 October 2026
-    (commit `b29130b`) gives them again. MOSE at commit `10b59003b72c` takes a time step about half as
-    large here (one additive rule over the directions, commit `667fc3c0`), and its runs end at
-    $t = 10.002$, $10.013$ and $10.007$: `verify.py` gives 2.49 %, 0.61 % and 0.17 % (observed orders
-    2.04 and 1.84), 2.4 % of the range of the axes from the figure at $N = 64$; at the time each run ends,
-    2.49 %, 0.562 % and 0.128 % (observed orders 2.15 and 2.13), within 0.5 % of those of `b29130b`.
 
 ## Limiter choice and observed order
 

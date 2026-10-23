@@ -1,6 +1,6 @@
 # Hypersonic Cylinder
 
-A Mach 8.1 supersonic flow around a cylindrical body, generating a detached bow shock upstream of the cylinder stagnation point. This test case verifies the accuracy of numerical solutions against theoretical normal shock relations at the stagnation line, where the bow shock becomes approximately normal. The test is particularly valuable for validating Riemann solver behavior in high-speed flows known to be prone to the generation of numerical instabilities such as carbuncle phenomena.
+A Mach 8.1 supersonic flow around a cylindrical body, generating a detached bow shock upstream of the cylinder stagnation point. The case shows how four Riemann solvers behave in a high-speed flow prone to numerical instabilities such as the carbuncle phenomenon, and compares the total pressure and total temperature next to the stagnation point with the normal-shock relations, since the bow shock is approximately normal at the stagnation line. It has no pass criterion.
 
 **Reference**: normal shock relations (_e.g._ Anderson, _Modern Compressible Flow_, McGraw-Hill).
 
@@ -18,7 +18,7 @@ $$\frac{p_2}{p_1} = 1 + \frac{2\gamma}{\gamma+1}(M_1^2 - 1)$$
 
 $$\frac{T_2}{T_1} = \frac{p_2/p_1}{\rho_2/\rho_1}$$
 
-The test verifies that numerical predictions of total pressure $p_0$ and total temperature $T_0$ behind the shock match theoretical values calculated from the post-shock Mach number.
+The reference values of the total pressure $p_0$ and total temperature $T_0$ behind the shock follow from the post-shock state and Mach number through the isentropic relations.
 
 ## Numerical setup
 
@@ -49,7 +49,7 @@ The test reads no probe: `verify.py` takes the post-shock total quantities in th
 
 ## Results and verification
 
-MOSE solutions compared across four Riemann solvers in terms of non-dimensional density contours flow field and wall trend:
+MOSE solutions compared across four Riemann solvers: contours of the density of the flow field divided by its value in the cell with indices 0 and 0 (no colour scale), and the density along the cylinder wall in kg/m³:
 
 <figure>
   {% include "vv/images/HC-fields.svg" %}
@@ -59,28 +59,24 @@ MOSE solutions compared across four Riemann solvers in terms of non-dimensional 
   {% include "vv/images/HC-slice.svg" %}
 </figure>
 
-All Riemann solvers capture the fundamental shock structure, but exhibit varying levels of accuracy in preserving a smooth post-shock region. In particular, the HLLC solver shows significant oscillations in the shock layer, while HLLC+ and HLLE provide smoother solutions. The SLAU solver demonstrates an intermediate behavior with moderate oscillations.
+All Riemann solvers capture the fundamental shock structure, but exhibit varying levels of accuracy in preserving a smooth post-shock region. In particular, the HLLC solver shows significant oscillations in the shock layer, while HLLC+Tramel and HLLE provide smoother solutions. The SLAU solver demonstrates an intermediate behavior with moderate oscillations.
 
 The density profile along the cylinder wall confirms the overall behavior previously observed.
 
-Quantitative error metrics at the stagnation point compared to analytical normal-shock solution (code of the first
-upload, `ab2bf537`; see the note below):
+Total pressure and total temperature in the cell that `verify.py` reads, after the 5000 iterations of the case, against
+the normal-shock relations (GNU 12.2 RELEASE build, the build of the figures):
 
 | Solver | $p_0$ [MPa] | Error $p_0$ [%] | $T_0$ [K] | Error $T_0$ [%] |
 |---|---|---|---|---|
-| HLLC | 8.53825 | -0.79 | 4081.36 | +0.30 |
-| HLLC+ | 8.67777 | +0.83 | 4079.80 | +0.26 |
-| HLLE | 8.74553 | +1.62 | 4060.20 | -0.22 |
-| SLAU | 8.34013 | -3.09 | 4079.70 | +0.26 |
+| HLLC | 9.26915 | +7.70 | 4119.72 | +1.24 |
+| HLLC+Tramel | 8.76383 | +1.83 | 4099.98 | +0.76 |
+| HLLE | 8.47606 | −1.51 | 4053.06 | −0.39 |
+| SLAU | 8.31264 | −3.41 | 4068.34 | −0.02 |
 | **Analytical** | **8.60638** | **—** | **4069.11** | **—** |
 
-Only HLLE and HLLC+ provide smooth post-shock solutions.
-
-!!! note "Figure and code version"
-    The figure and the table come from the first upload of MOSE (May 2026, commit `ab2bf537`). MOSE at commit
-    `10b59003b72c` moves the HLLC, HLLE and SLAU curves by 8.9 %, 3.2 % and 7.3 % of the range of the
-    axes, and the HLLC+Tramel curve by 0.8 %. With any of the four solvers,
-    and also with the code of 13 October 2026 (commit `b29130b`), the solution does not settle at the
-    stagnation point: the error of $p_0$ in the cell where `verify.py` reads the stagnation state changes
-    by up to 7.7 points between 5000, 10 000 and 20 000 iterations, and by 9.2 points between two builds
-    (GNU 12.2 RELEASE with MPI on the cluster and gfortran 13 TESTING without MPI).
+`verify.py` prints these values and draws the figures. They are not converged values: the
+solution next to the stagnation point does not settle with any of the four solvers, and after the 5000 iterations the
+density residual is 3.5 % (HLLE), 6.0 % (SLAU), 8.0 % (HLLC) and 16.6 % (HLLC+Tramel) of its first value. The state
+of the cell changes with the iteration and, with HLLC and SLAU, with the build: with gfortran 13 TESTING the error of
+$p_0$ is +6.35 % (HLLC) and −2.17 % (SLAU), with ifx 2024.1 RELEASE +6.13 % and −0.58 %; with HLLC+Tramel and HLLE the
+three builds agree within 0.009 % ($p_0$) and 0.002 % ($T_0$).
