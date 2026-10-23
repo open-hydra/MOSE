@@ -580,6 +580,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `506` was missing.
 - The guide names the boundary files of the multigrid levels as MOSE reads them, `bc.txt`, `bc2.txt`, `bc3.txt`, … (it said
   `bc_x1.txt`, `bc_x2.txt`, …).
+- The figure of the grids of the 3-D manufactured-solution page (`docs/vv/images/mms3d-grids.svg`, drawn by `verify.py` of
+  `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
+  iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z
+  moves onto a face of a block, and stops with a message, exit status 1, when a block has no such face or more than one.
 - Every rule of the parameter registry is checked, at set-up and when `input.ini` is read again: intervals such as the `in (0,
   1)` of `preconditioning-eps-min`, and the rule of a list of numbers on each of its values (`index-position` of a probe, `>=
   0`; `ode-relative-tol-species` and `ode-absolute-tol-species`, `> 0`). Only the bounds of single numbers and the lists of

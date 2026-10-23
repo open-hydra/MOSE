@@ -39,7 +39,8 @@ The study passes if, for every case:
      chosen does not dominate the measured error.
 
 Figures, transparent and theme-aware like the other V&V figures:
-  OUTPUT/mms3d-grids.svg        the face z = 0 of the coarsest grid of each family;
+  OUTPUT/mms3d-grids.svg        the bottom face of the coarsest grid of each
+                                family, seen along z;
   OUTPUT/mms3d-<case>.svg       L2 and Linf errors against N (zigzag, iface,
                                 iface-walls), as the figure of the 2D case.
 
@@ -152,19 +153,39 @@ def read_case(path, field):
         out[q] = (math.sqrt(float(np.mean((a - b) ** 2))) / math.sqrt(float(np.mean(b ** 2))),
                   float(np.max(np.abs(a - b))) / float(np.max(np.abs(b))))
     out["totals"] = np.abs(tot_num - tot_ex) / tot_abs
-    out["grid"] = [face_z0(x, y, z) for x, y, z in zip(xb, yb, zb)]
+    out["grid"] = bottom_faces(xb, yb, zb, path)
     out["cells"] = int(sum((x.shape[0] - 1) * (x.shape[1] - 1) * (x.shape[2] - 1) for x in xb))
     return out
 
 
-def face_z0(x, y, z):
-    """(x, y) of the nodes of the block face that lies on the plane z = 0 (the blocks are turned, so it is not always k = 0),
-    or None when the block has no face there."""
-    X = np.stack([x, y, z], axis=-1)
-    for F in (X[0], X[-1], X[:, 0], X[:, -1], X[:, :, 0], X[:, :, -1]):
-        if np.all(np.abs(F[..., 2]) < 1e-12):
-            return F[..., 0], F[..., 1]
-    return None
+def bottom_faces(xb, yb, zb, path):
+    """(x, y) of the nodes of the bottom face of every block, the grid seen along z.  The bottom face of a block is the
+    face that the period of the grids in z, (0, 0, 1), moves onto a face of a block: the faces that bc.txt pairs with the
+    periodic records in z.  On zigzag it lies on the plane z = 0; on iface it is not plane, as the kink moves z by half the
+    shift of x.  The blocks are turned, so it is not always k = 0.  A block without one such face stops the script."""
+    faces = []
+    for x, y, z in zip(xb, yb, zb):
+        X = np.stack([x, y, z], axis=-1)
+        faces.append((X[0], X[-1], X[:, 0], X[:, -1], X[:, :, 0], X[:, :, -1]))
+    every = [G for six in faces for G in six]
+
+    def same_nodes(A, B):
+        """Whether the face B has the nodes of the face A, in one of the eight orders of the two index directions."""
+        for C in (B, np.swapaxes(B, 0, 1)):
+            for D in (C, C[::-1], C[:, ::-1], C[::-1, ::-1]):
+                if D.shape == A.shape and float(np.max(np.abs(D - A))) < 1e-9:
+                    return True
+        return False
+
+    out = []
+    for b, six in enumerate(faces):
+        found = [F for F in six if any(same_nodes(F + np.array([0.0, 0.0, 1.0]), G) for G in every)]
+        if len(found) != 1:
+            print("mms 3D: FAIL - %s, block %d: %d faces that the period (0, 0, 1) moves onto a face of a block, not one: "
+                  "no bottom face to draw" % (path, b + 1, len(found)))
+            sys.exit(1)
+        out.append((found[0][..., 0], found[0][..., 1]))
+    return out
 
 
 def zone_titles(path):
@@ -265,15 +286,12 @@ mpl.rcParams.update({
 })
 os.makedirs("OUTPUT", exist_ok=True)
 
-# face z = 0 of the coarsest grid of each family
+# bottom face of the coarsest grid of each family, seen along z
 shown = [c for c in [("zigzag", "periodic3d"), ("iface", "periodic3d")] if c in results]
 fig, axes = plt.subplots(1, len(shown), figsize=(5.5 * len(shown), 5.5), squeeze=False)
 for ax, (fam, field) in zip(axes[0], shown):
     N, r = results[(fam, field)][0]
-    for b, g in enumerate(r["grid"]):
-        if g is None:
-            continue
-        X, Y = g
+    for b, (X, Y) in enumerate(r["grid"]):
         col = "C0" if b == 0 else "C1"
         ax.plot(X, Y, "-", color=col, lw=1.0)
         ax.plot(X.T, Y.T, "-", color=col, lw=1.0)
@@ -281,7 +299,7 @@ for ax, (fam, field) in zip(axes[0], shown):
     ax.set_xlabel("x", fontsize=20)
     ax.set_ylabel("y", fontsize=20)
     ax.tick_params(labelsize=16)
-    ax.set_title("%s, %d x %d x %d cells, face z = 0" % (TITLES[(fam, field)].split(",")[0], N, N, N), fontsize=16)
+    ax.set_title("%s, %d x %d x %d cells, bottom face" % (TITLES[(fam, field)].split(",")[0], N, N, N), fontsize=16)
 fig.legend([plt.Line2D([], [], color="C0"), plt.Line2D([], [], color="C1")], ["block 1", "block 2"],
            loc="upper center", ncol=2, fontsize=18, bbox_to_anchor=(0.5, 1.04))
 plt.tight_layout(rect=[0, 0, 1, 0.92])
