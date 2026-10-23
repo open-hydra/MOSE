@@ -50,13 +50,15 @@ MUSCL with van Leer, HLLC, `diffusive-metric = stencil` (default).
   form does not run).
 - **Full form** (`./MOSE.sh test`; the CTest test `MMSViscous3DFull`, with the
   `verification` label, outside the CI of the pull requests): the refinement
-  study of the three cases. With `MOSE_mms` of commit `17367503009f` and the
-  inputs of this folder, `verify.py` passes every check of every case, gives the
-  errors and the observed orders below and draws the figures
-  `OUTPUT/mms3d-grids.svg` (the face $z = 0$ of the coarsest grid of each family)
-  and `OUTPUT/mms3d-<case>.svg` (the $L_2$ and $L_\infty$ errors against $N$).
+  study of the three cases. With the inputs of this folder, `verify.py` passes
+  every check of every case, gives the errors and the observed orders below and
+  draws the figures `OUTPUT/mms3d-grids.svg` (the bottom face of the coarsest
+  grid of each family, seen along $z$) and `OUTPUT/mms3d-<case>.svg` (the $L_2$
+  and $L_\infty$ errors against $N$).
 
-The face $z = 0$ of the coarsest grid of each family, the two blocks in two colours:
+The bottom face of the coarsest grid of each family, seen along $z$, the two
+blocks in two colours (on iface the face is not plane, as $z$ is moved with the
+kink):
 
 <figure>
   {% include "vv/images/mms3d-grids.svg" %}
