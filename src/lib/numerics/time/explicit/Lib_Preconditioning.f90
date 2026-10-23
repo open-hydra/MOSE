@@ -16,6 +16,10 @@ module MOSE_Lib_Preconditioning
   ! After mode selection, applied in order:
   !   - Viscous floor:  Ur = max(Ur, Ur_visc)       [not applied in Ur_ref mode]
   !   - User floor:     Ur = max(Ur, Ur_min)         [if Ur_min > 0]
+  !
+  ! Ur_visc = max((mu + mu_t)/(rho dx_min), (k + mu_t cp/Prt)/(rho cp dx_min)), dx_min the smallest width of the
+  ! cell and mu_t the eddy viscosity of the RANS model with the velocity gradient of the cell
+  ! (Update_Derived_Variables).
   !-----------------------------------------------------------------------------
   use iso_fortran_env, only: I4 => int32, R8 => real64
   use MOSE_Parameters_m
@@ -140,19 +144,14 @@ contains
     logical :: process_all
     real(R8) :: vel_mag
     real(R8) :: mu_turb_loc, mu_eff_loc, k_eff_loc, dx_min, Ur_visc
-    ! Scalar dissipation rate (AMC model)
-    real(R8) :: nu_tilde, nu_lam, chi_sa, fv1_val, S_sq, S_strain, omega_loc
-    real(R8) :: Gvel(3,3), rho, rhoi(nsc), R, sound, mu, lambda, T, cp
-    real(R8), parameter :: C_d = 2.0_R8, beta_star = 0.09_R8, C_mu = 0.09_R8, cv1 = 7.1_R8
-    integer :: ii, jj
+    real(R8) :: rho, rhoi(nsc), R, sound, mu, lambda, T, cp
 
     process_all = .false.
 
     do b = 1, domain % nb
       if (.not. process_all .and. .not. is_local_block(b)) cycle
       !$omp do collapse(3) private(i, j, k, vel_mag, sound, rho, rhoi, R, mu, lambda, T, cp, &
-      !$omp   mu_turb_loc, mu_eff_loc, k_eff_loc, dx_min, Ur_visc, &
-      !$omp   nu_tilde, nu_lam, chi_sa, fv1_val, S_sq, S_strain, omega_loc, Gvel, ii, jj)
+      !$omp   mu_turb_loc, mu_eff_loc, k_eff_loc, dx_min, Ur_visc)
       do k = 1, domain%blk(b)%dim(3)
       do j = 1, domain%blk(b)%dim(2)
       do i = 1, domain%blk(b)%dim(1)
@@ -174,6 +173,11 @@ contains
           mu_eff_loc = mu
           k_eff_loc  = lambda
           if (model>1) then
+            ! The eddy viscosity of the model takes the velocity gradient of the cell, blk%vel_gradient: with
+            ! preconditioning, Cell_Velocity_Gradient fills it from the state a stage starts from, after the ghost
+            ! cells of the stage are filled (Explicit_Step; at setup, MOSE_setup). Here, after the update of the
+            ! state, the ghost cells still hold the start of the stage: the gradient of a cell next to a face between
+            ! blocks would mix the two, and the floor would depend on how the mesh is divided into blocks.
             call Eddy_Viscosity(mut=mu_turb_loc, &
                                 rans_variables=domain%blk(b)%P(nt:nt+nrans-1,i,j,k), &
                                 mul=mu, rho=rho, &
@@ -182,24 +186,6 @@ contains
                                 k_rough=domain%blk(b)%k_rough(i,j,k))
             mu_eff_loc = mu_eff_loc + mu_turb_loc
             k_eff_loc  = k_eff_loc  + mu_turb_loc * cp / obj_rans%Prt
-
-            !% Scalar dissipation rate: chi = C_d * (eps/k) * Zv  (AMC model)
-            if (nrans == 1) then
-              ! SA: Bradshaw relations for eps/k
-              nu_tilde = domain%blk(b)%P(nt, i,j,k) / rho
-              nu_lam   = mu / rho
-              chi_sa   = nu_tilde / nu_lam
-              fv1_val  = chi_sa**3 / (chi_sa**3 + cv1**3)
-              Gvel = domain%blk(b)%vel_gradient(i,j,k)%c
-              S_sq = 0.0_R8
-              do jj = 1, 3; do ii = 1, 3
-                S_sq = S_sq + (Gvel(ii,jj) + Gvel(jj,ii))**2
-              end do; end do
-              S_strain = sqrt(0.5_R8 * S_sq)
-            elseif (nrans >= 2) then
-              ! k-omega family: eps/k = beta_star * omega
-              omega_loc = domain%blk(b)%P(nt+nrans-1, i,j,k) / rho
-            end if
           endif
 
           Ur_visc = max(mu_eff_loc / (rho * dx_min), &

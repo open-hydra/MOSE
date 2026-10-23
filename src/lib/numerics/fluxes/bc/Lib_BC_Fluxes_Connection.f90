@@ -156,19 +156,20 @@ contains
     Prim_loc = Blk % P(:,Im,Jm,Km)
     Prim_ghost = Pg (:,1)
 
-    ! stencil building
-    call Visc_Variables ( Prim_loc, Visc_loc )
-    call Visc_Variables ( Blk % P (:,Im+1,Jm,Km), Visc_ip )
-    call Visc_Variables ( Blk % P (:,Im-1,Jm,Km), Visc_im )
-    call Visc_Variables ( Blk % P (:,Im,Jm+1,Km), Visc_jp )
-    call Visc_Variables ( Blk % P (:,Im,Jm-1,Km), Visc_jm )
-    call Visc_Variables ( Blk % P (:,Im,Jm,Km+1), Visc_kp )
-    call Visc_Variables ( Blk % P (:,Im,Jm,Km-1), Visc_km )
-    call Visc_Variables ( Prim_ghost, Visc_ghost )
-    call Visc_Variables ( Pg(:,3), Visc_ghost3 )
-    call Visc_Variables ( Pg(:,4), Visc_ghost4 )
-    call Visc_Variables ( Pg(:,5), Visc_ghost5 )
-    call Visc_Variables ( Pg(:,6), Visc_ghost6 )
+    ! stencil building: the viscous variables of the cells of this block (Viscous_Variables), and those of the cells of
+    ! the other block (Pg) computed here
+    Visc_loc = Blk % Visc(:,Im,Jm,Km)
+    Visc_ip = Blk % Visc(:,Im+1,Jm,Km)
+    Visc_im = Blk % Visc(:,Im-1,Jm,Km)
+    Visc_jp = Blk % Visc(:,Im,Jm+1,Km)
+    Visc_jm = Blk % Visc(:,Im,Jm-1,Km)
+    Visc_kp = Blk % Visc(:,Im,Jm,Km+1)
+    Visc_km = Blk % Visc(:,Im,Jm,Km-1)
+    call Visc_State ( Prim_ghost, Visc_ghost )
+    call Visc_State ( Pg(:,3), Visc_ghost3 )
+    call Visc_State ( Pg(:,4), Visc_ghost4 )
+    call Visc_State ( Pg(:,5), Visc_ghost5 )
+    call Visc_State ( Pg(:,6), Visc_ghost6 )
 
     ! Gradient computations
     select case ( Fm )
@@ -207,24 +208,82 @@ contains
     ! Share of the residual of the cell
     dR = - 0.5d0 * modfm2 * (Flux_loc + Flux_ghost)
 
-    contains
-
-      subroutine Visc_Variables ( Prim, Visc )
-
-        implicit none
-        real(R8), intent(in) :: Prim (nprim)
-        real(R8), intent(out) :: Visc (nprim)
-        ! Local
-        real(R8) :: rho, Rgas
-
-        call co_rotot_Rtot ( Prim(1:nsc), rho, Rgas )
-        Visc(1:nsc) = Prim(1:nsc) / rho
-        Visc(nu:nw) = Prim(nu:nw)
-        Visc(np) = Prim(np) / ( rho * Rgas )
-        if (nprim>np) Visc(np+1:nprim) = Prim(np+1:nprim) / rho
-
-      end subroutine Visc_Variables
-        
   end subroutine BC_Connection_Visc
+
+
+  !> Viscous flux of a face between blocks (101, 201) with diffusive-metric = stencil: one face gradient, as on an
+  !> interior face (Diffusive_Flux), with the cells in the order of growing index of this block (the cell and its ghost)
+  !> and the face metric of the stencil (MOSE_Lib_Stencil_Metrics), whose ghost cells are those of Pg(:,3:6). Where the
+  !> index directions of the two blocks agree across the face and their nodes have the same bits, the operations are those
+  !> of the same face in the unsplit mesh. Returns the share of the residual of the cell, dR (the caller adds it).
+  subroutine BC_Connection_Visc_Stencil ( Im, Jm, Km, Fm, Blk, Pg, Sc, Sct, Prt, Prl, soot_enabled, dR )
+    use MOSE_Lib_Diffusive, only: Diffusive_Flux, Visc_State
+    implicit none
+    integer, intent(in)  :: Im, Jm, Km, Fm
+    real(R8), intent(in) :: Sc, Sct, Prt, Prl
+    logical, intent(in)  :: soot_enabled
+    type(MOSE_block_type), intent(in), target :: Blk
+    real(R8), intent(in)              :: Pg(nprim,6)
+    real(R8), intent(out)             :: dR(nprim)
+    ! Local
+    integer :: dir, Face_i, Face_j, Face_k, Ig, Jg, Kg, a, b, c
+    integer :: e(3,3)
+    real(R8), dimension(nprim) :: Rl, Rr
+    real(R8) :: Vg(nprim,6)                      ! viscous variables of the cells of Pg (the other block)
+    integer :: g
+    real(R8), pointer, contiguous :: Mg(:,:,:)   ! metrics per group with a wall ghost cell in the stencil, else absent
+
+    call Face_Index ( Fm, dir, Im, Jm, Km, Face_i, Face_j, Face_k )
+    Ig = Im - guide(Fm,1)
+    Jg = Jm - guide(Fm,2)
+    Kg = Km - guide(Fm,3)
+    select case ( dir )
+      case (1) ; a = 1 ; b = 2 ; c = 3
+      case (2) ; a = 2 ; b = 1 ; c = 3
+      case default ; a = 3 ; b = 1 ; c = 2
+    end select
+    e = reshape ( [1,0,0, 0,1,0, 0,0,1], [3,3] )
+    Rl = 0d0
+    Rr = 0d0
+    ! viscous variables: of the cells of this block, those of Viscous_Variables; of the cells of the other block, here
+    do g = 1, 6
+      if ( g /= 2 ) call Visc_State ( Pg(:,g), Vg(:,g) )
+    enddo
+
+    nullify ( Mg )
+    if ( Blk % dir(dir) % ig(Face_i,Face_j,Face_k) > 0 ) Mg => Blk % dir(dir) % Mg(:,:,:,Blk % dir(dir) % ig(Face_i,Face_j,Face_k))
+    associate ( f => Blk % dir(dir) % f(Face_i,Face_j,Face_k), Mf => Blk % dir(dir) % Mf(Face_i,Face_j,Face_k) % c )
+    if ( mod(Fm,2) == 0 ) then
+      ! the cell is on the low-index side of the face: cell 1 = cell, cell 2 = ghost
+      call Diffusive_Flux ( f % N, f % A, Blk % yn(Im,Jm,Km), Blk % yn(Ig,Jg,Kg),                     &
+                            Blk % k_rough(Im,Jm,Km), Blk % k_rough(Ig,Jg,Kg),                       &
+                            Blk % P(:,Im,Jm,Km), Pg(:,1),                                           &
+                            Blk % Visc(:,Im,Jm,Km), Vg(:,1),                                        &
+                            Blk % Visc(:,Im-e(1,b),Jm-e(2,b),Km-e(3,b)),                            &
+                            Blk % Visc(:,Im+e(1,b),Jm+e(2,b),Km+e(3,b)),                            &
+                            Vg(:,3), Vg(:,4),                                                       &
+                            Blk % Visc(:,Im-e(1,c),Jm-e(2,c),Km-e(3,c)),                            &
+                            Blk % Visc(:,Im+e(1,c),Jm+e(2,c),Km+e(3,c)),                            &
+                            Vg(:,5), Vg(:,6),                                                       &
+                            Mf, Rl, Rr, a, b, c, Sc, Sct, Prt, Prl, soot_enabled, Mg = Mg )
+      dR = Rl
+    else
+      ! cell 1 = ghost, cell 2 = cell
+      call Diffusive_Flux ( f % N, f % A, Blk % yn(Ig,Jg,Kg), Blk % yn(Im,Jm,Km),                     &
+                            Blk % k_rough(Ig,Jg,Kg), Blk % k_rough(Im,Jm,Km),                       &
+                            Pg(:,1), Blk % P(:,Im,Jm,Km),                                           &
+                            Vg(:,1), Blk % Visc(:,Im,Jm,Km),                                        &
+                            Vg(:,3), Vg(:,4),                                                       &
+                            Blk % Visc(:,Im-e(1,b),Jm-e(2,b),Km-e(3,b)),                            &
+                            Blk % Visc(:,Im+e(1,b),Jm+e(2,b),Km+e(3,b)),                            &
+                            Vg(:,5), Vg(:,6),                                                       &
+                            Blk % Visc(:,Im-e(1,c),Jm-e(2,c),Km-e(3,c)),                            &
+                            Blk % Visc(:,Im+e(1,c),Jm+e(2,c),Km+e(3,c)),                            &
+                            Mf, Rl, Rr, a, b, c, Sc, Sct, Prt, Prl, soot_enabled, Mg = Mg )
+      dR = Rr
+    end if
+    end associate
+
+  end subroutine BC_Connection_Visc_Stencil
 
 end module MOSE_Lib_BC_Fluxes_Connection

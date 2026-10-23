@@ -32,9 +32,9 @@ where $Re_x = U_\infty x / \nu$ is the local Reynolds number.
 |---|---|
 | Mach number | 0.2 |
 | Temperature | 300 K |
-| Pressure | 0.97250 Pa |
+| Pressure | 97 250 Pa |
 | Viscosity | 1.0 × 10⁻³ Pa·s |
-| Re/m | 80.65 m⁻¹ |
+| Re/m | $8.06\times10^{4}$ m⁻¹ ($g/\mu$, with the mass flux $g = 80.648$ kg m⁻² s⁻¹ of the inlet) |
 
 ## Numerical setup
 
@@ -49,14 +49,14 @@ where $Re_x = U_\infty x / \nu$ is the local Reynolds number.
 
 ## Grid structure
 
-The mesh is a 2D structured grid (65 × 65 cells) spanning the physical domain with fine resolution near the leading edge and near-wall region to capture boundary layer development accurately.
+The mesh is a 2D structured grid (64 × 64 cells, 65 × 65 nodes) spanning the physical domain with fine resolution near the leading edge and near-wall region to capture boundary layer development accurately.
 
 Boundary conditions:
 
-- **Inlet**: Riemann invariant boundary condition with freestream state
+- **Inlet** (`404`): mass flux 80.648 kg m⁻² s⁻¹ and static temperature 300 K
 - **Adiabatic wall** (x ≥ 0): No-slip, no-heat-flux
 - **Symmetry** (x < 0): Symmetry boundary condition upstream
-- **Outlets**: Atmospheric ambient conditions
+- **Outlets** (`407`, faces 1 and 4): ambient at $T_0 = 300$ K, $p_0 = p_\text{back} = 97\,250$ Pa
 
 ## Results and verification
 

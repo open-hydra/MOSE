@@ -62,10 +62,12 @@ jobs:
 
       - name: Run tests
         # Exclude cases that need heavy/optional dependencies disabled in this build
-        # (Cantera, SUNDIALS, MPI). See test/TESTING-PLAN.md for the tiering.
+        # (Cantera, SUNDIALS, MPI) and the full forms of the verification cases
+        # (label verification), which run on request. See test/TESTING-PLAN.md
+        # for the tiering.
         run: >
           ctest --test-dir build --output-on-failure --timeout 300
-          --label-exclude "needs-cantera|needs-sundials|needs-mpi"
+          --label-exclude "needs-cantera|needs-sundials|needs-mpi|verification"
 
   test-mpi:
     # gfortran with the MPI library of Ubuntu (Open MPI): the build with
@@ -118,4 +120,4 @@ jobs:
           PRTE_MCA_rmaps_default_mapping_policy: ":oversubscribe"
         run: >
           ctest --test-dir build --output-on-failure --timeout 900
-          --label-regex needs-mpi
+          --label-regex needs-mpi --no-tests=error

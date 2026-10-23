@@ -45,10 +45,74 @@ contains
   end subroutine Face_Index
 
 
-  subroutine Compute_Wall_Properties(stress,pw,Tw,rhow,mu,qw,mdot,y,exit_array)
+  !> The walls: walls coupled to another solver (103, 104), prescribed heat flux (301), prescribed temperature (302),
+  !> gas-surface interaction (503-505).
+  elemental logical function Is_Wall ( type )
+    implicit none
+    integer, intent(in) :: type
+
+    select case ( type )
+      case ( 103, 104, 301, 302, 503, 504, 505 )
+        Is_Wall = .true.
+      case default
+        Is_Wall = .false.
+    end select
+
+  end function Is_Wall
+
+
+  !> Gas at the face of a wall of prescribed temperature T_wall, as BC_Wall_Temperature takes it: the pressure of the
+  !> boundary cell (boundary layer) and its composition (non-catalytic wall) at the density rho_wall = p / (R T_wall), and
+  !> the laminar viscosity and conductivity at T_wall. Prim, rho and Rgas: primitive variables, density and gas constant of
+  !> the boundary cell; rhos_wall: the partial densities at the wall.
+  subroutine Wall_State_Temperature ( Prim, rho, Rgas, T_wall, rho_wall, rhos_wall, mil, kl )
+    use MOSE_Global_m, only: nsc, np
+    use FLINT_Lib_Thermodynamic, only: co_k_mi_lam_Wilke
+    implicit none
+    real(R8), intent(in)  :: Prim(:), rho, Rgas, T_wall
+    real(R8), intent(out) :: rho_wall, rhos_wall(nsc), mil, kl
+
+    rho_wall = Prim(np) / ( Rgas * T_wall )
+    rhos_wall = Prim(1:nsc) * rho_wall / rho
+    call co_k_mi_lam_Wilke ( rhos_wall, rho_wall, T_wall, mil, kl )
+
+  end subroutine Wall_State_Temperature
+
+
+  !> Gas at the face of a wall of prescribed heat flux, as BC_Wall_Heat takes it: the laminar viscosity and conductivity at
+  !> the temperature temp of the boundary cell; the difference dT = T_cell - T_wall across the half cell, from the heat flux
+  !> with that conductivity and the metric Mc of the cell along the face direction Dir; the wall temperature Twall = temp - dT
+  !> and the density rho_wall = p / (R Twall) (boundary layer, non-catalytic wall).
+  subroutine Wall_State_Heat ( Prim, rho, Rgas, Heat_Flux, Mc, normal, Dir, temp, mil, kl, dT, Twall, rho_wall )
+    use MOSE_Global_m, only: nsc, np
+    use FLINT_Lib_Thermodynamic, only: co_k_mi_lam_Wilke, EOS
+    implicit none
+    real(R8), intent(in)  :: Prim(:), rho, Rgas, Heat_Flux, Mc(3,3), normal(3)
+    integer,  intent(in)  :: Dir
+    real(R8), intent(out) :: temp, mil, kl, dT, Twall, rho_wall
+
+    temp = EOS( p=prim(np), rho=rho, R=Rgas )
+    call co_k_mi_lam_Wilke ( Prim(1:nsc), rho, temp, mil, kl )
+    ! Heat_Flux is positive into the fluid on every face: the wall is hotter than the cell when it heats the fluid
+    dT = -Heat_Flux / ( 2d0*kl*dot_product( Mc(Dir,:), normal ) )
+    Twall = temp - dT
+    rho_wall = Prim(np)/( Rgas * Twall ) ! EOS
+
+  end subroutine Wall_State_Heat
+
+
+  !> The properties of a wall face for the wall output, the same on every face: the stress is the traction of the gas on
+  !> the wall, tau . n with n the normal into the gas; qw is the heat flux into the gas (out of the solid); mdot the mass
+  !> flux into the gas. The callers give stress, qw and mdot along the face normal of the solver, toward growing index:
+  !> stress = tau . n, qw = k grad T . n (the heat flux into the wall times into), mdot the mass flux into the gas times
+  !> into, where into = +1 when that normal points into the gas (faces 1, 3, 5) and -1 when it points into the wall (faces
+  !> 2, 4, 6). A zero is written as +0 (Positive_Zero).
+  subroutine Compute_Wall_Properties(stress,pw,into,Tw,rhow,mu,qw,mdot,y,exit_array)
+    use iso_fortran_env, only: int64
     implicit none
     real(R8), dimension(:), intent(in)    :: stress
     real(R8), intent(in)                  :: pw
+    integer, intent(in)                   :: into
     real(R8), dimension(8), intent(inout) :: exit_array
     real(R8), optional :: Tw, qw, rhow, mu, y, mdot
     ! Local
@@ -58,16 +122,30 @@ contains
     tauw = sqrt( sum ( Stress**2 ) )
     ut = sqrt ( tauw/rhow )
     exit_array(1) = rhow*y*ut/mu
-    ! Wall stress
-    exit_array(2:4) = stress
+    ! Wall stress: the traction of the gas on the wall
+    exit_array(2:4) = Positive_Zero ( into * stress )
     ! Wall pressure
     exit_array(5) = pw
     ! Wall temperature
     if (present(Tw)) exit_array(6) = Tw
-    ! Heat flux
-    if (present(qw)) exit_array(7) = qw
-    ! Mass flux
-    if (present(mdot)) exit_array(8) = mdot
+    ! Heat flux into the gas
+    if (present(qw)) exit_array(7) = Positive_Zero ( - into * qw )
+    ! Mass flux into the gas
+    if (present(mdot)) exit_array(8) = Positive_Zero ( into * mdot )
+
+  contains
+
+    !> x, with -0 written as +0. The wall output of a run on several ranks is gathered with a sum, which turns -0 into +0,
+    !> so a -0 left here would make it differ, bit for bit, from that of a run on one rank. The test is on the bits: under a
+    !> fast floating-point model (-ffast-math) the compilers may drop an arithmetic one, such as x + 0.
+    elemental function Positive_Zero ( x ) result ( z )
+      real(R8), intent(in) :: x
+      real(R8) :: z
+      integer(int64) :: b
+      b = transfer ( x, b )
+      if ( ibclr ( b, 63 ) == 0_int64 ) b = 0_int64
+      z = transfer ( b, z )
+    end function Positive_Zero
 
   end subroutine Compute_Wall_Properties
 

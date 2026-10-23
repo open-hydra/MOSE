@@ -470,8 +470,11 @@ contains
   ! the interior Riemann invariant and the prescribed total conditions.
   ! The gas enters (enters = .true.) when p0 is above p_stop = p (Riem/a)**(2 gamma/(gamma-1)),
   ! the pressure that the gas of the cell reaches when the outgoing wave brings it to rest:
-  ! with Riem > 0 that is YC < 0. Otherwise Flux = 0 and the caller applies its own branch.
-  ! When the inflow root would make the face supersonic across (w + a3 <= 0) the face is choked.
+  ! with Riem > 0 that is YC < 0. With Riem <= 0 (the gas of the cell moving in at 2 a/(gamma-1)
+  ! or faster) no pressure brings it to rest, p_stop = 0, and a reservoir with p0 > 0 and T0 > 0
+  ! drives gas in. Otherwise Flux = 0 and the caller applies its own branch.
+  ! When the inflow root would make the face supersonic across (w + a3 <= 0), or when no inflow
+  ! root exists (Riem <= 0 with D Riem**2 > (g a0)**2), the face is choked.
   subroutine Stagn_Inflow ( Prim, Sound, Gamma, Riem, alpha, beta, &
                                  BC_ci, BC_RANS, BC_T0, BC_p0, BC_Sign, &
                                  t_Vec, Normal, Area, Flux, Fmass, enters )
@@ -488,6 +491,7 @@ contains
     real(R8) :: p3, Ut3, Ub3
     real(R8) :: Face_T, Face_Sound, Face_Prim(nprim), Face_rho, Face_Enthalpy, Face_Un
     real(R8) :: XA, XB, XC, XD, XE, XF, check, E1, E2, b_Vec(3), b_Mod
+    logical  :: choked
 
     ! Vector product n x t (why?)
     b_Vec(1) = Normal(2)*t_Vec(3) - Normal(3)*t_Vec(2)
@@ -507,14 +511,16 @@ contains
     E1 = ( XF * XA - XC * XD ) / check ! ??
     E2 = ( XD * XB - XE * XA ) / check ! ??
 
-    ! Does the reservoir drive gas in? Riem > 0 and YC < 0 (p0 > p_stop); then the quadratic below
-    ! has the inflow root, since its discriminant is at least YB**2: p0 is used as given
+    ! Does the reservoir drive gas in? With Riem > 0, when YC < 0 (p0 > p_stop); then the quadratic
+    ! below has the inflow root, since its discriminant is at least YB**2: p0 is used as given. With
+    ! Riem <= 0, p_stop = 0: when the reservoir has a pressure and a speed of sound, p0 > 0 and
+    ! a0 > 0 (with p0 <= 0 or T0 <= 0, which the reader takes, nothing enters, as with Riem > 0)
     Face_Rgas = sum ( BC_ci * Ri_tab )
     Sound0 = sqrt ( Gamma * Face_Rgas * BC_T0 )
     Coef_C = ( BC_p0 / Prim(np) )**( ( Gamma - 1d0 ) / Gamma )
     Coef_C = Coef_C * ( ( Sound / Sound0 )**2 )
     YC = Riem**2 - Coef_C * Sound0**2
-    enters = ( Riem > 0d0 .and. YC < 0d0 )
+    enters = ( Riem > 0d0 .and. YC < 0d0 ) .or. ( Riem <= 0d0 .and. BC_p0 > 0d0 .and. Sound0 > 0d0 )
     Flux  = 0d0
     Fmass = 0d0
     if ( .not. enters ) return
@@ -524,15 +530,30 @@ contains
     YB = BC_Sign * Riem * ( ( Gamma - 1d0 ) / 2d0 )
     Discr = YB**2 - YA * YC
 
-    ! The smaller root of the quadratic in w = BC_Sign*Un3, the inflow. The larger one is a spurious outflow
-    ! (w = 4 a0/(gamma+1) with the cell at rest at the reservoir state), and the sign of the cell velocity
-    ! cannot choose between them: at rest it would take the larger one on the faces 2, 4, 6
-    Un3 = ( YB - BC_Sign * sqrt( Discr ) ) / YA
-    Sound3 = sqrt ( Sound0**2 - Coef_D * Un3**2 )
-    ! Choked face. With w + a3 <= 0 the outgoing characteristic no longer reaches the face: every one
-    ! enters, the face state depends on the reservoir alone, and the one that joins the subsonic state
-    ! on w + a3 = 0 has normal Mach 1: from the total enthalpy, a3**2 = a0**2 - D a3**2
-    if ( BC_Sign * Un3 + Sound3 <= 0d0 ) then
+    ! The quadratic joins the curve of the reservoir (total enthalpy, a3**2 = a0**2 - D w**2, and total
+    ! pressure) to that of the cell, Riem = sqrt(C) a3 + g w, with g = (gamma-1)/2 and sqrt(C) a3 the speed
+    ! of sound of the gas of the cell brought isentropically to p3. The relation of the cell holds whatever
+    ! the sign of Riem: the wave of the family w - a links the cell to the face state, and the invariant is
+    ! exact across a rarefaction (p3 < p) and the isentropic approximation across a shock (p3 > p), as for
+    ! Riem > 0. With Riem <= 0 the two curves meet only if D Riem**2 < (g a0)**2: otherwise the gas of the
+    ! cell, even expanded to vacuum, moves away at |Riem|/g, faster than the gas of the reservoir can follow
+    ! (a0/sqrt(D) at most), no inflow state exists, and the face is choked.
+    ! Where they meet, the smaller root of the quadratic in w = BC_Sign*Un3 is the inflow. The larger one is
+    ! a spurious outflow (w = 4 a0/(gamma+1) with the cell at rest at the reservoir state), and the sign of the
+    ! cell velocity cannot choose between them: at rest it would take the larger one on the faces 2, 4, 6.
+    ! The max only takes the rounding next to the vacuum limit, where a3 -> 0 and the root is choked. The test of the
+    ! vacuum, -Riem sqrt(D) > g a0, takes no product that the lines above take: with Riem > 0 they round as before
+    if ( Riem <= 0d0 .and. - Riem * sqrt ( Coef_D ) > ( Gamma - 1d0 ) / 2d0 * Sound0 ) then
+      choked = .true.
+    else
+      Un3 = ( YB - BC_Sign * sqrt( Discr ) ) / YA
+      Sound3 = sqrt ( max ( 0d0, Sound0**2 - Coef_D * Un3**2 ) )
+      ! Choked face. With w + a3 <= 0 the outgoing characteristic no longer reaches the face: every one
+      ! enters, the face state depends on the reservoir alone, and the one that joins the subsonic state
+      ! on w + a3 = 0 has normal Mach 1: from the total enthalpy, a3**2 = a0**2 - D a3**2
+      choked = ( BC_Sign * Un3 + Sound3 <= 0d0 )
+    end if
+    if ( choked ) then
       Sound3 = Sound0 / sqrt ( 1d0 + Coef_D )
       Un3    = - BC_Sign * Sound3
     end if

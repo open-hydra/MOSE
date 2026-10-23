@@ -204,8 +204,9 @@ a single-species run needs no table.
     `mix_diff_coeffs`) instead use the mass-fraction numerator $(1 - Y_s)$, with the
     same denominator and binary data. The two differ by $\sim\!10\text{–}20\%$ per
     species in mixtures of light and heavy molecules. The $(1 - Y_s)$ variant is
-    kept as commented reference code in the diffusion routine for users who prefer
-    the Chemkin/Cantera convention.
+    kept as a commented line in the diffusion routine of FLINT (`co_DS_expr`, in
+    `src/lib/Lib_ThermoTransport.f90`), for users who prefer the Chemkin/Cantera
+    convention.
 
 ---
 

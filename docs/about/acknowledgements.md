@@ -18,7 +18,8 @@ FiNeR is a pure Fortran 2003+ OOP library for reading and writing INI configurat
 - **Repository:** [github.com/MarcoGrossi92/ORION](https://github.com/MarcoGrossi92/ORION)
 - **License:** GPL v3.0
 
-ORION provides built-in functions to read files in different formats. MOSE uses ORION to import thermodynamic, transport, and chemistry tabulated data.
+ORION provides built-in functions to read files in different formats. MOSE uses ORION to read the initial condition,
+which holds the mesh, and to write the solution, wall and diagnostic files (Tecplot and VTK).
 
 ## FLINT
 
@@ -28,6 +29,15 @@ ORION provides built-in functions to read files in different formats. MOSE uses 
 - **License:** GPL v3.0
 
 FLINT is a lightweight, modular Fortran library for thermochemistry in reactive flow simulations.
+
+## OSLO
+
+**ODE SoLver toolbOx**
+
+- **Repository:** [github.com/MarcoGrossi92/OSLO](https://github.com/MarcoGrossi92/OSLO)
+- **License:** GPL v3.0
+
+OSLO is a Fortran toolbox for systems of ordinary differential equations; its integrators are those that `ode-solver` selects for the chemistry.
 
 ## Documentation Tools
 
@@ -62,7 +72,7 @@ While MOSE is an independent open-source project, it has benefited from:
 
 MOSE respects all licenses of dependencies and foundations:
 
-- **GPL v3.0** - FLINT, ORION, FiNeR
+- **GPL v3.0** - FLINT, ORION, OSLO, FiNeR
 
 See the [License](license.md) page for MOSE's full license text.
 

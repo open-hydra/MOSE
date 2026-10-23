@@ -14,7 +14,8 @@
 #  2. Inlets at total conditions: when the gas enters, and the face state. A
 #     1-D tube of air, one forward Euler step with first-order reconstruction,
 #     so that the density change of a boundary cell gives the mass flux of its
-#     face (total_conditions.py). Reservoir at T0 = T, flow direction normal:
+#     face (total_conditions.py). Reservoir at T0 = T unless said otherwise,
+#     flow direction normal:
 #       farfield36 ambient (407) on both ends, p0 = p_back = 36 p, gas at rest:
 #                  the reservoir drives the gas in, through a choked face
 #                  (normal Mach 1);
@@ -32,8 +33,20 @@
 #                  outlet at p_back and lets gas out;
 #       outlet12   the same at 1.2 a with p0 = p_back = 0.1 p (p_stop = 0.147 p);
 #       outletstop as outlet05 with p_back = 0.6 p, above p_stop: the face is at
-#                  rest at p_stop, no mass through it.
-#     Each mass flux must equal that of the face state within 1e-9 of rho a.
+#                  rest at p_stop, no mass through it;
+#       inlet6     inlet (401) with p0 = p and the gas moving in at 6 a, at
+#                  2a/(gamma-1) or faster: no pressure brings it to rest
+#                  (p_stop = 0), the reservoir feeds the face, which is choked;
+#       farfield6  the same with an ambient face (407), p0 = p_back = p;
+#       inlethot   inlet (401) with T0 = 25 T, p0 = 0.1 p and the gas moving in
+#                  at 5.5 a: a subsonic face (normal Mach 0.83);
+#       inletvacuum inlet (401) with p0 = p and the gas moving in at 20 a,
+#                  faster than the gas of the reservoir can follow: choked;
+#       riemplus, riemminus  as inlethot with the invariant a + (gamma-1)/2 w
+#                  of the cell at +1e-9 a and -1e-9 a.
+#     Each mass flux must equal that of the face state within 1e-9 of rho a,
+#     and the mass fluxes of riemplus and riemminus must agree within 1e-9 of
+#     rho a: the face state is continuous where the invariant changes sign.
 #  Gas: test/common/Air.
 #===============================================================================
 set -uo pipefail
@@ -126,7 +139,9 @@ space-reconstruction = first-order
 riemann-solver = HLLC
 INI
 
-for name in farfield36 farfield2 inlet2 inlet36 nofeed outlet05 outlet12 outletstop; do
+pairok=1
+for name in farfield36 farfield2 inlet2 inlet36 nofeed outlet05 outlet12 outletstop \
+            inlet6 farfield6 inlethot inletvacuum riemplus riemminus; do
   echo "   $name"
   python3 -B total_conditions.py case "$name" || exit 1
   rm -f OUTPUT/field.tec
@@ -134,6 +149,7 @@ for name in farfield36 farfield2 inlet2 inlet36 nofeed outlet05 outlet12 outlets
   if [[ $? -ne 0 || ! -f OUTPUT/field.tec ]]; then
     echo "  [FAIL] the run did not complete (see OUTPUT/$name.log)"
     fail=1
+    [[ $name == riem* ]] && pairok=0
     continue
   fi
   cp OUTPUT/field.tec "OUTPUT/$name.tec"
@@ -144,6 +160,14 @@ for name in farfield36 farfield2 inlet2 inlet36 nofeed outlet05 outlet12 outlets
     fail=1
   fi
 done
+
+echo "   riemplus and riemminus"
+if [[ $pairok -eq 1 ]] && python3 -B total_conditions.py pair riemplus OUTPUT/riemplus.tec riemminus OUTPUT/riemminus.tec; then
+  echo "  [ok  ] the mass flux is continuous where the invariant of the cell changes sign"
+else
+  echo "  [FAIL] the mass flux jumps where the invariant of the cell changes sign"
+  fail=1
+fi
 
 if [[ $fail -ne 0 ]]; then
   echo "Inlets: FAILED"

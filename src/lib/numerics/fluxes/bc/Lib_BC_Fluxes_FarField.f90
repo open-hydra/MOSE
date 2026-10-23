@@ -94,9 +94,11 @@ contains
   ! a_f <= Riem, that is p_f <= p_stop = p (Riem/a)**(2 gamma/(gamma-1)), the pressure at which the
   ! outgoing wave brings the gas of the cell to rest. The face takes p_f = min(BC_pback, p_stop): the
   ! gas leaves at BC_pback, and with BC_pback at or above p_stop the face is at rest at p_stop.
-  ! With Riem <= 0 (gas moving in at 2 a/(gamma-1) or faster) every p_f > 0 gives w_f < 0: no face
-  ! state lets the gas out, and the limit p_f -> 0, the vacuum that the gas leaves behind, carries no
-  ! flux (rho_f -> 0 with w_f bounded); so does a BC_pback <= 0.
+  ! With Riem <= 0 (gas moving in at 2 a/(gamma-1) or faster) p_stop = 0, and Stagn_Inflow lets the gas
+  ! in from every ambient with p0 > 0 and T0 > 0: this branch is reached only with p0 <= 0 or T0 <= 0.
+  ! There every p_f > 0 gives w_f < 0: no face state lets the gas out, and the limit p_f -> 0, the
+  ! vacuum that the gas leaves behind, carries no flux (rho_f -> 0 with w_f bounded); so does a
+  ! BC_pback <= 0.
   subroutine Outlet_Moving_In ( Bound_Prim, Bound_rho, Bound_Rgas, Bound_Sound, Bound_Gamma, Riem, &
                                 BC_Sign, Un, Normal, Area, BC_pback, Flux, BC_mdot )
     use FLINT_Lib_Thermodynamic, only: f_tabT, h_tab

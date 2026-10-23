@@ -73,29 +73,29 @@ The `input.ini` file specifies the physics and numerics:
 
 ```ini
 [MOSE-Physics]
-equations = euler            # Inviscid compressible Euler
+equations = euler            ; Inviscid compressible Euler
 
 [MOSE-Numerics]
-cfl = 1.0                    # Courant–Friedrichs–Lewy number
-time-scheme = RK3            # 3rd-order Runge–Kutta temporal scheme
-time-accurate = false        # Steady-state integration (no physical time)
-irs-beta = 0.5               # Implicit restarts parameter
-riemann-solver = HLLE        # HLLE numerical flux
-space-reconstruction = MUSCL # 2nd-order spatial reconstruction
-flux-limiter = vanleer       # van Leer slope limiter
-integration-variables = cons # Conserved variables (ρ, ρu, ρv, E)
+cfl = 1.0                    ; Courant–Friedrichs–Lewy number
+time-scheme = RK3            ; 3rd-order Runge–Kutta temporal scheme
+time-accurate = false        ; Steady-state integration (no physical time)
+irs-beta = 0.5               ; Implicit residual smoothing (steady runs only)
+riemann-solver = HLLE        ; HLLE numerical flux
+space-reconstruction = MUSCL ; 2nd-order spatial reconstruction
+flux-limiter = vanleer       ; van Leer slope limiter
+integration-variables = cons ; Conserved variables (ρ, ρu, ρv, E)
 
 [MOSE-IO]
-shell-diter = 100           # Diagnostic output every 100 iterations
-sol-format = tecplot ascii   # Tecplot ASCII output format
+shell-diter = 100            ; Diagnostic output every 100 iterations
+sol-format = tecplot ascii   ; Tecplot ASCII output format
 
 [MOSE-Probes]
-probe1 = exit                # Probe at the exit plane
+probe1 = exit                ; Probe at the exit plane
 
 [exit]
-index-position = 1 50 33 1   # Probe location (i, j, k, block)
-variables = M                # Mach number output
-diter = 100                  # Probe output frequency
+index-position = 1 50 33 1   ; Probe location (block, i, j, k)
+variables = M                ; Mach number output
+diter = 100                  ; Probe output frequency
 
 ```
 
@@ -164,6 +164,7 @@ Before the iteration starts, MOSE prints a summary of the case set-up. This incl
    Blocks                         1
    Cells                          2500
    Boundary faces                 5200
+   Mesh type                      2-D, plane
 
  Boundary conditions
    Inflow/outflow                 50
@@ -206,20 +207,39 @@ Before the iteration starts, MOSE prints a summary of the case set-up. This incl
 During execution, MOSE prints iteration count and residuals. In this case, the density residual decreases smoothly, indicating stable convergence to the steady-state solution:
 
 ```
-MOSE | Iter =      100 | Global iter =      100 | Density residual = 0.125027E-03
-MOSE | Iter =      200 | Global iter =      200 | Density residual = 0.231340E-06
-MOSE | Iter =      300 | Global iter =      300 | Density residual = 0.221740E-08
-MOSE | Iter =      384 | Global iter =      384 | Density residual = 0.998459E-10
+ 400 boundary of block 1, face 3, gas entering at iteration 1, faces: 33, largest |w|/a:  9.05293E-08
+ 400 boundary of block 1, face 3, gas entering at iteration 15, faces with |w|/a above 10 times its last line: 2, largest |w|/a:  1.07239E-06
+ 400 boundary of block 1, face 3, gas entering at iteration 55, faces with |w|/a above 10 times its last line: 3, largest |w|/a:  1.17654E-05
+ 400 boundary of block 1, face 3, gas entering at iteration 61, faces with |w|/a above 10 times its last line: 4, largest |w|/a:  1.39872E-04
+ 400 boundary of block 1, face 3, gas entering at iteration 68, faces with |w|/a above 10 times its last line: 1, largest |w|/a:  1.41811E-03
+ 400 boundary of block 1, face 3, gas entering at iteration 78, faces with |w|/a above 10 times its last line: 1, largest |w|/a:  1.52527E-02
+MOSE | Iter =      100 | Global iter =      100 | Density residual = 0.293637E-03
+ 400 boundary of block 1, face 3, gas entering at iteration 101, faces with |w|/a above 10 times its last line: 1, largest |w|/a:  1.56579E-01
+MOSE | Iter =      200 | Global iter =      200 | Density residual = 0.181007E-04
+MOSE | Iter =      300 | Global iter =      300 | Density residual = 0.183076E-06
+MOSE | Iter =      400 | Global iter =      400 | Density residual = 0.517294E-08
+MOSE | Iter =      500 | Global iter =      500 | Density residual = 0.485840E-09
+MOSE | Iter =      600 | Global iter =      600 | Density residual = 0.383678E-10
+MOSE | Iter =      700 | Global iter =      700 | Density residual = 0.293705E-11
+MOSE | Iter =      767 | Global iter =      767 | Density residual = 0.627384E-12
 
  =========================================================================================
  Timing
  =========================================================================================
-   Iterations                     384
-   Solver                          4.75813E+00 s
-   Solver per iteration            1.23910E-02 s
-   Elapsed                         4.79402E+00 s
+   Iterations                     767
+   Solver                          8.91734E+00 s
+   Solver per iteration            1.16263E-02 s
+   Elapsed                         8.94817E+00 s
  =========================================================================================
+ 400 faces with gas entering, flux evaluations: 49162, largest |w|/a:  2.31614E-01
 ```
+
+The lines that start with `400 boundary`, and the line `400 faces with gas entering` after the timing, report the gas
+that enters the domain through the lower boundary of the case, face 3, of type `400` (extrapolation): the expansion fan
+reaches the last part of that boundary, and behind the fan the flow draws gas in through it, up to $|w|/a$ of about
+$0.2$. A `400` face lets that gas in with the state of its boundary cell, and the lines change nothing in the run (see
+[Boundary Conditions](../user/boundary-conditions.md#euler-boundaries)). `check.py` compares the Mach number at the
+probe at the exit with the analytic value.
 
 ### Output Files
 
@@ -256,7 +276,7 @@ You can also visualize the full field solution in `OUTPUT/field.tec` using Tecpl
 Now that you understand the basic workflow:
 
 - **Run other 2-D cases:** See `test/2D/euler/` for additional verification problems.
-- **Study the code:** Refer to [Architecture](../development/structure.md) and [Contributing](../development/contributing.md) for developer documentation.
+- **Study the code:** Refer to [Code Structure](../development/structure.md) and [Contributing](../development/contributing.md) for developer documentation.
 
 ---
 

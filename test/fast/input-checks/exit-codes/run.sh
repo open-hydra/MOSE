@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Exit codes of the error stops (fast tier)
+#  Exit codes of the error stops (validation tier)
 #
 #  A run that MOSE stops on an error must end with a non-zero exit code, so
 #  that scripts and CI see the failure, and with its message, not with a
@@ -55,12 +55,12 @@
 #  initial condition with fewer variables than the model needs (set-up), a
 #  rotating frame with an axis of zero length (set-up),
 #  chemistry = equilibrium without the elements of the species,
-#  INPUT/composition.txt (set-up; the run used to start and go on with an
+#  INPUT/composition.txt (set-up; without the stop the run would go on with an
 #  equilibrium of no element), and a value outside the rule of the registry
-#  of each form not checked before: preconditioning-eps-min = 1 (the
+#  for three forms of rule: preconditioning-eps-min = 1 (the
 #  interval in (0, 1)), ode-relative-tol-species = 0 (a list of reals, > 0)
-#  and index-position = 1 -1 1 1 of a probe (a list of integers, >= 0); the
-#  three used to run with no message (set-up). The exit code must be
+#  and index-position = 1 -1 1 1 of a probe (a list of integers, >= 0); without
+#  the check the three would run with no message (set-up). The exit code must be
 #  between 1 and 128 (128 is what ifx gives to ERROR STOP; above 128 the
 #  shell reports a signal) and the log must hold the message.
 #
@@ -130,12 +130,20 @@
 #  that the reader takes (upper case, with no blank before =): the same duct
 #  with I = 3, or j=2, in the header of the second zone. I or J kept its
 #  default, 2, without a word, and the run went on.
+#  So does a file that lacks a part of the state of the cell across the face,
+#  which the ghost cells of a face of type 410 take whole (the density rho(N)
+#  of at least one species, u, v, w and p), with the file and the variables
+#  it lacks: the same duct with p, with u and w, or with rho(1), the density
+#  of its only species, taken out of the file. The ghost cells took the value
+#  of the cell for a missing p, u or w, and the run ended with exit code 0;
+#  without any rho(N) they had zero density, and the run ended at its first
+#  step with a run-time error (gfortran with bounds checking).
 #
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
-#  of the INI reader). The run used to stop on the first required key,
-#  naming that key and not the file, or, with the empty file, to end inside
-#  the reader with a run-time error.
+#  of the INI reader). Without this check the run would stop on the first
+#  required key, naming that key and not the file, or, with the empty file,
+#  end inside the reader with a run-time error.
 #
 #  A restart from a solution whose time or counter is not finite stops the
 #  run at set-up, in every build, with exit code 1, the file, the name of the
@@ -316,8 +324,7 @@ soot_run() {
   local state=$1
   [[ $1 == sacomp ]] && state=sa-plain
   python3 -B make_case.py soot "$PREMIX" "$SOD/ic_x1.tec" INPUT "$state" || exit 1
-  # faces 3 and 4 of the tube, one cell thick in j: a copy (type 0), not the extrapolation 400, which takes
-  # three cells and with one cell reads ghost cells that no record fills
+  # faces 3 and 4 of the tube, one cell thick in j: the null type 0, no flux through them
   awk '$5 == 3 || $5 == 4 { $6 = 0 } { print }' "$SOD/bc_x1.txt" > INPUT/bc.txt
   local turb=none soot=LL91
   [[ $1 == sa || $1 == sa-plain ]] && turb=SA
@@ -649,6 +656,20 @@ run_q2d q2d-nan 1.0 NaN \
   "[ERROR] Q2D file q2d.dat, zone 2 (line 11), variable p, cell 1, 1: a value that is not finite (NaN or infinity)"
 run_q2d q2d-time Infinity 1.0E+05 \
   "[ERROR] Q2D file q2d.dat, line 11 (zone 2): SOLUTIONTIME is not finite (NaN or infinity)"
+
+echo "-- a Q2D file of a face 410 that lacks a part of the state across the face stops the run at set-up --"
+# the file of run_q2d with finite values (zone 2 at 1 s) without p, without u and w, without rho(1) (the density of the only
+# species): the name out of the VARIABLES line, the values out of both zones (zone 1: lines 6, 7, 9, 10 for rho(1), u, w, p;
+# zone 2: lines 15, 16, 18, 19), the CELLCENTERED range of both headers shortened
+run_q2d q2d-no-p 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat lacks p: the file of a face of type 410 gives the whole state of the cell across the face, the density rho(N) of at least one species N, u, v, w and p" \
+  'NR == 1 { sub(/ "p"/, "") } NR == 2 || NR == 11 { sub(/4-8/, "4-7") } NR == 10 || NR == 19 { next } { print }'
+run_q2d q2d-no-uw 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat lacks u, w: the file of a face of type 410 gives the whole state of the cell across the face, the density rho(N) of at least one species N, u, v, w and p" \
+  'NR == 1 { sub(/ "u"/, ""); sub(/ "w"/, "") } NR == 2 || NR == 11 { sub(/4-8/, "4-6") } NR == 7 || NR == 9 || NR == 16 || NR == 18 { next } { print }'
+run_q2d q2d-no-rho 1.0 1.0E+05 \
+  "[ERROR] Q2D file q2d.dat lacks rho(N): the file of a face of type 410 gives the whole state of the cell across the face, the density rho(N) of at least one species N, u, v, w and p" \
+  'NR == 1 { sub(/ "rho.1."/, "") } NR == 2 || NR == 11 { sub(/4-8/, "4-7") } NR == 6 || NR == 15 { next } { print }'
 
 echo "-- a Q2D file of a face 410 that cannot be read stops the run at set-up --"
 # the file of run_q2d with finite values (zone 2 at 1 s), 19 lines (zone 1: lines 2 to 10, its header and the values of x, y,

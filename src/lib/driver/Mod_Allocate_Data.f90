@@ -143,8 +143,8 @@ contains
     !! Without `keep`, every block gets everything.
     !!
     !! The excluded blocks still need geometry because set-up reads the mesh
-    !! of blocks this rank does not own: `Check_Mesh_Type` reads `blk(1)%node`
-    !! everywhere, `BC_Connect_Metrics` builds ghost metrics from a possibly
+    !! of blocks this rank does not own: `Check_Mesh_Type` reads the nodes of
+    !! every block, `BC_Connect_Metrics` builds ghost metrics from a possibly
     !! remote donor's nodes, and `Compute_Yn` minimises over every wall face in
     !! the domain.  `deallocate_remote_computation_data` releases the geometry
     !! too, once metrics are built.
@@ -274,6 +274,11 @@ contains
     allocate( blk % P (nprim, 1-gc:ni+gc, 1-gc:nj+gc, 1-gc:nk+gc ) )
     allocate( blk % PO, blk % R, mold = blk % P )
 
+    ! Viscous variables of the cells and of the first layer of ghost cells (Viscous_Variables)
+    if ( model > 0 ) then
+      allocate( blk % Visc (nprim, 0:ni+1, 0:nj+1, 0:nk+1) )
+    end if
+
     ! Dt cell center with no ghost cells
     allocate( blk % dtlocal ( 1:ni, 1:nj, 1:nk) )
 
@@ -289,11 +294,6 @@ contains
     if ( model > 1 ) then
       allocate( blk % rc_term1(ni, nj, nk) )
       allocate( blk % rc_term2(ni, nj, nk) )
-    end if
-
-    ! Stiffness of the turbulence sources, for the time step of time-accurate runs
-    if ( model > 1 ) then
-      allocate( blk % stiff(ni, nj, nk) )
     end if
 
     ! Temp storage for residuals in IRS
@@ -370,6 +370,15 @@ contains
       end do
     end if
 
+    if ( allocated(blk%Visc) ) then
+      !$omp do collapse(2) schedule(static)
+      do k = lbound(blk%Visc,4), ubound(blk%Visc,4)
+        do j = lbound(blk%Visc,3), ubound(blk%Visc,3)
+          blk % Visc(:,:,j,k) = 0.0d0
+        end do
+      end do
+    end if
+
     if ( allocated(blk%RS1) ) then
       !$omp do collapse(2) schedule(static)
       do k = lbound(blk%RS1,4), ubound(blk%RS1,4)
@@ -409,7 +418,6 @@ contains
         do j = lbound(blk%rc_term1,2), ubound(blk%rc_term1,2)
           blk % rc_term1(:,j,k) = 0.0d0
           blk % rc_term2(:,j,k) = 0.0d0
-          blk % stiff   (:,j,k) = 0.0d0
         end do
       end do
     end if
@@ -496,8 +504,8 @@ contains
       if (allocated(domain%blk(b)%vel_gradient)) deallocate(domain%blk(b)%vel_gradient)
       if (allocated(domain%blk(b)%rc_term1))     deallocate(domain%blk(b)%rc_term1)
       if (allocated(domain%blk(b)%rc_term2))     deallocate(domain%blk(b)%rc_term2)
-      if (allocated(domain%blk(b)%stiff))        deallocate(domain%blk(b)%stiff)
       if (allocated(domain%blk(b)%Minv))         deallocate(domain%blk(b)%Minv)
+      if (allocated(domain%blk(b)%Visc))         deallocate(domain%blk(b)%Visc)
 
       ! P — free unless this remote block is a chimera donor
       if (.not. needs_remote_P(b)) then

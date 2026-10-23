@@ -6,8 +6,8 @@ turbulent flows, selected at run time via the `turbulence` key in the
 described in detail below range from the one-equation Spalart–Allmaras
 model (with several variants) to the two-equation Menter SST and
 Wilcox 2006 $k$–$\omega$ models.  A full Reynolds-stress closure
-(SSG–LRR) and an algebraic non-linear correction (QCR2000) are also
-available — see [Other models](#other-models).
+(SSG–LRR) and an algebraic non-linear correction (QCR2000) are in the
+code, but `turbulence` does not accept them — see [Other models](#other-models).
 
 ---
 
@@ -109,11 +109,12 @@ $$
 \tilde\nu_\text{wall} = 0
 $$
 
-on the viscous walls (types `301`, `302`, `503`–`505`); the wall distance $y$ is measured from
-them and from the walls coupled to another solver (`103`, `104`). A slip wall (type `300`, which
-is also the symmetry plane) follows the standard model: the ghost cell copies the cell, a zero
-normal derivative of $\tilde\nu$, and the slip wall is not a wall for the distance («the free-slip
-wall points are not included in the search when $d$ is computed», P. R. Spalart, S. R. Allmaras,
+on the viscous walls and on the grain of a solid rocket motor (types `301`, `302`, `502`,
+`503`–`505`); the wall distance $y$ is measured from them and from the walls coupled to another
+solver (`103`, `104`). A slip wall (type `300`, which is also the symmetry plane) follows the
+standard model: the ghost cell copies the cell, a zero normal derivative of $\tilde\nu$, and the
+slip wall is not a wall for the distance («the free-slip wall points are not included in the search
+when $d$ is computed», P. R. Spalart, S. R. Allmaras,
 *La Recherche Aérospatiale* 1994(1), p. 21). Allmaras, Johnson and Spalart (ICCFD7-1902, §3.3)
 propose instead $\tilde\nu = 0$ on slip walls and their inclusion in the distance, as distinct
 from symmetry planes; MOSE, whose type `300` serves both, does not make that change.
@@ -188,24 +189,25 @@ Activated when compressibility effects on turbulence are significant
     $c$ from $c^2 f(c) = 25\,\Omega\,\tilde\nu f_{v1}/a$, with
     $f(c) = 0.44/(1 + 14c^5) + 0.56$, and multiplies the production by
     $f_1(c)\,f(c)$, with $f_1(c) = 0.6/(1 + 9c^6) + 0.4$: the left side is a
-    number and the right side a speed (the code divides by $a$, not by $a^2$
-    as written above), so the factor depends on the units. For
-    $\Omega = 10^3$ 1/s, $\nu_t = 10^{-3}$ m²/s and $a = 340$ m/s it is 0.99
-    with lengths in metres and 0.22 with lengths in millimetres; and since
-    $a$ only divides, at $\Omega = 10^5$ 1/s it cuts the production by 78 %
-    whatever the Mach number. Until the correction is checked against its
-    source (the article the code cites, doi:10.2514/2.3967) it is not
-    available: use `SA` or another model.
+    number and the right side a speed, so the factor depends on the unit of
+    length. For $\Omega = 10^3$ 1/s, $\nu_t = 10^{-3}$ m²/s and $a = 340$ m/s
+    it is 0.99 with lengths in metres and 0.22 with lengths in millimetres.
+    The correction (the code cites doi:10.2514/2.3967) is not available: use
+    `SA` or another model.
 
-#### SAR — Rotation Correction
+#### SA-R — Rotation Correction
 
-Adds a rotation term proportional to the difference between the strain
-rate and the vorticity magnitude:
+`turbulence = SA-R` replaces $\tilde S$ in the production by $\tilde S + C_\text{rot}\min(0,\,S - \Omega)$,
+with the strain-rate magnitude $S = \sqrt{2\,S_{ij}\,S_{ij}}$:
 
 $$
-P_\text{SAR} = P_\text{SA} + c_\text{rot}\,(\lVert S\rVert - \Omega)
-\qquad (c_\text{rot} = 2.0)
+P_\text{SA-R} = c_{b1}\,\bigl[\tilde{S} + C_\text{rot}\,\min(0,\,S - \Omega)\bigr]\,\rho\tilde\nu
+\qquad (C_\text{rot} = 2)
 $$
+
+The production is reduced where the vorticity exceeds the strain rate, as in vortex cores, and
+unchanged where it does not (NASA Turbulence Modeling Resource, Spalart–Allmaras page, SA-R, after
+Dacles-Mariani et al., *AIAA J.* 33(9), 1995).
 
 #### SA-RC — Spalart–Shur Rotation-Curvature Correction
 
@@ -244,6 +246,31 @@ steady flows only: «Without the time term, the model is not correct in a time-d
 (NASA Turbulence Modeling Resource, Spalart–Allmaras page, SA-RC). Time-accurate runs with the
 correction print a warning at start-up.
 
+MOSE takes $\partial S_{ij}/\partial x_k$ with central differences of the velocity gradients
+$G = \nabla\mathbf{u}$ of the cell and of its neighbours (`Compute_Velocity_Gradient`,
+`Compute_RC_Terms`), mapped to Cartesian components with a cell metric. Next to a block face the
+neighbour is the first ghost cell, and the difference is right when the ghost cell holds the value
+of a definite cell and the metric takes the position of that same cell: for $S_{ij}$ linear in
+space the difference is then exact (with `diffusive-metric = stencil`, the metric of the
+differences of these positions: [Cell gradients of the source terms](#cell-gradients-of-the-source-terms)).
+
+- Behind a face between blocks (`101`) or of a periodic pair (`201`) the ghost cell holds $G$ of the
+  cell across, the source cell of the record (from another MPI rank by message), and the metric
+  takes its centre, plus the translation of a periodic pair. $G$ is a tensor in Cartesian
+  components: it is copied whatever the orientation of the two blocks. The cell next to the face
+  then takes the central difference of the undivided mesh, and the result does not depend on how
+  the mesh is divided into blocks or among ranks.
+- Behind a face of rotational periodicity (`200`), the ghost cell holds $R\,G\,R^{\mathsf T}$, $G$ of
+  the image cell that the velocity takes there, turned by the same rotation $R$ about $x$: a flow
+  invariant under the turn, $\mathbf{u}(R\mathbf{x}) = R\,\mathbf{u}(\mathbf{x})$, has
+  $G(R\mathbf{x}) = R\,G(\mathbf{x})\,R^{\mathsf T}$. On a 3-D sector the image is the cell next to the
+  opposite face and the metric takes its position turned; on the 2-D wedge it is the cell itself,
+  and along $k$ the metric takes the edge of the cell, as for the velocity. With a zero sector angle
+  (a planar mesh, a translated sector) the ghost cell holds a copy of the cell, as below.
+- Behind the other faces (walls, symmetry, inflow, outflow, chimera, mapped faces) the ghost cell
+  holds a copy of the gradient of the cell and the metric takes the cell itself: the difference
+  across the boundary cell is one-sided, a choice of the model.
+
 ---
 
 ## Menter SST $k$–$\omega$ — Two-Equation Model
@@ -281,15 +308,15 @@ $$
 \frac{\partial(\rho k)}{\partial t}
 + \nabla\!\cdot\!(\rho\,\mathbf{v}\,k)
 = P_k - \beta^\ast\,\rho\,\omega\,k
-+ \nabla\!\cdot\!\bigl[(\mu + \mu_t/\sigma_{k})\,\nabla k\bigr]
++ \nabla\!\cdot\!\bigl[(\mu + \sigma_{k}\,\mu_t)\,\nabla k\bigr]
 $$
 
 $$
 \frac{\partial(\rho\omega)}{\partial t}
 + \nabla\!\cdot\!(\rho\,\mathbf{v}\,\omega)
-= \gamma\,\frac{\rho\,P_k}{k} - \beta\,\rho\,\omega^2
-+ \nabla\!\cdot\!\bigl[(\mu + \mu_t/\sigma_{\omega})\,\nabla\omega\bigr]
-+ 2(1 - F_1)\frac{\rho}{\sigma_{\omega 2}\,\omega}\,\nabla k\!\cdot\!\nabla\omega
+= \frac{\gamma\,\rho}{\mu_t}\,P_k - \beta\,\rho\,\omega^2
++ \nabla\!\cdot\!\bigl[(\mu + \sigma_{\omega}\,\mu_t)\,\nabla\omega\bigr]
++ 2(1 - F_1)\,\frac{\rho\,\sigma_{\omega 2}}{\omega}\,\nabla k\!\cdot\!\nabla\omega
 $$
 
 The last term is the **cross-diffusion** term, active only in the
@@ -412,7 +439,9 @@ $$
 F_1 = \tanh\!\bigl(\arg_1^4\bigr), \qquad
 \arg_1 = \min\!\left(
   \max\!\left(\frac{\sqrt{k}}{0.09\,\omega\,y},\;
-              \frac{500\,\nu}{\omega\,y^2}\right),\;100\right)
+              \frac{500\,\nu}{\omega\,y^2}\right),\;
+  \frac{4\,\rho\,\sigma_{\omega 2}\,k}{CD_{k\omega}\,y^2}\right), \qquad
+CD_{k\omega} = \max\!\bigl(2\,\rho\,\sigma_{\omega 2}\,\omega^{-1}\,\nabla k\!\cdot\!\nabla\omega,\;10^{-10}\bigr)
 $$
 
 $$
@@ -471,9 +500,11 @@ $$
 \frac{\partial(\rho E_m)}{\partial t} + \dots = \dots - \bigl(P_k - \beta^\ast\rho\,\omega\,k\bigr),
 $$
 
-with the same source as the $k$ equation (including its
-[point-implicit](#steady-runs-point-implicit-factor) factor), so $E_m + k$ is
-conserved.  This is the total-energy form of TMR [11] and Wilcox [4] written for
+with the same source as the $k$ equation, so $E_m + k$ is conserved.  In steady
+runs the [point-implicit](#steady-runs-point-implicit-factor) factor treats the
+energy and $k$ equations as one system: the two increments add up to that of the
+fluxes of $E_m + k$ at every stage, and the steady state does not depend on the
+time step.  This is the total-energy form of TMR [11] and Wilcox [4] written for
 $E_m$: subtracting the $k$ equation from the equation for $E = E_m + k$ leaves
 exactly this sink, and the diffusion of $k$ in the two equations cancels.  The
 pressure follows from $e = E_m - \tfrac12 u_iu_i$, MOSE's conserved energy being
@@ -513,7 +544,8 @@ limiter (below): TMR's Wilcox2006-klim, in its "e" form (Wilcox2006-klim-e) unle
 $$
 \mu_t = \frac{\rho\,k}{\hat\omega}, \qquad
 \hat\omega = \max\!\left(\omega,\;
-  C_\text{lim}\,\frac{\sqrt{2\,S_{ij}\,S_{ij}}}{\beta^\ast}\right)
+  C_\text{lim}\,\sqrt{\frac{2\,\bar S_{ij}\,\bar S_{ij}}{\beta^\ast}}\right), \qquad
+\bar S_{ij} = S_{ij} - \tfrac{1}{3}\,\frac{\partial u_k}{\partial x_k}\,\delta_{ij}
 $$
 
 The limiter $C_\text{lim}$ prevents excessive eddy viscosity in regions
@@ -547,12 +579,13 @@ as the same page advises for this model.
 
 ### Cross-diffusion *(conditional)*
 
-Cross-diffusion is included only when $\nabla k\!\cdot\!\nabla\omega \le 0$:
+Cross-diffusion is included only when $\nabla k\!\cdot\!\nabla\omega > 0$:
 
 $$
 \text{CD} = \frac{\sigma_d\,\rho}{\omega}\,
-  (\nabla k\!\cdot\!\nabla\omega)
-\qquad \text{if } \nabla k\!\cdot\!\nabla\omega \le 0
+  (\nabla k\!\cdot\!\nabla\omega), \qquad
+\sigma_d = \tfrac{1}{8} \ \text{if } \nabla k\!\cdot\!\nabla\omega > 0, \qquad
+\sigma_d = 0 \ \text{if } \nabla k\!\cdot\!\nabla\omega \le 0
 $$
 
 ### Production limiter
@@ -570,8 +603,8 @@ $$
 
 ### SSG–LRR (Reynolds-stress model)
 
-In addition to the eddy-viscosity closures above, MOSE provides the
-**SSG–LRR** differential Reynolds-stress model (`turbulence = SSGLRR`),
+In addition to the eddy-viscosity closures above, the code has the
+**SSG–LRR** differential Reynolds-stress model (`Lib_SSGLRR`),
 which transports the six independent components of the Reynolds-stress
 tensor together with a length-scale variable instead of assuming the
 Boussinesq relation. It blends the Speziale–Sarkar–Gatski (SSG)
@@ -579,6 +612,8 @@ pressure–strain model away from walls with the Launder–Reece–Rodi (LRR)
 model near walls. Being anisotropy-resolving, it captures secondary
 flows and strong streamline-curvature effects that the two-equation
 models miss, at the cost of the additional transport equations.
+`turbulence` does not accept the name `SSGLRR` (its allowed values are listed
+in the [registry](../user/registry.md)), so no run uses it.
 
 ### QCR2000 (non-linear constitutive correction)
 
@@ -588,7 +623,7 @@ model. It adds a quadratic dependence on the rotation tensor to the modelled
 stress, improving the prediction of anisotropy-driven secondary flows
 (corner flows, square ducts) while reusing the eddy viscosity of the
 underlying model. The code takes it as a suffix of the model name
-(`-QCR2000`), but `turbulence` does not accept such a name today (its
+(`-QCR2000`), but `turbulence` does not accept such a name (its
 allowed values are listed in the [registry](../user/registry.md)), so no run
 uses it; the test `QCR2000Stress` checks the stress against the definition.
 
@@ -620,25 +655,58 @@ $$
 Z_\text{ghost} = 2\,Z_\text{wall} - Z_\text{cell}, \qquad Z = \tilde\nu,\ k,\ \omega ,
 $$
 
-with the wall values of the models above (`RANS_Extrapolate_Wall`). It is the rule of CFL3D,
+with the wall values of the models above, here of the specific variables $Z = \tilde\nu, k, \omega$
+(the ghost value of $\rho Z$ is that times the density of the ghost cell). It is the rule of CFL3D,
 «the actual wall boundary conditions for the turbulence quantities (unlike the primitive variables)
 are applied at ghost cells» (S. L. Krist, R. T. Biedron, C. L. Rumsey, *CFL3D User's Manual
-(Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). The wall flux routines set these
-values; the source terms read them in the gradients of the wall cells: the $c_{b2}$ term of SA and
-its term $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST,
-the cross-diffusion of Wilcox 2006. They do so at every stage
-and in the stiffness pass of time-accurate runs (`Turbulence_Stiffness`), which calls the wall flux
-routines for this alone (`Wall_RANS_Ghosts`). With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$
-term of the wall cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell
-that copied the cell, as MOSE did before, gave $a/2$. The other primitive variables are copied into
-the wall ghost cells, with the velocity reversed (`Ghost_Wall_Extrapolation`); the fluxes through the
-first interior faces use the second-order extrapolation of `Fill_Ghost_Cell`.
+(Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). `Fill_Ghost_Cell` sets these
+values once per stage, from the wall values of the wall flux routines (the same wall state), with
+the other ghost values of the wall ([Numerics](numerics.md), *Ghost Cells of Walls and 400 Faces*):
+the fluxes through the first interior faces and the source terms read the same ghost cells, at every
+stage. The source terms read
+them in the gradients of the wall cells: the $c_{b2}$ term of SA and its term
+$-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST, the
+cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of the wall
+cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell that copied the cell
+would give $a/2$. An SRM grain (`502`) takes the
+same rule for its turbulence variables, with the wall values of its flux: those of the blowing wall while
+it burns, of the wall at the flame temperature when it does not.
+
+### Cell gradients of the source terms
+
+The source terms take, in every cell, the central differences of the values along the three index
+directions and map them to Cartesian components with a cell metric. With
+`diffusive-metric = stencil` the metric is $M_s = (J_c^{T})^{-1}$ with
+$J_c^{T}(:,d) = (\mathbf{x}_{c+e_d} - \mathbf{x}_{c-e_d})/2$, the same central differences of the
+cell centres (the mean of the eight nodes): the gradient of a linear field is exact on stretched,
+skewed and non-smooth cells (along an index direction with one cell, the edge of the cell and no
+difference). On a mesh of equal parallelograms these gradients are the reference gradient of [14]
+(Eq. 1), second order on smooth structured meshes. In a wall cell, for a field that is not linear,
+the reflected ghost value $2\phi_\text{wall} - \phi_\text{cell}$ makes the gradient first order, as
+the Green–Gauss gradient is in the boundary cells of [14] (Eq. 13).
+The ghost cells sit where their value is right: those of the fluxes, at the positions
+of the face metric ([Numerics](numerics.md)); behind a wall the position of the class of the
+quantity, one metric per group: the velocity, the density (whose ghost value follows the temperature:
+exact where the pressure and the composition do not vary across the wall cell), the turbulence
+variables (a metric of their own only next to `503`–`505`, where the velocity is extrapolated and they
+take their wall value). Behind a zero-gradient face (0, 401-407, 420), whose ghost cell copies the
+cell, the position is the cell itself, so the difference across the boundary cell is one-sided. The
+strain gradient of SA-RC takes, behind the faces between blocks and of a turned sector, the position
+of the cell whose velocity gradient the ghost cell holds, and the cell itself behind the other faces
+(see SA-RC above).
+The metrics are computed once at setup (`Cell_Source_Metrics`) and chosen in one place
+(`Source_Metrics`) by the source terms of SA, SA-RC, SST, Wilcox 2006 and SSG/LRR and by the eddy
+viscosity of the output. With `inverse-mean` and `mean` the metric is that of the cell:
+the central difference across a cell next to a jump of size $r$ is then wrong by $(r-1)/4$, on a
+skewed wall cell a copied density takes a normal gradient it does not have (part 5 of `MMSResiduals`),
+and next to a zero-gradient face the normal component is half the one-sided difference.
 
 ### Blowing / wall-suction correction
 
-An optional correction (`blowing_corr`) modifies the wall boundary-layer
-treatment for SST and Wilcox 2006 models in the presence of wall
-injection or suction.
+The code has a wall value of $\omega$ for walls that inject or suck gas
+(`SST_Blowing_Correction`, used by SST and Wilcox 2006), which the suffix
+`-blowcorr` of the model name selects; `turbulence` does not accept such a
+name, so no run uses it.
 
 ### Wall distance
 
@@ -663,43 +731,38 @@ $c_{w1} f_w (\tilde\nu/d)^2$ (a factor $\cos^2\theta$: 0.97, 0.88, 0.75,
 $\omega_w = 60\nu/(\beta_1 d_1^2)$ of SST. That distance is exact only on
 meshes orthogonal to the wall, with the cell centres above the face centres.
 
-- Each face of a wall boundary (types 301, 302, 503–505) is taken as the four
-  triangles between its centre and its sides, which are the face itself when
-  the face is plane and convex, as on every 2-D and axisymmetric mesh (on a
-  plane face that is not convex, a pathological cell, the centre can fall
-  outside the face, and the triangles are not the face). The distance to a
-  triangle is the distance to its plane when the projection of the point falls
-  inside it, otherwise the distance to the nearest side.
+- Each face of a wall boundary (types 103, 104, 301, 302, 502, 503–505) is the bilinear
+  surface through its four nodes, the face of the cells
+  ([Cell volume](numerics.md#cell-volume)):
+  $\mathbf{x}(s,t) = \mathbf{x}_1 + s\mathbf{a} + t\mathbf{b} + st\mathbf{T}$,
+  $\mathbf{a} = \mathbf{x}_2 - \mathbf{x}_1$, $\mathbf{b} = \mathbf{x}_4 - \mathbf{x}_1$,
+  with the twist $\mathbf{T} = \mathbf{x}_1 - \mathbf{x}_2 + \mathbf{x}_3 - \mathbf{x}_4$
+  (corners in cyclic order). The distance to it is its minimum over the face,
+  exact to the rounding of the size of the face and of the distance: a face plane
+  to the resolution of its coordinates (every face of a 2-D mesh) takes the four
+  triangles between its centre and its sides, any other face a certified minimum
+  ([Code Structure](../development/structure.md#wall-distance) gives the
+  algorithm). The four triangles of a twisted face would be wrong by up to
+  $(|\mathbf{T}|/16)/y$, 6 % on a unit face twisted by 0.1 at the height 0.1.
 - On a 2-D axisymmetric wedge (BC 200) the distance is measured in the
   meridional plane $(x, r)$, $r = \sqrt{y^2+z^2}$, from the cell centre to the
   wall curve. This is the distance to the wall surface of revolution, and it
   does not depend on the angle of the wedge. A wall on the faces of the wedge
-  (faces 5–6) stops the run.
-- A k-d tree over the face centres, with the radius of each face, finds the
-  nearest face: the exact distance is computed only for the faces whose centre
-  lies within the best distance found so far plus their radius.
+  (faces 5–6) stops the run. It is the one exception to the single geometric
+  model of the cells: for the wall distance the wall of the wedge is the
+  surface of revolution of its meridional curve, for the volumes and the fluxes
+  the cells are polyhedra with plane faces; the two differ by
+  $r(1 - \cos(\delta/2)) \approx r\delta^2/8$.
+- The distance and the face that gives it do not depend on the threads or on
+  the ranks.
 - Across periodic boundaries the wall goes on: the distance is the minimum over
   the periodic images of the wall too. A periodic connection (type 201) gives
   the translation from its source face to its own face, and on a 3-D mesh
   without sectors so does a block closed in $k$ by type `200` (its last node
-  plane is the first one translated). The distinct translations are reduced
-  to a basis $B_1 \ldots B_n$ of the lattice they generate, shortest first,
-  and then pairwise (Lagrange: $B_j$ becomes $B_j - m B_i$, $m$ the integer
-  nearest to $B_i\cdot B_j / B_i\cdot B_i$, while that shortens it) and, with
-  three translations, by threes ($B_l$ becomes $B_l - m_i B_i - m_j B_j$, with
-  $m_i, m_j$ the integers nearest to the least-squares coefficients of $B_l$ on
-  $B_i, B_j$ or next to them, while that shortens it). Three nearly dependent
-  translations can be reduced pair by pair (no pairwise step shortens them)
-  and still have a short sum: $B_1 = (1, 0, 0)$,
-  $B_2 = (-\tfrac12, \tfrac{\sqrt3}{2}, 0)$,
-  $B_3 = (-\tfrac12, -\tfrac{\sqrt3}{2}, \varepsilon)$ give
-  $B_1 + B_2 + B_3 = (0, 0, \varepsilon)$, which only the step by threes finds.
-  Each step adds to a vector an integer combination of the others, so the
-  lattice is the same, and the bound below holds for any basis of it: the
-  reduction only keeps the number of images small. The
-  images are the integer combinations $\sum_i k_i B_i$ of the basis (along $x$
-  on an axisymmetric wedge). The two sides of a periodic boundary match only
-  to the round-off of the coordinates in the mesh file: translations that
+  plane is the first one translated). The images are the integer combinations of
+  these translations (along $x$ on an axisymmetric wedge). The two sides of a
+  periodic boundary match only to the round-off of the coordinates in the mesh
+  file: translations that
   differ by at most $10^{-2}$ of the thinnest cell across the periodic
   boundaries are the same, as in the type of the mesh. The thickness of a
   cell across a periodic face is the distance from the centre of the face to
@@ -710,59 +773,19 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   lies; relative to the cells it does not. On a 3-D mesh whose
   sectors are closed by the rotational periodicity (type `200` on faces 5–6)
   the images are also the turns by multiples of the sector angle about the
-  $x$ axis, up to half a turn either way.
-- Only a bounded set of images can hold the nearest wall, whatever the size of
-  the mesh against its periods. Let $B^*_i$ be the dual basis
-  ($B^*_i\cdot B_j = \delta_{ij}$), $G_{ij} = B_i\cdot B_j$ the Gram matrix,
-  and $w_i = B^*_i\cdot w$ the coordinates of a vector $w$. Every wall face
-  is moved, whole, by the lattice vector that brings its centre $m$ to
-  $|(m - a)_i| \le 1/2$, $a$ the centre of the first wall face, and so is the
-  centre $c$ of every cell before its search: the periodic wall is the same
-  set. Let $p$ be the point of a face nearest to $c$ over all the images, and
-  $s$ the image that holds it: $s$ is a lattice vector closest to $v = c - p$
-  (another one would bring a point of the same face nearer), so $u = v - s$ is
-  not farther from 0 than from $\pm B_j$, $|u\cdot B_j| \le G_{jj}/2$, and
-  since $u_i = \sum_j (G^{-1})_{ij}\, u\cdot B_j$,
-  $|u_i| \le \beta_i = \tfrac12 \sum_j |(G^{-1})_{ij}|\, G_{jj}$ ($1/2$ on
-  an orthogonal basis). A face is the four triangles between its centre $m$
-  and its sides, so $|(p - m)_i| \le \rho_i$, $\rho_i$ the largest
-  $|(q - m)_i|$ of a corner $q$ of a face, and
-  $|v_i| \le |(c - a)_i| + |(m - a)_i| + |(p - m)_i| \le 1 + \rho_i$. The
-  coefficients of $s$ are $k_i = v_i - u_i$: the images searched are
-  $|k_i| \le \lfloor 1 + \rho_i + \beta_i \rfloor$, one on each side
-  ($|k_i| \le 1$) when $\rho_i < 1/2$ on an orthogonal lattice. On a sector
-  every translation lies along $x$, and the turns keep the coordinate along
-  $x$, so the same bound holds for each turn. An image is searched only when
-  the box around the moved wall, seen from the cell moved back by the image,
-  is not farther than the distance found so far, so a mesh without periodic
-  boundaries costs nothing more. Translations that do not form a lattice stop
-  the run: one that is not an integer combination of the others, more than
-  three independent ones, or one not along $x$ on a wedge or with sectors; so
-  does a number of images too large for an integer.
+  $x$ axis, up to half a turn either way. A channel periodic in $x$ and turned by
+  30 degrees about $z$ gives translations that differ by 1.1e-4 of its cells with
+  five significant digits, by 8.8e-4 with four, and by 0.15 with two, which stops
+  the run. Translations that do not form a lattice stop the run: one that is not
+  an integer combination of the others, more than three independent ones, or one
+  not along $x$ on a wedge or with sectors. Only a bounded set of images can hold
+  the nearest wall, and only those are searched: a mesh without periodic
+  boundaries costs nothing more.
 - Each cell takes the sand-grain roughness $k_s$ of the face that gives the
   minimum distance; between faces at the same distance, the first one in the
   boundary file.
 
-!!! warning "Twisted wall faces in 3-D"
-    A wall face whose corners $\mathbf{x}_1 \ldots \mathbf{x}_4$ (in cyclic
-    order) are not coplanar is the bilinear surface through them, with twist
-    $\mathbf{T} = \mathbf{x}_1 - \mathbf{x}_2 + \mathbf{x}_3 - \mathbf{x}_4$.
-    The four triangles lie within $|\mathbf{T}|/16$ of it, so the distance is
-    exact only to within $|\mathbf{T}|/16$: a relative error up to
-    $(|\mathbf{T}|/16)/y$, small next to cells thicker than $|\mathbf{T}|/16$
-    and of order one or more in thinner ones. On a unit face twisted by
-    $t = |\mathbf{T}|$, at height $h$ above it, the largest error is 6 % for
-    $t = h = 0.1$, 62 % for $t = 10^{-2}$ and $h = 10^{-3}$, and 62 times the
-    distance for $t = 0.1$ and $h = 10^{-4}$. On a smooth wall $|\mathbf{T}|$
-    falls as the square of the face size, so the error falls with refinement.
-    2-D and axisymmetric meshes are not affected: their wall faces are plane,
-    and the four triangles are the face. At start-up MOSE reports the largest
-    gap bound of the wall faces over the distance of the cell next to the face,
-    $\min(|\mathbf{T}|/16, |\mathbf{T}_n|/2)/y$ with $\mathbf{T}_n$ the part of
-    the twist along the normal of the face (zero on a plane face; the second
-    bound holds on faces convex in that plane), as a warning above 1 %.
-
-Test `MeshGeometry`/`WallDistance`.
+Tests `MeshGeometry`/`WallDistance` and `BilinearDistance`.
 
 ---
 
@@ -860,10 +883,19 @@ the run (the change of the variable over the step) are scaled by the same factor
 are smaller than without it; the convergence check `res-threshold` uses the density residual and is
 not affected.
 
-Up to this version the factor divided the source alone,
-$q^{n+1} = q^n + \Delta t\,\bigl(F + S/(1 + \Delta t\,d)\bigr)$, and the converged solution, wall shear
-and heat flux included, depended on the local time step. Steady solutions computed with the default
-change accordingly.
+With [`k-energy-coupling = true`](#energy-coupling-k-energy-coupling) the energy of the mean flow has
+the sink $-S_k$ of the $k$ equation, whose derivative with respect to $\rho k$ is $+\beta^\ast\omega$, so
+the factor is that of the two equations together: the implicit operator of the $k$ and energy rows
+is $D = \begin{pmatrix} 1 + \Delta t\,\beta^\ast\omega & 0 \\ -\Delta t\,\beta^\ast\omega & 1 \end{pmatrix}$, and the
+energy takes its own increment plus $\Delta t\,\beta^\ast\omega$ times that of $k$,
+
+$$
+\Delta(\rho E_m) = \Delta t\,\bigl(F_E - S_k\bigr) + \Delta t\,\beta^\ast\omega\,\Delta(\rho k), \qquad
+\Delta(\rho k) = \frac{\Delta t}{1 + \Delta t\,\beta^\ast\omega}\,\bigl(F_k + S_k\bigr).
+$$
+
+The two increments add up to $\Delta t\,(F_E + F_k)$, the fluxes of $E_m + k$ alone, at every stage, and
+the converged solution, $F_k + S_k = 0$ and $F_E = S_k$, does not depend on the time step.
 
 ```ini
 [MOSE-Turbulence]
@@ -872,8 +904,9 @@ point-implicit = .true.   ; (default) point-implicit factor on the turbulence in
 
 ### Time-accurate runs: explicit sources
 
-In time-accurate runs the factor is not applied, whatever `point-implicit` says, and a warning at
-start-up recalls it. Since $(F + S)/(1 + \Delta t\,d) = (F + S)(1 - \Delta t\,d) + O(\Delta t^2)$, the factor
+In time-accurate runs the factor is not applied, whatever `point-implicit` says; when `input.ini`
+sets `point-implicit = .true.`, a warning at start-up recalls it (a run that leaves the key out
+takes the default and gets no warning). Since $(F + S)/(1 + \Delta t\,d) = (F + S)(1 - \Delta t\,d) + O(\Delta t^2)$, the factor
 would make the turbulence equations, and the mean flow through $\mu_t$, first-order accurate in
 time. With the $k$–$\omega$ models the error of the factor would not even vanish when the mesh and the
 step are refined together, as in an explicit run, whose global step goes as $h^2$ in the wall cells: in
@@ -882,16 +915,26 @@ the first cell $\omega \approx 6\nu/(\beta_1 y^2)$ gives $\Delta t\,d \approx 24
 $\Delta t\,d \approx 1.64\,f_w\,y_1^+$ at `vnn = 0.3` ($y_1^+$ the height of the first cell in wall units): it
 vanishes as the mesh is refined, but is of order one at the usual heights.
 The sources are explicit, like the fluxes, and the local time step of each cell
-([Time Integration](time-integration.md#local-time-step)) includes their stiffness:
+([Time Integration](time-integration.md#local-time-step)) includes a bound of their stiffness:
 
 $$
-\frac{1}{\Delta t_i} = \bigl(\text{convective and diffusive rates}\bigr) + d_i ,
-\qquad d_i = \max_q \frac{\partial D_q}{\partial q} ,
+\frac{1}{\Delta t_i} = \bigl(\text{convective and diffusive rates}\bigr) + \hat d_i ,
+\qquad \hat d_i \ge d_i = \max_q \frac{\partial D_q}{\partial q} ,
 $$
 
-with the rates $d$ of the table, evaluated on the state at the start of the step (one evaluation
-of the sources before the first stage, with the wall ghost cells of the turbulence variables set
-from the wall values as in the stages). Then $\Delta t\,d \le 1$: a forward-Euler stage cannot make
+with $\hat d$ a bound of the rates $d$ of the table that the state of the cell at the start of the step gives
+alone, without gradients or ghost cells:
+
+| Model | $\hat d$ | $\hat d / d$ |
+|-------|----------|--------------|
+| SST | $\max(\beta^\ast, 2\max(\beta_1, \beta_2))\,\omega$ | $\beta = F_1\beta_1 + (1 - F_1)\beta_2$, and $F_1$ takes gradients: $\beta_2/\beta_1 = 1.10$ where $F_1 = 1$ (next to walls), 1 where $F_1 = 0$ |
+| Wilcox 2006 | $\max(\beta^\ast, 2\beta_0)\,\omega$ | $\beta = \beta_0 f_\beta$, and $f_\beta \le 1$ takes the velocity gradient: $1/f_\beta$, 1 in 2-D ($\chi_\omega = 0$), at most $1/0.85$ |
+| SA | $2\,c_{w1}\,(1 + c_{w3}^6)^{1/6}\,\tilde\nu/y^2$ | $f_w = g\,[(1 + c_{w3}^6)/(g^6 + c_{w3}^6)]^{1/6}$ grows with $g \ge 0$ towards $(1 + c_{w3}^6)^{1/6} = 2.005$: $2.005/f_w$, 1 where $r$ reaches its cap of 10, about 2 where $r \approx 1$ (an equilibrium boundary layer, where the destruction is slow against the diffusion) |
+
+($y$ the wall distance of the source, moved below a rough wall.) The Reynolds-stress model SSG/LRR,
+which the key `turbulence` does not select, takes no bound: none was derived for its
+sources, and its $\hat d$ is zero. Then
+$\Delta t\,d \le \Delta t\,\hat d \le 1$: a forward-Euler stage cannot make
 $\tilde\nu$, $k$ or $\omega$ negative through their destruction, and neither can Heun and RK3, whose
 stages are convex combinations of forward-Euler stages (W. Hundsdorfer, *Numerical Solution of
 Advection–Diffusion–Reaction Equations*, lecture notes, 2000, §6.2, Theorem 6.4; C.-W. Shu,
@@ -915,19 +958,21 @@ under one step restriction, for every state it is applied to (ICASE Report 87-33
 Proposition 2.1), while here the restriction depends on the state through $d$, and the rates are
 those of the state at the start of the step. A stage from a state where the rate is $d_s$ takes
 $q_s - \Delta t\,(d_s/2)\,q_s$ through a quadratic destruction, positive while $\Delta t\,d_s < 2$; with
-$\Delta t\,d \le 1$ this holds as long as $d_s < 2\,d$. The margin of 2 of $\tilde\nu$ and $\omega$ therefore
-covers a rate that grows within the step up to twice its value at the start, and no more; $k$, whose
-destruction is linear, keeps only the margin by which its rate $\beta^\ast\omega$ lies below $d$. An
+$\Delta t\,\hat d \le 1$ this holds as long as $d_s < 2\,\hat d$. The margin of 2 of $\tilde\nu$ and $\omega$
+therefore covers a rate that grows within the step up to twice the bound at the start (at least twice the rate),
+and no more; $k$, whose destruction is linear, keeps only the margin by which its rate $\beta^\ast\omega$ lies below
+$\hat d$. An
 impulsive start of a $k$–$\omega$ model from a state far from the wall value of $\omega$ goes beyond
 that: during the first step the wall condition raises $\omega$ in the wall cells by orders of
 magnitude, and with the full step the explicit destruction overshoots ($\omega < 0$, then the floor
 and a very large $\mu_t$). Start such runs with the CFL ramp (`cfl-rise-threshold`).
 
-At the end of a RANS run MOSE prints how many cell updates had a stage that made $\tilde\nu$, $k$ or
-$\omega$ negative before the realizability floor:
+At the end of a RANS run in which a stage made $\tilde\nu$, $k$ or $\omega$ negative before the
+realizability floor, MOSE prints how many cell updates had such a stage; a run in which none did
+prints no such line:
 
 ```text
- Turbulence variables below zero after a stage (set to the floor): 0
+ Turbulence variables below zero after a stage (set to the floor): <n>
 ```
 
 In a steady run the count covers the whole run: the start, and the fronts of $k$ that the fluxes
@@ -989,3 +1034,7 @@ fallback when a model's destruction Jacobian is not readily available.
     Spalart–Allmaras Turbulence Model",
     https://turbmodels.larc.nasa.gov/spalart.html (TMBWG/turbmodels commit
     20a39f5, consulted 2026-09-29): minimum distance to the wall.
+14. A. Syrakos, S. Varchanis, Y. Dimakopoulos, A. Goulas, J. Tsamopoulos, "A
+    critical analysis of some popular methods for the discretisation of the
+    gradient operator in finite volume methods," *Phys. Fluids*, 29, 127103,
+    2017, doi:10.1063/1.4997682.

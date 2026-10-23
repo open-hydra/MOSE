@@ -2,7 +2,7 @@
 !>
 !> The solver takes the viscous stress on a face through the pointer Stress_Vector, always as
 !> Stress_Vector(velocity gradient, normal, laminar viscosity, eddy viscosity, turbulence variables)
-!> (the wall, symmetry and interior fluxes). QCR2000 is not selectable from the input today, so no run
+!> (the wall, symmetry and interior fluxes). QCR2000 is not selectable from the input, so no run
 !> passes through it: this program calls it through the same pointer, in the same way, on a 3-D velocity
 !> gradient G(i,j) = du_i/dx_j, and compares the stress with the one written from the definition
 !> (NASA Turbulence Modeling Resource, Spalart-Allmaras page, SA-QCR2000):

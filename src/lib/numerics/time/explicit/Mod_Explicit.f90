@@ -18,13 +18,15 @@ contains
     use MOSE_Config_Types_m
     use MOSE_Global_m
     use MOSE_Mod_dt,              only: Set_Global_dt, Compute_dt
-    use MOSE_Lib_Ghost,           only: Fill_Ghost_Cell, Ghost_Wall_Extrapolation
-    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes, Zero_W_Residual, Zero_V_Residual
+    use MOSE_Lib_Ghost,           only: Fill_Ghost_Cell
+    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes, Zero_W_Residual, Zero_V_Residual, &
+                                        Viscous_Variables
     use MOSE_Mod_BC_Fluxes,       only: BC_Fluxes
     use MOSE_Lib_RANS,            only: RANS_Source_Terms
     use MOSE_Mod_Soot,            only: Soot_Source_Terms
     use MOSE_Mod_Newstate,        only: RK_Newstate
     use MOSE_Lib_Preconditioning, only: update_derived_variables
+    use MOSE_Lib_SpalartShur,     only: Cell_Velocity_Gradient
     use MOSE_Lib_Chemistry,       only: Chemistry_Newstate, Chemistry_Equilibrium
     use MOSE_Mod_Diagnostic,      only: Compute_Residual
     use MOSE_Lib_RotatingFrame,   only: RotatingFrame_Source_Terms
@@ -91,6 +93,7 @@ contains
 
         call Zero_Residuals ( domain(level) )                ! Zero residuals
         call Fill_Ghost_Cell ( domain(level) )               ! Fill ghost cells
+        if (model>0) call Viscous_Variables ( domain(level) ) ! Viscous variables of the cells, for the viscous fluxes
         call Internal_Fluxes ( domain(level) )               ! Convective and Diffusive fluxes
         call BC_Fluxes ( domain(level) )                     ! Boundary fluxes
 
@@ -100,8 +103,11 @@ contains
            call RotatingFrame_Source_Terms ( domain(level) ) ! Coriolis and centrifugal source terms
 
         if (model==2) then
-          call Ghost_Wall_Extrapolation ( domain(level) )    ! Fill ghost cells for RHS of turbulence eqns
-          call RANS_Source_Terms ( domain(level) )           ! RHS of turbulence equations
+          ! The eddy viscosity of the reference velocity of the preconditioner (Update_Derived_Variables, below)
+          ! takes the velocity gradient of the cells of this state, with the ghost cells of this stage; the -RC models
+          ! compute it with their sources
+          if ( obj_prec%enabled .and. .not. obj_rans%SpalartShur ) call Cell_Velocity_Gradient ( domain(level) )
+          call RANS_Source_Terms ( domain(level) )           ! RHS of turbulence equations (the ghost cells of the fluxes)
         endif
 
         if (obj_soot%enabled) then

@@ -6,7 +6,7 @@ module MOSE_Input_Registry
 
   integer, parameter :: TYPE_INT=1, TYPE_REAL=2, TYPE_LOG=3, TYPE_STR=4
 
-  public :: registry_t, Validate_Registry
+  public :: registry_t, Validate_Registry, Save_Values, Restore_Values, Key_Is_Set
 
   !--------------------------------------------------------
   ! Value container (typed pointers)
@@ -75,6 +75,25 @@ module MOSE_Input_Registry
 
 
   type(registry_t), public :: reg
+
+
+  !--------------------------------------------------------
+  ! Copy of the values of the registry (Save_Values, Restore_Values)
+  !--------------------------------------------------------
+  type :: saved_value_t
+    integer  :: i = 0
+    real(R8) :: r = 0.0_R8
+    logical  :: l = .false.
+    character(len=:), allocatable :: s
+    integer,  allocatable :: iarr(:)
+    real(R8), allocatable :: rarr(:)
+    logical  :: is_set = .false.
+    logical  :: unread = .false.
+    logical  :: has_text = .false.
+    character(len=:), allocatable :: text
+  end type
+
+  type(saved_value_t), allocatable :: saved(:)
 
 
 contains
@@ -360,6 +379,8 @@ contains
   !> levels, which the reader takes outside the
   !> registry (Scan_Ini): the run went on with the default, or with the value of the previous reading, without a word.
   !> The message gives the file, the section, the key and the value as written.
+  !> What an error does is up to the caller: at set-up it stops the run (Check_Input in Wrap_Setup); in a reading during
+  !> the run it is an error of that reading, which ini-error decides (Read_Inifile_Runtime).
   function Validate_Registry() result(out)
     use MOSE_Finite_m, only: Not_Finite
     implicit none
@@ -472,6 +493,81 @@ contains
     end do
 
   end function Validate_Registry
+
+
+  !> Keeps a copy of the value of every parameter of the registry, whatever its type, and of the fields that Load_Ini
+  !> writes (is_set, unread, text): Restore_Values puts back the state of every parameter as it was at this call. Used
+  !> when input.ini is read again during the run (Read_Inifile_Runtime), before Load_Ini.
+  subroutine Save_Values()
+
+  implicit none
+
+  integer :: i
+
+  if (allocated(saved)) then
+    if (size(saved) /= reg%size) deallocate(saved)
+  end if
+  if (.not. allocated(saved)) allocate(saved(reg%size))
+  do i = 1, reg%size
+    if (associated(reg%params(i)%value%i))    saved(i)%i    = reg%params(i)%value%i
+    if (associated(reg%params(i)%value%r))    saved(i)%r    = reg%params(i)%value%r
+    if (associated(reg%params(i)%value%l))    saved(i)%l    = reg%params(i)%value%l
+    if (associated(reg%params(i)%value%s))    saved(i)%s    = reg%params(i)%value%s
+    if (associated(reg%params(i)%value%iarr)) saved(i)%iarr = reg%params(i)%value%iarr
+    if (associated(reg%params(i)%value%rarr)) saved(i)%rarr = reg%params(i)%value%rarr
+    saved(i)%is_set   = reg%params(i)%is_set
+    saved(i)%unread   = reg%params(i)%unread
+    saved(i)%has_text = allocated(reg%params(i)%text)
+    if (saved(i)%has_text) saved(i)%text = reg%params(i)%text
+  end do
+
+  end subroutine Save_Values
+
+
+  !> Puts back the value of every parameter of the registry, and the fields that Load_Ini writes, as Save_Values kept
+  !> them: the variables of the parameters (the registry points at them) hold again what they held at that call
+  subroutine Restore_Values()
+
+  implicit none
+
+  integer :: i
+
+  if (.not. allocated(saved)) return
+  do i = 1, min(reg%size, size(saved))
+    if (associated(reg%params(i)%value%i))    reg%params(i)%value%i    = saved(i)%i
+    if (associated(reg%params(i)%value%r))    reg%params(i)%value%r    = saved(i)%r
+    if (associated(reg%params(i)%value%l))    reg%params(i)%value%l    = saved(i)%l
+    if (associated(reg%params(i)%value%s))    reg%params(i)%value%s    = saved(i)%s
+    if (associated(reg%params(i)%value%iarr)) reg%params(i)%value%iarr = saved(i)%iarr
+    if (associated(reg%params(i)%value%rarr)) reg%params(i)%value%rarr = saved(i)%rarr
+    reg%params(i)%is_set = saved(i)%is_set
+    reg%params(i)%unread = saved(i)%unread
+    if (allocated(reg%params(i)%text)) deallocate(reg%params(i)%text)
+    if (saved(i)%has_text) reg%params(i)%text = saved(i)%text
+  end do
+
+  end subroutine Restore_Values
+
+
+  !> Whether input.ini gives the key name of the section section a value of the type of its parameter (is_set, which
+  !> Load_Ini writes): false for a key that the file leaves out, whose parameter keeps its default, and for a key that is
+  !> not in the registry
+  logical function Key_Is_Set(section, name)
+
+  implicit none
+
+  character(len=*), intent(in) :: section, name
+  integer :: i
+
+  Key_Is_Set = .false.
+  do i = 1, reg%size
+    if (reg%params(i)%section == section .and. reg%params(i)%name == name) then
+      Key_Is_Set = reg%params(i)%is_set
+      return
+    end if
+  end do
+
+  end function Key_Is_Set
 
 
   !> The key i of input.ini, as the messages of Validate_Registry give it: the file, the section, the key and the value as

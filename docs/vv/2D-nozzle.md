@@ -21,7 +21,7 @@ A single structured block with 120 axial × 40 radial cells covers the full nozz
 
 Boundary conditions (same for all configurations):
 
-- Inlet: CEA chamber equilibrium state (subsonic inflow) with 13 species from RP-1/LOX combustion products
+- Inlet (`401`, $T_0 = 3644$ K, $p_0 = 108$ bar): CEA chamber equilibrium state (subsonic inflow) of the RP-1/LOX combustion products, with 13 species (frozen, equilibrium) or 19 (finite-rate: the 17 of the CORIA mechanism, and COOH and HCOOH, which it leaves inert)
 - Exit: zero-gradient supersonic extrapolation
 - Axis: symmetry
 - Wall: symmetry (inviscid)
@@ -30,16 +30,16 @@ Boundary conditions (same for all configurations):
 
 | Parameter | Value |
 |---|---|
-| Time scheme | RK3 |
+| Time scheme | RK3 (frozen), RK2 (equilibrium, finite-rate) |
 | CFL | 0.9 |
-| IRS beta | 0.3 |
+| IRS beta | 0.3 (frozen), 0.5 (equilibrium, finite-rate) |
 | Space reconstruction | MUSCL |
 | Flux limiter | vanleer |
 | Riemann solver | SLAU |
 
 - **Frozen composition** Species mass fractions are fixed at the chamber-equilibrium state and do not react during the expansion.  
 - **Equilibrium chemistry** Species composition adjusts instantaneously at each point to maintain thermochemical equilibrium.  
-- **Finite-rate chemistry** Species composition evolves according to reaction kinetics using the CORIA reaction mechanism with NASA9 thermodynamic database.
+- **Finite-rate chemistry** Species composition evolves according to reaction kinetics using the CORIA reaction mechanism (17 species, 44 reactions) with NASA9 thermodynamic database.
 
 
 ## Results and verification
@@ -50,3 +50,12 @@ The 2D averages from each configuration are compared against 1D CEA references. 
   {% include "vv/images/Merlin-XY.svg" %}
   Area-weighted 1D averages of Mach number, pressure ratio, and temperature ratio compared against CEA reference stations.
 </figure>
+
+!!! note "Figure and code version"
+    The curves are drawn from the solutions stored in `reference/field.tec` of each configuration, which
+    come from the first upload of MOSE (May 2026, commit `ab2bf537`; the equilibrium one after 2000
+    iterations). MOSE at commit `10b59003b72c` moves the equilibrium curve of the fourth panel by 2.4 % of
+    the range of its axes, and every other curve by less than 1 %. 1.7 % of it is already there with the
+    code and the inputs of the first upload, run for 2000 or 10 000 iterations: they do not give the
+    stored equilibrium solution again. The other 0.7 % comes from the changes between the code of 13 October
+    2026 (commit `b29130b`) and `10b59003b72c`.

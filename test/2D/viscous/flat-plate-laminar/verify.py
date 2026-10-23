@@ -111,7 +111,8 @@ print(f"\nBlasius f''(0) = {fpp0:.6f}  →  Cf = {np.sqrt(2)*fpp0:.4f} / √Re_x
 # Read wall.tec
 # Cell-centered variables (indices 0-6):
 #   0:y+  1:tauX  2:tauY  3:tauZ  4:pw  5:Tw  6:qw
-# tauX is negative (wall drags fluid in -x), so take abs()
+# tauX is the traction of the gas on the plate, positive along the flow;
+# abs() keeps its magnitude
 # -------------------------------------------------------------
 xw_, yw_, zw_, varw_, _ = read_TEC("OUTPUT/wall.tec")
 

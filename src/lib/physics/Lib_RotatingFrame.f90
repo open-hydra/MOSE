@@ -148,7 +148,8 @@ contains
     read(obj_rot%axis_str, *)   obj_rot%axis
     read(obj_rot%origin_str, *) obj_rot%origin
     ! A value that is not finite stops the run: the test of the length below compares, and every comparison with a NaN
-    ! is false. The test reads the bits (Not_Finite). Every rank reads the same input.ini at set-up
+    ! is false. The test reads the bits (Not_Finite). Every rank parses the text of input.ini that rank 0 read
+    ! (Load_Input_File in Read_Ini), so every rank takes the same decision
     if ( any(Not_Finite(obj_rot%axis)) ) &
       call mpi_stop_all ( '[ERROR] Rotating frame: a value of axis in input.ini is not finite (NaN or infinity)' )
     if ( any(Not_Finite(obj_rot%origin)) ) &
@@ -179,41 +180,65 @@ contains
   !> read again enter every term of the frame together, as at set-up: the unit axis, the origin and Omega_vec, which the
   !> Coriolis and centrifugal sources, the velocity of the stationary walls and of the inlets and far field, and the power
   !> of the torque file read at each use. The same arithmetic as Setup_RotatingFrame, so values read again unchanged leave
-  !> every bit as it was. The model and the stationary faces change the equations and the boundary conditions: a change
-  !> of rotational-frame, or of the number or the faces of the stationary-face-<k> keys (n_file of them in the file read
-  !> again), stops the run. So does a value of axis or origin that is not finite: read as a number, it would enter every
-  !> term of the frame, and the test of the length of the axis compares, which a NaN passes as false (Not_Finite reads the
-  !> bits). Every rank reads input.ini again on its own, and a file rewritten while the ranks read it can
-  !> give them different contents: the ranks take the decision to stop together (the largest of a flag), so that every
-  !> rank stops, or none (a rank that stopped alone would wait for the others in mpi_stop_all).
-  subroutine Reload_RotatingFrame ( n_file )
+  !> every bit as it was. The model and the stationary faces change the equations and the boundary conditions and cannot
+  !> change during the run: a change of rotational-frame, or of the stationary faces, is an error of the reading. The
+  !> registry holds the stationary-face-<k> keys of the set-up, and a key that the file read again leaves out keeps its
+  !> face, as every value left out does (Load_Ini): the faces change only when a key up to the number of the set-up names
+  !> another face, or when the file lists more keys than the set-up (n_file of them, counted as at set-up, up to the first
+  !> missing: a key after a gap of the numbering is counted neither there nor here). A value of axis or origin that is
+  !> not finite is an error of the reading too: read as a number, it would enter every term of the frame, and the test of
+  !> the length of the axis compares, which a NaN passes as false (Not_Finite reads the bits); so are an axis of zero
+  !> length and a value of axis, origin or of a stationary face that does not read as numbers (a read without IOSTAT
+  !> would end the run there). On an error the frame is left as it was and taken is false: with warn (ini-error = warn)
+  !> the caller does not take the reading and puts back every value it had before it (Read_Inifile_Runtime); without,
+  !> every rank stops. Every rank checks the values that rank 0 read again and passed to it (Load_Input_File in
+  !> Read_Ini), the same on every rank; the ranks take the decision together (the largest of a flag), so that every
+  !> rank stops or none does (a rank that stopped alone would wait for the others in mpi_stop_all).
+  subroutine Reload_RotatingFrame ( n_file, warn, taken, reason )
     use MOSE_Finite_m, only: Not_Finite
     use MOSE_Mod_MPI, only: mpi_is_root, mpi_allreduce_max_r8, mpi_stop_all
     implicit none
-    integer, intent(in) :: n_file
+    integer,          intent(in)  :: n_file
+    logical,          intent(in)  :: warn     !< ini-error = warn: an error leaves the frame as it was, with no stop
+    logical,          intent(out) :: taken    !< The values read again are taken: no rank found an error
+    character(len=*), intent(out) :: reason   !< The error this rank finds, blank if none
     ! Local
-    integer  :: k, face(2)
+    integer  :: k, face(2), ios
     real(R8) :: axis(3), origin(3), norm, omega_vec(3), flag, flag_all
-    character(len=256) :: reason   ! The error this rank finds, blank if none
+    character(len=12) :: kk
 
     reason = ''
     if ( obj_rot%model /= obj_rot%model_setup ) then
       reason = '[ERROR] Rotating frame: rotational-frame in input.ini read again is "'//trim(obj_rot%model)// &
                '", "'//trim(obj_rot%model_setup)//'" at set-up: the model cannot change during the run'
     else if ( obj_rot%enabled ) then
-      if ( n_file /= obj_rot%n_stationary ) &
-        reason = '[ERROR] Rotating frame: input.ini read again does not list the stationary-face keys of the'// &
-                 ' set-up: the stationary faces cannot change during the run'
+      if ( n_file > obj_rot%n_stationary ) &
+        reason = '[ERROR] Rotating frame: input.ini read again lists stationary-face keys that the set-up does not'// &
+                 ' have: the stationary faces cannot change during the run'
       do k = 1, obj_rot%n_stationary
         if ( len_trim(reason) > 0 ) exit
-        read(obj_rot%stationary_face_str(k), *) face(1), face(2)
-        if ( any ( face /= obj_rot%stationary_face(:,k) ) ) &
+        read(obj_rot%stationary_face_str(k), *, iostat=ios) face(1), face(2)
+        if ( ios /= 0 ) then
+          write(kk, '(I0)') k
+          reason = '[ERROR] Rotating frame: stationary-face-'//trim(kk)//' = '//trim(obj_rot%stationary_face_str(k))// &
+                   ' in input.ini read again does not read as a block and a face'
+        else if ( any ( face /= obj_rot%stationary_face(:,k) ) ) then
           reason = '[ERROR] Rotating frame: input.ini read again does not list the stationary-face keys of'// &
                    ' the set-up: the stationary faces cannot change during the run'
+        end if
       end do
       if ( len_trim(reason) == 0 ) then
-        read(obj_rot%axis_str, *)   axis
-        read(obj_rot%origin_str, *) origin
+        read(obj_rot%axis_str, *, iostat=ios) axis
+        if ( ios /= 0 ) then
+          reason = '[ERROR] Rotating frame: axis = '//trim(obj_rot%axis_str)// &
+                   ' in input.ini read again does not read as three numbers'
+        else
+          read(obj_rot%origin_str, *, iostat=ios) origin
+          if ( ios /= 0 ) reason = '[ERROR] Rotating frame: origin = '//trim(obj_rot%origin_str)// &
+                                   ' in input.ini read again does not read as three numbers'
+        end if
+      end if
+      if ( len_trim(reason) == 0 ) then
         if ( any(Not_Finite(axis)) ) then
           reason = '[ERROR] Rotating frame: a value of axis in input.ini read again is not finite (NaN or infinity)'
         else if ( any(Not_Finite(origin)) ) then
@@ -227,7 +252,9 @@ contains
     flag = 0.0_R8
     if ( len_trim(reason) > 0 ) flag = 1.0_R8
     call mpi_allreduce_max_r8 ( flag, flag_all )
-    if ( flag_all > 0.0_R8 ) then
+    taken = .not. ( flag_all > 0.0_R8 )
+    if ( .not. taken ) then
+      if ( warn ) return
       if ( len_trim(reason) > 0 ) call mpi_stop_all ( trim(reason) )
       call mpi_stop_all ( 'stopped with the ranks that found an error in input.ini read again (rotating frame)' )
     end if
@@ -384,6 +411,26 @@ contains
     w_wall(3) = -( obj_rot%Omega_vec(1)*r(2) - obj_rot%Omega_vec(2)*r(1) )
 
   end function RF_Wall_Velocity
+
+
+  ! ---------------------------------------------------------------------------
+  !> @brief Return the gradient of the velocity of a lab-stationary wall in the
+  !>        rotating frame, G(i,j) = d w_wall(i) / d x(j).
+  !>
+  !> w_wall = -(Omega x (r - origin)) is linear in r (RF_Wall_Velocity), so its
+  !> gradient is the constant matrix -[Omega x]. The wall routines take from it
+  !> the differences of the wall velocity along the wall.
+  !>
+  !> @return     G        Gradient of the relative velocity of the stationary wall [1/s]
+  function RF_Wall_Velocity_Gradient() result(G)
+    implicit none
+    real(R8) :: G(3,3)
+
+    G(1,:) = [  0.0_R8,                obj_rot%Omega_vec(3), -obj_rot%Omega_vec(2) ]
+    G(2,:) = [ -obj_rot%Omega_vec(3),  0.0_R8,                obj_rot%Omega_vec(1) ]
+    G(3,:) = [  obj_rot%Omega_vec(2), -obj_rot%Omega_vec(1),  0.0_R8               ]
+
+  end function RF_Wall_Velocity_Gradient
 
 
   ! ---------------------------------------------------------------------------
@@ -564,6 +611,63 @@ contains
   end function RF_Is_Stationary_Face
 
 
+  !> At set-up, once bc.txt is read: every stationary-face-<k> = <block> <face> must name a face of the mesh with walls 301
+  !> or 302, the only boundary conditions that take the velocity of a wall at rest in the laboratory, and with no record
+  !> that would take it in part. The records fall in three classes by the points that read the stationary flag
+  !> (RF_Is_Stationary_Face): the walls 301 and 302 read it everywhere (inviscid and viscous flux, ghost cells, wall output,
+  !> torque); the types 0, 101, 102, 200, 201, 400, 407, 410, 501 and 506 never read it, so their boundary condition is the
+  !> same with or without the key (a face of a casing that is wall in part and connection in part); every other type reads
+  !> it in part, in the inviscid flux of BC_Symmetry_Eul, which 103, 104 and 300 call always and 401-406, 408, 420 and
+  !> 502-505 as a fallback (103 and 104 also in the ghost cells), so the face would be at rest in part only: that stops the
+  !> run. A face with no wall 301 or 302, or with no record of the mesh, has no wall to put at rest: that stops the run too.
+  !> A new type that never reads the flag must be added to the types skipped here; if it is not, it stops the run as one
+  !> that reads it in part.
+  subroutine Check_Stationary_Faces ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Mod_MPI, only: mpi_stop_all
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    ! Local
+    integer :: k, l, b, f, nrec, nwall
+    character(len=256) :: msg
+
+    if ( .not. obj_rot%enabled ) return
+    if ( .not. allocated(obj_rot%stationary_face) ) return
+    do k = 1, size(obj_rot%stationary_face, 2)
+      b = obj_rot%stationary_face(1,k)
+      f = obj_rot%stationary_face(2,k)
+      nrec = 0
+      nwall = 0
+      do l = 1, domain % nbound
+        if ( domain % bc(l) % b /= b .or. domain % bc(l) % f /= f ) cycle
+        nrec = nrec + 1
+        select case ( domain % bc(l) % type )
+          case (301, 302)
+            nwall = nwall + 1
+          case (0, 101, 102, 200, 201, 400, 407, 410, 501, 506)
+            ! never reads the stationary flag
+          case default
+            write(msg,'(A,I0,A,I0,A,I0,A,I0,A,3(1X,I0),A)') '[ERROR] Rotating frame: stationary-face-', k, &
+              ' covers a record of type ', domain % bc(l) % type, ' (block ', b, ', face ', f, ', cell', &
+              domain % bc(l) % i, domain % bc(l) % j, domain % bc(l) % k, '), which reads the stationary flag in part:'// &
+              ' the face would be at rest in part only'
+            call mpi_stop_all ( trim(msg) )
+        end select
+      end do
+      if ( nrec == 0 ) then
+        write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] Rotating frame: stationary-face-', k, ' names block ', b, ', face ', f, &
+          ', which has no record in bc.txt: it is no wall of the mesh'
+        call mpi_stop_all ( trim(msg) )
+      else if ( nwall == 0 ) then
+        write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] Rotating frame: stationary-face-', k, ' names block ', b, ', face ', f, &
+          ', which has no wall 301 or 302'
+        call mpi_stop_all ( trim(msg) )
+      end if
+    end do
+
+  end subroutine Check_Stationary_Faces
+
+
   ! ---------------------------------------------------------------------------
   !> @brief Estimate the pressure torque on the rotating wall surfaces.
   !>
@@ -585,7 +689,7 @@ contains
   subroutine RF_Torque_Walls(domain, iter, time)
     use MOSE_Advanced_Types_m
     use MOSE_Global_m, only: np
-    use MOSE_Lib_Ghost, only: Is_Wall
+    use MOSE_Lib_BC_Fluxes, only: Is_Wall
     use MOSE_Mod_MPI, only: is_local_block, mpi_is_root, mpi_reduce_sum_r8_array
     use MOSE_Config_Types_m, only: obj_sim_param
 

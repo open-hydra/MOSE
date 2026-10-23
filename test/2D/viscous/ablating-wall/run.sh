@@ -41,10 +41,10 @@ done
 
 # melting-inert: the inert column runs 8000 iterations, in melting-inert/ with
 # the input.ini of this case at 8000 iterations. Its last check (no blowing)
-# looks at the start-up flow while it decays: the additive local time step is
-# about half as large in these cells, so the column needs 8000 iterations to
-# reach the pseudo-time of 4000 with the earlier step; the other columns pass
-# their checks with the 4000 of input.ini.
+# looks at the start-up flow while it decays: in these cells the additive local
+# time step is about half the smallest of the direction limits, so the column
+# needs 8000 iterations to reach the pseudo-time of 4000 steps of that limit;
+# the other columns pass their checks with the 4000 of input.ini.
 if [[ " $CONFIGS " == *" melting-inert "* ]]; then
   D=melting-inert
   mkdir -p "$D/INPUT" "$D/OUTPUT"

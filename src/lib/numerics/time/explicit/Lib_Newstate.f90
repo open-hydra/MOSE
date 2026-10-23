@@ -512,8 +512,10 @@ contains
   end subroutine Count_Negative_Turbulence
 
 
-  !> One line at the end of a RANS run: how many cell updates had a stage that made nu~, k or omega negative, so
-  !> that the realizability floor changed the solution (collective: every rank calls it).
+  !> One line at the end of a RANS run in which a stage made nu~, k or omega negative, so that the realizability floor
+  !> changed the solution: how many cell updates had such a stage, over the ranks. A run in which none did prints no
+  !> line. Collective: every rank of a run with a one- or two-equation model calls it and the reduction (model and nrans
+  !> are the same on every rank), so that no rank takes another MPI path; rank 0 writes the line when the total is not zero.
   subroutine Report_Negative_Turbulence ()
     use MOSE_Global_m, only: model, nrans
     use MOSE_Mod_MPI,  only: mpi_is_root, mpi_allreduce_sum_r8
@@ -522,8 +524,8 @@ contains
 
     if ( model /= 2 .or. nrans > 2 ) return
     call mpi_allreduce_sum_r8 ( real(n_negative_turbulence, R8), total )
-    if ( mpi_is_root ) write(*,'(A,I0)') ' Turbulence variables below zero after a stage (set to the floor): ', &
-                                         nint(total, I8)
+    if ( mpi_is_root .and. total > 0d0 ) &
+      write(*,'(A,I0)') ' Turbulence variables below zero after a stage (set to the floor): ', nint(total, I8)
 
   end subroutine Report_Negative_Turbulence
 

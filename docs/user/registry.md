@@ -16,6 +16,7 @@
 |-----------|---------|---------|----------|-------------|
 | ic-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw |  no | Initial condition (INPUT/ic.*) format |
 | sol-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw |  no | Solution (OUTPUT/field.*) format |
+| decomposition-map | none |  |  no | Block-to-rank map in INPUT/ (none: MOSE assigns the blocks) |
 | sol-diter | 1000000000 | > 0 |  no | Solution output iter frequency |
 | sol-dtime | 1e30 | > 0 |  no | Solution output time frequency |
 | sol-overwrite | true | true, false |  no | Overwrite solution files |
@@ -24,6 +25,7 @@
 | res-diter | 1 | > 0 |  no | Residual history iter frequency |
 | shell-diter | 1 | > 0 |  no | Shell update iter frequency |
 | ini-diter | 10000 | > 0 |  no | input.ini update iter frequency |
+| ini-error | warn | warn, stop |  no | input.ini read again with an error: warn and keep the values held before the reading, or stop (at set-up every error stops) |
 | timer-diter | 0 | >= 0 |  no | Wall-clock timing report iter frequency (0 = off) |
 
 ## MOSE-Probes
@@ -62,7 +64,7 @@
 | preconditioning-Ur-smooth | 0 | >= 0 |  no | Ur max-smoothing passes |
 | space-reconstruction |  | MUSCL, first-order | yes | Space reconstruction method |
 | flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order) |
-| diffusive-metric | inverse-mean | inverse-mean, mean |  no | Face metric of the interior viscous fluxes: inverse-mean is exact on stretched meshes, mean is faster but overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r |
+| diffusive-metric | stencil | stencil, inverse-mean, mean |  no | Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the k faces of type 200 for the linear fields that they allow) except at the chimera faces (102), which take inverse-mean with every value; inverse-mean takes the mean edges of the two cells, exact on a stretching normal to the face only; mean also overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r; inverse-mean and mean do not converge next to a symmetry plane (300) that bounds a sector of a polar mesh |
 | shock-detector |  | Tramel, Chen |  no | Shock detector method |
 | riemann-solver | HLLC | HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact |  no | Riemann solver |
 | riemann-options-Mco | 0.0 | >= 0 |  no | Low-Mach acoustic-dissipation cutoff Mach (floor) |

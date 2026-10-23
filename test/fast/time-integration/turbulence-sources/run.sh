@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Turbulence source terms in time-accurate runs (fast tier)
+#  Turbulence source terms in time-accurate runs, and the count of the values
+#  that a stage makes negative (fast tier)
 #
 #  A 2-D channel with a wall, periodic along the flow (make_case.py), with
 #  Spalart-Allmaras and with SST, each with Heun (RK2) and RK3:
@@ -9,12 +10,26 @@
 #           time (the step is set by cells whose state does not change), and
 #           the observed order must be at least 1.8 with Heun and 2.7 with RK3;
 #    warn   one step of SST-RC with RK3 on the case of SST, with no
-#           cfl-rise-threshold: the start-up warnings of the k-omega models and
-#           of the rotation-curvature correction must both be printed;
+#           cfl-rise-threshold and no point-implicit in the input: the
+#           start-up warning of the rotation-curvature correction must be
+#           printed, and none about the CFL ramp or point-implicit; the same
+#           step with point-implicit = true in the input: the warning that the
+#           factor is not applied in time-accurate runs must be printed, and
+#           with point-implicit = false not;
 #    pos    near-wall turbulence far above its equilibrium decays faster than
 #           the transport acts: no stage may make nu~, k or omega negative
-#           (count printed by the solver at the end of the run), and the step
-#           must have been limited by the turbulence sources.
+#           (the solver counts the cell updates in which a stage did, in a line
+#           at the end of the run that it prints only when there is one), the
+#           step must have been limited by the turbulence sources, and the
+#           first step must be the rule with the bound of the stiffness that
+#           the state of each cell gives alone (SA 2 cw1 (1 + cw3^6)^(1/6)
+#           nu~/y^2, SST max(beta*, 2 max(beta_1, beta_2)) omega);
+#    count  the case of pos with SST in a steady run (RK3, cfl 0.8, vnn 0.4,
+#           two iterations), whose local step holds no bound of the stiffness
+#           of the turbulence sources: with point-implicit = false the explicit
+#           destruction takes k or omega below zero in wall cells, and the line
+#           of the count must be printed once, with a count above zero; with
+#           point-implicit = true no stage does, and no such line is printed.
 #  and, on its own case,
 #    wilcox the vortex-stretching function of Wilcox 2006: a cube of 6^3
 #           cells, one block, a velocity whose every component varies
@@ -65,10 +80,11 @@ ln -sf "../$VISC/transport.dat" INPUT/transport.dat
 
 fail=0
 
-# solve <case> <time scheme> <cfl> <vnn> <steps> <tag>: time-accurate run of the case written by make_case.py;
-# the final field is kept as OUTPUT/<tag>.tec and the solver output as OUTPUT/<tag>.log
+# solve <case> <time scheme> <cfl> <vnn> <steps> <tag> [<line>]: time-accurate run of the case written by make_case.py,
+# with <line> added to [MOSE-Turbulence]; the final field is kept as OUTPUT/<tag>.tec and the solver output as
+# OUTPUT/<tag>.log
 solve() {
-  local model=${1#*-} wall=asymptotic
+  local model=${1#*-} wall=asymptotic extra=${7:-}
   [[ $1 == pos-SST ]] && wall=practical
   cat > input.ini <<EOF
 [MOSE-Parameters]
@@ -83,6 +99,7 @@ schmidt = 0.7
 
 [MOSE-Turbulence]
 omega-wall-bc = $wall
+$extra
 
 [MOSE-Numerics]
 cfl = $3
@@ -115,17 +132,71 @@ EOF
   cp OUTPUT/field.tec "OUTPUT/$6.tec"
 }
 
+# steady <point-implicit> <tag>: steady run of two RK3 iterations of the case pos-SST written by make_case.py, cfl 0.8,
+# vnn 0.4, with the point-implicit factor on (true) or off (false); the solver output as OUTPUT/<tag>.log
+steady() {
+  cat > input.ini <<EOF
+[MOSE-Parameters]
+iter-threshold = 2
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = navier-stokes
+turbulence = SST
+schmidt = 0.7
+
+[MOSE-Turbulence]
+omega-wall-bc = practical
+point-implicit = $1
+
+[MOSE-Numerics]
+cfl = 0.8
+vnn = 0.4
+time-accurate = false
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+
+[MOSE-IO]
+sol-diter = 1000000000
+shell-diter = 1
+EOF
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$2.log" 2>&1
+  if [[ ! -f OUTPUT/field.tec ]] || grep -a -qE 'NaN|Integration failed' "OUTPUT/$2.log"; then
+    echo "  [FAIL] the run did not end (see OUTPUT/$2.log)"
+    fail=1
+    return 1
+  fi
+}
+
 echo "-- start-up warnings, SST-RC, RK3, no cfl-rise-threshold, one step --"
 python3 -B make_case.py order-SST || exit 1
 if solve order-SST-RC RK3 0.8 0.4 1 warn-SST-RC; then
-  if grep -a -q '^\[WARNING\] k-omega, time-accurate, no cfl-rise-threshold' OUTPUT/warn-SST-RC.log &&
-     grep -a -q '^\[WARNING\] The rotation-curvature correction (-RC)' OUTPUT/warn-SST-RC.log; then
-    echo "  [ok  ] the k-omega and the -RC warnings are both printed"
+  if grep -a -q '^\[WARNING\] The rotation-curvature correction (-RC)' OUTPUT/warn-SST-RC.log &&
+     ! grep -a -q 'cfl-rise-threshold' OUTPUT/warn-SST-RC.log &&
+     ! grep -a -q '^\[WARNING\] point-implicit' OUTPUT/warn-SST-RC.log; then
+    echo "  [ok  ] the -RC warning is printed, and none about the CFL ramp or point-implicit (not in the input)"
   else
-    echo "  [FAIL] a start-up warning is missing (see OUTPUT/warn-SST-RC.log)"
+    echo "  [FAIL] the start-up warnings are not those of the input (see OUTPUT/warn-SST-RC.log)"
     fail=1
   fi
 fi
+for pi in true false; do
+  solve order-SST-RC RK3 0.8 0.4 1 "warn-pi-$pi" "point-implicit = $pi" || continue
+  n=$(grep -a -c '^\[WARNING\] point-implicit is not applied in time-accurate runs' "OUTPUT/warn-pi-$pi.log")
+  want=0
+  [[ $pi == true ]] && want=1
+  if [[ $n -eq $want ]]; then
+    echo "  [ok  ] point-implicit = $pi in the input: warnings that the factor is not applied in time-accurate runs: $n"
+  else
+    echo "  [FAIL] point-implicit = $pi in the input: warnings about the factor: $n, expected $want (see OUTPUT/warn-pi-$pi.log)"
+    fail=1
+  fi
+done
 
 for model in SA SST; do
   python3 -B make_case.py "order-$model" || exit 1
@@ -157,6 +228,20 @@ for model in SA SST; do
       fail=1
     fi
   done
+done
+
+echo "-- count of the values below zero, SST, steady, RK3, cfl 0.8, vnn 0.4, two iterations --"
+python3 -B make_case.py pos-SST || exit 1
+for pi in false true; do
+  expect=none
+  [[ $pi == false ]] && expect=some
+  steady "$pi" "count-$pi" || continue
+  if python3 -B make_case.py count "OUTPUT/count-$pi.log" "$expect"; then
+    echo "  [ok  ] point-implicit = $pi: the line of the count as expected ($expect)"
+  else
+    echo "  [FAIL] point-implicit = $pi: the line of the count is not as expected ($expect)"
+    fail=1
+  fi
 done
 
 echo "-- Wilcox 2006, vortex stretching: a 3-D flow, one step --"

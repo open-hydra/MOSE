@@ -10,7 +10,9 @@ contains
 
   subroutine Assign_Setup()
     use MOSE_Config_Types_m
-    use MOSE_Global_m,            only: model, nsc, nRANS
+    use MOSE_Global_m,            only: model, nsc
+    use MOSE_Parameters_m,        only: codename
+    use MOSE_Input_Registry,      only: Key_Is_Set
     use MOSE_IO_Solution,         only: Setup_Input_Solution
     use MOSE_Mod_Space,           only: Setup_Space_Scheme
     use MOSE_Mod_Riemann,         only: Assign_Riemann_Solver
@@ -144,23 +146,17 @@ contains
         '[ERROR] Sc<=0 (multicomponent diffusion) requires a binary diffusion table (INPUT/diffusion.dat)'
     end if
     ! SAcomp: Compressibility_Correction (Lib_Spalart) takes c from c^2 f(c) = 25 Omega nu~ fv1 / a, a number against a
-    ! speed, so the factor it gives the production depends on the units; until the correction is checked against its
-    ! source, the model is refused
+    ! speed, so the factor it gives the production depends on the units: the set-up refuses the model (Stop_Simulation)
     if (model == 2 .and. obj_rans%SAcomp) obj_rans%error_message = '[ERROR] turbulence = SAcomp: its '// &
       'compressibility correction solves c^2 f(c) = 25 Omega nu_t / a, a number against a speed, so the result '// &
       'depends on the units. Use SA or another turbulence model.'
-    ! Turbulence sources in time-accurate runs
-    if (model == 2 .and. obj_time_scheme%time_accurate) then
-      if (obj_rans%point_implicit) obj_time_scheme%warning_message = '[WARNING] point-implicit is not applied in '// &
+    ! Turbulence sources in time-accurate runs: explicit, whatever point-implicit says. A warning recalls it when input.ini
+    ! sets point-implicit to true; a run that leaves the key out takes its default, which the warning does not concern.
+    ! The warning of the rotation-curvature correction (-RC) in time-accurate runs is written by Print_Warnings (Wrap_Setup)
+    if (model == 2 .and. obj_time_scheme%time_accurate .and. obj_rans%point_implicit .and. &
+        Key_Is_Set(trim(codename)//'-Turbulence', 'point-implicit')) &
+      obj_time_scheme%warning_message = '[WARNING] point-implicit is not applied in '// &
         'time-accurate runs: the turbulence sources are explicit, and the time step includes their stiffness.'
-      ! k-omega models: the stiffness of the step is that of the start of the step, which does not see the omega that
-      ! the wall raises during the first step of a start far from the wall value
-      if (nRANS == 2 .and. obj_time_scheme%rampa_cfl_iter == 0) obj_rans%warning_message = '[WARNING] k-omega, '// &
-        'time-accurate, no cfl-rise-threshold: omega 100 times or more below its wall value in diffusion-limited '// &
-        'wall cells can turn negative at the first step.'
-      ! The warning of the rotation-curvature correction (-RC), which SST-RC needs next to the k-omega one above, is
-      ! written by Print_Warnings (Wrap_Setup)
-    end if
 
   end subroutine Assign_Setup
 

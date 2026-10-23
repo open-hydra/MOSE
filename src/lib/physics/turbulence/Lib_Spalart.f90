@@ -44,12 +44,15 @@ contains
     use MOSE_Lib_Fluid, only : Vorticity_Vector, Vorticity_Tensor
     use MOSE_Lib_SpalartShur, only : Compute_Velocity_Gradient, Compute_RC_Terms
     use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
+    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
 
     implicit none
-    type(MOSE_domain_type), intent(inout) :: domain
+    type(MOSE_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b
     logical :: SpalartShur, SAR, SAcomp, point_implicit
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:), Mc(:,:,:), Mt(:,:,:)   ! cell metrics of the sources (Source_Metrics)
 
     SpalartShur = obj_rans%SpalartShur
     SAR         = obj_rans%SAR
@@ -66,9 +69,10 @@ contains
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
+      call Source_Metrics ( domain % blk(b), Mi, Mc, Mt=Mt )
       call SA_Source_Blk ( domain % blk(b) % P,            &
                            domain % blk(b) % r,            &
-                           domain % blk(b) % M,            &
+                           Mi, Mc, Mt,                     &
                            domain % blk(b) % yn,           &
                            domain % blk(b) % k_rough,      &
                            domain % blk(b) % vol,          &
@@ -76,7 +80,6 @@ contains
                            domain % blk(b) % rc_term1,     &
                            domain % blk(b) % rc_term2,     &
                            domain % blk(b) % dtlocal,      &
-                           domain % blk(b) % stiff,        &
                            domain % blk(b) % dim,          &
                            SpalartShur, SAR, SAcomp,       &
                            point_implicit                  )
@@ -86,7 +89,7 @@ contains
   end subroutine Spalart_Source_Terms
 
 
-  subroutine SA_Source_Blk ( Prim, Res, M, yn, k_rough, vol, gradv, rc1, rc2, dt, stiff, n, SpalartShur, SAR, SAcomp, &
+  subroutine SA_Source_Blk ( Prim, Res, M, Mc, Mt, yn, k_rough, vol, gradv, rc1, rc2, dt, n, SpalartShur, SAR, SAcomp, &
                              point_implicit )
     use MOSE_Base_Types_m
     use MOSE_Global_m
@@ -101,11 +104,12 @@ contains
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: yn
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: k_rough
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: vol
-    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
+    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M    ! velocity
+    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mc   ! density
+    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variable
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
-    real(R8), dimension(n(1), n(2), n(3)), intent(out) :: stiff  ! d(destruction)/d(nu~) = 2 cw1 fw nu~/d^2
     ! Local
     integer :: i, j, k
     real(R8) :: rho, Rgas, nit, mil, Gradvel(3,3), Gradnit(3), omega(3), Om, abs_Eij, Wij(3,3)
@@ -190,7 +194,7 @@ contains
       Gradnit(3) = ( Prim(nt,i,j,k+1) / sum( Prim(1:nsc,i,j,k+1) ) - &
                      Prim(nt,i,j,k-1) / sum( Prim(1:nsc,i,j,k-1) ) ) * 0.5d0
 
-      Gradnit = Matmul ( Gradnit, M(i,j,k) % c ) ! ni-tilde gradient
+      Gradnit = Matmul ( Gradnit, Mt(i,j,k) % c ) ! ni-tilde gradient
 
       Gradnit2 = Sum ( Gradnit**2 )              ! ni-tilde gradient squared
 
@@ -198,7 +202,7 @@ contains
       Gradrho(1) = ( sum( Prim(1:nsc,i+1,j,k) ) - sum( Prim(1:nsc,i-1,j,k) ) ) * 0.5d0
       Gradrho(2) = ( sum( Prim(1:nsc,i,j+1,k) ) - sum( Prim(1:nsc,i,j-1,k) ) ) * 0.5d0
       Gradrho(3) = ( sum( Prim(1:nsc,i,j,k+1) ) - sum( Prim(1:nsc,i,j,k-1) ) ) * 0.5d0
-      Gradrho = Matmul ( Gradrho, M(i,j,k) % c )
+      Gradrho = Matmul ( Gradrho, Mc(i,j,k) % c )   ! behind a wall the density follows the temperature (Ghost_Wall)
 
       ! Diffusion terms outside the flux div((mu + rho nu~) grad nu~)/sigma: the cb2 term and, with variable density,
       ! -(nu + nu~) grad rho . grad nu~ / sigma, which makes this conservation form equal to the original equation
@@ -216,9 +220,6 @@ contains
 
       if ( SAcomp ) call Compressibility_Correction &
       ( nit, rho, chi, Prim(1:nsc,i,j,k), Prim(np,i,j,k), Rgas, Om, Production )
-
-      ! Stiffness of the destruction term (its derivative with respect to nu~ at fixed fw)
-      stiff(i,j,k) = 2d0 * cw1 * fw * nit / d**2
 
       ! Point-implicit factor of steady runs. It multiplies the whole increment of the row: the fluxes already in
       ! Res(nt) (Internal_Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not
@@ -376,6 +377,27 @@ contains
     mut = fv1( chi )*mitilde(1)
 
   end subroutine Spalart_Eddy_Viscosity
+
+
+  !> Bound of the stiffness of the destruction term, cw1 fw (nu~/d)^2: its derivative with respect to nu~ at fixed fw
+  !> is 2 cw1 fw nu~/d^2, and fw = g ((1 + cw3^6)/(g^6 + cw3^6))^(1/6) grows with g >= 0 towards (1 + cw3^6)^(1/6) =
+  !> 2.005, so d <= 2 cw1 (1 + cw3^6)^(1/6) nu~/d^2: from the cell alone, exact where fw is near its limit (r at its cap
+  !> of 10: nu~ far above its equilibrium), larger by 2.005/fw where fw is smaller (about 2 in an equilibrium boundary
+  !> layer, r near 1). d is the wall distance of the source, moved below a rough wall (SA-rough).
+  pure function Spalart_Stiffness_Bound ( rans_variables, rho, walldist, k_rough ) result ( stiff )
+    use MOSE_Global_m
+    implicit none
+    real(R8), intent(in), dimension(nRANS) :: rans_variables  ! : rho nu~
+    real(R8), intent(in)                   :: rho, walldist, k_rough
+    real(R8)                               :: stiff
+    ! Local
+    real(R8) :: d
+
+    d = walldist
+    if ( k_rough > 0d0 ) d = d + C_rough_d0 * k_rough
+    stiff = 2d0 * cw1 * ( 1d0 + cw3**6 )**(1d0/6d0) * max ( rans_variables(1) / rho, 0d0 ) / d**2
+
+  end function Spalart_Stiffness_Bound
 
 
   subroutine Spalart_RANS_Diffusive_Flux (flux, mitilde, milam, gradvel, gradnit, rho, area, normal, dist)

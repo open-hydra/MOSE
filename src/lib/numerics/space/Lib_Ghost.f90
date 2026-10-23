@@ -1,10 +1,15 @@
 module MOSE_Lib_Ghost
-  use iso_fortran_env, only: I4 => int32, R8 => real64
+  use iso_fortran_env, only: I4 => int32, I8 => int64, R8 => real64
   use MOSE_Advanced_Types_m
   use MOSE_Parameters_m
   use MOSE_Global_m
+  use MOSE_Lib_BC_Fluxes, only: Is_Wall
 
   implicit none
+
+  !> Ghost fills of a wall or 400 face (Ghost_Wall) in which the cut of an extrapolated quantity acted, and in which the
+  !> temperature of a 302 wall took the floor T_w/2: reported at the end of a run in which either happened (Report_Wall_Ghosts)
+  integer(I8) :: n_ghost_cut = 0, n_ghost_floor = 0
 
 contains
 
@@ -96,6 +101,11 @@ contains
           call Ghost_Q2D_Mapped ( domain % bc(i), domain % blk(Bm), domain % time )
         case(0,401:407,420) ! inlet/outlet/extrapolation: zero-gradient
           call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
+        case(103,104,301,302,400,503:505) ! walls (103, 104: coupled to another solver) and extrapolation faces
+          call Ghost_Wall ( domain % bc(i), domain % blk(Bm) )
+        case(502) ! SRM grain: extrapolation; in a RANS run the turbulence variables from the wall values of the grain
+          call Ghost_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
+          if ( model == 2 ) call Ghost_SRM_Turbulence ( domain % bc(i), domain % blk(Bm) )
         case(102)
           ! Chimera: processed after the donor-cell MPI exchange completes (below)
           continue
@@ -248,7 +258,7 @@ contains
 
 
   subroutine Ghost_Axysimmetry ( Im, Jm, Km, Fm, blk )
-    use MOSE_Lib_Metrics, only: delthe
+    use MOSE_Lib_Metrics, only: cos_delthe, sin_delthe
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout) :: blk
@@ -261,16 +271,16 @@ contains
 
     if (ndir < 3) then 
       ! Rotate v and w of +/- delthe and copy other variables
-      blk % P (nv,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Km) * cos(delthe) + guide(Fm,3) * blk % P (nw,Im,Jm,Km) * sin(delthe)
-      blk % P (nw,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Km) * sin(delthe) * (-guide(Fm,3)) + blk % P (nw,Im,Jm,Km) * cos(delthe)
+      blk % P (nv,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Km) * cos_delthe + guide(Fm,3) * blk % P (nw,Im,Jm,Km) * sin_delthe
+      blk % P (nw,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Km) * sin_delthe * (-guide(Fm,3)) + blk % P (nw,Im,Jm,Km) * cos_delthe
       blk % P (1:nu,Ig,Jg,Kg) = blk % P (1:nu,Im,Jm,Km)
       blk % P (np:nprim,Ig,Jg,Kg) = blk % P (np:nprim,Im,Jm,Km)
     else
       ! The cell next to the opposite k face, turned about x by -guide(Fm,3)*delthe: back by the
       ! sector angle behind face 5, forward behind face 6 (the same turn as the 2-D branch above)
       Ks = blk % dim(3) - Km + 1
-      blk % P (nv,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * cos(delthe) + guide(Fm,3) * blk % P (nw,Im,Jm,Ks) * sin(delthe)
-      blk % P (nw,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * sin(delthe) * (-guide(Fm,3)) + blk % P (nw,Im,Jm,Ks) * cos(delthe)
+      blk % P (nv,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * cos_delthe + guide(Fm,3) * blk % P (nw,Im,Jm,Ks) * sin_delthe
+      blk % P (nw,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * sin_delthe * (-guide(Fm,3)) + blk % P (nw,Im,Jm,Ks) * cos_delthe
       blk % P (1:nu,Ig,Jg,Kg) = blk % P (1:nu,Im,Jm,Ks)
       blk % P (np:nprim,Ig,Jg,Kg) = blk % P (np:nprim,Im,Jm,Ks)
     endif
@@ -312,6 +322,12 @@ contains
       
   end subroutine Ghost_Symmetry
 
+  !> Ghost cells of a mapped face (410), both layers, and Pg(:,1:2): the state of the cell across the face that its file
+  !> gives, the densities of the species, the velocity and the pressure, interpolated at the time; the quantities after p
+  !> (the turbulence variables and the soot), which the file does not give, those of the cell per unit mass, phi_g = phi_1,
+  !> that is (rho phi)_g = rho_g (rho phi)_1/rho_1 with rho the sum of the densities of the species. So the specific values
+  !> whose differences the viscous fluxes and the sources take, phi = (rho phi)/rho (Visc_State), are those of the cell,
+  !> and a uniform field of them stays uniform across the face, whatever the density of the file.
   subroutine Ghost_Q2D_Mapped ( bc, blk, time )
     implicit none
     type(MOSE_bc_type), intent(inout)    :: bc
@@ -326,8 +342,9 @@ contains
     Km = bc % k
     Fm = bc % f
 
-    ! Interpolate Q2D data at current time (per-variable, reusing time_bc_type)
-    do s = 1, nprim
+    ! Interpolate Q2D data at current time (per-variable, reusing time_bc_type): the file gives every primitive up to the
+    ! pressure (Read_Q2D_Tecplot stops on a file that lacks one; a species that it does not name has zero density)
+    do s = 1, np
       if (bc % q2d_map(s) % exists) then
         if (bc % q2d_map(s) % periodic) then
           Pinterp(s) = bc % q2d_map(s) % update(time)
@@ -344,6 +361,11 @@ contains
         Pinterp(s) = blk % P(s, Im, Jm, Km)
       endif
     enddo
+
+    ! The quantities after p (the turbulence variables and the soot): the values of the cell per unit mass, at the density
+    ! of the file
+    if ( nprim > np ) Pinterp(np+1:nprim) = sum ( Pinterp(1:nsc) ) * ( blk % P(np+1:nprim,Im,Jm,Km) &
+                                                                       / sum ( blk % P(1:nsc,Im,Jm,Km) ) )
 
     ! First ghost cell
     Ig = Im - guide(Fm,1)
@@ -696,63 +718,219 @@ contains
   end subroutine Fill_BC_Ghost_Q2D
 
 
-  subroutine Ghost_Wall_Extrapolation ( domain )
+  !> Ghost cells of a wall (103, 104, 301, 302, 503-505) or of an extrapolation face (400), both layers
+  !> (docs/theory/numerics.md, "Ghost cells of walls and 400 faces"). The quantities whose differences the viscous fluxes
+  !> and the turbulence sources take, Y_s, T, u and the specific turbulence and scalar variables phi = P/rho, are
+  !> extrapolated, and the pressure; the ghost state follows from them, rho = p / (R(Y) T). A quantity with a wall value
+  !> q_w takes 2 q_w - q_1: the velocity of a 301 or 302 wall (zero, or the wall velocity of a stationary face of a
+  !> rotating frame) and the turbulence variables of the walls (their wall values, as the wall routines take them, so that
+  !> the ghost values written here are the only ones: the fluxes and the source terms read the same); the temperature of a
+  !> 302 wall, max(2 T_w - T_1, T_w/2). The others q_1 + psi (q_1 - q_2), psi <= s = l0/l1 (rec%sx), cut where needed to keep
+  !> each species, the pressure, the temperature and each scalar within [q_1/2, 2 q_1] (Bounded_Extrapolation; the
+  !> composition is normalised after the cut), the velocity not cut. Exact for the linear fields whose wall values are
+  !> their values at the centre of the face, at the positions of MOSE_Lib_Stencil_Metrics (2 x_f - x_1 for the quantities
+  !> with a wall value, x_1 + s (x_1 - x_2) for the extrapolated ones). In an inviscid run the walls take no wall values:
+  !> every quantity is extrapolated, as behind a 400 face. With one cell along the direction of the face the extrapolated
+  !> quantities are copied.
+  subroutine Ghost_Wall ( rec, blk )
+    use MOSE_Config_Types_m, only: obj_rot
+    use MOSE_Lib_RotatingFrame, only: RF_Is_Stationary_Face, RF_Face_Center, RF_Wall_Velocity
+    use MOSE_Lib_RANS, only: RANS_Set_Wall_Values
+    use MOSE_Lib_BC_Fluxes, only: Face_Index, Wall_State_Heat, Wall_State_Temperature
+    use FLINT_Lib_Thermodynamic, only: co_rotot_Rtot, f_Rtot
     implicit none
-    type(MOSE_domain_type) :: domain
-    integer :: ii, i, ig, jg, kg
-    integer :: bm, im, jm, km, fm
+    type(MOSE_bc_type), intent(in)       :: rec
+    type(MOSE_block_type), intent(inout) :: blk
+    ! Local
+    integer  :: Im, Jm, Km, Fm, c(3,2), l, s, Dir, Face_i, Face_j, Face_k
+    real(R8) :: rho(2), Rgas(2), T(2), Y(nsc,2), u(3,2), phi(nprim-np,2)
+    real(R8) :: YG(nsc,2), TG(2), pG(2), uG(3,2), phiG(nprim-np,2), uw(3), phiw(nprim-np), rw(nrans), r_fc(3)
+    real(R8) :: rho_w, rhos_w(nsc), mil, kl, temp, dT, Twall, kr, sx, rhoG
+    logical  :: wall, cut, cutq
 
-    !$omp do private ( ii, i, bm, im, jm, km, fm, ig, jg, kg )
-    ! BC array processing — iterate only over local BC entries
-    do ii = 1, domain%n_local_bc
-      i = domain%local_bc_idx(ii)
+    Im = rec % i ; Jm = rec % j ; Km = rec % k ; Fm = rec % f
+    sx = rec % sx
+    wall = model > 0 .and. Is_Wall(rec % type)
 
-      ! Preliminary assignments
-      bm = domain % bc(i) % b
-      im = domain % bc(i) % i
-      jm = domain % bc(i) % j
-      km = domain % bc(i) % k
-      fm = domain % bc(i) % f
-
-      ! ghost cell coordinates
-      ig = im - guide(fm,1)
-      jg = jm - guide(fm,2)
-      kg = km - guide(fm,3)
-
-      if ( Is_Wall( domain%bc(i)%type ) ) then
-        ! Invert the velocity components
-        domain%blk(bm)%P (nu:nw,ig,jg,kg) = - domain%blk(bm)%P (nu:nw,im,jm,km)
-
-        ! Other variables copied, but not the turbulence variables (the last nrans):
-        ! the wall flux routines set their ghost values from the wall values,
-        ! Z_ghost = 2 Z_wall - Z_cell (RANS_Extrapolate_Wall; S. L. Krist, R. T. Biedron,
-        ! C. L. Rumsey, CFL3D User's Manual 5.0, NASA/TM-1998-208444, eq. H-186), and
-        ! the source terms of the wall cells must see those (Wall_RANS_Ghosts sets them
-        ! where no boundary fluxes come first)
-        domain%blk(bm)%P (1:nsc,ig,jg,kg) = domain%blk(bm)%P (1:nsc,im,jm,km)
-        domain%blk(bm)%P (np:nprim-nrans,ig,jg,kg) = domain%blk(bm)%P (np:nprim-nrans,im,jm,km)
-        ! The walls coupled to another solver (103, 104) have no such routine (BC_Fluxes gives
-        ! them the inviscid wall flux and the flux of the other solver only): their turbulence
-        ! variables are copied from the cell, as the other variables
-        if ( domain%bc(i)%type == 103 .or. domain%bc(i)%type == 104 ) &
-          domain%blk(bm)%P (nprim-nrans+1:nprim,ig,jg,kg) = domain%blk(bm)%P (nprim-nrans+1:nprim,im,jm,km)
-      endif
+    ! The boundary cell (1) and the next one along the direction of the face (2; the cell itself in a block of one cell)
+    c(:,1) = [Im, Jm, Km]
+    c(:,2) = c(:,1)
+    if ( blk % dim((Fm+1)/2) > 1 ) c(:,2) = c(:,1) + guide(Fm,:)
+    do l = 1, 2
+      associate ( P => blk % P(:,c(1,l),c(2,l),c(3,l)) )
+      call co_rotot_Rtot ( P(1:nsc), rho(l), Rgas(l) )
+      T(l) = P(np) / ( rho(l) * Rgas(l) )
+      Y(:,l) = P(1:nsc) / rho(l)
+      u(:,l) = P(nu:nw)
+      phi(:,l) = P(np+1:nprim) / rho(l)
+      end associate
     enddo
 
-  end subroutine Ghost_Wall_Extrapolation
+    cut = .false.
 
+    ! Species (each cut, then the composition normalised) and pressure
+    do s = 1, nsc
+      call Bounded_Extrapolation ( Y(s,1), Y(s,2), sx, YG(s,1), YG(s,2), cutq )
+      cut = cut .or. cutq
+    enddo
+    YG(:,1) = YG(:,1) / sum ( YG(:,1) )
+    YG(:,2) = YG(:,2) / sum ( YG(:,2) )
+    call Bounded_Extrapolation ( blk % P(np,c(1,1),c(2,1),c(3,1)), blk % P(np,c(1,2),c(2,2),c(3,2)), sx, pG(1), pG(2), cutq )
+    cut = cut .or. cutq
 
-  function Is_Wall(type) result (ans)
-      implicit none
-      integer, intent(in) :: type
-      logical :: ans
+    ! Temperature
+    if ( wall .and. rec % type == 302 ) then
+      TG(1) = max ( 2d0 * rec % Tw - T(1), 0.5d0 * rec % Tw )
+      TG(2) = max ( 2d0 * rec % Tw - T(2), 0.5d0 * rec % Tw )
+      if ( 2d0 * rec % Tw - T(1) < 0.5d0 * rec % Tw ) then
+        !$omp atomic
+        n_ghost_floor = n_ghost_floor + 1
+      end if
+    else
+      call Bounded_Extrapolation ( T(1), T(2), sx, TG(1), TG(2), cutq )
+      cut = cut .or. cutq
+    end if
 
-      select case (type)
-        case (103, 104, 301, 302, 503, 504, 505)  ! wall BCs (multi-solver coupling, heat flux, T, GSI)
-          ans = .true.
+    ! Velocity
+    if ( wall .and. rec % type <= 302 ) then
+      uw = 0d0
+      if ( obj_rot % enabled ) then
+        if ( RF_Is_Stationary_Face(rec % b, Fm) ) then
+          call RF_Face_Center ( blk % node, Im, Jm, Km, Fm, r_fc )
+          uw = RF_Wall_Velocity ( r_fc )
+        end if
+      end if
+      uG(:,1) = 2d0 * uw - u(:,1)
+      uG(:,2) = 2d0 * uw - u(:,2)
+    else
+      uG(:,1) = u(:,1) + sx * ( u(:,1) - u(:,2) )
+      uG(:,2) = u(:,1) + 2d0 * sx * ( u(:,1) - u(:,2) )
+    end if
+
+    ! Turbulence and scalar variables: the wall values of the turbulence variables, from the wall state of the wall
+    ! routines (302: BC_Wall_Temperature; 301: BC_Wall_Heat; 503-505, whose surface model sets the wall state at every
+    ! call, and the coupled walls 103 and 104: the state of the cell, as an adiabatic wall)
+    if ( wall .and. model == 2 ) then
+      kr = 0d0
+      select case ( rec % type )
+        case (302)
+          kr = rec % k_rough
+          call Wall_State_Temperature ( blk % P(:,Im,Jm,Km), rho(1), Rgas(1), rec % Tw, rho_w, rhos_w, mil, kl )
+        case (301)
+          kr = rec % k_rough
+          call Face_Index ( Fm, Dir, Im, Jm, Km, Face_i, Face_j, Face_k )
+          call Wall_State_Heat ( blk % P(:,Im,Jm,Km), rho(1), Rgas(1), rec % qw, blk % M(Im,Jm,Km) % c, &
+                                 blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n, Dir, temp, mil, kl, dT, Twall, rho_w )
         case default
-          ans = .false.
+          call Face_Index ( Fm, Dir, Im, Jm, Km, Face_i, Face_j, Face_k )
+          call Wall_State_Heat ( blk % P(:,Im,Jm,Km), rho(1), Rgas(1), 0d0, blk % M(Im,Jm,Km) % c, &
+                                 blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n, Dir, temp, mil, kl, dT, Twall, rho_w )
       end select
-    end function Is_Wall
+      call RANS_Set_Wall_Values ( mil, blk % P(nt:nprim,Im,Jm,Km) * rho_w / rho(1), rw, blk % yn(Im,Jm,Km), kr )
+      phiw = 0d0
+      phiw(nt-np:) = rw / rho_w
+    end if
+    do s = 1, nprim - np
+      if ( wall .and. model == 2 .and. np + s >= nt ) then
+        phiG(s,1) = 2d0 * phiw(s) - phi(s,1)
+        phiG(s,2) = 2d0 * phiw(s) - phi(s,2)
+      else
+        call Bounded_Extrapolation ( phi(s,1), phi(s,2), sx, phiG(s,1), phiG(s,2), cutq )
+        cut = cut .or. cutq
+      end if
+    enddo
+
+    if ( cut ) then
+      !$omp atomic
+      n_ghost_cut = n_ghost_cut + 1
+    end if
+
+    ! Ghost state of the two layers
+    do l = 1, 2
+      associate ( P => blk % P(:,Im-l*guide(Fm,1),Jm-l*guide(Fm,2),Km-l*guide(Fm,3)) )
+      rhoG = pG(l) / ( f_Rtot ( YG(:,l) ) * TG(l) )
+      P(1:nsc) = YG(:,l) * rhoG
+      P(nu:nw) = uG(:,l)
+      P(np) = pG(l)
+      P(np+1:nprim) = phiG(:,l) * rhoG
+      end associate
+    enddo
+
+  end subroutine Ghost_Wall
+
+
+  !> Turbulence variables of the two layers of ghost cells of an SRM grain face (502) in a RANS run, after
+  !> Ghost_Extrapolate: 2 phi_w - phi_l times the density of the ghost cell (phi = Z/rho; l = 1 the boundary cell, l = 2
+  !> the next one along the direction of the face, the cell itself in a block of one cell), the rule of the walls
+  !> (Ghost_Wall), with the wall values that the boundary flux of the grain takes (SRM_Wall_Turbulence): those of the
+  !> blowing wall while the surface burns, of the wall at the flame temperature when it does not. The other variables keep
+  !> the extrapolation. MOSE_Lib_Stencil_Metrics puts these values at 2 x_f - x_1.
+  subroutine Ghost_SRM_Turbulence ( rec, blk )
+    use MOSE_Lib_BC_Fluxes_GSI_SRM, only: SRM_Wall_Turbulence
+    implicit none
+    type(MOSE_bc_type), intent(in)       :: rec
+    type(MOSE_block_type), intent(inout) :: blk
+    ! Local
+    integer  :: Im, Jm, Km, Fm, c(3), l
+    real(R8) :: rho_w, rw(nrans), phiw(nrans)
+
+    Im = rec % i ; Jm = rec % j ; Km = rec % k ; Fm = rec % f
+    call SRM_Wall_Turbulence ( Im, Jm, Km, Fm, blk, rec % aCoeff, rec % n, rec % pRef, rec % Taf, rec % ci, rho_w, rw )
+    phiw = rw / rho_w
+    do l = 1, 2
+      c = [Im, Jm, Km]
+      if ( l == 2 .and. blk % dim((Fm+1)/2) > 1 ) c = c + guide(Fm,:)
+      associate ( G => blk % P(:,Im-l*guide(Fm,1),Jm-l*guide(Fm,2),Km-l*guide(Fm,3)), Pc => blk % P(:,c(1),c(2),c(3)) )
+      G(nt:nprim) = sum ( G(1:nsc) ) * ( 2d0 * phiw - Pc(nt:nprim) / sum ( Pc(1:nsc) ) )
+      end associate
+    enddo
+
+  end subroutine Ghost_SRM_Turbulence
+
+
+  !> q_1 + psi (q_1 - q_2) on the first ghost layer and q_1 + 2 psi_2 (q_1 - q_2) on the second, with psi <= sx and
+  !> psi_2 <= psi the largest values that keep the ghost value within [q_1/2, 2 q_1] (with the sign of q_1; a zero q_1 is
+  !> copied). cut: the bound acted on the first layer.
+  pure subroutine Bounded_Extrapolation ( q1, q2, sx, g1, g2, cut )
+    implicit none
+    real(R8), intent(in)  :: q1, q2, sx
+    real(R8), intent(out) :: g1, g2
+    logical,  intent(out) :: cut
+    ! Local
+    real(R8) :: d, b
+
+    d = q1 - q2
+    b = huge(1d0)
+    if ( q1 * d > 0d0 ) then
+      b = q1 / d                    ! away from zero: |g| <= 2 |q1|
+    elseif ( q1 * d < 0d0 ) then
+      b = -0.5d0 * q1 / d           ! towards zero: |g| >= |q1|/2
+    elseif ( abs(d) > 0d0 ) then
+      b = 0d0                       ! q1 = 0
+    end if
+    g1 = q1 + min ( sx, b ) * d
+    g2 = q1 + 2d0 * min ( sx, 0.5d0 * b ) * d
+    cut = b < sx
+
+  end subroutine Bounded_Extrapolation
+
+
+  !> One line at the end of a run in which the cut of an extrapolated quantity acted in a ghost fill of a wall or 400 face, or
+  !> the temperature of a 302 wall took the floor T_w/2: the fills of each kind, over the whole run, its grid levels and ranks.
+  !> Either says that the mesh does not resolve the profile next to the face; a run in which neither acted prints no line.
+  !> Collective: every rank calls it, and both reductions, in every run, so that no rank takes another MPI path; rank 0
+  !> writes the line when one of the two totals is not zero.
+  subroutine Report_Wall_Ghosts ()
+    use MOSE_Mod_MPI, only: mpi_is_root, mpi_allreduce_sum_r8
+    implicit none
+    real(R8) :: ncut, nfloor
+
+    call mpi_allreduce_sum_r8 ( real(n_ghost_cut, R8), ncut )
+    call mpi_allreduce_sum_r8 ( real(n_ghost_floor, R8), nfloor )
+    if ( mpi_is_root .and. ( ncut > 0d0 .or. nfloor > 0d0 ) ) &
+      write(*,'(A,I0,A,I0)') ' Ghost cells of walls and 400 faces, fills with the extrapolation cut: ', &
+                             nint(ncut, I8), ', with the 302 temperature at T_w/2: ', nint(nfloor, I8)
+
+  end subroutine Report_Wall_Ghosts
 
 end module MOSE_Lib_Ghost

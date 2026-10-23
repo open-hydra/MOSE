@@ -16,6 +16,11 @@
 #     residual of the same cell in one block (wedgeref), within 1e-9 of
 #     mu G / H: with the ghost cell itself as the k neighbours of the ghost
 #     row, the chimera faces took half of the v/r of the divergence.
+#  And a control: fanchim, plane with the y spacing of block 1 growing 4
+#  times across its last cell, which turns over the first layer of ghost
+#  cells extrapolated behind the chimera face, whose viscous flux takes
+#  their metric: the run must stop at set-up, with a non-zero exit code,
+#  on the ghost cell behind face 2.
 #===============================================================================
 set -uo pipefail
 
@@ -73,6 +78,17 @@ done
 
 echo "-- residual of a linear field next to the edges of chimera faces --"
 python3 -B make_case.py check || status=1
+echo "-- a turned-over first layer of ghost cells behind a chimera face: stop at set-up --"
+python3 -B make_case.py case fanchim || exit 1
+rm -f OUTPUT/diagnostic.tec
+OMP_NUM_THREADS=1 "$LOCAL" > OUTPUT/fanchim.log 2>&1
+rc=$?
+if [[ $rc -ne 0 && ! -f OUTPUT/diagnostic.tec ]] && python3 -B make_case.py stopped OUTPUT/fanchim.log; then
+  :
+else
+  echo "  [FAIL] fanchim: exit code $rc, no stop at set-up on the ghost cell behind face 2 (see OUTPUT/fanchim.log)"
+  status=1
+fi
 if [[ $status -eq 0 ]]; then
   echo "ChimeraFace: all checks passed"
 else

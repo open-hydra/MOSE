@@ -34,11 +34,15 @@
 #  translation of each periodic face, of which the run takes one). Rounded
 #  to 2 digits, the turned channel gives translations that differ by up to
 #  0.15 of its cells: the run must stop at set-up with the message on the
-#  periodic translations, which asks for sides that match. On a 3-D wall of
-#  twisted faces, where the four triangles of a face are not the face, the
-#  run must report at start-up the largest bound of their gap over the
-#  distance of the cell next to the face; on plane faces it must report
-#  nothing.
+#  periodic translations, which asks for sides that match. Two 3-D walls of
+#  twisted faces, each the bilinear surface through its four nodes, whose four
+#  triangles between the centre and the sides are not the face: a block whose
+#  wall is y = 2 (x - 0.5)(z - 0.5) (twist), where in some cells the nearest
+#  face by the triangles is not the nearest face, and a block periodic in x
+#  whose wall is y = 0.08 sin(2 pi x) sin(2 pi z) (twistper): d must equal the
+#  exact distance to the bilinear faces and their periodic images within 1e-9
+#  (references twist_exact.txt and twistper_exact.txt, written by make_case.py
+#  exact NAME). No run may print a warning on twisted wall faces.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -90,7 +94,8 @@ EOF
 
 echo "-- distance to the wall read back from the Spalart-Allmaras source --"
 errors=()
-for name in corner arc lip periodic pipe sector noisy span thin far staggered oblique turned5 turned4; do
+fan_differs=0
+for name in corner arc lip periodic pipe sector noisy span thin far staggered oblique turned5 turned4 twist twistper; do
   python3 -B make_case.py case "$name" || exit 1
   rm -f OUTPUT/diagnostic.tec
   "$LOCAL" > "OUTPUT/$name.log" 2>&1
@@ -100,8 +105,13 @@ for name in corner arc lip periodic pipe sector noisy span thin far staggered ob
     exit 1
   fi
   cp OUTPUT/diagnostic.tec "OUTPUT/diagnostic-$name.tec"
-  read -r err cells corner_cells < <(python3 -B make_case.py error "$name" "OUTPUT/diagnostic-$name.tec")
-  echo "  $name: largest relative error of d $err over $cells cells ($corner_cells nearest to a wall node)"
+  read -r err cells third < <(python3 -B make_case.py error "$name" "OUTPUT/diagnostic-$name.tec")
+  if [[ $name == twist* ]]; then
+    echo "  $name: largest relative error of d $err over $cells cells ($third whose nearest face by the four triangles is not the nearest face)"
+    [[ $name == twist ]] && fan_differs=$third
+  else
+    echo "  $name: largest relative error of d $err over $cells cells ($third nearest to a wall node)"
+  fi
   errors+=("$name=$err")
 done
 
@@ -124,18 +134,16 @@ else
   fail=1
 fi
 
-echo "-- twisted wall faces in 3-D: the start-up report of the error bound --"
-python3 -B make_case.py case twist || exit 1
-"$LOCAL" > OUTPUT/twist.log 2>&1
-if python3 -B make_case.py twist OUTPUT/twist.log; then
-  echo "  [ok  ] reported"
+echo "-- twisted wall faces: the exact distance, no warning --"
+if [[ $fan_differs -ge 1 ]]; then
+  echo "  [ok  ] twist: $fan_differs cells whose nearest face by the four triangles is not the nearest face"
 else
-  echo "  [FAIL] the twist of the wall faces is not reported, or not right (see OUTPUT/twist.log)"
+  echo "  [FAIL] twist: no cell whose nearest face by the four triangles differs: the case does not test the search"
   fail=1
 fi
-for name in corner arc lip periodic pipe sector noisy span thin far staggered oblique turned5 turned4; do
+for name in corner arc lip periodic pipe sector noisy span thin far staggered oblique turned5 turned4 twist twistper; do
   if grep -a -q 'twisted wall faces' "OUTPUT/$name.log"; then
-    echo "  [FAIL] $name: a twist reported on plane wall faces"
+    echo "  [FAIL] $name: a warning on twisted wall faces"
     fail=1
   fi
 done

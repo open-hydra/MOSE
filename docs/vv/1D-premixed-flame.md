@@ -22,13 +22,15 @@ and $p = 101325$ Pa. The inflow velocity is set to the laminar flame speed,
 $u_n = S_L = 0.2860$ m/s, anchoring the flame in the domain. The initial field is
 a sharp unburnt/burnt discontinuity that relaxes to the steady flame structure.
 
-| State | $T$ [K] | $u$ [m/s] | composition |
+| Initial state | $T$ [K] | $u$ [m/s] | composition |
 |---|---:|---:|---|
 | Unburnt (reactants) | 300  | 0.286 | CH$_4$/O$_2$/N$_2$ at $\phi = 1$ |
 | Burnt (products)    | 2153 | 2.428 | CO$_2$, H$_2$O, CO, OH, N$_2$, … |
 
 Mass conservation across the flame fixes the burnt-gas velocity through the
-density (temperature) ratio, $u_b/u_u = \rho_u/\rho_b = T_b/T_u \approx 7.2$.
+density (temperature) ratio, $u_b/u_u = \rho_u/\rho_b = T_b/T_u \approx 7.2$: the
+run takes the 2.428 m/s of the initial burnt state to the $u_\text{burnt}$ of the
+steady flame, 2.04 m/s (below).
 
 ## Numerical setup
 
@@ -71,12 +73,12 @@ Y_{\mathrm{CO}}$, right axis) against $c$.
   {% include "vv/images/flame-species.svg" %}
 </figure>
 
-The reactant inflow speed, the burnt-gas state, and the radical (OH) peak all
-match the Cantera reference closely:
+The burnt-gas state and the radical (OH) peak match the Cantera reference
+closely; the unburnt velocity is that of the inlet, set to the Cantera flame speed:
 
 | Quantity | MOSE | Cantera |
 |---|---:|---:|
-| $S_L$ (unburnt $u$) [m/s] | 0.286 | 0.286 |
+| Unburnt $u$ [m/s] (inlet, set to the $S_L$ of Cantera) | 0.286 | 0.286 |
 | $T_\text{burnt}$ [K]      | 2190  | 2149  |
 | $u_\text{burnt}$ [m/s]    | 2.04  | 2.06  |
 | $Y_{\mathrm{OH}}$ peak    | $5.17\times10^{-3}$ | $5.15\times10^{-3}$ |

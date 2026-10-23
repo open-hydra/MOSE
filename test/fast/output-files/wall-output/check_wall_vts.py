@@ -9,9 +9,10 @@ Points array must hold three values for each of the points of that extent, and e
 CellData array one value for each of its cells (a collapsed direction counts one layer of
 cells, as in the cell-centered ordered data of the Tecplot format and in the writers of
 ORION). Every array of a wall file must be raw appended data, whose values are counted
-from its size header.
+from its size header. The wall files are those that the .vtm lists: each of them exists,
+there are as many as the wall faces of the case, and no other wallB<b>F<f>.vts is there.
 
-Usage: python check_wall_vts.py <OUTPUT/vtk directory> <label>
+Usage: python check_wall_vts.py <OUTPUT/vtk directory> <label> <wall .vtm> <number of wall faces>
 Exit 0 = pass, 1 = fail.
 """
 import re
@@ -19,7 +20,7 @@ import struct
 import sys
 from pathlib import Path
 
-vtk, label = Path(sys.argv[1]), sys.argv[2]
+vtk, label, vtm, nfaces = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3]), int(sys.argv[4])
 SIZE = {"Float64": 8, "Float32": 4, "Int32": 4, "UInt32": 4, "Int64": 8, "UInt64": 8}
 
 
@@ -88,6 +89,19 @@ for wall in sorted(vtk.glob("wallB*F*.vts")):
             fail.append(f"{wall.name}: {section} {name}: {nval} values, {expected} expected")
     if not any(s == "CellData" for s, _ in arrays):
         fail.append(f"{wall.name}: no CellData")
+
+# The .vtm lists the wall files relative to its folder: one for each wall face, all of them on disk, and no other one
+listed = [(vtm.parent / f).resolve() for f in re.findall(r'<DataSet[^>]*\bfile="([^"]*)"', vtm.read_text(encoding="latin-1"))]
+if len(listed) != nfaces:
+    fail.append(f"{vtm.name}: {len(listed)} wall files listed, {nfaces} expected (one for each wall face)")
+for f in listed:
+    if not f.is_file():
+        fail.append(f"{vtm.name}: {f.name} listed but not written")
+for wall in sorted(vtk.glob("wallB*F*.vts")):
+    if wall.resolve() not in listed:
+        fail.append(f"{wall.name}: not listed in {vtm.name}")
+if nwall != nfaces:
+    fail.append(f"{nwall} wall files checked, {nfaces} expected (one for each wall face)")
 
 for line in fail:
     print("  " + line)

@@ -14,6 +14,7 @@ contains
     use MOSE_Read_Ini,             only: Read_Inifile
     use MOSE_Load_ThermoTransport, only: Load_ThermoTransport
     use MOSE_Lib_Preconditioning,  only: update_derived_variables
+    use MOSE_Lib_SpalartShur,      only: Cell_Velocity_Gradient
     use MOSE_Load_Chemistry,       only: Load_Chemistry
     use MOSE_Assign_Setup,         only: Assign_Setup
     use MOSE_IO_Solution,          only: Read_IC, Setup_Output_Solution, Ic_Supports_Zone_Filter
@@ -22,6 +23,8 @@ contains
                                          blocks_needing_full_arrays
     use MOSE_Mod_Multigrid,        only: Setup_Multigrid, Restriction
     use MOSE_IO_BC,                only: Setup_BC
+    use MOSE_Lib_BC_Fluxes_Extrapolation, only: Setup_400_Entering
+    use MOSE_Lib_RotatingFrame,    only: Check_Stationary_Faces
     use MOSE_Mod_Metrics,          only: Setup_Metrics
     use MOSE_Mod_Fluxes,           only: Setup_Quasi2D_W
     use MOSE_IO_Probes,            only: Setup_Probes, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
@@ -128,17 +131,29 @@ contains
     setup_error = .false.
     if (mpi_is_root) call Check_BC ( setup_error )
     call Stop_Together ( setup_error, 'boundary condition error (see above)' )
+    ! The record of the lines of the gas entering through 400 faces on every level, and the counts of the end line set to
+    ! zero (every rank)
+    call Setup_400_Entering ( simulation%domain, obj_multigrid%MGL )
+    ! The stationary faces of a rotating frame are walls 301 and 302 of the mesh (every rank, as the records)
+    call Check_Stationary_Faces ( simulation%domain(1) )
 
     ! MPI: partition blocks once on finest-level cell counts (restriction and
     ! prolongation are block-local, so a block must live on the same rank at
     ! every level), then build per-level ghost/chimera communication schedules.
-    ! The rank of every block comes from INPUT/<prefix>decomposition.map when the
-    ! case has one (the map of the ATLAS mesh decomposer), otherwise from the LPT.
-    call partition_blocks(simulation%domain(1)%nb, &
-      [(product(simulation%domain(1)%blk(ios)%dim(1:3)), ios=1, simulation%domain(1)%nb)], &
-      reshape([(simulation%domain(1)%blk(ios)%dim(1:3), ios=1, simulation%domain(1)%nb)], &
-              [3, simulation%domain(1)%nb]), &
-      'INPUT/'//trim(MOSE_phase_prefix)//'decomposition.map')
+    ! The rank of every block comes from the map that decomposition-map names in
+    ! INPUT/ (with the phase prefix of bc.txt), in the format of the map of the
+    ! ATLAS mesh decomposer; with none, the default, from the LPT, and no file is
+    ! read.
+    if ( trim(obj_io%decomposition_map) == 'none' ) then
+      call partition_blocks(simulation%domain(1)%nb, &
+        [(product(simulation%domain(1)%blk(ios)%dim(1:3)), ios=1, simulation%domain(1)%nb)])
+    else
+      call partition_blocks(simulation%domain(1)%nb, &
+        [(product(simulation%domain(1)%blk(ios)%dim(1:3)), ios=1, simulation%domain(1)%nb)], &
+        reshape([(simulation%domain(1)%blk(ios)%dim(1:3), ios=1, simulation%domain(1)%nb)], &
+                [3, simulation%domain(1)%nb]), &
+        'INPUT/'//trim(MOSE_phase_prefix)//trim(obj_io%decomposition_map))
+    end if
 
     ! Ownership is known: allocate the state arrays only where they are needed.
     ! Every block still gets its mesh -- Setup_Metrics reads donor nodes and
@@ -286,6 +301,9 @@ contains
                                 resume = .not. ( obj_io%restart%steady .and. obj_time_scheme%time_accurate ) )
         endif
         call Fill_Ghost_Cell ( simulation%domain(1) )
+        ! The velocity gradient of the cells, which the eddy viscosity of the reference velocity of the preconditioner
+        ! takes (Update_Derived_Variables); every stage computes it again (Explicit_Step)
+        if ( obj_prec%enabled .and. model == 2 ) call Cell_Velocity_Gradient ( simulation%domain(1) )
         call Update_Derived_Variables ( simulation%domain(1) )
 
         ! Interpolate initial solution on coarser domains
@@ -499,6 +517,11 @@ contains
       character(len=hlen) :: out
 
       out = Validate_Registry()
+      ! decomposition-map names a file of INPUT/: MOSE puts the folder, and the phase prefix of bc.txt, before it
+      if ( index(out,'ERROR') == 0 .and. trim(obj_io%decomposition_map) /= 'none' .and. &
+           index(obj_io%decomposition_map, '/') > 0 ) &
+        out = '[ERROR] input.ini, [MOSE-IO] decomposition-map = '//trim(obj_io%decomposition_map)// &
+              ': the value is the name of a file in INPUT/, without a folder'
       has_error = index(out,'ERROR') > 0
       if ( has_error ) then
         write(*,'(A,T35,A)') '   Input file', 'FAIL'
@@ -535,8 +558,7 @@ contains
       if (index(obj_thermo%warning_message,'WARNING')>0) write(*,'(A)') obj_thermo%warning_message
       if (index(obj_transport%warning_message,'WARNING')>0) write(*,'(A)') obj_transport%warning_message
       if (index(obj_rans%warning_message,'WARNING')>0) write(*,'(A)') obj_rans%warning_message
-      ! Rotation-curvature correction in a time-accurate run, written here: with SST-RC the warning above is that of
-      ! k-omega models (Assign_Setup)
+      ! Rotation-curvature correction (-RC, a model the input chooses) in a time-accurate run: a limit of the model
       if (model == 2 .and. obj_time_scheme%time_accurate .and. obj_rans%SpalartShur) write(*,'(A)') &
         '[WARNING] The rotation-curvature correction (-RC) omits the time derivative of the strain-rate tensor: '// &
         'it holds for steady flows only.'

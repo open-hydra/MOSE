@@ -18,7 +18,7 @@ A straight rectangular channel carries an axial throughflow of air in a frame ro
 | 5 | inlet, $z=0$ | `inlet` | mass flux $g = 12.25$ kg m⁻² s⁻¹ at $T = 300$ K, normal to the face |
 | 6 | outlet, $z=0.1$ m | `outlet` | static pressure $p = 1.054725\times10^{5}$ Pa |
 
-The inflow boundary lays on the rotation axis and injects the flow in the normal direction following the rotation. The outlet is what sets the pressure level of this subsonic flow: with zero-gradient `extrapolation` on every open face nothing does, and the mean pressure rises without bound instead of settling.
+The inflow boundary lies on the rotation axis and injects the flow in the normal direction following the rotation. The outlet is what sets the pressure level of this subsonic flow: with zero-gradient `extrapolation` on every open face nothing does, and the mean pressure rises without bound instead of settling.
 
 **Initial state.** Uniform air at $T = 300$ K, $p = 1.054725\times10^{5}$ Pa, moving along the channel at $w = 10$ m/s (`INPUT/ic.tec`, written by ATLAS ICB from `[ICB-Block1]`).
 
@@ -55,9 +55,9 @@ A full annulus of quiescent air rotates about its axis. With $\boldsymbol{w}=\bo
 |---|---|---|---|
 | 1, 2 | axial ends ($x = 0,\,0.02$ m) | symmetry | axially homogeneous closure |
 | 3, 4 | radial ends ($r_\perp = 0.05$ and $0.15$ m) | symmetry | inviscid wall (slip) at hub and shroud |
-| 5, 6 | azimuthal periodic pair ($\theta = 0$) | periodic | closes the full ring via `src/lib/numerics/fluxes/bc/Lib_BC_Fluxes_Rotational.f90` since the domain is a curved rectangle. |
+| 5, 6 | azimuthal periodic pair ($\theta = 0$) | periodic | closes the full ring: the two faces coincide, so the pair is a connection of the block with itself (type 201, no rotation). |
 
-**Solver.** Euler, RK3 with local time stepping, CFL $= 2.0$, MUSCL/minmod, HLLC.
+**Solver.** Euler, RK3 with local time stepping, CFL $= 2.0$ with implicit residual smoothing (`irs-beta = 0.5`), MUSCL/minmod, HLLC.
 
 **Closed-form reference.** For inviscid steady rigid-body rotation with no heat transfer, the equilibrium is **isentropic** ($p/\rho^\gamma$ uniform). Combining $\nabla p = \rho\omega^2 \boldsymbol{r}_\perp$ with the isentropic relation gives
 
@@ -68,7 +68,7 @@ The reference state $(p_{\rm ref}, T_{\rm ref})$ at $r_{\rm ref}$ is fixed by to
 **Expected behaviour.** The centrifugal source builds a radially stratified field with $p$ increasing monotonically with $r_\perp$ at constant entropy, while $\boldsymbol{w}$ should relax back to zero. The case verifies that
 
 - the centrifugal contribution is wired into both the momentum and energy residuals with the correct sign and magnitude,
-- the rotational-periodic BC closes the ring with the proper velocity rotation,
+- the periodic connection (`201`) closes the ring,
 - the converged pressure and temperature profiles match the isentropic closed form above (radial $L_2$ error against the analytical reference is the verification metric).
 
 **Result.** From the uniform start the density residual falls from $7\times10^{-4}$ to $10^{-8}$ in 40 000 iterations and then only creeps ($5.5\times10^{-9}$ at 200 000). It does not reach the default threshold of $10^{-10}$, so the run has to be stopped with `iter-threshold`. At 200 000 iterations:
@@ -83,4 +83,14 @@ The reference state $(p_{\rm ref}, T_{\rm ref})$ at $r_{\rm ref}$ is fixed by to
 
 The fluid does not come fully to rest. A tangential velocity remains in the cell rows next to hub and shroud, up to 1.9 m/s at the shroud against a rim speed $\omega r_{\rm out} = 15$ m/s, and about 0.08 m/s in the core; it grows slowly with the iterations and goes with the 2 % deficit in the pressure rise.
 
-**Sensitivity note.** At $\omega = 100$ rad/s the rim Mach number is $\omega r_{\rm out}/\sqrt{\gamma R T} \approx 0.04$, giving a pressure variation of only $\sim 0.1\%$ across the annulus. Verification at this setting requires tight residual convergence and a precise mass-conservation pinning of $p_{\rm ref}$; running at higher $\omega$ (e.g. 1000 rad/s, $\sim 10\%$ variation) gives the comparison more dynamic range.
+!!! note "Numbers and code version"
+    The numbers of the table and of the paragraph above come from October 2026 (commit `546f99d1`), and
+    the code of 13 October 2026 (commit `b29130b`) gives again the pressure rise, the residual and the
+    tangential velocities (111.4 Pa, $5.5\times10^{-9}$, 1.9 m/s and 0.08 m/s). MOSE at commit
+    `10b59003b72c` gives, at 200 000 iterations, a pressure rise of 112.7 Pa, relative $L_2$ errors of
+    $1.6\times10^{-5}$ ($p$) and $1.4\times10^{-5}$ ($T$), a total mass $2.4\times10^{-6}$ above the
+    initial one, a density residual of $4.4\times10^{-9}$, and 1.66 m/s at the shroud and 0.054 m/s in
+    the core; the ranges of $p$ and $T$ move by about 1 Pa and 0.002 K. The change comes from the commits
+    between `b29130b` and `10b59003b72c`.
+
+**Sensitivity note.** At $\omega = 100$ rad/s the rim Mach number is $\omega r_{\rm out}/\sqrt{\gamma R T} \approx 0.04$, giving a pressure variation of only $\sim 0.1\%$ across the annulus. Verification at this setting requires tight residual convergence and a precise mass-conservation pinning of $p_{\rm ref}$.

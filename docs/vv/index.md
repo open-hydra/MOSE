@@ -11,27 +11,30 @@ This section documents the Verification & Validation (V&V) test suite for MOSE. 
 | [Noh Implosion](1D.md#noh-implosion-problem) | 1D | supersonic | Strong shock, density jump | Analytical | HLLE | Noh (1987) |
 | [Toro Test 3](1D.md#toro-test-case-3) | 1D | subsonic–supersonic | Compound wave (shock + contact + shock) | Analytical | HLLE++ | Toro (1999) |
 | [Shu–Osher Interaction](1D.md#shuosher-shock-entropy-wave-interaction) | 1D | 3.0 | Shock / sine entropy-wave interaction | Richardson extrapolation (grid convergence) | HLLC | Shu & Osher (1989) |
-| [Finite-Rate Reactive Shock Tube](1D-fer14.md) | 1D | subsonic–supersonic | Reactive shock tube, finite-rate chemistry | Digitized reference profiles (velocity, temperature) | HLLC+ Tramel | Ferrer et al. (2014) |
+| [Finite-Rate Reactive Shock Tube](1D-fer14.md) | 1D | subsonic–supersonic | Reactive shock tube, finite-rate chemistry | Digitized reference profiles (velocity, temperature) | HLLC+Tramel | Ferrer et al. (2014) |
 | [Unity-Lewis Diffusion](1D-diffusion.md) | 1D | ~0 (diffusion) | Species + thermal diffusion, unity Lewis ($Le=1$) | Cantera low-Mach reference | HLLC | Forti/Ferrer; Cantera |
 | [Multicomponent Diffusion](1D-multicomponent-diffusion.md) | 1D | ~0 (diffusion) | Per-species mixture-averaged diffusion | Cantera low-Mach reference | HLLC | Forti/Ferrer; Cantera |
 | [Premixed Laminar Flame](1D-premixed-flame.md) | 1D | ~0 (deflagration) | Finite-rate chemistry, premixed CH$_4$/air flame structure | Cantera freely-propagating flame | HLLC | Cantera |
 | [Isentropic Vortex](2D-isentropic-vortex.md) | 2D | ~1.2 | Smooth vortex convection, order of accuracy | Exact solution + Richardson-style grid refinement | HLLC | Shu (1998) |
 | [Viscous Manufactured Solution](2D-mms.md) | 2D | ~0.47 | Viscous order of accuracy (gradients, metrics) | Manufactured solution + grid refinement | HLLC | Roache (2002) |
+| [Viscous Manufactured Solutions on Skewed Grids](2D-mms-skewed.md) | 2D | subsonic | Viscous order of accuracy on skewed and non-smooth two-block grids, with walls | Manufactured solution + grid refinement | HLLC | Salari and Knupp (2000) |
+| [3D Viscous Manufactured Solutions on Skewed Grids](3D-mms.md) | 3D | subsonic | Viscous order of accuracy on 3D skewed and non-smooth two-block grids, with walls | Manufactured solution + grid refinement | HLLC | Salari and Knupp (2000) |
 | [Woodward-Colella Step](2D-woodward-colella.md) | 2D | 3.0 | Oblique shock, expansion fan, interactions | OpenFOAM reference | HLLE | Woodward & Colella (1984) |
 | [Oblique Shock](2D-oblique-shock.md) | 2D | 4.0 | Oblique shock, post-shock instabilities | Analytical | HLLC, HLLC+, HLLE, SLAU | oblique shock theory |
 | [Hypersonic Cylinder](2D-hypersonic-cylinder.md) | 2D | 8.1 | Bow shock, carbuncle | Analytical | HLLC, HLLC+, HLLE, SLAU | normal shock theory |
 | [Gresho Vortex](2D-gresho-vortex.md) | 2D | 0.1–0.001 | Low-Mach accuracy, steady vortex | Analytical (steady solution) | HLLC, LMRoe, AUSM+M | Gresho (1990), Miczek (2015) |
 | [Rocket Nozzle](2D-nozzle.md) | 2D | transonic–supersonic | Multi-species frozen expansion | CEA 1D reference | HLLC | CEA/NASA |
+| [Planar Nozzle on Grid Families](2D-planar-nozzle-grids.md) | 2D | subsonic–supersonic | Turbulent nozzle flow on grid families that differ in the direction and smoothness of their grid lines | Mirror symmetry; grid families on three levels | HLLC (SA, SST) | quasi-1D isentropic flow |
 | [Laminar Flat Plate](2D-flat-plate-laminar.md) | 2D | 0.2 | Laminar boundary layer, viscous effects | Blasius similarity | HLLC | Blasius (1908) |
 | [Turbulent Flat Plate](2D-flat-plate-turbulent.md) | 2D | 0.2 | Turbulent boundary layer, turbulence models | NASA solver comparison (CFL3D, FUN3D) | HLLC | NASA |
 | [Shock Wave-Boundary Layer Interaction](2D-swbli.md) | 2D | 5.0 | Shock-boundary-layer interaction, separation/reattachment | Schulein/SU2/Wind-US + same-grid OpenFOAM code-to-code | HLLC (SA, SST) | Schulein + code-to-code |
 | [Ablating Wall](2D-ablating-wall.md) | 2D | ~0 (blown column) | Gas-surface interaction: melting and pyrolysis walls, mass/energy surface balance | Closed-form surface energy balance (both face orientations) | HLLC | [GSI theory](../theory/gsi.md) |
 | [HyShot II Scramjet Combustor](3D-hyshotII.md) | 3D | 2.65 | Reacting scramjet combustor: sonic H$_2$ injection, shock train, finite-rate chemistry, chimera overset | HyShot II experiment (wall pressure, with uncertainty) + TAU S-A RANS | HLLC (SA) | Karl (2011); Chapuis et al. (2013) |
-| [Rotating Frame](rotating-frame.md) | 3D | low Mach | Coriolis and centrifugal source terms | Analytical / balance | Euler | rotating-frame theory |
+| [Rotating Frame](rotating-frame.md) | 3D | low Mach | Coriolis and centrifugal source terms | Analytical / balance | HLLC | rotating-frame theory |
 
 ## Running the tests
 
-Each test case lives under `test/` and contains a `verify.py` script.  The script reads the solver output, compares it against the exact solution, and writes output figures.
+Most test cases under `test/` hold a `verify.py` (some a `check.py` or a `compare.py`) that reads the solver output, compares it with the reference and draws the figures; `test/TESTING-PLAN.md` lists the verifier and the criterion of every case.
 
 ```bash
 cd test/1D/<TestName>

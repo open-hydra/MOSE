@@ -5,8 +5,8 @@ A short hypersonic flat-plate segment: 6 x 16 cells, k faces null. Along x, cell
 the wall (16 cells, 0.55 mm). Supersonic inflow (405) at Mach 5, 68.3 K, 4000 Pa; supersonic outflow (406, extrapolation) on
 the outflow face and on the top face. Air of test/common/Air-viscous with the Sutherland viscosity of test/common/Air-sutherland.
 Free-stream turbulence:
-  SA   rho nu~ = 3 mu (mu = 4.605e-6 Pa s at 68.3 K, from the Sutherland table),
-  SST  rho k = 0.5, rho omega = 248.1 (mu_t about 90 mu), omega-wall-bc = practical;
+  SA                rho nu~ = 3 mu (mu = 4.605e-6 Pa s at 68.3 K, from the Sutherland table),
+  SST, Wilcox2006   rho k = 0.5, rho omega = 248.1 (mu_t about 90 mu), omega-wall-bc = practical;
 the eddy viscosity then matters in the wall layer, so the wall shear and heat flux feel the turbulence equations there.
 
 The test converges the steady state with the point-implicit factor at (cfl, vnn) = (0.8, 0.4), then continues from it at
@@ -27,7 +27,7 @@ RGAS = 8314.46261815324 / 28.970418          # gas constant of FLINT for air, J/
 MACH, T_IN, P_IN, T_WALL = 5.0, 68.3, 4000.0, 300.0
 NI, NS, NJ, DX, Y1, GROWTH = 6, 1, 16, 1.0e-3, 4.0e-6, 1.25
 MU_IN = 4.582749e-6 + 0.3 * (4.658099e-6 - 4.582749e-6)   # Sutherland table of test/common/Air-sutherland, 68 K and 69 K
-RANS_IN = {"SA": [3.0 * MU_IN], "SST": [0.5, 248.1]}
+RANS_IN = {"SA": [3.0 * MU_IN], "SST": [0.5, 248.1], "Wilcox2006": [0.5, 248.1]}
 
 
 def write_case(model):

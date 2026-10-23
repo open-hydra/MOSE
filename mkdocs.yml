@@ -120,11 +120,14 @@ nav:
     - Premixed Laminar Flame: vv/1D-premixed-flame.md
     - Isentropic Vortex: vv/2D-isentropic-vortex.md
     - Viscous Manufactured Solution: vv/2D-mms.md
+    - Viscous Manufactured Solutions on Skewed Grids: vv/2D-mms-skewed.md
+    - 3D Viscous Manufactured Solutions on Skewed Grids: vv/3D-mms.md
     - Woodward-Colella Step: vv/2D-woodward-colella.md
     - Oblique Shock: vv/2D-oblique-shock.md
     - Hypersonic Cylinder: vv/2D-hypersonic-cylinder.md
     - Gresho Vortex: vv/2D-gresho-vortex.md
     - Rocket Nozzle: vv/2D-nozzle.md
+    - Planar Nozzle on Grid Families: vv/2D-planar-nozzle-grids.md
     - Laminar Flat Plate: vv/2D-flat-plate-laminar.md
     - Turbulent Flat Plate: vv/2D-flat-plate-turbulent.md
     - Shock Boundary Layer Interaction: vv/2D-swbli.md
