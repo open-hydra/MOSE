@@ -229,9 +229,11 @@ module MOSE_Config_Types_m
     ! USER-DEFINED INPUTS
     integer              :: MGL                ! Number of multigrid levels
     integer, allocatable :: iter_threshold(:)  ! Number of iterations for each level
+    integer              :: prolongated_diter = 0  ! Level iterations between two prolongated writes (0: with every field write)
     ! Useful variables
     integer, public :: MG_level    ! Current MG-level being solved
     logical, public :: change_MG   ! Logical variable to change MG-level
+    integer, public :: prolongated_last = 0  ! Level iteration of the last prolongated write on the current level
   end type multigrid_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------

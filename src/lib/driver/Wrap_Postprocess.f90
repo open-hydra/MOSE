@@ -202,13 +202,14 @@ contains
         if (mpi_is_root) write(*,*) ' ... writing iter-based solution'
         call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
         if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
-        if (obj_multigrid%MGL > 1 .and. level > 1) then
+        if (obj_multigrid%MGL > 1 .and. level > 1 .and. prolongated_due()) then
           if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
           do m = obj_multigrid%MG_level, 2, -1
             call Prolongation ( Fine=simulation%domain(m-1), Coarse=simulation%domain(m) )
           enddo
           call Write_Solution (  simulation%domain(1), simulation%IOfield(1), mgsol )
           if (obj_io % write_wall) call Write_Wall_Solution( simulation%domain(1), mgwall )
+          obj_multigrid%prolongated_last = simulation%domain(level) % iter
         endif
         if (level == 1 .and. .not. obj_time_scheme%time_accurate) &
           call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
@@ -218,13 +219,14 @@ contains
         if (mpi_is_root) write(*,*) ' ... writing time-based solution'
         call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
         if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
-        if (obj_multigrid%MGL > 1 .and. level > 1) then
+        if (obj_multigrid%MGL > 1 .and. level > 1 .and. prolongated_due()) then
           if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
           do m = obj_multigrid%MG_level, 2, -1
             call Prolongation ( Fine=simulation%domain(m-1), Coarse=simulation%domain(m) )
           enddo
           call Write_Solution (  simulation%domain(1), simulation%IOfield(1), mgsol )
           if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(1), mgwall )
+          obj_multigrid%prolongated_last = simulation%domain(level) % iter
         endif
         if (level == 1 .and. .not. obj_time_scheme%time_accurate) &
           call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
@@ -246,6 +248,7 @@ contains
 
       if (obj_multigrid%change_MG) then
         obj_multigrid%MG_level = obj_multigrid%MG_level - 1
+        obj_multigrid%prolongated_last = 0
         obj_sim_param%iter_from_call = 0
         obj_sim_param%time_from_call = 0.0
       endif
@@ -326,6 +329,16 @@ contains
         if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(1), mgwall )
       endif
     endif
+
+  contains
+
+    ! A coarse level writes its prolongated solution (field-prolongated, wall-prolongated) with every field
+    ! write when prolongated-diter is 0, else only once prolongated-diter of its iterations have passed since
+    ! the last one. The end of a level (change_MG) always writes it.
+    logical function prolongated_due ()
+      prolongated_due = obj_multigrid%prolongated_diter == 0 .or. &
+        simulation%domain(level) % iter - obj_multigrid%prolongated_last >= obj_multigrid%prolongated_diter
+    end function prolongated_due
 
   end subroutine MOSE_postprocess
 

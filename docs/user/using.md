@@ -215,6 +215,7 @@ After a run completes, the `OUTPUT/` directory contains:
 | `diagnostic.*` | Per-cell residuals of $\rho$, $\rho u$, $\rho v$, $\rho w$, $\rho E$, of the soot and RANS variables, local time step `dt`, shock-sensor flag `beta` — steady runs only |
 | `<probe>.txt` | Time-history data at probe locations called <probe>|
 | `field-level<n>.*`, `wall-level<n>.*` | Multigrid runs: solution and wall quantities of coarse level `<n>`, written with every output of that level and when the run moves on to the next finer level |
+| `field-prolongated.*`, `wall-prolongated.*` | Multigrid runs: the solution of the coarse level being computed, prolongated to the finest level, written with every coarse-level output (with `prolongated-diter` > 0 at most once every `prolongated-diter` iterations of the level) and at the end of every coarse level |
 
 The residuals of `diagnostic.*` are those of the last stage of the iteration written (the wall output, written just
 before, leaves them alone). With a single species the diagnostic output needs `sol-variables` to name `thermo` (the

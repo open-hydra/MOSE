@@ -632,6 +632,13 @@ level), then its solution is prolongated onto level $n-1$. `level<n>-iter`
 `ini-diter` iterations: lowering it below the iterations already done ends
 the current level at the iteration after that re-read.
 
+Every field write of a coarse level also prolongates its solution to the
+finest level and writes it (`field-prolongated`, `wall-prolongated`). On a
+large mesh that write costs more than the coarse iterations between two
+writes; `prolongated-diter` (re-read at runtime) spaces it to at least that
+many iterations of the level. The end of a level always writes it, so the one
+written at the end of level 2 is the exact start of level 1.
+
 ### Restriction (fine → coarse)
 
 Conservative volume averaging:

@@ -31,6 +31,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`field-level<n>`) and at the end of the level, with the same solution time. The name was built, but the wall file was
   written on the finest level only: the friction and heat flux of a coarse level could be read only from `wall-prolongated`,
   the wall of its solution prolongated to the finest grid, not from the level itself. The other files do not change.
+- The key `prolongated-diter` of `[MOSE-Multigrid]` spaces the writes of `field-prolongated` and `wall-prolongated` on the
+  coarse levels: with a value above 0 they are written with a field output of the level only once that many iterations of the
+  level have passed since the last one; the end of a level always writes them, so the file written at the end of level 2 is
+  still the exact start of level 1. On a mesh of 23 million cells that file is 3 GB and its write took about 6.5 minutes,
+  half the time of a coarse level at `sol-diter` 5000. The default, 0, writes them with every field output, as before; the
+  key is read again at runtime.
 - Probes can record `mi_tilde`, the first turbulence variable, which the solution files name `rhoNuTilde`
   (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model).
 - Builds with `USE_MPI=ON` register a `needs-mpi` test tier (`ctest -L needs-mpi`). Each of its tests writes its own small
