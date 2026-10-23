@@ -54,7 +54,7 @@ exact field at the cell centres.
 | Face metric | `diffusive-metric = stencil` (default) |
 | Grids | short form (CTest): $N = 10, 20$ cells per side; full form: $N = 20, 40, 80$ |
 
-The gas is that of `test/common/Air`, written by ATLAS GPB from `test/common/Air/input.ini`, with the flat transport
+The gas is that of `test/common/Air`, the files that ATLAS GPB writes from `test/common/Air/input.ini` at ATLAS commit `ebeaf4f`, with the flat transport
 table `test/2D/viscous/mms/INPUT/transport.dat` (the values of ATLAS GPB with `mil = 10` and `Pr = 0.72`).
 
 ## Checks

@@ -34,7 +34,7 @@ twenty-five times the zigzag pair in CPU time.
 ## Setup
 
 As in the [2D case](2D-mms-skewed.md#setup): calorically perfect air with
-$\mu = 10$ and $\mathrm{Pr} = 0.72$ (the same gas files, written by ATLAS GPB), laminar Navier–Stokes, RK3 with local time
+$\mu = 10$ and $\mathrm{Pr} = 0.72$ (the same gas files, those of ATLAS GPB at ATLAS commit `ebeaf4f`), laminar Navier–Stokes, RK3 with local time
 stepping until the residual has fallen by $5\cdot10^{-4}$, CFL 0.2 and VNN 0.1,
 MUSCL with van Leer, HLLC, `diffusive-metric = stencil` (default).
 
