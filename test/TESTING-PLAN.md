@@ -80,9 +80,9 @@ against its criterion, *runs* where it has none (the run ends with exit status 0
 | `2D/euler/hypersonic-cylinder` | `2D-hypersonic-cylinder.md` | outside | normal-shock relations at the stagnation line | none: `verify.py` prints and plots | runs |
 | `2D/euler/oblique-shock` | `2D-oblique-shock.md` | outside | oblique-shock relations | `verify.py`: p2/p1, T2/T1, ρ2/ρ1 and M2 within 1.5 % for each solver | fails: HLLC T2/T1 error 1.94 % and M2 error -3.21 % (threshold 1.5 %); HLLC+Tramel, HLLE and SLAU within 0.80 % |
 | `2D/euler/ramp-channel` | — | outside | oblique-shock relations | none: `verify.py` plots | runs |
-| `2D/euler/rocket-nozzle/frozen` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`); `reference/field.tec` | none: `../verify.py` plots | runs |
+| `2D/euler/rocket-nozzle/frozen` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`) | none: `../verify.py` prints and plots, from the runs of the three configurations | runs |
 | `2D/euler/rocket-nozzle/finite-rate` | `2D-nozzle.md` | outside | `reference/field.tec` | `verify.py`: p, ρ, u, v and γ at the throat within a relative 1e-3 | passes |
-| `2D/euler/rocket-nozzle/equilibrium` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`); `reference/field.tec` | none: `../verify.py` plots | runs |
+| `2D/euler/rocket-nozzle/equilibrium` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`) | none: `../verify.py` prints and plots, from the runs of the three configurations | runs |
 | `2D/euler/supersonic-forward-step` | `2D-woodward-colella.md` | outside | OpenFOAM solution (`reference/OpenFOAM/`) | none: `verify.py` prints L2 and L∞ differences | runs |
 | `2D/viscous/flat-plate-laminar` | `2D-flat-plate-laminar.md` | outside | Blasius solution, computed by `verify.py` | `verify.py` prints PASS for an RMS c_f error below 2.5 % at x ≥ 0.05 m; its exit code is 0 either way | passes: RMS c_f error 2.26 % |
 | `2D/viscous/flat-plate-turbulent/SA` | `2D-flat-plate-turbulent.md` | outside | c_f of CFL3D (`reference/cf.dat`) | `verify.py`: RMS c_f error below 5 % | passes: RMS c_f error 0.77 % |

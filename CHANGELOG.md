@@ -643,6 +643,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `506` was missing.
 - The guide names the boundary files of the multigrid levels as MOSE reads them, `bc.txt`, `bc2.txt`, `bc3.txt`, … (it said
   `bc_x1.txt`, `bc_x2.txt`, …).
+- The comparison of the rocket nozzle with CEA (`test/2D/euler/rocket-nozzle/verify.py`, page `docs/vv/2D-nozzle.md`) reads the
+  solutions of the runs of the three configurations, `OUTPUT/field.tec`, and stops with a message, exit status 1, when one is
+  missing; it drew the stored solutions `reference/field.tec`. The mixture density is the sum of every species density: it summed
+  12 of the 13 species of the frozen and equilibrium configurations and 18 of the 19 of the finite-rate one, so that the Mach
+  number of the frozen run was 0.39 % low. The script prints the averages at the CEA stations and their differences from CEA; the
+  page calls the averages weighted by the mass flow (it called them area-weighted) and names the run of the Mach contours,
+  finite-rate, and the panels of the comparison.
 - The figure of the grids of the 3-D manufactured-solution page (`docs/vv/images/mms3d-grids.svg`, drawn by `verify.py` of
   `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
   iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z

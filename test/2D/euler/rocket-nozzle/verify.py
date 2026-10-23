@@ -42,48 +42,26 @@ parser.add_argument('--plot', action='store_true', help='Plot pressure contours 
 args = parser.parse_args()
 
 
-[x_, y_, z_, var_, vnames] = read_TEC("frozen/reference/field.tec")
-frozen = {
-    'x': x_[0],
-    'y': y_[0],
-    'p': var_[0][16],
-    'rho': sum(var_[0][0:12]),
-    'u': var_[0][13],
-    'v': var_[0][14],
-    'T': var_[0][17],
-    'g': var_[0][18],
-    'R': var_[0][19],
-}
+def read_run(case):
+    """The solution of the run of one configuration, case/OUTPUT/field.tec: mixture density (every species), velocity, p, T,
+    gamma and R. The species densities come first in the file, then u, v, w, p, T, g, R."""
+    path = os.path.join(case, "OUTPUT", "field.tec")
+    if not os.path.exists(path):
+        sys.exit(f"verify.py: {path} is missing: run ./MOSE.sh solve in {case} first")
+    x_, y_, z_, var_, vnames = read_TEC(path)
+    ns = sum(1 for name in vnames if name.startswith("rho("))
+    v = var_[0]
+    return {'x': x_[0], 'y': y_[0], 'rho': sum(v[0:ns]), 'u': v[ns], 'v': v[ns + 1], 'p': v[ns + 3], 'T': v[ns + 4],
+            'g': v[ns + 5], 'R': v[ns + 6]}
 
-[x_, y_, z_, var_, vnames] = read_TEC("finite-rate/reference/field.tec")
-finite_rate = {
-    'x': x_[0],
-    'y': y_[0],
-    'p': var_[0][22],
-    'rho': sum(var_[0][0:18]),
-    'u': var_[0][19],
-    'v': var_[0][20],
-    'T': var_[0][23],
-    'g': var_[0][24],
-    'R': var_[0][25],
-}
 
-[x_, y_, z_, var_, vnames] = read_TEC("equilibrium/reference/field.tec")
-equilibrium = {
-    'x': x_[0],
-    'y': y_[0],
-    'p': var_[0][16],
-    'rho': sum(var_[0][0:12]),
-    'u': var_[0][13],
-    'v': var_[0][14],
-    'T': var_[0][17],
-    'g': var_[0][18],
-    'R': var_[0][19],
-}
+frozen = read_run("frozen")
+finite_rate = read_run("finite-rate")
+equilibrium = read_run("equilibrium")
 
 
 # ----------------------------------------------------------
-# Quasi-1D comparison: area-weighted averages vs CEA
+# Quasi-1D comparison: mass-flow-weighted averages vs CEA
 # ----------------------------------------------------------
 # CEA reference: Merlin 1D, RP-1/LOX O/F=2.35
 # Source: CEA.out (Pin=108 bar, O/F=2.35)
@@ -110,8 +88,7 @@ R_cea_fz = Runi / mw_cea_fz  # J/(kg·K)
 R_cea_eq = Runi / mw_cea_eq  # J/(kg·K)
 g_cea_fz = (cp_cea_fz * 1000) / (cp_cea_fz * 1000 - R_cea_fz)  # convert Cp to J/(kg·K)
 g_cea_eq = (cp_cea_eq * 1000) / (cp_cea_eq * 1000 - R_cea_eq)
-# (These p/p0 and T/T0 ratios are no longer used since we replaced pressure subplot)
-# but kept here for potential future use
+# Ratios to the stagnation values of CEA (the temperature panel draws T/T0)
 pp0_cea_fz   = P_cea_fz / P0_cea
 TT0_cea_fz   = T_cea_fz / T0_cea
 pp0_cea_eq   = P_cea_eq / P0_cea
@@ -214,6 +191,7 @@ sub_idx     = np.where(x_c < x_c[i_throat])[0]
 sup_idx     = np.where(x_c >= x_c[i_throat])[0]
 
 x_cea_list = []
+i_cea_list = []
 for k, AeAt in enumerate(AeAt_cea):
     if M_cea_fz[k] < 1.0:                      # subsonic → converging section
         region = sub_idx
@@ -221,7 +199,27 @@ for k, AeAt in enumerate(AeAt_cea):
         region = sup_idx
     i = region[np.argmin(np.abs(AeAt_1d[region] - AeAt))]
     x_cea_list.append(x_c[i])
+    i_cea_list.append(i)
 x_cea = np.array(x_cea_list)
+
+# The comparison of the figure, as numbers: mass-flow-weighted averages in the cell nearest to each CEA station
+print("Stations of the CEA reference: the cell nearest to each area ratio")
+print("  Ae/At of CEA  : " + "  ".join(f"{a:7.3f}" for a in AeAt_cea))
+print("  Ae/At of cell : " + "  ".join(f"{AeAt_1d[i]:7.3f}" for i in i_cea_list))
+print("  x [m]         : " + "  ".join(f"{x_c[i]:7.4f}" for i in i_cea_list))
+for name, avg in (("Frozen", (M_avg_fz, p_avg_fz, T_avg_fz, g_avg_fz, mv_avg_fz)),
+                  ("Finite-rate", (M_avg_fr, p_avg_fr, T_avg_fr, g_avg_fr, mv_avg_fr)),
+                  ("Equilibrium", (M_avg_eq, p_avg_eq, T_avg_eq, g_avg_eq, mv_avg_eq))):
+    print(f"MOSE {name}: value, % from CEA frozen, % from CEA equilibrium")
+    for qname, q, ref_fz, ref_eq, scale in (("Mach", avg[0], M_cea_fz, M_cea_eq, 1.0),
+                                            ("p [bar]", avg[1], P_cea_fz, P_cea_eq, 1e-5),
+                                            ("T [K]", avg[2], T_cea_fz, T_cea_eq, 1.0),
+                                            ("gamma", avg[3], g_cea_fz, g_cea_eq, 1.0),
+                                            ("M_w [g/mol]", avg[4], mw_cea_fz, mw_cea_eq, 1.0)):
+        val = np.array([q[i] * scale for i in i_cea_list])
+        print(f"  {qname:12s}" + "  ".join(f"{v:9.4f}" for v in val))
+        print(f"  {'':12s}" + "  ".join(f"{d:+9.2f}" for d in (val / ref_fz - 1) * 100) + "   (CEA frozen)")
+        print(f"  {'':12s}" + "  ".join(f"{d:+9.2f}" for d in (val / ref_eq - 1) * 100) + "   (CEA equilibrium)")
 
 fig3, axes = plt.subplots(2, 2, figsize=(15, 11), sharex=True)
 
@@ -229,7 +227,7 @@ fig3, axes = plt.subplots(2, 2, figsize=(15, 11), sharex=True)
 ax = axes[0, 0]
 ax.plot(x_c, M_avg_fz,  label='MOSE Frozen', linewidth=2)
 ax.plot(x_c, M_avg_fr,  color='green', label='MOSE Finite-rate', linewidth=2)
-ax.plot(x_c, M_avg_eq,  label='MOSE Equilibrium', linewidth=2)
+ax.plot(x_c, M_avg_eq,  color='orange', label='MOSE Equilibrium', linewidth=2)
 ax.scatter(x_cea, M_cea_fz, color='blue', zorder=5, label='CEA Frozen', s=60)
 ax.scatter(x_cea, M_cea_eq, color='red', zorder=5, label='CEA Equilibrium', s=60)
 ax.set_ylabel('Mach')
