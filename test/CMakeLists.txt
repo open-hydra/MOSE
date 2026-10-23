@@ -361,7 +361,7 @@ mose_add_parts_script(RuntimeInput fast/input-checks
 # Part 4: the viscous force on the axisymmetric wedge (Homann's flow and a field
 # with dilatation and swirl) converges to the Navier-Stokes one with second order;
 # a viscous run with the axis at r = 0 on the wedge or on a 3-D sector stops at setup,
-# and on the polar line of a 3-D mesh with diffusive-metric = inverse-mean or mean.
+# and on the polar line of a 3-D mesh with diffusive-metric = mean.
 # Part 5: next to a wall the Spalart-Allmaras sources see the gradient of nu~
 # that the wall value nu~ = 0 gives (linear profile at rest).
 mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")
@@ -395,8 +395,8 @@ endif()
 # folds between blocks, a fan of index lines at a wall (the second layer of
 # extrapolated ghost cells turned over, and both layers), points shared by 3 and 5 blocks,
 # symmetry planes and
-# walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
-# against an independent replica of their formulas. ViscousWallPatch: the
+# walls with a prescribed heat flux; the face metric mean
+# against an independent replica of its formula. ViscousWallPatch: the
 # cells next to walls of prescribed temperature varying along the wall, and
 # next to faces of type 410 (assigned state from a file).
 # ViscousOpenPatch: the cells next to inlets and outlets (401-408, 420), whose

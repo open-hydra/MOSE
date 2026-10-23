@@ -70,16 +70,16 @@
 #     301 on cells growing along x and r with bent lines, where the faces of
 #     the wedge take the ghost cells of the wall: no viscous force in every
 #     cell with no face 400, below 1e-11 of its scale.
-#     Axis at r = 0 on the wedge: with inverse-mean and mean the faces of the
+#     Axis at r = 0 on the wedge: with mean the faces of the
 #     wedge would get the hoop stress of the first row wrong, so a viscous run
 #     must stop at setup and say why, with diffusive-metric = stencil and
-#     inverse-mean; so must a viscous run on a 3-D sector closed by type 200
+#     mean; so must a viscous run on a 3-D sector closed by type 200
 #     on its k faces (homann, four cells of 1 degree, wedge_viscous.py sector)
 #     with the axis at r = 0. Polar line of
 #     a 3-D mesh (360 degrees around the axis, axis at r = 0): with symmetry on
 #     the axis the viscous force of a linear velocity field must vanish to
 #     round-off, next to the axis too (diffusive-metric = stencil); with
-#     inverse-mean and mean, whose viscous force of the first row grows as the
+#     mean, whose viscous force of the first row grows as the
 #     mesh is refined there, a viscous run must stop at setup and name stencil;
 #     with a wall on the axis the run must
 #     stop at setup with the message that names the face and the remedy
@@ -388,7 +388,7 @@ fi
 
 echo "-- the axis at r = 0 on the wedge (homann, N = 32): a declared stop of the viscous runs --"
 python3 -B wedge_viscous.py case homann 32 axis0 || exit 1
-for metric in stencil inverse-mean; do
+for metric in stencil mean; do
   wedge_ini navier-stokes "$metric"
   rm -f OUTPUT/diagnostic.tec
   "$LOCAL" > "OUTPUT/axis0-$metric.log" 2>&1
@@ -402,7 +402,7 @@ done
 
 echo "-- the axis at r = 0 on a 3-D sector (homann, N = 32, 4 cells of 1 degree): a declared stop of the viscous runs --"
 python3 -B wedge_viscous.py sector 32 axis0 || exit 1
-for metric in stencil inverse-mean; do
+for metric in stencil mean; do
   wedge_ini navier-stokes "$metric"
   rm -f OUTPUT/diagnostic.tec
   "$LOCAL" > "OUTPUT/sector-axis0-$metric.log" 2>&1
@@ -425,8 +425,8 @@ else
   fail=1
 fi
 
-echo "-- polar line of a 3-D mesh, symmetry on the axis, inverse-mean and mean: a declared stop of the viscous runs --"
-for metric in inverse-mean mean; do
+echo "-- polar line of a 3-D mesh, symmetry on the axis, mean: a declared stop of the viscous runs --"
+for metric in mean; do
   wedge_ini navier-stokes "$metric"
   rm -f OUTPUT/diagnostic.tec
   "$LOCAL" > "OUTPUT/polar-300-$metric.log" 2>&1

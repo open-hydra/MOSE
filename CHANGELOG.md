@@ -16,9 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   run in which the gas entered through them, the flux evaluations where it entered and their largest |w|/a. The flux of the
   faces does not change.
 - The key `diffusive-metric` of `[MOSE-Numerics]` chooses the face metric of the viscous fluxes: `stencil`, the default, from the
-  same differences of the cell centres that the face gradient takes of the field (see Changed); `inverse-mean`, the inverse of the
-  mean of the inverse metrics of the two cells, whose face-normal edge is the vector between the cell centres; or `mean`, the mean
-  of the two metrics, as before.
+  same differences of the cell centres that the face gradient takes of the field (see Changed); or `mean`, the mean of the two
+  metrics, as before. Its first value, `inverse-mean`, is removed (see Removed).
 - The key `irs-variables` of `[MOSE-Numerics]` chooses the residuals that implicit residual smoothing smooths: `flow`, the
   default, those of the species, momentum and energy, as before; or `all`, every residual, those of the turbulence, soot and
   passive-scalar equations too. With `flow` the turbulence equations advance with the local time step of the smoothed flow
@@ -192,13 +191,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   blocks, skewed cells on a symmetry plane), at any resolution. The metric is computed at set-up and stored on the faces (27
   values per cell). Results change for viscous runs on meshes that are not Cartesian, on meshes stretched across a boundary
   layer, and at the faces between blocks with SST, Wilcox 2006 or QCR. A face whose stencil does not span three directions stops
-  the run at set-up with its block, cell and face, and the remedy `diffusive-metric = inverse-mean`.
+  the run at set-up with its block, cell and face, and the remedy `diffusive-metric = mean`.
 - A viscous run on a 2-D axisymmetric wedge or on a 3-D sector closed by type `200` whose axis nodes are exactly at r = 0 stops
   at set-up, with every `diffusive-metric`, with a message that asks to put the axis nodes at a small radius (the meshes of MOSE
   put them at 1e-6 of the radial size of the first cell): on such an axis the faces have zero area, their ghost cells copy the
-  cells, and with `inverse-mean` and `mean` the hoop stress of the first row of cells was wrong by 1/6 of the hoop term in
+  cells, and with `mean` (and the removed `inverse-mean`) the hoop stress of the first row of cells was wrong by 1/6 of the hoop term in
   Homann's flow, whatever the refinement. A wall on a face of zero area, as on the axis of a 3-D mesh around it, stops with its
-  remedy, the symmetry condition (`300`) on the axis; with `inverse-mean` and `mean` a viscous run on a 3-D mesh with a
+  remedy, the symmetry condition (`300`) on the axis; with `mean` a viscous run on a 3-D mesh with a
   boundary face of zero area stops at set-up and asks for `diffusive-metric = stencil`.
 - In time-accurate RANS runs the local time step takes, for the stiffness of the turbulence sources, a bound that the state of
   the cell gives alone: Spalart–Allmaras 2 c_w1 (1 + c_w3⁶)^(1/6) ν̃/y², SST max(β*, 2 max(β₁, β₂)) ω, Wilcox 2006
@@ -227,6 +226,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- The value `inverse-mean` of `diffusive-metric` (`[MOSE-Numerics]`): the key takes `stencil`, the default, exact for a
+  linear field on any mesh, or `mean`. A deck that names `inverse-mean` stops at set-up. The inverse-mean face metric stays
+  where the code takes it whatever the key: the chimera faces, and with `mean` the faces between blocks and of type `200`.
 - The compressibility correction of Spalart–Allmaras (`turbulence = SAcomp`): it is refused at set-up. It took c from
   c² f(c) = 25 Ω ν_t / a, a number against a speed, so the factor it gave the production depended on the units: 0.99 with
   lengths in metres and 0.22 with lengths in millimetres for Ω = 1e3 1/s, ν_t = 1e-3 m²/s and a = 340 m/s; at Ω = 1e5 1/s it
@@ -239,7 +241,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Faces between blocks take the inverse of the mean of the inverse metrics with `diffusive-metric = inverse-mean` or `mean`, and
+- Faces between blocks take the inverse of the mean of the inverse metrics with `diffusive-metric = mean`, and
   chimera faces with every value of the key: across a large size jump at a block connection the mean of the two metrics made the
   normal gradient far too steep, and the explicit diffusion unstable on the large cell.
 - `level<n>-iter`, and `iter-threshold` without multigrid, take effect when `input.ini` is read again during the run: the

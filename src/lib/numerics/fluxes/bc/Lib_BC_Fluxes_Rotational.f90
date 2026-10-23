@@ -194,7 +194,7 @@ contains
   !> the source turned (Rotational_Face_Metric, MOSE_Lib_Stencil_Metrics, stored on
   !> the face of the block, one per group of quantities with a wall ghost cell in
   !> the stencil), exact for the linear fields that the periodicity allows; with
-  !> inverse-mean and mean, Mf, the inverse of the mean of the two inverse metrics
+  !> mean, Mf, the inverse of the mean of the two inverse metrics
   !> of the cell and its image, as on the connections, computed once at setup
   !> (Rotational_Periodic_Face_Metric, stored in the record: bc%rM).
   !>
@@ -224,7 +224,7 @@ contains
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout), target :: Blk
-    real(R8), intent(in) :: Mf(3,3)      ! face metric of inverse-mean and mean (Rotational_Periodic_Face_Metric)
+    real(R8), intent(in) :: Mf(3,3)      ! face metric of mean (Rotational_Periodic_Face_Metric)
     real(R8), intent(in) :: Sc, Sct, Prt, Prl
     logical, intent(in) :: soot_enabled
     ! Local
@@ -338,7 +338,7 @@ contains
 
 
   !> Face metric of the viscous flux of a face of type 200 (BC_Rotational_Periodic_Visc) with diffusive-metric =
-  !> inverse-mean and mean (with stencil the face takes Rotational_Face_Metric of MOSE_Lib_Stencil_Metrics, which takes
+  !> mean (with stencil the face takes Rotational_Face_Metric of MOSE_Lib_Stencil_Metrics, which takes
   !> from this one the columns of the index directions with one cell): the inverse of the mean of
   !> the two inverse metrics (Face_Metric) of the cell and of its image. It depends on the metrics only, so
   !> Setup_Metrics computes it once, for the records of type 200 of the blocks of the rank, and stores it in the record

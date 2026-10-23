@@ -265,7 +265,7 @@ contains
     integer, intent(in)  :: b                ! block id, for error messages only
     type(MOSE_block_type), intent(inout), target :: blk
     logical, intent(in)  :: soot_enabled
-    integer, intent(in)  :: metric           ! diffusive-metric: 0 mean, 1 inverse-mean, 2 stencil
+    integer, intent(in)  :: metric           ! diffusive-metric: 0 mean, 2 stencil
     integer, intent(in)  :: SD_id
     real(R8), intent(in) :: Sc, Sct, Prt, Prl
     ! Local
