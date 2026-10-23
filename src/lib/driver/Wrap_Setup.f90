@@ -23,6 +23,7 @@ contains
                                          blocks_needing_full_arrays
     use MOSE_Mod_Multigrid,        only: Setup_Multigrid, Restriction
     use MOSE_IO_BC,                only: Setup_BC
+    use MOSE_IO_BC_Q2D,            only: Check_Q2D_Nodes
     use MOSE_Lib_BC_Fluxes_Extrapolation, only: Setup_400_Entering
     use MOSE_Lib_RotatingFrame,    only: Check_Stationary_Faces
     use MOSE_Mod_Metrics,          only: Setup_Metrics
@@ -171,6 +172,10 @@ contains
       ! Every value that the initial condition gives the blocks of this rank is finite
       call Check_IC_Values ( simulation%domain(1), simulation%IOfield(1) )
     end if
+
+    ! The nodes that the files of the faces of type 410 give are those of the faces in the mesh: every rank holds the
+    ! nodes of every block here, with one grid level (Setup_Data_Fields above) and with multigrid (before Setup_BC)
+    call Check_Q2D_Nodes ( simulation%domain(1) )
 
     call allocate_exchange_schedules(obj_multigrid%MGL)
     do m = 1, obj_multigrid%MGL

@@ -223,6 +223,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   CPU time or less at one thread: `ExitCodes`, `RuntimeInput` and `ViscousWallPatch`, which take more, run in the validation
   tier under their own names, and the PR CI runs both tiers as before (rule, tolerance and times in `test/TESTING-PLAN.md`,
   section 4).
+- The nodes that the zones of the file of an assigned state (`410`) give for the face of each cell of a face of type `410`
+  are compared at set-up with those of the face in the mesh, and those of its later zones with those of the first one, to
+  within 1e-2 of the shortest edge of the face that is not of zero length: a zone that gives the nodes of another block, of
+  another face or of another mesh stops the run with exit code 1, with the file, the zone, the line of its header, the node,
+  the record, the block and the cell, and so does a coordinate of these nodes that is not finite. The reader skipped the
+  coordinates, and the values of such a zone went to the face without a word. The files that the boundary-condition builder
+  of ATLAS writes give the nodes of the faces; a file written by hand must give them, with the digits that the tolerance
+  needs.
 
 ### Removed
 
@@ -557,6 +565,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   face. The ghost cells took the value of the cell for a missing `p`, `u`, `v` or `w`, and the run ended with exit code 0;
   without any `rho(N)` they had zero density, and the run ended at its first step with a run-time error (gfortran with bounds
   checking).
+- A file of an assigned state (`410`) that leaves a cell of a face of type `410` without a value at one of its times stops
+  the run at set-up with exit code 1, in every build, with the file, the block and the record: a block with no zone in the
+  file, with no zone at one of its times, or whose zones at a time do not hold the cell, as when the blocks of the mesh were
+  split or numbered anew after the file was written. The reader left such a cell with the zero state: the run ended at its
+  first step with a run-time error that named no file (an index out of bounds, with gfortran with bounds checking and with
+  ifx), or took that state at that time and ended with exit code 0.
 - With the rotating frame, `stationary-face-<n>` entries no longer make the start-up hang: the count of the entries asked for
   `stationary-face-1` at every pass, so stationary walls could not be used. A `rotational-frame` other than `rigid-body`, its
   default `none` included, turns the frame off before its entries are read; with `none` the switch of the frame was left

@@ -136,11 +136,29 @@
 #  which the ghost cells of a face of type 410 take whole (the density rho(N)
 #  of at least one species, u, v, w and p), with the file and the variables
 #  it lacks: the same duct with p, with u and w, or with rho(1), the density
-#  of its only species, taken out of the file. Without the check the ghost
-#  cells would take the value of the cell for a missing p, u or w, and the run
-#  would end with exit code 0; without any rho(N) they would have zero
-#  density, and the run would end at its first step with a run-time error
-#  (gfortran with bounds checking).
+#  of its only species, taken out of the file. The ghost cells took the value
+#  of the cell for a missing p, u or w, and the run ended with exit code 0;
+#  without any rho(N) they had zero density, and the run ended at its first
+#  step with a run-time error (gfortran with bounds checking).
+#  So does a file that leaves a cell of a face of type 410 without a value at
+#  one of its times, or whose zones give nodes that are not those of the
+#  faces, with the file, the block and the record, and for the nodes the zone
+#  and the node: the duct of BCInput in two blocks with faces of type 410 on
+#  its six kinds of faces, read from three files in the form that ATLAS
+#  writes (make_case.py duct410), the file of its faces 5 and 6 with the
+#  zones of the two blocks under each other's title, with no zone of block 2,
+#  with no zone of block 2 at the second time, with the zones of block 2 cut
+#  to their first 25 cells, with the zone of block 1 at the second time
+#  holding that of block 2, and with its nodes moved by 2e-2 of the shortest
+#  edge of these faces. The reader left such cells with the zero state: the
+#  run ended at its first step with a run-time error that named no file, or
+#  took that state at the second time; it did not read the nodes, and the
+#  values of a zone of another block, of another time or of another mesh went
+#  to the face without a word. The files as written must run, with exit code
+#  0, and so must the same files with the nodes of the faces 5 and 6 moved by
+#  0.5e-2 of that edge, or with the coordinates written with 15 significant
+#  digits, with the solution of the files as written, bit for bit; and so
+#  must a restart from that solution, whose nodes the check reads again.
 #
 #  An input.ini that cannot be read stops the run at set-up with its reason:
 #  input.ini missing, empty, and of comment lines only (no section, an error
@@ -702,6 +720,88 @@ run_q2d q2d-long 1.0 1.0E+05 \
 run_q2d q2d-order 1.0 1.0E+05 \
   "[ERROR] Q2D file q2d.dat, line 11 (zone 2): SOLUTIONTIME 1.00000E+00 is less than 2.00000E+00, the time of a zone above it: the zones must come in increasing time" \
   'NR == 2 { sub(/SOLUTIONTIME=0.0/, "SOLUTIONTIME=2.0") } { print }'
+
+echo "-- a file of faces of type 410 that leaves a cell without a value, or whose nodes are not those of the faces, stops the run at set-up --"
+# run_q2d_mesh <tag> <form> <message>: the duct of BCInput in two blocks with faces of type 410 on its six kinds of faces, read
+# from three files in the form that ATLAS writes (make_case.py duct410 <form>), 5 steps. With a message, it must stop at set-up
+# with exit code 1 and the message, and write no solution; with "valid", it must end with exit code 0, its solution kept as
+# OUTPUT/q2d-mesh-valid.tec; with "same", it must end with exit code 0 and give that solution, bit for bit
+run_q2d_mesh() {
+  local tag="$1" form="$2" message="$3" found=missing solution=none
+  rm -f INPUT/* q2d-ends.dat q2d-jfaces.dat q2d-side.dat
+  ln -sf "../$COMMON/phase.txt" INPUT/phase.txt; ln -sf "../$COMMON/thermo.dat" INPUT/thermo.dat
+  python3 -B make_case.py duct410 "$form" || exit 1
+  cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 5
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.5
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+EOI
+  rm -f OUTPUT/field.tec
+  "$LOCAL" > "OUTPUT/$tag.log" 2>&1
+  local rc=$?
+  if [[ $message == valid || $message == same ]]; then
+    [[ $message == valid && $rc -eq 0 ]] && cp OUTPUT/field.tec OUTPUT/q2d-mesh-valid.tec
+    if [[ $rc -eq 0 ]] && cmp -s OUTPUT/field.tec OUTPUT/q2d-mesh-valid.tec; then
+      if [[ $message == valid ]]; then
+        echo "  [ok  ] $tag: exit code 0"
+      else
+        echo "  [ok  ] $tag: exit code 0, the solution of the files as written, bit for bit"
+      fi
+    else
+      echo "  [FAIL] $tag: exit code $rc (required 0), solution $(cmp -s OUTPUT/field.tec OUTPUT/q2d-mesh-valid.tec && echo same || echo different) (see OUTPUT/$tag.log)"
+      fail=1
+    fi
+    return
+  fi
+  grep -a -q -F -- "$message" "OUTPUT/$tag.log" && found=found
+  [[ -f OUTPUT/field.tec ]] && solution=written
+  if [[ $rc -eq 1 && $found == found && $solution == none ]]; then
+    echo "  [ok  ] $tag: exit code 1, \"$message\""
+  else
+    echo "  [FAIL] $tag: exit code $rc (required 1), message \"$message\" $found, solution $solution (see OUTPUT/$tag.log)"
+    fail=1
+  fi
+}
+rm -f OUTPUT/q2d-mesh-valid.tec
+run_q2d_mesh q2d-mesh-valid valid valid
+# a restart from that solution: the check reads its nodes again
+sed -i 's/^newrun = true$/newrun = false/' input.ini
+"$LOCAL" > OUTPUT/q2d-mesh-restart.log 2>&1
+rc=$?
+if [[ $rc -eq 0 ]] && grep -a -q 'MOSE | Iter' OUTPUT/q2d-mesh-restart.log; then
+  echo "  [ok  ] q2d-mesh-restart: exit code 0, a restart from the solution of the files as written"
+else
+  echo "  [FAIL] q2d-mesh-restart: exit code $rc (required 0, with its steps) (see OUTPUT/q2d-mesh-restart.log)"
+  fail=1
+fi
+run_q2d_mesh q2d-mesh-moved-5e-5 moved-5e-5 same
+run_q2d_mesh q2d-mesh-digits-15 digits-15 same
+run_q2d_mesh q2d-mesh-swapped swapped \
+  "[ERROR] Q2D file q2d-side.dat, zone 1 (line 2): node I=1, J=1 of the zone, a corner of the face of record 205 (block 1, cell 1, 1, 1, face 5), is at"
+run_q2d_mesh q2d-mesh-moved-2e-4 moved-2e-4 \
+  "[ERROR] Q2D file q2d-side.dat, zone 1 (line 2): node I=1, J=1 of the zone, a corner of the face of record 205 (block 1, cell 1, 1, 1, face 5), is at"
+run_q2d_mesh q2d-mesh-no-block-2 no-block-2 \
+  "[ERROR] Q2D file q2d-side.dat has no zone of block 2, whose 50 cells of faces of type 410 read it (the first: record 559, cell 1, 1, 2, face 6)"
+run_q2d_mesh q2d-mesh-no-time-2 no-time-2 \
+  "[ERROR] Q2D file q2d-side.dat: block 2 has no zone at SOLUTIONTIME 1.00000E-03, a time of the file, and its cells of faces of type 410 need a value at every time of the file (the first: record 559, cell 1, 1, 2, face 6)"
+run_q2d_mesh q2d-mesh-short-zone short-zone \
+  "[ERROR] Q2D file q2d-side.dat: at SOLUTIONTIME 0.00000E+00 no zone of block 2 holds cell 26, 1 of the face of record 584 (cell 26, 1, 2, face 6); the first zone of the block at that time, zone 2 (line 559), has I=26, J=2, that is 25 by 1 cells, along i and j of the face"
+run_q2d_mesh q2d-mesh-time-2-other-block time-2-other-block \
+  "[ERROR] Q2D file q2d-side.dat, zone 3 (line 1116): node I=1, J=1 of the zone, a corner of the face of record 205 (block 1, cell 1, 1, 1, face 5), is  5.000E-01 from the same node in zone 1 (line 2)"
+rm -f q2d-ends.dat q2d-jfaces.dat q2d-side.dat OUTPUT/q2d-mesh-valid.tec
 
 echo "-- an input.ini that cannot be read stops the run at set-up --"
 # run_ini <tag> <reason expected in the log>: the Sod tube with the input.ini left by the caller

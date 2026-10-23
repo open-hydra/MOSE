@@ -4,7 +4,17 @@ module MOSE_IO_BC_Q2D
   implicit none
 
   private
-  public :: Setup_Q2D_BC_Data
+  public :: Setup_Q2D_BC_Data, Check_Q2D_Nodes
+
+  ! The nodes of the face of each cell of a face of type 410 in the zones of its file, kept by Read_Q2D_Tecplot for
+  ! Check_Q2D_Nodes, which compares them with the nodes of the mesh once these are in place (Wrap_Setup: with one grid
+  ! level they come after the boundary conditions). One entry per record of type 410 (q2d_slot gives it)
+  integer,  allocatable :: q2d_slot(:)          ! (nbound) the entry of a record of type 410, 0 for the other records
+  integer,  allocatable :: q2d_rec(:)           ! the record of each entry
+  real(R8), allocatable :: q2d_corner(:,:,:)    ! (3, 4, entry) the nodes of the face in the first zone that gives a value
+  integer,  allocatable :: q2d_zone1(:,:)       ! (2, entry) that zone and the line of its header; 0 until one does
+  real(R8), allocatable :: q2d_dev(:)           ! the largest distance of a node of a later zone from the node kept
+  integer,  allocatable :: q2d_devz(:,:)        ! (3, entry) the zone, the line of its header and the node of that distance
 
 contains
 
@@ -12,7 +22,8 @@ contains
   ! Setup Q2D mapped boundary condition data (BC type 410).
   ! Reads the ATLAS Tecplot file(s) specified in bc.txt (one per face),
   ! parses all solution times, maps variables by name to MOSE primitives,
-  ! and populates bc(i)%q2d_map for each type 410 boundary cell.
+  ! and populates bc(i)%q2d_map for each type 410 boundary cell; keeps the
+  ! nodes of the face of each such cell in its zones for Check_Q2D_Nodes.
   ! ---------------------------------------------------------------------------
   subroutine Setup_Q2D_BC_Data ( domain )
     use MOSE_Advanced_Types_m
@@ -32,6 +43,21 @@ contains
       if (domain%bc(i)%type == 410) nq2d_count = nq2d_count + 1
     enddo
     if (nq2d_count == 0) return
+
+    ! One entry per record of type 410 for the nodes of its face (Read_Q2D_Tecplot, Check_Q2D_Nodes)
+    allocate(q2d_slot(domain%nbound), q2d_rec(nq2d_count), q2d_corner(3, 4, nq2d_count), q2d_zone1(2, nq2d_count), &
+             q2d_dev(nq2d_count), q2d_devz(3, nq2d_count))
+    q2d_slot = 0
+    q2d_zone1 = 0
+    q2d_dev = 0.0_R8
+    q2d_devz = 0
+    nq2d_count = 0
+    do i = 1, domain%nbound
+      if (domain%bc(i)%type /= 410) cycle
+      nq2d_count = nq2d_count + 1
+      q2d_slot(i) = nq2d_count
+      q2d_rec(nq2d_count) = i
+    enddo
 
     ! Collect unique filenames from bc(:)%q2d_file
     allocate(file_list(nq2d_count))
@@ -92,7 +118,13 @@ contains
   ! above it has, less than the last such time, stops the run too. Every rank
   ! reads the whole file (Setup_BC runs before the blocks are given to the
   ! ranks), so every rank stops on the same error (mpi_stop_all). So does a
-  ! file that lacks a part of the state across the face (Check_Q2D_State).
+  ! file that lacks a part of the state across the face (Check_Q2D_State),
+  ! and a file that leaves a cell of a face of type 410 without a value at
+  ! one of its times (Check_Q2D_Coverage, from the zone headers). The nodes
+  ! of the face of each such cell are taken from every zone that gives it a
+  ! value, must be finite, and are kept for Check_Q2D_Nodes: those of the
+  ! first zone, and the largest distance of those of the later zones from
+  ! them.
   ! ---------------------------------------------------------------------------
   subroutine Read_Q2D_Tecplot ( domain, filename )
     use MOSE_Advanced_Types_m
@@ -113,7 +145,9 @@ contains
     character(len=:), allocatable :: header
     character(len=32) :: tmp_names(100)
     integer, allocatable :: varmap(:)
-    real(R8), allocatable :: node_buf(:), cell_buf(:,:,:)
+    real(R8), allocatable :: node_x(:), node_y(:), node_z(:), cell_buf(:,:,:)
+    real(R8) :: corner(3,4), d               ! the nodes of the face of a cell in a zone, a distance
+    integer  :: k, ip, zn(2,4)               ! the entry of a record of type 410, a node of the zone, the nodes of its face
     integer :: nvar_total
     integer :: nzones_total
     integer, allocatable :: zone_block(:), zone_tidx(:)
@@ -251,6 +285,9 @@ contains
 
     write(*,'(A,I0,A,I0,A)') '  Q2D data: ', ntimes, ' time steps, ', nvar_file, ' variables'
 
+    ! Every cell of a face of type 410 that reads the file gets a value at every time of the file, from the zone headers
+    call Check_Q2D_Coverage ( domain, filename, zone_block, zone_tidx, zone_I, zone_J, zone_line, unique_times )
+
     ! --- Allocate q2d_map for each type 410 BC ---
     do ibc = 1, domain%nbound
       if (domain%bc(ibc)%type == 410 .and. trim(domain%bc(ibc)%q2d_file) == trim(filename)) then
@@ -287,7 +324,7 @@ contains
     ! Allocate buffers once using max dimensions
     I_max = maxval(zone_I(1:nzones_total))
     J_max = maxval(zone_J(1:nzones_total))
-    allocate(node_buf(I_max * J_max))
+    allocate(node_x(I_max * J_max), node_y(I_max * J_max), node_z(I_max * J_max))
     allocate(cell_buf(nvar_file, I_max - 1, J_max - 1))
 
     rewind(u)
@@ -309,12 +346,12 @@ contains
       b_zone = zone_block(iz)
       t_zone = zone_tidx(iz)
 
-      ! Read and skip node coordinates (3 * n_nodes values); a read that fails stops the run
-      read(u, *, iostat=ios) node_buf(1:n_nodes)  ! x
+      ! Read the node coordinates (3 * n_nodes values, the first index fastest); a read that fails stops the run
+      read(u, *, iostat=ios) node_x(1:n_nodes)
       if (ios /= 0) call Q2D_Read_Error(filename, iz, zone_line(iz), tmp_names(1), ios)
-      read(u, *, iostat=ios) node_buf(1:n_nodes)  ! y
+      read(u, *, iostat=ios) node_y(1:n_nodes)
       if (ios /= 0) call Q2D_Read_Error(filename, iz, zone_line(iz), tmp_names(2), ios)
-      read(u, *, iostat=ios) node_buf(1:n_nodes)  ! z
+      read(u, *, iostat=ios) node_z(1:n_nodes)
       if (ios /= 0) call Q2D_Read_Error(filename, iz, zone_line(iz), tmp_names(3), ios)
 
       ! Read cell-centered variables: nvar_file blocks of n_cells values
@@ -330,17 +367,46 @@ contains
         if (trim(domain%bc(ibc)%q2d_file) /= trim(filename)) cycle
 
         ! Face-local indices: (i,j,k,f) -> (i1,i2)
-        select case (domain%bc(ibc)%f)
-          case (1,2); bc_i1 = domain%bc(ibc)%j; bc_i2 = domain%bc(ibc)%k
-          case (3,4); bc_i1 = domain%bc(ibc)%i; bc_i2 = domain%bc(ibc)%k
-          case default; bc_i1 = domain%bc(ibc)%i; bc_i2 = domain%bc(ibc)%j
-        end select
+        call Face_Cell ( domain%bc(ibc), bc_i1, bc_i2 )
 
         ! Check bounds
         if (bc_i1 < 1 .or. bc_i1 > n1 .or. bc_i2 < 1 .or. bc_i2 > n2) then
           write(*,'(A,4I6)') ' [WARNING] Q2D BC index out of range: bc=', ibc, &
             bc_i1, bc_i2, b_zone
           cycle
+        endif
+
+        ! The nodes of the face of the cell in this zone, (i1-1, i2-1), (i1, i2-1), (i1, i2), (i1-1, i2) counted from 0, the
+        ! first index fastest: finite; kept from the first zone that gives the cell a value, compared with those of the later
+        ! zones (Check_Q2D_Nodes compares the ones kept with the mesh)
+        zn(:,1) = [bc_i1 - 1, bc_i2 - 1]
+        zn(:,2) = [bc_i1,     bc_i2 - 1]
+        zn(:,3) = [bc_i1,     bc_i2    ]
+        zn(:,4) = [bc_i1 - 1, bc_i2    ]
+        do ic = 1, 4
+          ip = 1 + zn(1,ic) + zn(2,ic) * I_nodes
+          corner(:,ic) = [node_x(ip), node_y(ip), node_z(ip)]
+          do iv = 1, 3
+            if (Not_Finite(corner(iv,ic))) then
+              write(msg,'(3A,I0,A,I0,3A,I0,A,I0,A)') '[ERROR] Q2D file ', trim(filename), ', zone ', iz, ' (line ', &
+                zone_line(iz), '), variable ', trim(tmp_names(iv)), ', node I=', zn(1,ic) + 1, ', J=', zn(2,ic) + 1, &
+                ': a value that is not finite (NaN or infinity)'
+              call mpi_stop_all(trim(msg))
+            endif
+          enddo
+        enddo
+        k = q2d_slot(ibc)
+        if (q2d_zone1(1,k) == 0) then
+          q2d_corner(:,:,k) = corner
+          q2d_zone1(:,k) = [iz, zone_line(iz)]
+        else
+          do ic = 1, 4
+            d = norm2(corner(:,ic) - q2d_corner(:,ic,k))
+            if (d > q2d_dev(k)) then
+              q2d_dev(k) = d
+              q2d_devz(:,k) = [iz, zone_line(iz), ic]
+            endif
+          enddo
         endif
 
         ! Map file variables to MOSE primitives
@@ -372,10 +438,239 @@ contains
     enddo
 
     close(u)
-    deallocate(node_buf, cell_buf)
+    deallocate(node_x, node_y, node_z, cell_buf)
     deallocate(varmap, zone_block, zone_tidx, zone_time, zone_I, zone_J, zone_line, unique_times)
 
   end subroutine Read_Q2D_Tecplot
+
+
+  ! ---------------------------------------------------------------------------
+  ! The face-local indices (i1, i2) of the cell of a record on its face: (j, k)
+  ! on the faces 1 and 2, (i, k) on 3 and 4, (i, j) on 5 and 6, the order of
+  ! the cells of a zone of the file (the first index fastest).
+  ! ---------------------------------------------------------------------------
+  subroutine Face_Cell ( bc, i1, i2 )
+    use MOSE_Advanced_Types_m
+    implicit none
+    type(MOSE_bc_type), intent(in) :: bc
+    integer, intent(out) :: i1, i2
+
+    select case (bc%f)
+      case (1,2); i1 = bc%j; i2 = bc%k
+      case (3,4); i1 = bc%i; i2 = bc%k
+      case default; i1 = bc%i; i2 = bc%j
+    end select
+
+  end subroutine Face_Cell
+
+
+  ! ---------------------------------------------------------------------------
+  ! Stop the run at set-up when a cell of a face of type 410 that reads the
+  ! file would get no value at a time of the file, which the reader leaves at
+  ! the zero state it starts with (Read_Q2D_Tecplot): its block has no zone in
+  ! the file, no zone at that time, or no zone at that time that holds the
+  ! cell (a zone holds its I-1 by J-1 cells from the cell 1, 1 of the face).
+  ! A record of a block that the mesh does not have (a bc.txt of another
+  ! mesh) is not checked here.
+  ! The zones go to the blocks by the number in their title, so a file written
+  ! for another mesh, such as one whose blocks were split or numbered anew,
+  ! does not fit it. From the zone headers, before the values are read; every
+  ! rank reads the file and bc.txt whole, so every rank stops on the same
+  ! record (mpi_stop_all).
+  ! ---------------------------------------------------------------------------
+  subroutine Check_Q2D_Coverage ( domain, filename, zone_block, zone_tidx, zone_I, zone_J, zone_line, times )
+    use MOSE_Advanced_Types_m
+    use MOSE_Mod_MPI, only: mpi_stop_all
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    character(len=*), intent(in)       :: filename
+    integer, intent(in)                :: zone_block(:), zone_tidx(:), zone_I(:), zone_J(:), zone_line(:)
+    real(R8), intent(in)               :: times(:)
+    ! Local
+    integer :: nb, ibc, jbc, b, i1, i2, iz, it, n, z1
+    integer, allocatable :: first(:), next(:), first_at(:)
+    logical, allocatable :: held(:)
+    character(len=1024) :: msg
+    character(len=16)   :: tstr
+    character(len=8)    :: along
+
+    ! The zones of each block of the mesh, in the order of the file: first(b), then next(iz)
+    nb = domain%nb
+    allocate(first(nb), next(size(zone_block)), first_at(size(times)), held(size(times)))
+    first = 0
+    next = 0
+    do iz = size(zone_block), 1, -1
+      b = zone_block(iz)
+      if (b < 1 .or. b > nb) cycle
+      next(iz) = first(b)
+      first(b) = iz
+    enddo
+
+    do ibc = 1, domain%nbound
+      if (domain%bc(ibc)%type /= 410) cycle
+      if (trim(domain%bc(ibc)%q2d_file) /= trim(filename)) cycle
+      b = domain%bc(ibc)%b
+      if (b < 1 .or. b > nb) cycle
+      call Face_Cell ( domain%bc(ibc), i1, i2 )
+      iz = first(b)
+
+      if (iz == 0) then
+        n = 0
+        do jbc = 1, domain%nbound
+          if (domain%bc(jbc)%type /= 410 .or. domain%bc(jbc)%b /= b) cycle
+          if (trim(domain%bc(jbc)%q2d_file) == trim(filename)) n = n + 1
+        enddo
+        write(msg,'(3A,I0,A,I0,A,I0,A,3(I0,A),I0,A)') '[ERROR] Q2D file ', trim(filename), ' has no zone of block ', b, &
+          ', whose ', n, ' cells of faces of type 410 read it (the first: record ', ibc, ', cell ', domain%bc(ibc)%i, ', ', &
+          domain%bc(ibc)%j, ', ', domain%bc(ibc)%k, ', face ', domain%bc(ibc)%f, '): the zones go to the blocks by the '// &
+          'number in their title, T="B<block>_T<n>", and a file written for another mesh, such as one whose blocks were '// &
+          'split or numbered anew, does not fit this one'
+        call mpi_stop_all(trim(msg))
+      endif
+
+      held = .false.
+      first_at = 0
+      do while (iz > 0)
+        it = zone_tidx(iz)
+        if (first_at(it) == 0) first_at(it) = iz
+        if (i1 >= 1 .and. i1 <= zone_I(iz) - 1 .and. i2 >= 1 .and. i2 <= zone_J(iz) - 1) held(it) = .true.
+        iz = next(iz)
+      enddo
+
+      do it = 1, size(times)
+        if (held(it)) cycle
+        write(tstr,'(ES12.5)') times(it)
+        if (first_at(it) == 0) then
+          write(msg,'(3A,I0,3A,I0,A,3(I0,A),I0,A)') '[ERROR] Q2D file ', trim(filename), ': block ', b, &
+            ' has no zone at SOLUTIONTIME ', trim(adjustl(tstr)), ', a time of the file, and its cells of faces of type '// &
+            '410 need a value at every time of the file (the first: record ', ibc, ', cell ', domain%bc(ibc)%i, ', ', &
+            domain%bc(ibc)%j, ', ', domain%bc(ibc)%k, ', face ', domain%bc(ibc)%f, ')'
+        else
+          z1 = first_at(it)
+          select case (domain%bc(ibc)%f)
+            case (1,2); along = 'j and k'
+            case (3,4); along = 'i and k'
+            case default; along = 'i and j'
+          end select
+          write(msg,'(5A,I0,A,I0,A,I0,A,I0,A,3(I0,A),I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,3A)') '[ERROR] Q2D file ', &
+            trim(filename), ': at SOLUTIONTIME ', trim(adjustl(tstr)), ' no zone of block ', b, ' holds cell ', i1, ', ', &
+            i2, ' of the face of record ', ibc, ' (cell ', domain%bc(ibc)%i, ', ', domain%bc(ibc)%j, ', ', domain%bc(ibc)%k, &
+            ', face ', domain%bc(ibc)%f, '); the first zone of the block at that time, zone ', z1, ' (line ', &
+            zone_line(z1), '), has I=', zone_I(z1), ', J=', zone_J(z1), ', that is ', zone_I(z1) - 1, ' by ', &
+            zone_J(z1) - 1, ' cells, along ', trim(along), ' of the face'
+        endif
+        call mpi_stop_all(trim(msg))
+      enddo
+    enddo
+
+    deallocate(first, next, first_at, held)
+
+  end subroutine Check_Q2D_Coverage
+
+
+  ! ---------------------------------------------------------------------------
+  ! Stop the run at set-up when the nodes that the zones of a file of a face of
+  ! type 410 give for the face of a cell are not those of the face in the mesh:
+  ! the first zone that gives the cell a value against the mesh, each later
+  ! zone against that first one (Read_Q2D_Tecplot keeps their largest
+  ! distance), within 1e-2 of the shortest edge of the face of the cell, the
+  ! measure of Check_Mesh_Type: the round-off of coordinates written with
+  ! enough digits passes, a zone of another block, of another face or of
+  ! another mesh, which moves the nodes by a cell, does not. The node (p, q) of
+  ! a zone is the node (plane, p, q) of the mesh on the faces 1 and 2, (p,
+  ! plane, q) on 3 and 4, (p, q, plane) on 5 and 6, the plane that of the face
+  ! of the cell, as the boundary-condition builder of ATLAS writes them. A face
+  ! of four edges of zero length is a point, with no area for a flux and no
+  ! edge to measure with: it is not compared. Nor is a record whose block or
+  ! cell is not in the mesh (a bc.txt of another mesh). Called once the nodes
+  ! of every block are in place (Wrap_Setup), on every rank: every rank holds
+  ! the nodes of every block and has read the same files (mpi_stop_all).
+  ! ---------------------------------------------------------------------------
+  subroutine Check_Q2D_Nodes ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Mod_MPI, only: mpi_stop_all
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain
+    ! Local
+    real(R8), parameter :: ETA = 1d-2
+    integer  :: k, ibc, b, ii, jj, kk, ic, e, i1, i2, z1, zd, cd
+    integer  :: dims(3), zn(2,4)
+    real(R8) :: mesh(3,4), h, edge, tol, d
+    character(len=1024) :: msg
+    character(len=48)   :: pz, pm
+
+    if (.not. allocated(q2d_rec)) return
+
+    do k = 1, size(q2d_rec)
+      ibc = q2d_rec(k)
+      if (q2d_zone1(1,k) == 0) cycle   ! no zone gave it a value (Check_Q2D_Coverage stops such a file first)
+      b  = domain%bc(ibc)%b
+      if (b < 1 .or. b > domain%nb) cycle
+      ii = domain%bc(ibc)%i
+      jj = domain%bc(ibc)%j
+      kk = domain%bc(ibc)%k
+      dims = domain%blk(b)%dim
+      if (ii < 1 .or. ii > dims(1) .or. jj < 1 .or. jj > dims(2) .or. kk < 1 .or. kk > dims(3)) cycle
+
+      ! The nodes of the face of the cell in the mesh, in the order of the nodes kept (Read_Q2D_Tecplot)
+      call Face_Cell ( domain%bc(ibc), i1, i2 )
+      zn(:,1) = [i1 - 1, i2 - 1]
+      zn(:,2) = [i1,     i2 - 1]
+      zn(:,3) = [i1,     i2    ]
+      zn(:,4) = [i1 - 1, i2    ]
+      do ic = 1, 4
+        associate ( node => domain%blk(b)%node )
+          select case (domain%bc(ibc)%f)
+            case (1); mesh(:,ic) = node(ii - 1, zn(1,ic), zn(2,ic))%c
+            case (2); mesh(:,ic) = node(ii,     zn(1,ic), zn(2,ic))%c
+            case (3); mesh(:,ic) = node(zn(1,ic), jj - 1, zn(2,ic))%c
+            case (4); mesh(:,ic) = node(zn(1,ic), jj,     zn(2,ic))%c
+            case (5); mesh(:,ic) = node(zn(1,ic), zn(2,ic), kk - 1)%c
+            case default; mesh(:,ic) = node(zn(1,ic), zn(2,ic), kk)%c
+          end select
+        end associate
+      enddo
+
+      ! The shortest edge of the face, not zero
+      h = huge(1.0_R8)
+      do e = 1, 4
+        edge = norm2(mesh(:, mod(e, 4) + 1) - mesh(:,e))
+        if (edge > 0.0_R8) h = min(h, edge)
+      enddo
+      if (h == huge(1.0_R8)) cycle
+      tol = ETA * h
+
+      z1 = q2d_zone1(1,k)
+      do ic = 1, 4
+        d = norm2(q2d_corner(:,ic,k) - mesh(:,ic))
+        if (.not. (d <= tol)) then
+          write(pz,'(3(ES15.7))') q2d_corner(:,ic,k)
+          write(pm,'(3(ES15.7))') mesh(:,ic)
+          write(msg,'(3A,9(I0,A),I0,5A,ES10.3,A,ES10.3,A)') '[ERROR] Q2D file ', &
+            trim(domain%bc(ibc)%q2d_file), ', zone ', z1, ' (line ', q2d_zone1(2,k), '): node I=', zn(1,ic) + 1, &
+            ', J=', zn(2,ic) + 1, ' of the zone, a corner of the face of record ', ibc, ' (block ', b, ', cell ', ii, &
+            ', ', jj, ', ', kk, ', face ', domain%bc(ibc)%f, '), is at', trim(pz), ', the node of the mesh at', &
+            trim(pm), ': ', d, ' apart, more than ', tol, ', 1e-2 of the shortest edge of the face; the nodes of '// &
+            'a zone must be those of the face of its block'
+          call mpi_stop_all(trim(msg))
+        endif
+      enddo
+      if (.not. (q2d_dev(k) <= tol)) then
+        zd = q2d_devz(1,k)
+        cd = q2d_devz(3,k)
+        write(msg,'(3A,9(I0,A),I0,A,ES10.3,A,I0,A,I0,A,ES10.3,A)') '[ERROR] Q2D file ', &
+          trim(domain%bc(ibc)%q2d_file), ', zone ', zd, ' (line ', q2d_devz(2,k), '): node I=', zn(1,cd) + 1, ', J=', &
+          zn(2,cd) + 1, ' of the zone, a corner of the face of record ', ibc, ' (block ', b, ', cell ', ii, ', ', jj, &
+          ', ', kk, ', face ', domain%bc(ibc)%f, '), is ', q2d_dev(k), ' from the same node in zone ', z1, ' (line ', &
+          q2d_zone1(2,k), '), more than ', tol, ', 1e-2 of the shortest edge of the face; the zones of a block must '// &
+          'give the nodes of its face at every time'
+        call mpi_stop_all(trim(msg))
+      endif
+    enddo
+
+    deallocate(q2d_slot, q2d_rec, q2d_corner, q2d_zone1, q2d_dev, q2d_devz)
+
+  end subroutine Check_Q2D_Nodes
 
 
   ! ---------------------------------------------------------------------------

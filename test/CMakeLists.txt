@@ -311,7 +311,10 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # the time table of an inlet 402, in a property line of bc.txt and in the file
 # of a face 410, a file of a face 410 that cannot be read (missing, cut, with a
 # word among its values, an unreadable zone header or a value too many), whose
-# zones go back in time or that lacks a part of the state across the face, an
+# zones go back in time, that lacks a part of the state across the face, that
+# leaves a cell of a face 410 without a value at one of its times or whose
+# nodes are not those of the faces (files as ATLAS writes them run, also from a
+# restart, with the same bits when their nodes move within the tolerance), an
 # initial condition with too few variables, a
 # rotating frame
 # with a zero axis, or with an axis or an origin that is not finite,
@@ -554,7 +557,8 @@ if(USE_MPI)
     # both ranks with exit code 1 with ini-error = stop.
     # A value of the initial condition that is not finite stops both ranks with exit
     # code 1, also when rank 1 alone holds it; so does an initial condition that
-    # rank 1 alone cannot read (two folders).
+    # rank 1 alone cannot read (two folders), and a file of faces 410 whose zones
+    # give the nodes of another block (a block on each rank).
     # A rank that stops every rank with MPI_ABORT writes out its output first: one
     # process without the launcher, its output on a file, keeps in its log the
     # message (a probe of an unknown variable), the set-up summary before it and a
