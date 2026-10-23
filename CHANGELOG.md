@@ -236,6 +236,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Faces between blocks take the inverse of the mean of the inverse metrics with `diffusive-metric = inverse-mean` or `mean`, and
   chimera faces with every value of the key: across a large size jump at a block connection the mean of the two metrics made the
   normal gradient far too steep, and the explicit diffusion unstable on the large cell.
+- `level<n>-iter`, and `iter-threshold` without multigrid, take effect when `input.ini` is read again during the run: the
+  iterations of each level were copied once at set-up, so a changed value did nothing. Lowering one below the iterations
+  already done ends that level at the iteration after that reading.
+- `irs = true`, or `irs-beta` above 0, added to `input.ini` during a run started without IRS is ignored with a warning: the
+  arrays of IRS exist only when it is on at set-up, and the run used them unallocated.
 - With MPI the tangential neighbours of the source cell of a block connection, which on the edge of a face can be ghost cells
   filled from another rank, are taken after the ghost exchange: they were one stage old, and MPI runs drifted from the serial run
   at block edges and junctions.

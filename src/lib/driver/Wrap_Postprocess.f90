@@ -5,6 +5,7 @@ module MOSE_Wrap_Postprocess
   private
   public :: MOSE_postprocess
 
+  logical, private :: irs_runtime_warned = .false.
   character(81), private :: RANS_shell_format  =    "('MOSE | Iter =', i9, ' | Global iter =', i9, ' | Density residual =', E13.6)"
   character(69), private :: URANS_shell_format =    "('MOSE | Iter =', i9, ' | Time =', E13.6,  ' | Delta t =', E13.6)"
   character(96), private :: RANS_shell_format_MG  = "('MOSE Grid Level', i2, ' | Iter =', i9, ' | Global iter =', i9, ' | Density residual =', E13.6)"
@@ -291,6 +292,23 @@ contains
     ! Update input data
     if ( mod (simulation%domain(level) % iter, obj_io%ini_diter) == 0d0 ) then
       call Read_Inifile_Runtime( simulation%domain(level)%iter )
+      ! level<n>-iter (multigrid) and iter-threshold (one level) take effect at runtime: the stop
+      ! test (Mod_Explicit) uses each level's itermax, set from them at setup.
+      if ( obj_multigrid%MGL > 1 ) then
+        do m = 1, obj_multigrid%MGL
+          simulation%domain(m)%itermax = obj_multigrid%iter_threshold(m)
+        enddo
+      else
+        simulation%domain(1)%itermax = obj_sim_param%iter_threshold
+      endif
+      ! IRS can only be switched on at setup, where its arrays are allocated: irs = true, or irs-beta > 0, added to
+      ! a run started without it is ignored (irs = false, irs-beta and irs-variables do act on a run started with IRS).
+      if ( ( obj_irs%enabled .or. obj_irs%beta > 0d0 ) .and. .not. obj_irs%at_setup ) then
+        if ( mpi_is_root .and. .not. irs_runtime_warned ) write(*,'(A)') &
+          ' [WARNING] IRS cannot be switched on at runtime (start with irs-beta > 0): irs and irs-beta ignored'
+        irs_runtime_warned = .true.
+        obj_irs%enabled = .false.
+      endif
     end if
     
 

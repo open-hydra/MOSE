@@ -79,7 +79,8 @@ space-reconstruction = MUSCL
 in the registry. MOSE reads it at set-up as an integer: a value that is not an integer, or no value,
 stops the run, and a value below 1 counts as 1. With `levels = n` the number of cells of every block
 must be a multiple of 2^(n−1) in i, and in j and k unless it is 1, or the run stops at set-up.
-`level1-iter`, `level2-iter`, ... give the iterations of each level.
+`level1-iter`, `level2-iter`, ... give the iterations of each level. They are read again with `input.ini`
+during the run: lowering one below the iterations already done ends that level at the iteration after that reading.
 
 ---
 

@@ -576,6 +576,11 @@ and Wilcox 2006 flat plates of the tests at IRS 0.5).
 Smoothing changes the path to the steady state, not the steady state
 itself (a zero residual stays zero).
 
+IRS is switched on only at setup (`irs = true` or `irs-beta > 0`), where its
+arrays are allocated; on a run started with IRS `irs-beta` and `irs-variables`
+can change at runtime and `irs = false` switches it off; `irs = true`, or
+`irs-beta` above 0, added to a run started without IRS is ignored with a warning.
+
 ---
 
 ## Multigrid Acceleration
@@ -617,6 +622,15 @@ coarse-grid solution.
     $n_j = n_k = 1$). If this is not met, grid generation / setup will reject the
     mesh. Choose $n_i$ (and $n_j$ in 2-D) accordingly **before** generating the
     grid — the hierarchy is built from this mesh, not the other way around.
+
+### Level schedule
+
+The levels run in sequence, coarsest first: level $n$ runs `level<n>-iter`
+iterations (or until `res-threshold` / `time-threshold`, which act on every
+level), then its solution is prolongated onto level $n-1$. `level<n>-iter`
+(and `iter-threshold` without multigrid) is re-read with `input.ini` every
+`ini-diter` iterations: lowering it below the iterations already done ends
+the current level at the iteration after that re-read.
 
 ### Restriction (fine → coarse)
 

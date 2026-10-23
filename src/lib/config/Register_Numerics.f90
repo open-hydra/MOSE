@@ -49,7 +49,7 @@ contains
     obj_irs%warning_message = 'none'
     obj_irs%error_message   = 'none'
     call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', &
-          'Implicit Residual Smoothing (steady runs only)', 'logical', .false. )
+          'Implicit Residual Smoothing (steady runs only; switched on only at setup)', 'logical', .false. )
     call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
           'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false. )
     call reg%add( trim(section), 'irs-variables', obj_irs%variables, 'flow', &
@@ -135,12 +135,12 @@ contains
     if (.not. obj_sim_param%HYDRA_MG) then 
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
-        call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m)), '>= 0', .false. )
+        call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
       enddo
     else
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
-        call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m)), '>= 0', .false. )
+        call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
       enddo
     endif
 
