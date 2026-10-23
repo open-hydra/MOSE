@@ -52,6 +52,9 @@ contains
           'Implicit Residual Smoothing (steady runs only)', 'logical', .false. )
     call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
           'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false. )
+    call reg%add( trim(section), 'irs-variables', obj_irs%variables, 'flow', &
+          'Residuals smoothed by IRS: flow (species, momentum, energy) or all (also the RANS, '// &
+          'soot and passive-scalar equations; for Spalart-Allmaras: the k-omega models diverge with all)', 'flow, all', .false. )
 
     ! Preconditioning controls (used when integration-variables = prec)
     obj_prec%description     = 'none'

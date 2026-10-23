@@ -19,6 +19,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   same differences of the cell centres that the face gradient takes of the field (see Changed); `inverse-mean`, the inverse of the
   mean of the inverse metrics of the two cells, whose face-normal edge is the vector between the cell centres; or `mean`, the mean
   of the two metrics, as before.
+- The key `irs-variables` of `[MOSE-Numerics]` chooses the residuals that implicit residual smoothing smooths: `flow`, the
+  default, those of the species, momentum and energy, as before; or `all`, every residual, those of the turbulence, soot and
+  passive-scalar equations too. With `flow` the turbulence equations advance with the local time step of the smoothed flow
+  equations but without smoothing, and above their explicit limit they are the part that diverges: on a 3-D aerospike nozzle
+  restarted from a converged field, IRS 0.5 at CFL 1.6 stopped after 884 iterations, the Spalart–Allmaras residual growing
+  first, and ran stable with `all` (measured before the time step and face metric of this release). `all` is for
+  Spalart–Allmaras: with the k-omega models it diverges (the SST and Wilcox 2006 flat plates of the tests, IRS 0.5: stop at
+  iterations 28 and 95; with `flow` both run). Smoothing changes the path to the steady state, not the steady state.
 - Probes can record `mi_tilde`, the first turbulence variable, which the solution files name `rhoNuTilde`
   (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model).
 - Builds with `USE_MPI=ON` register a `needs-mpi` test tier (`ctest -L needs-mpi`). Each of its tests writes its own small

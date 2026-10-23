@@ -566,6 +566,16 @@ refuses it because its time-accurate targets include moving shocks.
     - Pass the smoothed residual to the next direction
 3. Use the smoothed residual in the RK stage
 
+By default (`irs-variables = flow`) only the flow residuals (species,
+momentum, energy) are smoothed; the turbulence equations then advance
+with the same local time step without smoothing, and above the explicit
+limit they become the unstable part. `irs-variables = all` smooths every
+residual (turbulence, soot and passive scalars too) in the same way. It is
+meant for Spalart–Allmaras: the k-omega models diverge with it (the SST
+and Wilcox 2006 flat plates of the tests at IRS 0.5).
+Smoothing changes the path to the steady state, not the steady state
+itself (a zero residual stays zero).
+
 ---
 
 ## Multigrid Acceleration

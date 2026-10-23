@@ -114,7 +114,8 @@ contains
       obj_time_scheme%error_message = '[ERROR] integration-variables=prec is currently supported only for steady/pseudo-time runs.'
     end if
     if (obj_irs%enabled) then
-      obj_irs%description = 'Beta set to '//trim(str(.true.,real(obj_irs%beta)))
+      obj_irs%description = 'Beta set to '//trim(str(.true.,real(obj_irs%beta)))// &
+                            ', variables: '//trim(obj_irs%variables)
     end if
     ! IRS accelerates steady runs: the smoothed residual changes the transient of a time-accurate run
     if (obj_irs%enabled .and. obj_time_scheme%time_accurate) then
