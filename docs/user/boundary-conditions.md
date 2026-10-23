@@ -209,13 +209,27 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 
 Type `409` (a forced outlet named in the reader of the boundary file) is not implemented: a record of type `409`, or of any
 type not listed on this page, gets no flux, and MOSE does not stop on it. Type `410` reads its data on the finest
-grid level only: do not use it with a sequence of grid levels. Its file is a Tecplot ASCII file with one zone per block
-and time: a `VARIABLES` line with `p`, `u`, `v`, `w` and at least one `rho(N)`; zone headers with `I=` and `J=` in upper
-case and no blank around `=` (`I=3, J=2`), `SOLUTIONTIME` and the title `T="B<block>_T<n>"`; each zone with exactly
-the values that its `I` and `J` give, and the header of the next zone on the line after them; the zones in increasing
-time (the zones of other blocks at a time already given may come anywhere after it). Every value must be finite. A file
-that departs from this, or that cannot be opened, stops the run at set-up with the file and, for a zone, the zone, the
-line of its header and the value, the variable, the times or the form to write at fault.
+grid level only: do not use it with a sequence of grid levels. Its file is a Tecplot ASCII file, in the form that the
+boundary-condition builder of ATLAS writes, with one zone per block and time: a `VARIABLES` line with the coordinates
+`x`, `y`, `z` first, then `p`, `u`, `v`, `w` and at least one `rho(N)`; zone headers with `I=` and `J=` in upper case
+and no blank around `=` (`I=3, J=2`), `SOLUTIONTIME` and the title `T="B<block>_T<n>"`; in each zone, one variable after
+the other, the coordinates at its `I` × `J` nodes, which are those of the face of the block, then the other variables at
+its (`I` − 1) × (`J` − 1) cells, each from the low end of the face, the first index fastest: along $j$ and $k$ on the
+faces 1 and 2, $i$ and $k$ on the faces 3 and 4, $i$ and $j$ on the faces 5 and 6; the header of the next zone on the
+line after the values; the zones in increasing time (the zones of other blocks at a time already given may come anywhere
+after it). Every value must be finite. Each cell of a face of type `410` needs, at every time of the file, a zone of its
+block that holds it, and the nodes of its face in the first zone that gives it a value must be those of the mesh, and in
+the later zones those of the first one, each to within $10^{-2}$ of the shortest edge of its face that is not of zero
+length, written with the digits that this needs (a face reduced to a point, with no area and no flux, is not compared).
+A file that cannot be opened stops the run at set-up, and so does a file that departs from this form in its `VARIABLES`
+line, in the `I=` and `J=` of a zone header, in a value of a header that does not read, in values that are not numbers,
+that end before those that `I` and `J` give or that are not followed by the header of the next zone, in the order of the
+times, in a time or a value for a face of type `410` that is not finite, in the zones of a block with faces of type
+`410` (none, none at a time of the file, none that holds one of its cells) or in their nodes, with the file and, for a
+zone, the zone, the line of its header and the value, the variable, the times, the form to write, the block, the cell or
+the node at fault. The reader does not check the rest of the form: a zone header without `SOLUTIONTIME` takes the time
+0, a title without `B<block>_` gives the zone to block 1, and the items of a header are split at commas only, so they
+must be separated by commas.
 
 **Common fields:**
 

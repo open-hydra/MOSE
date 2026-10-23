@@ -36,6 +36,28 @@ Usage (from test/fast/input-checks/exit-codes):
       it declares and writes, the names are NAME..., and its column dt is that
       of the diagnostic REF (the same run without soot: plain, or sa-plain
       with Spalart-Allmaras) within 1e-6.
+  python3 -B make_case.py duct410 FORM
+      writes INPUT/ic.tec, INPUT/bc.txt, q2d-ends.dat, q2d-jfaces.dat and
+      q2d-side.dat: the duct of BCInput (100 cells on 0 <= x <= 1 m, one cell
+      of 0.01 m in y, two cells of 5e-4 m in z) in two blocks of 50 cells
+      joined at x = 0.5 m (101), air at rest at 1e5 Pa and 300 K, with faces
+      of type 410 on the six kinds of faces, read from three files in the form
+      that the boundary-condition builder of ATLAS writes (one zone per block
+      and time, the nodes of the face of the block, values with 17 digits, two
+      times, 0 and 1e-3 s): q2d-ends.dat for face 1 of block 1 and face 2 of
+      block 2, q2d-jfaces.dat for face 4 of block 1 and face 3 of block 2,
+      q2d-side.dat for face 5 of block 1 and face 6 of block 2. The files hold
+      the air at rest at 300 K, at 1e5 Pa for block 1 and 1.02e5 Pa for block
+      2. The blocks are joined by type 101; the faces in y and z without a
+      410 have the null type 0. FORM changes q2d-side.dat: valid (no change),
+      swapped (the zones of the two blocks under each other's title),
+      no-block-2 (no zone of block 2), no-time-2 (no zone of block 2 at the
+      second time), short-zone (the zones of block 2 with I=26, its first 25
+      cells), time-2-other-block (the zone B1_T2 holds the nodes and the
+      values of block 2), moved-5e-5 and moved-2e-4 (every node moved by that
+      along z, 0.5e-2 and 2e-2 of the shortest edge of the faces 5 and 6,
+      0.01 m); digits-15 writes the coordinates of the three files with 15
+      significant digits.
 """
 import os
 import re
@@ -225,9 +247,124 @@ def diagnostic_check(diag, ref, expected):
     return 0 if names == want and declared == written == len(names) and err <= 1.0e-6 else 1
 
 
+D410_N, D410_NK = 50, 2                   # cells of a block along x, cells along z
+D410_DX, D410_LY, D410_LZ = 0.01, 0.01, 1.0e-3
+D410_T = 300.0
+D410_P = {1: 1.0e5, 2: 1.02e5}            # pressure of the files for each block; the cells are at 1e5 Pa
+D410_TIMES = (0.0, 1.0e-3)
+D410_FORMS = ('valid', 'swapped', 'no-block-2', 'no-time-2', 'short-zone', 'time-2-other-block', 'moved-5e-5', 'moved-2e-4',
+              'digits-15')
+
+
+def fr_p(v, digits=17):
+    """A real as the format (E25.17E3) writes it, 0.ddd...E+eee; with digits = 15 the same form with 15 significant digits."""
+    if v == 0.0:
+        m, e = '0' * digits, 0
+    else:
+        mant, exp = ('%.*e' % (digits - 1, abs(v))).split('e')
+        m, e = mant.replace('.', ''), int(exp) + 1
+    return ('%s0.%sE%s%03d' % ('-' if v < 0.0 else '', m, '+' if e >= 0 else '-', abs(e))).rjust(25)
+
+
+def duct410_nodes(b, face, dz=0.0):
+    """(I, J) and the nodes of face `face` of block b, the first index fastest: (j, k) on faces 1 and 2, (i, k) on 3 and 4,
+    (i, j) on 5 and 6."""
+    x0 = 0.5 * (b - 1)
+    xs = [x0 + D410_DX * i for i in range(D410_N + 1)]
+    zs = [D410_LZ * (k / D410_NK - 0.5) for k in range(D410_NK + 1)]
+    if face in (1, 2):
+        xf = x0 + (0.0 if face == 1 else D410_N * D410_DX)
+        dims, nodes = (2, D410_NK + 1), [(xf, D410_LY * j, z) for z in zs for j in range(2)]
+    elif face in (3, 4):
+        yf = 0.0 if face == 3 else D410_LY
+        dims, nodes = (D410_N + 1, D410_NK + 1), [(x, yf, z) for z in zs for x in xs]
+    else:
+        zf = zs[0] if face == 5 else zs[-1]
+        dims, nodes = (D410_N + 1, 2), [(x, D410_LY * j, zf) for j in range(2) for x in xs]
+    return dims, [(x, y, z + dz) for (x, y, z) in nodes]
+
+
+def duct410_zone(title, time, dims, nodes, p, digits, ncells=None):
+    """A zone as the boundary-condition builder of ATLAS writes it; ncells keeps the first ncells cells along I."""
+    ni, nj = dims
+    if ncells is not None:
+        nodes = [nd for n, nd in enumerate(nodes) if n % ni <= ncells]
+        ni = ncells + 1
+    out = [' ZONE T="%s", I=%d, J=%d, K=1, DATAPACKING=BLOCK, VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED), '
+           'SOLUTIONTIME=%15.8E\n' % (title, ni, nj, time)]
+    for c in range(3):
+        out += [fr_p(nd[c], digits) + '\n' for nd in nodes]
+    ncell = (ni - 1) * (nj - 1)
+    for v in (p / (RU / 28.970418 * D410_T), 0.0, 0.0, 0.0, p):
+        out += [fr_p(v) + '\n'] * ncell
+    return ''.join(out)
+
+
+def duct410(form):
+    if form not in D410_FORMS:
+        sys.exit('unknown form %s: %s' % (form, ', '.join(D410_FORMS)))
+    files = {'q2d-ends.dat': {1: 1, 2: 2}, 'q2d-jfaces.dat': {1: 4, 2: 3}, 'q2d-side.dat': {1: 5, 2: 6}}
+    digits = 15 if form == 'digits-15' else 17
+    for name, faces in files.items():
+        side = name == 'q2d-side.dat'
+        dz = {'moved-5e-5': 5.0e-5, 'moved-2e-4': 2.0e-4}.get(form, 0.0) if side else 0.0
+        zones = []
+        for it, t in enumerate(D410_TIMES, start=1):
+            for b in (1, 2):
+                src, ncells = b, None
+                if side:
+                    if form == 'swapped':
+                        src = 3 - b
+                    elif (form == 'no-block-2' and b == 2) or (form == 'no-time-2' and b == 2 and it == 2):
+                        continue
+                    elif form == 'short-zone' and b == 2:
+                        ncells = 25
+                    elif form == 'time-2-other-block' and b == 1 and it == 2:
+                        src = 2
+                dims, nodes = duct410_nodes(src, faces[src], dz)
+                zones.append(duct410_zone('B%d_T%d' % (b, it), t, dims, nodes, D410_P[src], digits, ncells))
+        with open(name, 'w') as f:
+            f.write(' VARIABLES ="x" "y" "z" "rho(1)" "u" "v" "w" "p"\n' + ''.join(zones))
+    rho = 1.0e5 / (RU / 28.970418 * D410_T)
+    with open(os.path.join('INPUT', 'ic.tec'), 'w') as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "u" "v" "w" "p"\n')
+        for b in (1, 2):
+            f.write(' ZONE  T = B%d-IG, I=%d, J=2, K=%d, DATAPACKING=BLOCK, VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED), '
+                    'SOLUTIONTIME=0.0\n' % (b, D410_N + 1, D410_NK + 1))
+            for c in range(3):
+                for k in range(D410_NK + 1):
+                    for j in range(2):
+                        for i in range(D410_N + 1):
+                            node = (0.5 * (b - 1) + D410_DX * i, D410_LY * j, D410_LZ * (k / D410_NK - 0.5))
+                            f.write(' %.16E\n' % node[c])
+            for v in (rho, 0.0, 0.0, 0.0, 1.0e5):
+                f.write((' %.16E\n' % v) * (D410_N * D410_NK))
+    q2d = {(1, 1): 'q2d-ends.dat', (2, 2): 'q2d-ends.dat', (1, 4): 'q2d-jfaces.dat', (2, 3): 'q2d-jfaces.dat',
+           (1, 5): 'q2d-side.dat', (2, 6): 'q2d-side.dat'}
+    rows = []
+    for b in (1, 2):
+        for face in range(1, 7):
+            ii = [1] if face == 1 else [D410_N] if face == 2 else range(1, D410_N + 1)
+            kk = [1] if face == 5 else [D410_NK] if face == 6 else range(1, D410_NK + 1)
+            for k in kk:
+                for i in ii:
+                    head = ''.join('%8d' % v for v in (b, i, 1, k, face))
+                    if (b, face) in q2d:
+                        rows.append(head + '%8d\n%s\n' % (410, q2d[(b, face)]))
+                    elif (b, face) in ((1, 2), (2, 1)):
+                        other = (2, 1, 1, k, 1) if b == 1 else (1, D410_N, 1, k, 2)
+                        rows.append(head + '%8d\n' % 101 + ''.join('%8d' % v for v in other + (1, 0, 0, 1)) + '\n')
+                    else:
+                        rows.append(head + '%8d\n' % 0)
+    with open(os.path.join('INPUT', 'bc.txt'), 'w') as f:
+        f.write(''.join(rows))
+
+
 if __name__ == '__main__':
     if len(sys.argv) == 3 and sys.argv[1] == 'sod':
         sod(sys.argv[2])
+    elif len(sys.argv) == 3 and sys.argv[1] == 'duct410':
+        duct410(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == 'nan':
         nan(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == 'inf':

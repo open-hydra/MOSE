@@ -26,6 +26,13 @@
 #  exit code 1, the place of the value, written once, and the STOP line of
 #  both ranks.
 #
+#  A file of faces of type 410 whose zones give nodes that are not those of
+#  the faces must stop every rank: the duct in two blocks of ExitCodes with
+#  the zones of its two blocks under each other's title (make_case.py
+#  duct410 swapped), one block on each rank, must end within 60 s with exit
+#  code 1, the message and the STOP line of both ranks: every rank reads the
+#  file and holds the nodes of every block.
+#
 #  A value out of its rule written during the run must stop every rank when
 #  input.ini is read again with ini-error = stop: two ranks launched as two
 #  programs (MPMD), each
@@ -177,6 +184,31 @@ for tag in mpi-nan-ic mpi-inf-node; do
   fi
 done
 rm -f INPUT/decomposition.map
+
+echo "-- the nodes of a file of faces of type 410 that are not those of the faces stop every rank (2 ranks, a block on each) --"
+python3 -B ../../fast/input-checks/exit-codes/make_case.py duct410 swapped || exit 1
+cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 5
+newrun = true
+res-threshold = 1e-300
+
+[MOSE-Physics]
+equations = euler
+
+[MOSE-Numerics]
+cfl = 0.5
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+EOI
+run2 mpi-q2d-nodes "Q2D file q2d-side.dat, zone 1 (line 2): node I=1, J=1 of the zone, a corner of the face of record 205" \
+  "[ERROR] Q2D file q2d-side.dat, zone 1 (line 2): node I=1, J=1 of the zone, a corner of the face of record 205"
+rm -f q2d-ends.dat q2d-jfaces.dat q2d-side.dat
+python3 -B ../../fast/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
 
 echo "-- a value out of its rule written in the input.ini of rank 0 stops every rank when it is read again with ini-error = stop" \
      "(2 ranks, two folders) --"
