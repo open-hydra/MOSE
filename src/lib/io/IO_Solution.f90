@@ -2,6 +2,12 @@ module MOSE_IO_Solution
 
   implicit none
 
+  !> Names of the counters stored with every solution, next to its time and to CYCLE (the iteration
+  !> count over all grid levels): field data of the vtk files, data set auxiliary data of the
+  !> Tecplot files; see restart_counters_t in Config_Types_m
+  character(len=21), parameter, public :: restart_counter_names(5) = [character(len=21) :: &
+    'MOSE_ITERATION', 'MOSE_OUTPUT_NUMBER', 'MOSE_GRID_LEVEL', 'MOSE_LAST_OUTPUT_TIME', 'MOSE_RES_REFERENCE']
+
   !> Concrete procedure pointing to one of the subroutine realizations
   procedure(r_solution_if), pointer, public :: Read_IC
   procedure(w_solution_if), pointer, public :: Write_solution
@@ -108,6 +114,7 @@ contains
     use Lib_ORION_data
     use Lib_VTK
     use Lib_Tecplot
+    use IR_Precision, only: I4P, R8P
     use strings, only: parse
     implicit none
     type(ORION_data), intent(inout) :: IOfield
@@ -116,6 +123,13 @@ contains
     ! Local
     integer         :: error
     character(clen) :: format(2)
+    character(llen) :: vtspath
+    integer(I4P)    :: cycle
+    integer         :: nc
+    ! The counters stored with a vtk solution, and TIME, asked for by name to know whether the files hold it
+    character(len=len(restart_counter_names)) :: fldnames(size(restart_counter_names)+1)
+    real(R8P)       :: counters(size(restart_counter_names)+1)
+    logical         :: found(size(restart_counter_names)+1)
 
     error = 0
 
@@ -130,16 +144,219 @@ contains
     select case(trim(format(1)))
     case('tecplot')
       IOfield%tec%format = trim(format(2))
-      error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit), &
-                                             zone_mask=zone_mask,dims_only=dims_only)
+      if ( obj_sim_param%newrun .or. present(zone_mask) ) then
+        error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit), &
+                                               zone_mask=zone_mask,dims_only=dims_only)
+      else
+        ! Restart: also the counters stored with the solution, as data set auxiliary data (the pass with
+        ! zone_mask keeps those of the first pass)
+        nc = size(restart_counter_names)
+        error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit),dims_only=dims_only, &
+                                               cycle=cycle,fldnames=restart_counter_names, &
+                                               fldvalues=counters(1:nc),fldfound=found(1:nc))
+      endif
+      ! Restart: a time or a counter of the solution that is not finite stops the run (Check_IC), before the tests
+      ! below, which compare
+      if ( .not. obj_sim_param%newrun .and. .not. present(zone_mask) .and. error == 0 ) then
+        if ( Restart_Not_Finite ( IOfield%solutiontime ) ) return
+      endif
+      ! Restart: does the solution hold a time? The ORION reader gives -huge(1._R8P) when no zone of a Tecplot
+      ! ASCII file holds SOLUTIONTIME, and every valid time lies far above half of it; a zone of a binary file
+      ! always holds its solution time. A steady run writes its solutions at minus the global iteration count, a
+      ! time-accurate one at t >= 0, so a negative solution time marks a steady solution, as a negative TIME does
+      ! in vtk. Its global iteration count, |time|, goes where the vtk branch stores it. The time comes with the
+      ! zone headers: the pass with zone_mask, which reads the variable data of some blocks only, keeps what the
+      ! first pass found
+      if ( .not. obj_sim_param%newrun ) then
+        if ( .not. present(zone_mask) ) then
+          obj_io%restart%time_found = ( IOfield%solutiontime > -0.5_R8P*huge(1._R8P) )
+          obj_io%restart%steady = obj_io%restart%time_found .and. ( IOfield%solutiontime < 0._R8P )
+        endif
+        if ( obj_io%restart%steady ) IOfield%solutiontime = abs(IOfield%solutiontime)
+      endif
     case('vtk')
       IOfield%tec%format = trim(format(2))
-      error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4),vtspath='INPUT/vtk/field',time=obj_io%IOtime)
+      if ( obj_sim_param%newrun ) then
+        ! Initial condition: the .vtm lists its block files relative to its own folder, as ORION writes it (a solution
+        ! of MOSE copied into INPUT/ as ic.vtm with its vtk/ folder); the files that put the blocks at
+        ! INPUT/vtk/field<entry>.vts, the place read before, are read there
+        vtspath = obj_io%nameinit(1:index(obj_io%nameinit,'/',back=.true.))
+        if ( .not. Vtm_First_Block_Exists(obj_io%nameinit, vtspath) .and. &
+             Vtm_First_Block_Exists(obj_io%nameinit, 'INPUT/vtk/field') ) vtspath = 'INPUT/vtk/field'
+      else
+        ! Restart: the .vtm written by MOSE lists its blocks relative to its own folder
+        vtspath = obj_io%nameinit(1:index(obj_io%nameinit,'/',back=.true.))
+      endif
+      ! The ORION reader needs the vtk format of the block files, and it is the one they declare:
+      ! MOSE writes vtk raw solutions as raw appended data, older versions wrote base64 (raw after
+      ! the first diagnostic output of a steady run), and an initial condition may come in any
+      ! format. When the files cannot tell, the reader keeps its format (base64), as before.
+      IOfield%vtk%format = Vtk_Block_Format(obj_io%nameinit, vtspath, IOfield%vtk%format)
+      if ( obj_sim_param%newrun ) then
+        error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4), &
+                                               vtspath=trim(vtspath),time=obj_io%IOtime)
+        ! The solution time of the file, where the Tecplot reader stores it
+        IOfield%solutiontime = obj_io%IOtime
+      else
+        ! Restart: also the counters stored with the solution, as field data, and whether it holds a time (the
+        ! reader gives TIME = 0 when the files hold none)
+        nc = size(restart_counter_names)
+        fldnames(1:nc) = restart_counter_names
+        fldnames(nc+1) = 'TIME'
+        error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4), &
+                                               vtspath=trim(vtspath),time=obj_io%IOtime,cycle=cycle, &
+                                               fldnames=fldnames,fldvalues=counters,fldfound=found)
+        ! A time or a counter that is not finite stops the run (Check_IC), before the tests below, which compare
+        if ( error == 0 ) then
+          if ( Restart_Not_Finite ( obj_io%IOtime ) ) return
+        endif
+        obj_io%restart%time_found = found(nc+1)
+        ! A steady run writes its solutions at time minus the global iteration count (before, -1), a
+        ! time-accurate one at t >= 0
+        obj_io%restart%steady = ( obj_io%IOtime < 0.d0 )
+        ! The solution time where the Tecplot reader stores it, with its convention for a steady
+        ! solution: the global iteration count, CYCLE when the file holds it (the reader gives 0
+        ! otherwise), else |TIME|
+        if ( obj_io%restart%steady ) then
+          if ( cycle > 0 ) then
+            IOfield%solutiontime = real(cycle, R8P)
+          else
+            IOfield%solutiontime = abs(obj_io%IOtime)
+          endif
+        else
+          IOfield%solutiontime = obj_io%IOtime
+        endif
+      endif
     end select
+
+    ! Restart: the counters stored with the solution, the same in every format, when it holds them all (the last
+    ! one, the residual reference, is not in the solutions written before it was stored)
+    if ( .not. obj_sim_param%newrun .and. .not. present(zone_mask) ) then
+      obj_io%restart%found = all(found(1:4))
+      if ( obj_io%restart%found ) then
+        obj_io%restart%cycle            = cycle
+        obj_io%restart%iteration        = nint(counters(1))
+        obj_io%restart%output_number    = nint(counters(2))
+        obj_io%restart%grid_level       = nint(counters(3))
+        obj_io%restart%last_output_time = counters(4)
+        obj_io%restart%res_found        = found(5)
+        obj_io%restart%res_reference    = counters(5)
+      endif
+    endif
 
     if (error/=0) obj_io%error_message = "[ERROR] reading input file "//trim(obj_io%nameinit)
 
+  contains
+
+    !> The time that a restart reads, and the counters that the solution holds (found(1:nc), values counters(1:nc)): the
+    !> first one that is not finite (NaN or infinity) is an error of the read, which stops the run (Check_IC), and the
+    !> result is .true.. The test reads the bits (Not_Finite): the tests of the time compare, and every comparison with
+    !> a NaN is false; a counter goes to an integer with nint, which an infinity or a NaN does not fit.
+    logical function Restart_Not_Finite ( time )
+      use MOSE_Finite_m, only: Not_Finite
+      implicit none
+      real(R8P), intent(in) :: time
+      ! Local
+      integer :: k
+
+      Restart_Not_Finite = .true.
+      if ( Not_Finite(time) ) then
+        obj_io%error_message = '[ERROR] '//trim(obj_io%nameinit)//': the solution time is not finite (NaN or infinity)'
+        return
+      endif
+      do k = 1, nc
+        if ( found(k) .and. Not_Finite(counters(k)) ) then
+          obj_io%error_message = '[ERROR] '//trim(obj_io%nameinit)//': '//trim(restart_counter_names(k))// &
+                                 ' is not finite (NaN or infinity)'
+          return
+        endif
+      enddo
+      Restart_Not_Finite = .false.
+
+    end function Restart_Not_Finite
+
   end subroutine Read_vtk_tec
+
+
+  !> \brief Entry of the first block file listed by a .vtm (its file attribute without '.vts'), '' when
+  !>        the .vtm cannot be read or lists none.
+  function Vtm_First_Entry ( vtmfile ) result(block)
+    use MOSE_Parameters_m, only: llen
+    implicit none
+    character(*), intent(in) :: vtmfile
+    character(llen)          :: block
+    ! Local
+    integer         :: u, ios, i1, i2
+    character(llen) :: line
+
+    block = ''
+    open(newunit=u, file=trim(vtmfile), action='read', status='old', iostat=ios)
+    if (ios /= 0) return
+    do
+      read(u, '(A)', iostat=ios) line
+      if (ios /= 0) exit
+      i1 = index(line, 'file="')
+      if (i1 == 0) cycle
+      i2 = index(line, '.vts"')
+      if (i2 > i1+6) block = line(i1+6:i2-1)
+      exit
+    enddo
+    close(u)
+
+  end function Vtm_First_Entry
+
+
+  !> \brief Is the first block file of a .vtm at vtspath//<entry>//'.vts', the path the ORION reader opens?
+  logical function Vtm_First_Block_Exists ( vtmfile, vtspath )
+    use MOSE_Parameters_m, only: llen
+    implicit none
+    character(*), intent(in) :: vtmfile, vtspath
+    ! Local
+    character(llen) :: block
+
+    block = Vtm_First_Entry(vtmfile)
+    Vtm_First_Block_Exists = .false.
+    if (len_trim(block) > 0) inquire(file=trim(vtspath)//trim(block)//'.vts', exist=Vtm_First_Block_Exists)
+
+  end function Vtm_First_Block_Exists
+
+
+  !> \brief vtk format of the block files of a .vtm: 'ascii', 'binary' (base64) or 'raw'
+  !>        (appended), as the first block file declares it, or fallback when it cannot tell.
+  !> \details The blocks of a .vtm are written in one call, so they share the format. The
+  !>          block file is vtspath//<entry of the .vtm>//'.vts', the path the ORION reader
+  !>          opens; its XML header names the format of every DataArray before any data.
+  function Vtk_Block_Format ( vtmfile, vtspath, fallback ) result(fmt)
+    use MOSE_Parameters_m, only: llen
+    implicit none
+    character(*), intent(in) :: vtmfile, vtspath, fallback
+    character(6)             :: fmt
+    ! Local
+    integer         :: u, ios
+    character(llen) :: line, block
+
+    fmt = fallback
+    block = Vtm_First_Entry(vtmfile)
+    if (len_trim(block) == 0) return
+
+    open(newunit=u, file=trim(vtspath)//trim(block)//'.vts', action='read', status='old', iostat=ios)
+    if (ios /= 0) return
+    do
+      read(u, '(A)', iostat=ios) line
+      if (ios /= 0) exit
+      if (index(line, '<DataArray') == 0) cycle
+      if (index(line, 'format="appended"') > 0) then
+        fmt = 'raw'
+      elseif (index(line, 'format="binary"') > 0) then
+        fmt = 'binary'
+      elseif (index(line, 'format="ascii"') > 0) then
+        fmt = 'ascii'
+      endif
+      exit
+    enddo
+    close(u)
+
+  end function Vtk_Block_Format
 
 
   !> \brief Can Read_IC report block dimensions without reading the field?
@@ -172,12 +389,17 @@ contains
     ! IO Variables specification
     obj_io%Ovarnames=' '
     obj_io%ORANSname=' '
+    ! The turbulence variables are the density-weighted ones MOSE solves for, under the names
+    ! of the density-weighted keys of ATLAS (those of the NASA Turbulence Modeling Resource), as
+    ! in the initial condition written by ICB: rhoNuTilde = rho*nu_tilde (the Spalart-Allmaras
+    ! variable, not the eddy viscosity, which is the auxiliary variable mut below),
+    ! rhoK = rho*k, rhoOmega = rho*omega
     if ( nrans == 1 ) then
-      obj_io%ORANSname=' "mi_tilde"'
+      obj_io%ORANSname=' "rhoNuTilde"'
     elseif ( nrans == 2 ) then
-      obj_io%ORANSname=' "kappa" "omega"'
+      obj_io%ORANSname=' "rhoK" "rhoOmega"'
     elseif ( nrans == 7 ) then
-      obj_io%ORANSname=" ru'u' rv'v' rw'w' ru'v' ru'w' rv'w' omega"
+      obj_io%ORANSname=" ru'u' rv'v' rw'w' ru'v' ru'w' rv'w' rhoOmega"
     end if
     do i = 1, nsc
       obj_io%Ovarnames = trim(obj_io%Ovarnames)//' "rho('//trim(str(.true.,i))//')"'
@@ -218,7 +440,7 @@ contains
       obj_io%Onvar = obj_io%Onvar + 2
     endif
     if (obj_io%write_transport .and. (nrans>0)) then
-      obj_io%Ovarnames = trim(obj_io%Ovarnames)//' "mit"'
+      obj_io%Ovarnames = trim(obj_io%Ovarnames)//' "mut"'   ! eddy viscosity
       obj_io%Onvar = obj_io%Onvar + 1
     endif
     ! Composition
@@ -240,7 +462,9 @@ contains
       else
         IOfield(m)%tec%extension = '.szplt'
         IOfield(m)%tec%format = 'binary'
-        IOfield(m)%vtk%format = 'binary'
+        ! vtk raw: raw binary data appended to each .vts file, as the wall and diagnostic outputs.
+        ! The diagnostic output writes with these IOfields and sets the same format.
+        IOfield(m)%vtk%format = 'raw'
       endif
     end do
 
@@ -280,7 +504,7 @@ contains
 
   subroutine Write_vtk_tec ( domain, IOfield, file )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_io
+    use MOSE_Config_Types_m, only: obj_io, obj_sim_param, obj_multigrid
     use MOSE_Global_m
     use MOSE_Parameters_m
     use MOSE_Lib_RANS
@@ -289,7 +513,7 @@ contains
     use Lib_VTK
     use Lib_Tecplot
     use FLINT_Lib_Thermodynamic
-    use MOSE_Mod_MPI, only: mpi_is_root
+    use MOSE_Mod_MPI, only: mpi_is_root, mpi_size_, is_local_block, block_owner, check_mpi_error
     use MOSE_Mod_GhostExchange, only: gather_P_to_root, mpi_io_barrier
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
@@ -298,58 +522,104 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    integer             :: E_IO, b, i, j, k, pv
-    real(8)             :: p, rho, Rtot, rhoi(nsc), T, mu, kl, mut
-    real(8)             :: vel_gradient(3,3)
+    character(len=llen) :: name
+    character(len=len(obj_io%Ovarnames)) :: vtknames
+    integer             :: E_IO, b, c
+    real(R8P)           :: counters(size(restart_counter_names))
 
     ! Gather P from all ranks to root (collective — all ranks must call)
     call gather_P_to_root(domain)
 
+    ! Output variables are computed by the rank that owns the block: the auxiliary
+    ! ones need the metrics, the wall distance and the ghost cells, which root
+    ! does not hold for remote blocks (geometry-only, interior P from the gather).
+    if (mpi_is_root) then
+      do b = 1, domain%nb
+        if (is_local_block(b)) call Fill_Output_Vars ( domain%blk(b), domain%blk(b)%dim, IOfield%block(b)%vars )
+      enddo
+    endif
+
+#ifdef USE_MPI
+    if (mpi_size_ > 1) then
+      block
+        use mpi
+        use MOSE_Mod_GhostExchange, only: TAG_IO
+        integer :: ierr, nreq, n, offset
+        integer, allocatable :: reqs(:), stats(:,:)
+        real(R8P), allocatable :: buf(:)
+
+        allocate(reqs(domain%nb), stats(MPI_STATUS_SIZE, domain%nb))
+        nreq = 0
+        if (mpi_is_root) then
+          ! Root: receive the remote blocks straight into IOfield
+          do b = 1, domain%nb
+            if (is_local_block(b)) cycle
+            n = obj_io%Onvar * product(domain%blk(b)%dim)
+            nreq = nreq + 1
+            call MPI_IRECV(IOfield%block(b)%vars, n, MPI_DOUBLE_PRECISION, &
+                           block_owner(b), TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
+            call check_mpi_error(ierr)
+          enddo
+        else
+          ! Non-root: fill the local blocks in one contiguous buffer and send them
+          n = 0
+          do b = 1, domain%nb
+            if (is_local_block(b)) n = n + obj_io%Onvar * product(domain%blk(b)%dim)
+          enddo
+          allocate(buf(max(n, 1)))
+          offset = 0
+          do b = 1, domain%nb
+            if (.not. is_local_block(b)) cycle
+            n = obj_io%Onvar * product(domain%blk(b)%dim)
+            call Fill_Output_Vars ( domain%blk(b), domain%blk(b)%dim, buf(offset+1:offset+n) )
+            nreq = nreq + 1
+            call MPI_ISEND(buf(offset+1), n, MPI_DOUBLE_PRECISION, &
+                           0, TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
+            call check_mpi_error(ierr)
+            offset = offset + n
+          enddo
+        endif
+        if (nreq > 0) then
+          call MPI_WAITALL(nreq, reqs(1:nreq), stats(:,1:nreq), ierr)
+          call check_mpi_error(ierr)
+        endif
+      end block
+    endif
+#endif
+
     if (mpi_is_root) then
       path = 'OUTPUT/'
-
-      ! Update IOfield variables with domain primitives and other variables
-      do b = 1, size(IOfield%block)
-        IOfield%block(b)%vars(1:nprim,:,:,:) = domain%blk(b)%P(:,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk)
-        ! Auxiliary variables
-        do k = 1, IOfield%block(b)%Nk ; do j = 1, IOfield%block(b)%Nj ; do i = 1, IOfield%block(b)%Ni
-          rhoi = domain%blk(b)%P(1:nsc,i,j,k)
-          p    = domain%blk(b)%P(np,i,j,k)
-          rho  = sum ( rhoi )
-          Rtot = f_Rtot( rhoi )
-          T = eos(p=p,rho=rho,R=Rtot)
-          pv = 1; IOfield%block(b)%vars(nprim+1,i,j,k) = T
-          if (obj_io%write_thermo) then
-            pv = pv + 1; IOfield%block(b)%vars(nprim+pv,i,j,k) = f_gamma ( rhoi, p, rho, Rtot )
-            pv = pv + 1; IOfield%block(b)%vars(nprim+pv,i,j,k) = Rtot
-          endif
-          if (obj_io%write_transport) then
-            call co_k_mi_lam_Wilke(rhoi,rho,T,mu,kl)
-            pv = pv +1; IOfield%block(b)%vars(nprim+pv,i,j,k) = mu
-            pv = pv +1; IOfield%block(b)%vars(nprim+pv,i,j,k) = kl
-            if (nrans>0) then
-              vel_gradient(:,1) = ( domain%blk(b)%P(nu:nw,i+1,j,k) - domain%blk(b)%P(nu:nw,i-1,j,k) )/2d0
-              vel_gradient(:,2) = ( domain%blk(b)%P(nu:nw,i,j+1,k) - domain%blk(b)%P(nu:nw,i,j-1,k) )/2d0
-              vel_gradient(:,3) = ( domain%blk(b)%P(nu:nw,i,j,k+1) - domain%blk(b)%P(nu:nw,i,j,k-1) )/2d0
-              vel_gradient = matmul ( vel_gradient + 1d-40, domain%blk(b)%m(i,j,k)%c )
-              call Eddy_Viscosity ( mut=mut, rans_variables=domain%blk(b)%p(nt:,i,j,k), &
-                                    mul=mu, rho=rho, vel_gradient=vel_gradient, &
-                                    walldist=domain%blk(b)%yn(i,j,k), &
-                                    k_rough=domain%blk(b)%k_rough(i,j,k))
-              pv = pv +1; IOfield%block(b)%vars(nprim+pv,i,j,k) = mut
-            end if
-          endif
-        enddo; enddo; enddo
-      enddo
+      ! The counters a restart needs to go on as the uninterrupted run, the same in every format (Read_vtk_tec
+      ! reads them)
+      counters = [real(domain%iter,R8P), real(obj_io%output_number,R8P), real(obj_multigrid%MG_level,R8P), &
+                  obj_sim_param%time_from_call, obj_sim_param%res_reference]
 
       ! Write the IOfield accordingly to the solution format
       if (index(obj_io%sol_format,'vtk')>0) then
+        ! The names become XML attributes (Name="..."): the double quotes of the Tecplot list must go
+        vtknames = obj_io%Ovarnames
+        do c = 1, len_trim(vtknames)
+          if ( vtknames(c:c) == '"' ) vtknames(c:c) = ' '
+        enddo
+        ! The block files go to OUTPUT/vtk/ and the .vtm lists them relative to its own
+        ! folder (vtk/fieldBlockN.vts), as VTK readers and the restart resolve them: the
+        ! leading '/' of file is dropped so that both paths share the prefix OUTPUT/.
+        name = file
+        if ( name(1:1) == '/' ) name = name(2:)
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
-        E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=obj_io%Ovarnames,time=domain%time)
+        ! The counters as field data, next to TIME and CYCLE. The time is the solution time of the Tecplot
+        ! outputs: minus the global iteration count in a steady run
+        E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(name), &
+                                               vtmpath=trim(path)//trim(name),varnames=vtknames,time=IOfield%solutiontime, &
+                                               cycle=int(obj_sim_param%iter_general,I4P), &
+                                               fldnames=restart_counter_names,fldvalues=counters)
       else
-        E_IO = tec_write_structured_multiblock(orion=IOfield,varnames=obj_io%Ovarnames,filename=trim(path)//trim(file)//trim(IOfield%tec%extension))
+        ! The counters as data set auxiliary data, next to CYCLE
+        E_IO = tec_write_structured_multiblock(orion=IOfield,varnames=obj_io%Ovarnames, &
+                                               filename=trim(path)//trim(file)//trim(IOfield%tec%extension), &
+                                               cycle=int(obj_sim_param%iter_general,I4P), &
+                                               fldnames=restart_counter_names,fldvalues=counters)
       end if
     end if
 
@@ -357,5 +627,63 @@ contains
     call mpi_io_barrier()
 
   end subroutine Write_vtk_tec
+
+
+  !> Output variables of one block: primitives, then T and the optional thermo,
+  !> transport and eddy-viscosity ones, in the order of obj_io%Ovarnames.
+  !> Needs the full block (P with ghosts, metrics, wall distance): call it on the owner.
+  subroutine Fill_Output_Vars ( blk, nijk, out )
+    use MOSE_Advanced_Types_m
+    use MOSE_Config_Types_m, only: obj_io
+    use MOSE_Global_m
+    use MOSE_Parameters_m
+    use MOSE_Lib_RANS
+    use IR_Precision
+    use FLINT_Lib_Thermodynamic
+    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
+    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
+    implicit none
+    type(MOSE_block_type), intent(in), target :: blk
+    integer, intent(in)               :: nijk(3)
+    real(R8P), intent(out)            :: out(obj_io%Onvar, nijk(1), nijk(2), nijk(3))
+    ! Local
+    integer :: i, j, k, pv
+    real(8) :: p, rho, Rtot, rhoi(nsc), T, mu, kl, mut
+    real(8) :: vel_gradient(3,3)
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:)   ! cell metric of the sources (Source_Metrics)
+
+    out(1:nprim,:,:,:) = blk%P(:,1:nijk(1),1:nijk(2),1:nijk(3))
+    call Source_Metrics ( blk, Mi )
+    ! Auxiliary variables
+    do k = 1, nijk(3) ; do j = 1, nijk(2) ; do i = 1, nijk(1)
+      rhoi = blk%P(1:nsc,i,j,k)
+      p    = blk%P(np,i,j,k)
+      rho  = sum ( rhoi )
+      Rtot = f_Rtot( rhoi )
+      T = eos(p=p,rho=rho,R=Rtot)
+      pv = 1; out(nprim+1,i,j,k) = T
+      if (obj_io%write_thermo) then
+        pv = pv + 1; out(nprim+pv,i,j,k) = f_gamma ( rhoi, p, rho, Rtot )
+        pv = pv + 1; out(nprim+pv,i,j,k) = Rtot
+      endif
+      if (obj_io%write_transport) then
+        call co_k_mi_lam_Wilke(rhoi,rho,T,mu,kl)
+        pv = pv +1; out(nprim+pv,i,j,k) = mu
+        pv = pv +1; out(nprim+pv,i,j,k) = kl
+        if (nrans>0) then
+          vel_gradient(:,1) = ( blk%P(nu:nw,i+1,j,k) - blk%P(nu:nw,i-1,j,k) )/2d0
+          vel_gradient(:,2) = ( blk%P(nu:nw,i,j+1,k) - blk%P(nu:nw,i,j-1,k) )/2d0
+          vel_gradient(:,3) = ( blk%P(nu:nw,i,j,k+1) - blk%P(nu:nw,i,j,k-1) )/2d0
+          vel_gradient = matmul ( vel_gradient + 1d-40, Mi(i,j,k)%c )
+          call Eddy_Viscosity ( mut=mut, rans_variables=blk%p(nt:,i,j,k), &
+                                mul=mu, rho=rho, vel_gradient=vel_gradient, &
+                                walldist=blk%yn(i,j,k), &
+                                k_rough=blk%k_rough(i,j,k))
+          pv = pv +1; out(nprim+pv,i,j,k) = mut
+        end if
+      endif
+    enddo; enddo; enddo
+
+  end subroutine Fill_Output_Vars
 
 end module MOSE_IO_Solution

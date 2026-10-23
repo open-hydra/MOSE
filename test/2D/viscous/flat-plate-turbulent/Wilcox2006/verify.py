@@ -113,7 +113,8 @@ def read_wall_cf(path, rho_inf, U_inf):
 
 
 # ---- freestream state from the field --------------------------------------
-_, _, _, fv, _ = read_TEC("OUTPUT/field.tec")
+xf, _, _, fv, _ = read_TEC("OUTPUT/field.tec")
+GRID = " + ".join("%d x %d" % (x.shape[0] - 1, x.shape[1] - 1) for x in xf)   # cells of each block
 U_inf   = fv[0][1][0, -1, 0]
 rho_inf = fv[0][0][0, -1, 0]
 nu      = MU / rho_inf
@@ -146,7 +147,7 @@ try:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(x_m, Cf_m, "bd-", ms=12, markevery=5, label=f"MOSE", color="#0072B2", linewidth=4.0)
+    ax.plot(x_m, Cf_m, "bd-", ms=12, markevery=5, label=f"MOSE, {GRID} cells", color="#0072B2", linewidth=4.0)
     ax.plot(x_r[x_r > 0], cf_r[x_r > 0], label=ref_label, color="#E69F00", linestyle="--", linewidth=4.0)
     ax.set_xlim(0.0, 1.8); ax.set_ylim(0.002, 0.006)
     style(ax, r"$x$  [m]", r"$C_f$")

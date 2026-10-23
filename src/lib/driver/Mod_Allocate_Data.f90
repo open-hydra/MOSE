@@ -77,10 +77,62 @@ contains
     if ( size(IOfield%block(1)%vars, 1) < nprim ) then
       write(*,'(A)')         '[ERROR] Number of variables in IOfield does not match MOSE expectation.'
       write(*,'(A,I0,A,I0)') '        Expected: ', nprim, ', Found: ', size(IOfield%block(1)%vars, 1)
-      stop
+      stop 1
     end if
 
+    call Check_Turbulence_Names ( IOfield )
+
   end subroutine Setup_Data_Dimensions
+
+
+  subroutine Check_Turbulence_Names ( IOfield )
+    !! The turbulence bands of the initial condition are read by position as the
+    !! density-weighted variables MOSE advances, named rhoNuTilde (= rho*nu_tilde), rhoK,
+    !! rhoOmega: the names of the density-weighted keys of ATLAS, which ICB writes and MOSE
+    !! writes back. The earlier names of the same variables (mi_t, mi_tilde, and kappa with its
+    !! omega) are accepted; any other name, e.g. the specific nuTilde or k, or the eddy viscosity
+    !! mut, stops the run instead of being read as density-weighted. The names are known for an
+    !! ASCII file only (ORION does not return those of a .szplt file).
+    use MOSE_Global_m
+    use Lib_ORION_data
+    use MOSE_Config_Types_m, only: obj_io
+    use strings, only: lowercase
+
+    implicit none
+    type(ORION_data), intent(in) :: IOfield
+    ! Local
+    character(len=32) :: name(2), expected
+    integer :: off, d
+
+    if ( nrans /= 1 .and. nrans /= 2 ) return
+    if ( .not. allocated(IOfield%varnames) ) return
+    off = size(IOfield%varnames) - size(IOfield%block(1)%vars, 1)
+    if ( off < 0 ) return
+    name = ''
+    do d = 1, nrans
+      name(d) = lowercase(adjustl(IOfield%varnames(off + nt + d - 1)))
+    end do
+    do d = 1, nrans
+      select case ( nrans*10 + d )
+      case ( 11 )
+        expected = 'rhoNuTilde'
+        if ( any(name(1) == [character(len=32) :: 'rhonutilde', 'mi_t', 'mi_tilde']) ) cycle
+      case ( 21 )
+        expected = 'rhoK'
+        if ( any(name(1) == [character(len=32) :: 'rhok', 'kappa']) ) cycle
+      case ( 22 )
+        expected = 'rhoOmega'
+        ! an earlier file names it omega, next to kappa: next to rhoK, omega is the specific one
+        if ( name(2) == 'rhoomega' .or. ( name(2) == 'omega' .and. name(1) == 'kappa' ) ) cycle
+      end select
+      write(*,'(A,I0,A)') '[ERROR] '//trim(obj_io%nameinit)//': variable ', off + nt + d - 1, ' is named '''// &
+        trim(adjustl(IOfield%varnames(off + nt + d - 1)))//''', where MOSE reads the density-weighted '// &
+        trim(expected)//' (the turbulence variables of an initial condition are density-weighted: ATLAS ICB'// &
+        ' writes rhoNuTilde, rhoK, rhoOmega from either the specific or the density-weighted keys)'
+      stop 1
+    end do
+
+  end subroutine Check_Turbulence_Names
 
 
   subroutine Setup_Data_Fields ( domain, IOfield, keep )
@@ -91,8 +143,8 @@ contains
     !! Without `keep`, every block gets everything.
     !!
     !! The excluded blocks still need geometry because set-up reads the mesh
-    !! of blocks this rank does not own: `Check_Mesh_Type` reads `blk(1)%node`
-    !! everywhere, `BC_Connect_Metrics` builds ghost metrics from a possibly
+    !! of blocks this rank does not own: `Check_Mesh_Type` reads the nodes of
+    !! every block, `BC_Connect_Metrics` builds ghost metrics from a possibly
     !! remote donor's nodes, and `Compute_Yn` minimises over every wall face in
     !! the domain.  `deallocate_remote_computation_data` releases the geometry
     !! too, once metrics are built.
@@ -147,7 +199,8 @@ contains
 
   function blocks_needing_full_arrays ( domain ) result ( keep )
     !! Blocks whose state arrays this rank has to hold: the ones it owns, plus
-    !! the chimera donors and manifold sources whose `P` it reads directly.
+    !! the chimera donors whose `P` it reads directly. Manifold sources need no
+    !! entry: check_donors_are_colocated puts them on their receiver's rank.
     use MOSE_Advanced_Types_m
     use MOSE_Mod_MPI, only: is_local_block
 
@@ -171,9 +224,6 @@ contains
               if (b >= 1 .and. b <= domain%nb) keep(b) = .true.
             end do
           end if
-        case (501) ! manifold
-          b = domain%bc(i)%bs
-          if (b >= 1 .and. b <= domain%nb) keep(b) = .true.
       end select
     end do
 
@@ -223,6 +273,11 @@ contains
     ! Prim and Residuals
     allocate( blk % P (nprim, 1-gc:ni+gc, 1-gc:nj+gc, 1-gc:nk+gc ) )
     allocate( blk % PO, blk % R, mold = blk % P )
+
+    ! Viscous variables of the cells and of the first layer of ghost cells (Viscous_Variables)
+    if ( model > 0 ) then
+      allocate( blk % Visc (nprim, 0:ni+1, 0:nj+1, 0:nk+1) )
+    end if
 
     ! Dt cell center with no ghost cells
     allocate( blk % dtlocal ( 1:ni, 1:nj, 1:nk) )
@@ -311,6 +366,15 @@ contains
           blk % P (:,:,j,k) = 0.0d0
           blk % PO(:,:,j,k) = 0.0d0
           blk % R (:,:,j,k) = 0.0d0
+        end do
+      end do
+    end if
+
+    if ( allocated(blk%Visc) ) then
+      !$omp do collapse(2) schedule(static)
+      do k = lbound(blk%Visc,4), ubound(blk%Visc,4)
+        do j = lbound(blk%Visc,3), ubound(blk%Visc,3)
+          blk % Visc(:,:,j,k) = 0.0d0
         end do
       end do
     end if
@@ -420,12 +484,10 @@ contains
           if (allocated(domain%bc(i)%donorID)) then
             do c = 1, size(domain%bc(i)%donorID, 1)
               b = domain%bc(i)%donorID(c, 1)
+              if (b < 1 .or. b > domain%nb) cycle
               if (.not. is_local_block(b)) needs_remote_P(b) = .true.
             end do
           end if
-        case (501) ! manifold
-          b = domain%bc(i)%bs
-          if (b > 0 .and. .not. is_local_block(b)) needs_remote_P(b) = .true.
       end select
     end do
 
@@ -442,14 +504,16 @@ contains
       if (allocated(domain%blk(b)%vel_gradient)) deallocate(domain%blk(b)%vel_gradient)
       if (allocated(domain%blk(b)%rc_term1))     deallocate(domain%blk(b)%rc_term1)
       if (allocated(domain%blk(b)%rc_term2))     deallocate(domain%blk(b)%rc_term2)
+      if (allocated(domain%blk(b)%Minv))         deallocate(domain%blk(b)%Minv)
+      if (allocated(domain%blk(b)%Visc))         deallocate(domain%blk(b)%Visc)
 
-      ! P — free unless this remote block is a chimera donor or manifold source
+      ! P — free unless this remote block is a chimera donor
       if (.not. needs_remote_P(b)) then
         if (allocated(domain%blk(b)%P)) deallocate(domain%blk(b)%P)
       end if
 
-      ! Metrics — free on non-root ranks only (root needs them for wall I/O)
-      ! Keep dir on blocks needed for manifold (BC_Manifold reads blk(Bs)%dir%f%A)
+      ! Metrics — free on non-root ranks only (root needs them for wall I/O).
+      ! Chimera donors are read through P alone, so their metrics go too.
       if (.not. mpi_is_root) then
         if (allocated(domain%blk(b)%node)) deallocate(domain%blk(b)%node)
         if (allocated(domain%blk(b)%M))    deallocate(domain%blk(b)%M)
@@ -457,11 +521,9 @@ contains
         if (allocated(domain%blk(b)%vol))  deallocate(domain%blk(b)%vol)
         if (allocated(domain%blk(b)%yn))   deallocate(domain%blk(b)%yn)
         if (allocated(domain%blk(b)%k_rough)) deallocate(domain%blk(b)%k_rough)
-        if (.not. needs_remote_P(b)) then
-          do d = 1, 3
-            if (allocated(domain%blk(b)%dir(d)%f)) deallocate(domain%blk(b)%dir(d)%f)
-          end do
-        end if
+        do d = 1, 3
+          if (allocated(domain%blk(b)%dir(d)%f)) deallocate(domain%blk(b)%dir(d)%f)
+        end do
       end if
     end do
 

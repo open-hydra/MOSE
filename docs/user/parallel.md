@@ -94,6 +94,10 @@ mpirun \
 
 CPU affinity is important: without explicit process and thread binding, different MPI ranks or OpenMP threads may be placed on the same cores, invalidating the intended parallel configuration.
 
+### MPI thread support
+
+MOSE initialises MPI with the thread level `MPI_THREAD_FUNNELED`: every rank may run several OpenMP threads, but only the thread that initialised MPI makes MPI calls. Any MPI library that provides this level can be used; MOSE stops at start-up if the library provides less.
+
 ### Multi-node execution
 
 The same strategy extends naturally across nodes.
@@ -110,6 +114,32 @@ Total: 16 MPI ranks × 10 threads = 160 cores
 The important constraint is to preserve the same **per-node socket coverage** as the single-node configuration.
 
 Thus, increasing from 80 to 160 cores should preferably add a complete, identically configured node rather than changing the MPI/OpenMP layout on the original node.
+
+### Block-to-rank assignment
+
+Blocks are the unit of the MPI decomposition: every block runs on one rank. By default MOSE assigns them itself, largest block first, each to the least loaded rank, and prints the balance of the result:
+
+```text
+  MPI partition: 12 blocks over 4 ranks, balance  96.3% of ideal
+```
+
+MOSE can take the rank of every block from a file instead: name it with `decomposition-map` in `[MOSE-IO]` (the default, `none`, keeps the assignment above, and MOSE then reads no map, even if `INPUT/` holds one). The value is the name of a file in `INPUT/`, without a folder; in multi-phase runs MOSE puts the phase prefix of `bc.txt` before it. With a map MOSE says so:
+
+```text
+  MPI partition: 12 blocks over 4 ranks, balance  94.1% of ideal
+  MPI partition read from INPUT/decomposition.map
+```
+
+The file has the format of the decomposition map that the ATLAS mesh decomposer (MDB) writes where its `map-file` option says (by default next to the split mesh, with the phase prefix in multi-phase runs). In its `rank` column MDB writes the assignment that MOSE makes itself on the same number of ranks: to run another one, copy the map into `INPUT/` with the split mesh and its `bc.txt` and change that column, or write the file by hand. Lines starting with `#` are comments; then one line per block, blocks 1 to *nb* in order, with 13 integers
+
+```text
+# new  parent   i0   i1    j0   j1    k0   k1      ni   nj   nk        cells  rank
+     1     1     1    14       1    16       1     8        14   16    8         1792     0
+```
+
+of which MOSE uses `new` (the block), `ni nj nk` and `cells`, which must be those of the block in the mesh, and `rank`, counted from 0. The first `#` line after the block lines ends them: the face origins MDB writes after it are not read. The map must be made for the mesh and for the run: it must list every block of the mesh once, in order, its ranks must lie between 0 and the number of ranks of the run minus 1, and when the mesh has at least as many blocks as the run has ranks the highest rank must be used, otherwise the map was made for another number of ranks. A map that does not fit the mesh or the run, a named file that is not in `INPUT/`, or a value with a folder stops MOSE at setup, on every rank, with a message that names the fault and exit code 1, also in a run on one rank; with `decomposition-map = none` MOSE assigns the blocks itself. Blocks joined by a face of type `501` must be on the same rank, with any assignment, or MOSE stops at setup. A rank the map gives no block to stays idle, with a warning; with fewer blocks than ranks some always do, as without a map. The balance printed is that of the cells on each rank. The assignment does not change the solution, only where each block is computed; the residuals printed, summed in a fixed order, are the same bits with any assignment.
+
+MDB numbers the blocks anew, the pieces of each block one after the other, and writes the split mesh, its `bc.txt` and the map. It does not split the file of a `410` face, which holds one zone per block of the mesh it was written for, and it does not rewrite the keys of `input.ini` that name blocks: `exclude-blocks` (`[MOSE-Chemistry]`), the `index-position` of a probe and `stationary-face-<n>` (`[MOSE-Rotating-Frame]`). They keep the numbers of the blocks before the split, which then name other blocks or other cells: the records of a `410` face take the zone of another block, or of none, and the run uses that state or stops in its first step; a key names another block or cell with no message, or stops the run at setup. After a split, write them for the new blocks: the block lines of the map give the parent of each new block and its range of cells in it, and the face origins after them the parent face of each of its faces. A probe given by `position` needs no change.
 
 ## 3. Verifying CPU Placement
 
@@ -265,7 +295,7 @@ Parallel scalability is ultimately limited by several factors.
 
 **Memory consumption:** MOSE allocates some domain-wide structures on every MPI rank. Very large MPI rank counts can therefore exhaust memory before all available CPU cores are used. Increasing OpenMP parallelism is preferable when this becomes a limitation.
 
-**Mesh decomposition:** Increasing the number of MPI ranks can increase the number of ghost cells. If the rank count does not divide the number of mesh blocks, additional decomposition overhead can be introduced.
+**Mesh decomposition:** Increasing the number of MPI ranks can increase the number of ghost cells. Per Runge–Kutta stage, two ranks that share block connections exchange the two ghost layers of the connection faces, their tangential stencil with the preconditioning reference velocity, and the flux of each face to the rank of the cell that does not compute it. If the rank count does not divide the number of mesh blocks, additional decomposition overhead can be introduced.
 
 **Serial output:** Solution output is gathered through rank 0 and can become a significant bottleneck for large parallel jobs. Output frequency should therefore be kept low for large-scale runs.
 

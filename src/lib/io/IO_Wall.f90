@@ -94,6 +94,11 @@ contains
               IOwall % block(bb) % mesh(:,i,j,0) = domain % blk(b) % node(i,j,domain%blk(b)%dim(3)) % c
           enddo; enddo
         end select
+        ! Cells of the face in each direction, 0 across it: the vtk writer of ORION sizes the block
+        ! file with them (the Tecplot writer takes the sizes from the mesh array)
+        IOwall%block(bb)%Ni = size(IOwall%block(bb)%mesh, 2) - 1
+        IOwall%block(bb)%Nj = size(IOwall%block(bb)%mesh, 3) - 1
+        IOwall%block(bb)%Nk = size(IOwall%block(bb)%mesh, 4) - 1
       endif
     enddo; enddo
 
@@ -115,7 +120,9 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    integer             :: E_IO
+    character(len=llen) :: name
+    character(len=len(obj_io%Owallnames)) :: vtknames
+    integer             :: E_IO, i
     character(len=clen) :: format(2)
 
     ! Each rank computes wall properties for its local blocks and reduces to root.
@@ -130,10 +137,19 @@ contains
       select case(trim(format(1)))
       case('vtk')
         IOwall%vtk%format = trim(format(2))
+        ! The names become XML attributes (Name="..."): the double quotes of the Tecplot list must go
+        vtknames = obj_io%Owallnames
+        do i = 1, len_trim(vtknames)
+          if ( vtknames(i:i) == '"' ) vtknames(i:i) = ' '
+        enddo
+        ! As for the field (IO_Solution): the .vtm lists its blocks relative to its folder
+        name = file
+        if ( name(1:1) == '/' ) name = name(2:)
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
-        E_IO = vtk_write_structured_multiblock(orion=IOwall,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=obj_io%Owallnames,time=domain%time)
+        ! The time is the solution time of the Tecplot output: minus the global iteration count in a steady run
+        E_IO = vtk_write_structured_multiblock(orion=IOwall,vtspath=trim(localpath_vtk)//trim(name), &
+                                               vtmpath=trim(path)//trim(name),varnames=vtknames,time=IOwall%solutiontime)
       case('tecplot')
         IOwall%tec%format = trim(format(2))
         E_IO = tec_write_structured_multiblock(orion=IOwall,varnames=obj_io%Owallnames,filename=trim(path)//trim(file)//trim(IOwall%tec%extension))
@@ -147,7 +163,8 @@ contains
 
 
   !> Compute wall BC properties on all ranks (local blocks only), reduce to root,
-  !> and fill IOwall on root. Collective — all ranks must call.
+  !> and fill IOwall on root. Collective — all ranks must call. The residual is
+  !> left as it was: an output does not change the state.
   subroutine Extract_Properties_From_BC ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Global_m
@@ -157,6 +174,8 @@ contains
     use MOSE_Lib_BC_Fluxes_GSI_Melting
     use MOSE_Lib_BC_Fluxes_GSI_Pyrolysis
     use MOSE_Lib_BC_Fluxes_GSI_Reactions
+    use MOSE_Config_Types_m,    only: obj_rot
+    use MOSE_Lib_RotatingFrame, only: RF_Is_Stationary_Face, RF_Wall_Velocity, RF_Wall_Velocity_Gradient, RF_Face_Center
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
@@ -164,8 +183,11 @@ contains
     logical  :: ablating
     real(R8) :: Tw_surface
     integer :: f, lower, upper, i, b, bb, pv, Bm, Im, Jm, Km, Fm, Is, Js, Ks
-    integer :: n_wall_total, wall_i
+    integer :: n_wall_total, wall_i, ii, nrec
     real(R8), allocatable :: wall_buf(:)
+    integer, allocatable  :: order(:), first(:,:), next(:,:)
+    real(R8) :: r_keep(nprim)   ! residual of the wall cell, before the call
+    real(R8) :: r_fc(3)         ! centre of a wall face that does not rotate with the frame
 
     ! Count total BC cells across all viscous faces
     n_wall_total = 0
@@ -178,15 +200,36 @@ contains
     allocate(wall_buf(8 * n_wall_total))
     wall_buf = 0d0
 
-    ! Each rank computes Ovar only for its local blocks
-    upper = 0; wall_i = 0
+    ! The records grouped by block, then face, in the order of the file within a group
+    ! (a counting sort over n_bf): the wall properties are computed and laid out face by
+    ! face, block by block, whatever the order of bc.txt. The ranges n_bf(b,f) of the
+    ! record list itself hold one face of one block only when bc.txt is sorted.
+    allocate(order(domain%nbound), first(domain%nb,6), next(domain%nb,6))
+    nrec = 0
     do b = 1, domain%nb
       do f = 1, 6
-        lower = upper + 1
-        upper = upper + domain%n_bf(b,f)
+        first(b,f) = nrec + 1
+        nrec = nrec + domain%n_bf(b,f)
+      end do
+    end do
+    next = first
+    do i = 1, domain%nbound
+      b = domain%bc(i)%b
+      f = domain%bc(i)%f
+      order(next(b,f)) = i
+      next(b,f) = next(b,f) + 1
+    end do
+
+    ! Each rank computes Ovar only for its local blocks
+    wall_i = 0
+    do b = 1, domain%nb
+      do f = 1, 6
+        lower = first(b,f)
+        upper = lower + domain%n_bf(b,f) - 1
         if (.not. obj_io_bc%viscous_flag(b,f)) cycle
 
-        do i = lower, upper
+        do ii = lower, upper
+          i = order(ii)
           wall_i = wall_i + 1
           Bm = domain%bc(i)%b
           if (.not. is_local_block(Bm)) cycle
@@ -195,16 +238,39 @@ contains
           Jm = domain % bc(i) % j
           Km = domain % bc(i) % k
           Fm = domain % bc(i) % f
+
+          ! The wall flux routines below are called for the wall properties (Ovar)
+          ! only, but they also add the wall flux to the residual of the wall cell.
+          ! The diagnostic output, written next, prints that residual: keep it and
+          ! put it back. (They write no ghost value: Fill_Ghost_Cell does.)
+          r_keep = domain % blk(Bm) % r (:,Im,Jm,Km)
+
           Ovar = 0d0
           select case ( domain % bc(i) % type )
 
+            ! A wall that does not rotate with the frame moves with -(Omega x r) in it: the wall velocity
+            ! and its gradient that BC_Fluxes gives it (RF_Wall_Velocity at the face centre)
             case (301) ! wall: prescribed heat flux
-              call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
-                                  k_rough = domain % bc(i) % k_rough )
+              if (obj_rot%enabled .and. RF_Is_Stationary_Face(Bm,Fm)) then
+                call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
+                call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
+                                    w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
+                                    rec = domain % bc(i), w_grad = RF_Wall_Velocity_Gradient() )
+              else
+                call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, &
+                                    k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
+              endif
 
             case (302) ! wall: prescribed temperature
-              call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
-                                         k_rough = domain % bc(i) % k_rough )
+              if (obj_rot%enabled .and. RF_Is_Stationary_Face(Bm,Fm)) then
+                call RF_Face_Center ( domain % blk(Bm) % node, Im, Jm, Km, Fm, r_fc )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
+                                           w_wall = RF_Wall_Velocity(r_fc), k_rough = domain % bc(i) % k_rough, &
+                                           rec = domain % bc(i), w_grad = RF_Wall_Velocity_Gradient() )
+              else
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, &
+                                           k_rough = domain % bc(i) % k_rough, rec = domain % bc(i) )
+              endif
 
             ! Gas-surface interaction walls: when the surface is inert the GSI
             ! routine reports nothing, and the face is an ordinary wall at the
@@ -216,23 +282,26 @@ contains
                                                                        domain % bc(i) % qrad, domain % bc(i) % ci, Ovar, &
                                                                        ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
 
             case (504) ! GSI - pyrolysis
               call BC_Wall_Pyrolysis ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_pyro_model_id, &
                                        domain % bc(i) % qrad, domain % bc(i) % ci, Ovar, &
                                        ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
 
             case (505) ! GSI - surface reactions
               call BC_Wall_Reactions ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_surf_reac_id, &
                                        domain % bc(i) % qrad, Ovar, &
                                        ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
 
           end select
+
+          domain % blk(Bm) % r (:,Im,Jm,Km) = r_keep
+
           wall_buf(8*(wall_i-1)+1 : 8*wall_i) = Ovar
         enddo
 
@@ -245,15 +314,16 @@ contains
 
     ! Root fills IOwall from the gathered buffer
     if (mpi_is_root) then
-      upper = 0; wall_i = 0; bb = 0
+      wall_i = 0; bb = 0
       do b = 1, domain%nb
         do f = 1, 6
-          lower = upper + 1
-          upper = upper + domain%n_bf(b,f)
+          lower = first(b,f)
+          upper = lower + domain%n_bf(b,f) - 1
           if (.not. obj_io_bc%viscous_flag(b,f)) cycle
           bb = bb + 1
 
-          do i = lower, upper
+          do ii = lower, upper
+            i = order(ii)
             wall_i = wall_i + 1
             Ovar = wall_buf(8*(wall_i-1)+1 : 8*wall_i)
 
@@ -282,7 +352,7 @@ contains
       enddo ! block
     end if
 
-    deallocate(wall_buf)
+    deallocate(wall_buf, order, first, next)
 
   end subroutine Extract_Properties_From_BC
   

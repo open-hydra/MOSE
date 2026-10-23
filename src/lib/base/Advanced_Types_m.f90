@@ -15,6 +15,11 @@ module MOSE_Advanced_Types_m
     real(R8), allocatable                  :: vol(:,:,:)       ! Cell volume
     type(MOSE_vector_3D_type), allocatable :: node(:,:,:)      ! Mesh grid points (including ghost)
     type(MOSE_tensor_3D_type), allocatable :: M(:,:,:)         ! Metric transformation tensor
+    type(MOSE_tensor_3D_type), allocatable :: Minv(:,:,:)      ! Inverse of M (interior cells only), for the viscous face metric; diffusive-metric = inverse-mean only
+    type(MOSE_tensor_3D_type), allocatable :: Ms(:,:,:)        ! Cell metric of the RANS source terms, diffusive-metric = stencil (velocity)
+    type(MOSE_tensor_3D_type), allocatable :: Msc(:,:,:)       ! the same for the density
+    type(MOSE_tensor_3D_type), allocatable :: Msa(:,:,:)       ! the same for the velocity gradients of SA-RC, with their ghost cells
+    type(MOSE_tensor_3D_type), allocatable :: Mst(:,:,:)       ! the same for the turbulence variables, where it is not Ms (503-505 walls)
     type(MOSE_vector_3D_type), allocatable :: dl(:,:,:)        ! Average cell length (in i/j/k direction). eg: dl%c(1) is sqrt(dx**2+dy**2+dz**2) of the cell in the i direction
     type(MOSE_d_metrics_type)              :: dir(3)           ! Direction object. Contains: i-faces, j-faces, k-faces; eg: dir(1)%face(i,j,k)%n
     real(R8), allocatable                  :: yn(:,:,:)        ! Nearest wall distance
@@ -29,6 +34,11 @@ module MOSE_Advanced_Types_m
     type(MOSE_vector_3D_type)  :: dlg(2)                                    ! Ghost cell average cell length
     real(R8)                   :: volg(2)                                   ! Ghost cell volume
     real(R8), allocatable      :: Pg(:,:)                                   ! Ghost cell primitive stencil
+    ! BC 101/201: record of the same face seen from the other block
+    integer                    :: partner = 0
+    logical                    :: owner = .false.                           ! BC 101/201: this record computes the flux of the face
+    ! BC 101/201: residual of the face for this record's cell, (:,1) inviscid, (:,2) viscous
+    real(R8), allocatable      :: Fc(:,:)
     integer                    :: ni(2)                                     ! BC chimera
     integer, allocatable       :: donorID(:,:)                              ! BC chimera
     real(R8), allocatable      :: volume_fraction(:)                        ! BC chimera
@@ -43,6 +53,7 @@ module MOSE_Advanced_Types_m
   type, extends(block_type) :: MOSE_block_type
     real(R8), dimension(:,:,:,:), allocatable :: P, PO                 ! Primitive variables at time n and n-1: { rho(s) vel p rho*r }, r generic RANS variable
     real(R8), dimension(:,:,:,:), allocatable :: R                     ! Residuals
+    real(R8), dimension(:,:,:,:), allocatable :: Visc                  ! Viscous variables of the cells, once per stage
     real(R8), dimension(:,:,:,:), allocatable :: RS1, RS2              ! Implicit smoothing residuals (temporary storage)
     real(R8), dimension(:,:,:), allocatable   :: dtlocal               ! Local time step
     real(R8), dimension(:,:,:), allocatable   :: beta                  ! Shock detector flag
@@ -60,6 +71,7 @@ module MOSE_Advanced_Types_m
     real(R8)                            :: rel_fac                           ! BC 400 (inflow/outflow) specifications
     real(R8), allocatable               :: ci(:)                             ! BC 400 (inflow/outflow) specifications
     real(R8)                            :: k_rough  = 0.0_R8                 ! Surface roughness height [m]  (wall BCs 301-302)
+    real(R8)                            :: sx       = 0.0_R8                 ! Walls and 400: l0/l1 of the MUSCL distances (Extrapolation_Ratio)
     real(R8)                            :: eps_wall = 0.0_R8                 ! Wall emissivity               (wall BCs 301-302. 503-506)
     real(R8)                            :: cp_wall  = 0.0_R8                 ! Material specific heat capacity   (GSI melting wall 503)
     real(R8)                            :: Ti_wall  = 0.0_R8                 ! Material initial temperature      (GSI melting wall 503)
@@ -75,6 +87,12 @@ module MOSE_Advanced_Types_m
     type(time_series_type), allocatable :: q2d_map(:)                        ! BC 667 (Q2D mapped) time-varying primitive data (one per primitive)
     character(len=llen)                 :: q2d_file = ' '                    ! BC 667 (Q2D mapped) Tecplot filename from bc.txt
     logical                             :: q2d_periodic = .false.            ! BC 667 (Q2D mapped) periodic time signal flag
+    ! Wall faces with diffusive-metric = stencil (MOSE_Lib_Stencil_Metrics: Wall_Face_Stencils)
+    logical                             :: wstencil = .false.                ! wM, wdT set for this wall face
+    real(R8)                            :: wM(3,3) = 0.0_R8                  ! face metric of the wall gradient
+    real(R8)                            :: wdT(2) = 0.0_R8                   ! tangential differences of T_w (302)
+    ! Faces of type 200 (MOSE_Lib_BC_Fluxes_Rotational): face metric of the viscous flux, set once (Setup_Metrics)
+    real(R8)                            :: rM(3,3) = 0.0_R8                  ! Rotational_Periodic_Face_Metric
   end type MOSE_bc_type
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -95,6 +113,11 @@ module MOSE_Advanced_Types_m
     integer, dimension(:), allocatable               :: local_bc_idx
     integer                                          :: n_local_bs = 0
     integer, dimension(:), allocatable               :: local_bs_idx
+    ! The same local BC indices grouped by block and face, for BC_Fluxes: the records of face f
+    ! of block b are local_bf_idx(local_bf_first(b,f) : local_bf_first(b,f) + local_bf_count(b,f) - 1)
+    integer, dimension(:,:), allocatable             :: local_bf_first
+    integer, dimension(:,:), allocatable             :: local_bf_count   ! 0 on blocks of other ranks
+    integer, dimension(:), allocatable               :: local_bf_idx
     integer                                          :: mg_level = 1     ! Multigrid level of this domain (selects exchange schedules)
   end type MOSE_domain_type
 

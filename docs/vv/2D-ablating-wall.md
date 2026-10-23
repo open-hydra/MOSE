@@ -42,7 +42,13 @@ $c_p T_w$ and the analysis below is free of table interpolation error.
 | CFL / VNN | 0.5 / 0.5 |
 | Space reconstruction | MUSCL, Van Leer limiter |
 | Riemann solver | HLLC |
-| Iterations | 4000 |
+| Iterations | 4000 (`melting-inert`: 8000) |
+
+The run is a pseudo-time march (local time stepping) that is stopped before full convergence. The
+inert-surface check (no blowing, $|\rho v| < 5\times10^{-2}$ kg m⁻² s⁻¹) looks at the start-up flow
+while it decays, so `melting-inert` runs 8000 iterations, in its own directory: with MOSE of commit
+`cd27e88266e5` the largest $|\rho v|$ is 5.450e-2 after 4000 iterations and 4.455e-2 after 8000, when
+the largest gas temperature is 530.93 K. The other configurations pass their checks with 4000.
 
 ---
 
@@ -123,8 +129,16 @@ condition must fall back to an impermeable wall:
 |---|---|
 | Injected mass flux | exactly 0 |
 | Wall temperature | 800 K (the prescribed melting point) |
-| Wall heat flux | −1.17 × 10⁴ W/m² — the wall heats the gas |
+| Wall heat flux | +1.78 × 10⁴ W/m² into the gas (after the 8000 iterations of `melting-inert`) — the wall heats the gas |
 | Flow field | conduction layer developing, only weak expansion venting |
+
+### Default Schmidt number
+
+The `default-schmidt` configuration runs the `melting` column again, in its own directory, with no `schmidt` in
+`input.ini`.  The default, `schmidt = 0`, selects mixture-averaged multicomponent diffusion, which needs the binary
+diffusion table `INPUT/diffusion.dat` only when the gas has more than one species (see
+[thermodynamics](../theory/thermo.md)): a single species does not diffuse, so the run needs no table and gives
+the `melting` column, and every check of `verify.py` prints the same numbers as for `melting` in the table above.
 
 ---
 
@@ -140,7 +154,8 @@ python3 build_case.py hdpe     # generate mesh / IC / BC by hand
 python3 verify.py
 ```
 
-The case is registered in the fast tier as `AblatingWall` (~8 s):
+The case is registered in the fast tier as `AblatingWall` (about 11 s of CPU time at one thread; see
+`test/TESTING-PLAN.md`, section 4):
 
 ```bash
 ctest -R AblatingWall --output-on-failure

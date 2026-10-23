@@ -5,6 +5,12 @@ module MOSE_Mod_Explicit
   private
   public :: Explicit_Step
 
+  ! Stage k of the Runge-Kutta scheme with n_RK stages (coefficients in Lib_RK.f90) evaluates the residual of an
+  ! approximation of the solution at t^n + RKtheta(n_RK,k)*dt: forward Euler 0; Heun 0, 1; SSP RK3 0, 1, 1/2.
+  real(R8), parameter :: RKtheta(3,3) = reshape([ 0._R8, 0._R8,  0._R8, &
+                                                  0._R8, 1._R8,  0._R8, &
+                                                  0._R8, 1._R8, 0.5_R8 ], shape(RKtheta), order=[2,1])
+
 contains
 
   subroutine Explicit_Step ( domain, External_Function )
@@ -12,13 +18,15 @@ contains
     use MOSE_Config_Types_m
     use MOSE_Global_m
     use MOSE_Mod_dt,              only: Set_Global_dt, Compute_dt
-    use MOSE_Lib_Ghost,           only: Fill_Ghost_Cell, Ghost_Wall_Extrapolation
-    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes
+    use MOSE_Lib_Ghost,           only: Fill_Ghost_Cell
+    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes, Zero_W_Residual, Zero_V_Residual, &
+                                        Viscous_Variables
     use MOSE_Mod_BC_Fluxes,       only: BC_Fluxes
     use MOSE_Lib_RANS,            only: RANS_Source_Terms
     use MOSE_Mod_Soot,            only: Soot_Source_Terms
     use MOSE_Mod_Newstate,        only: RK_Newstate
     use MOSE_Lib_Preconditioning, only: update_derived_variables
+    use MOSE_Lib_SpalartShur,     only: Cell_Velocity_Gradient
     use MOSE_Lib_Chemistry,       only: Chemistry_Newstate, Chemistry_Equilibrium
     use MOSE_Mod_Diagnostic,      only: Compute_Residual
     use MOSE_Lib_RotatingFrame,   only: RotatingFrame_Source_Terms
@@ -30,9 +38,10 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain(obj_multigrid%MGL)
     external :: External_Function
     ! Local
-    logical  :: endsim, iosim, endmg
+    logical  :: endsim, iosim, endmg, accurate
     integer  :: i_rk, i_strang, b, level, aaa
-    real(R8) :: average(nres)
+    real(R8) :: average(nres), time_old, time_new
+    real(R8), allocatable :: res_block(:,:)   ! residual sums over the cells of each block
 
     call timer_iter_begin()
 
@@ -41,6 +50,9 @@ contains
     domain(level) % iter = domain(level) % iter + 1
     obj_sim_param%iter_from_call = obj_sim_param%iter_from_call + 1
     obj_sim_param%iter_general   = obj_sim_param%iter_general + 1
+
+    accurate = obj_sim_param%HYDRA_time_accurate .or. obj_time_scheme%time_accurate
+    time_old = domain(level) % time
 
     if (obj_sim_param%HYDRA_time_accurate) then
       call Set_Global_dt ( domain(level) )
@@ -53,12 +65,15 @@ contains
         domain(level) % time = domain(level) % time + domain(level) % dtglobal 
       endif
     endif
+    time_new = domain(level) % time
 
     !$omp parallel
     strang: do i_strang = 1, obj_chemistry%N_strang ! Strang splitting: L = L_rk(dt/2) * L_chem(dt) * L_rk(dt/2)
 
       if (obj_chemistry%imodel == 2) then
         do b = 1, domain(level) % nb
+          if (.not. is_local_block(b)) cycle                 ! the state of a block lives on the rank that owns it
+          if (domain(level)%blk(b)%no_chem) cycle            ! exclude-blocks, as for the finite-rate chemistry below
           call Chemistry_Equilibrium ( domain(level) % blk(b) % P, domain(level) % blk(b) % dim )
         enddo
       end if
@@ -67,8 +82,18 @@ contains
 
       rk: do i_rk = 1, obj_time_scheme%n_RK
 
+        ! Time-dependent boundary data (BC 402, 410) read domain%time: during a stage of a time-accurate step it is
+        ! the stage time t^n + (i_strang - 1 + theta) * strangcoeff * dt (Carpenter et al., ICASE Report 93-83)
+        if (accurate) then
+          !$omp single
+          domain(level) % time = time_old + ( real(i_strang - 1, R8) + RKtheta(obj_time_scheme%n_RK, i_rk) ) &
+                                          * obj_chemistry%strangcoeff * domain(level) % dtglobal
+          !$omp end single
+        endif
+
         call Zero_Residuals ( domain(level) )                ! Zero residuals
         call Fill_Ghost_Cell ( domain(level) )               ! Fill ghost cells
+        if (model>0) call Viscous_Variables ( domain(level) ) ! Viscous variables of the cells, for the viscous fluxes
         call Internal_Fluxes ( domain(level) )               ! Convective and Diffusive fluxes
         call BC_Fluxes ( domain(level) )                     ! Boundary fluxes
 
@@ -78,13 +103,19 @@ contains
            call RotatingFrame_Source_Terms ( domain(level) ) ! Coriolis and centrifugal source terms
 
         if (model==2) then
-          call Ghost_Wall_Extrapolation ( domain(level) )    ! Fill ghost cells for RHS of turbulence eqns
-          call RANS_Source_Terms ( domain(level) )           ! RHS of turbulence equations
+          ! The eddy viscosity of the reference velocity of the preconditioner (Update_Derived_Variables, below)
+          ! takes the velocity gradient of the cells of this state, with the ghost cells of this stage; the -RC models
+          ! compute it with their sources
+          if ( obj_prec%enabled .and. .not. obj_rans%SpalartShur ) call Cell_Velocity_Gradient ( domain(level) )
+          call RANS_Source_Terms ( domain(level) )           ! RHS of turbulence equations (the ghost cells of the fluxes)
         endif
 
         if (obj_soot%enabled) then
           call Soot_Source_Terms ( domain(level) )           ! RHS of soot equations
         end if 
+
+        if (freeze_w) call Zero_W_Residual ( domain(level) ) ! Quasi-2D, symmetry k faces: w not integrated
+        if (freeze_v) call Zero_V_Residual ( domain(level) ) ! 1-D, symmetry j faces: v not integrated
 
         call RK_Newstate ( domain(level), i_rk )             ! State update
         call Update_Derived_Variables ( domain(level) )
@@ -102,10 +133,16 @@ contains
 
     enddo strang
     !$omp end parallel
+    domain(level) % time = time_new                          ! end of the step
 
     ! Save residuals
     if ( (obj_sim_param%iter_from_call == 1) .or. (mod (domain(level) % iter, obj_io%res_diter) == 0) ) then
+      ! Sums in a fixed order, the same for any number of threads and ranks: over the cells of each block
+      ! (Compute_Residual), then over the blocks in turn on the root; each column of res_block comes from the one rank that
+      ! holds the block, so its sum over the ranks is exact
       obj_sim_param%residuotot = 0.d0
+      allocate ( res_block(nres, domain(level)%nb) )
+      res_block = 0.d0
       do b = 1, domain(level) % nb
         if (.not. is_local_block(b)) cycle
         call Compute_Residual ( new=domain(level)%blk(b)%P, &
@@ -113,25 +150,41 @@ contains
                                 dt=domain(level)%blk(b)%dtlocal, &
                                 n=domain(level)%blk(b)%dim, &
                                 average=average, &
-                                total=obj_sim_param%residuotot )
+                                total=res_block(:,b) )
       enddo
       call timer_sync_begin()
-      call mpi_reduce_sum_r8_array(obj_sim_param%residuotot, nres)
+      call mpi_reduce_sum_r8_array(res_block, nres*domain(level)%nb)
       call timer_sync_end()
-      if (mpi_is_root) obj_sim_param%residuotot = sqrt ( obj_sim_param%residuotot ) ! L2 norm time derivative
+      if (mpi_is_root) then
+        do b = 1, domain(level) % nb
+          obj_sim_param%residuotot = obj_sim_param%residuotot + res_block(:,b)
+        enddo
+        obj_sim_param%residuotot = sqrt ( obj_sim_param%residuotot ) ! L2 norm time derivative
+      endif
+      deallocate ( res_block )
+      ! The unit of res-threshold: the density residual of the first iteration of the run (of the grid level), or that of
+      ! the uninterrupted run, read with the restart solution (MOSE_Wrap_Setup)
+      if ( obj_sim_param%iter_from_call == 1 ) then
+        if ( mpi_is_root .and. .not. obj_sim_param%res_restored ) obj_sim_param%res_reference = obj_sim_param%residuotot(1)
+        obj_sim_param%res_restored = .false.
+      endif
     endif
 
     ! Determine simulation control flags on root, then broadcast to all ranks
     if (mpi_is_root) then
       endsim = .false.
       endmg  = .false.
+      ! res-threshold is a convergence test of steady runs: the change per iteration does not end a time-accurate run.
+      ! A steady run ends when its density residual has fallen by res-threshold from the first iteration.
       if (level == 1) then
         endsim = ( obj_sim_param%iter_from_call >= domain(1) % itermax ) &
-            .or. ( obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
+            .or. ( .not. accurate .and. &
+                   obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold * obj_sim_param%res_reference ) &
             .or. ( domain(1) % time >= obj_sim_param%time_threshold )
       else
         endmg = ( obj_sim_param%iter_from_call >= domain(level) % itermax ) &
-           .or. ( obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
+           .or. ( .not. accurate .and. &
+                  obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold * obj_sim_param%res_reference ) &
            .or. ( domain(level) % time >= obj_sim_param%time_threshold )
       endif
 

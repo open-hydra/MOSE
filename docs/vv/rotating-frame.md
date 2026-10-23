@@ -12,17 +12,25 @@ A straight rectangular channel carries an axial throughflow of air in a frame ro
 
 **Boundary conditions (from `test/3D/coriolis-channel/input.ini`).**
 
-| Face | Location | Preset | Type |
+| Face | Location | Type | Role |
 |---|---|---|---|
-| 1–4 | lateral sides | 11 | outflow |
-| 5 | inlet, $z=0$ | 4 | inflow (subsonic with total conditions) |
-| 6 | outlet, $z=0.1$ m | 11 | outflow |
+| 1–4 | lateral sides | `symmetry` | slip walls |
+| 5 | inlet, $z=0$ | `inlet` | mass flux $g = 12.25$ kg m⁻² s⁻¹ at $T = 300$ K, normal to the face |
+| 6 | outlet, $z=0.1$ m | `outlet` | static pressure $p = 1.054725\times10^{5}$ Pa |
 
-The inlet section sets `T = 300`, `g = 12.25`, `yAir = 1.0`. The numeric type IDs above are the user-side preset codes from `input.ini`; faces 1–4 and face 6 share the same preset (11). The inflow boundary lays on the rotation axis and injects the flow in the normal direction following the rotation.
+The inflow boundary lies on the rotation axis and injects the flow in the normal direction following the rotation. The outlet is what sets the pressure level of this subsonic flow: with zero-gradient `extrapolation` on every open face nothing does, and the mean pressure rises without bound instead of settling.
+
+**Initial state.** Uniform air at $T = 300$ K, $p = 1.054725\times10^{5}$ Pa, moving along the channel at $w = 10$ m/s (`INPUT/ic.tec`, written by ATLAS ICB from `[ICB-Block1]`).
 
 **Solver.** Euler, RK2 with local time stepping, CFL $= 0.9$, MUSCL/minmod, HLLC.
 
-**Expected behaviour.** With inflow along $+\hat{\boldsymbol{z}}$ and $\boldsymbol{\Omega} = \omega\hat{\boldsymbol{x}}$, the Coriolis acceleration $-2\,\boldsymbol{\Omega}\times\boldsymbol{w}$ deflects the throughflow toward $+\hat{\boldsymbol{y}}$ (since $\hat{\boldsymbol{x}}\times\hat{\boldsymbol{z}} = -\hat{\boldsymbol{y}}$). The centrifugal contribution $\rho\omega^2 \boldsymbol{r}_{\perp}$ adds a streamwise body force ($+\hat{\boldsymbol{z}}$) that grows linearly with $z$ and a transverse component antisymmetric about the channel mid-plane $y = 0.01$. The case verifies sign and magnitude of both source terms together and that the inflow/outflow BCs remain stable when they are active.
+**Expected behaviour.** With inflow along $+\hat{\boldsymbol{z}}$ and $\boldsymbol{\Omega} = \omega\hat{\boldsymbol{x}}$, the Coriolis acceleration $-2\,\boldsymbol{\Omega}\times\boldsymbol{w}$ points toward $+\hat{\boldsymbol{y}}$ (since $\hat{\boldsymbol{x}}\times\hat{\boldsymbol{z}} = -\hat{\boldsymbol{y}}$). The centrifugal contribution $\rho\omega^2 \boldsymbol{r}_{\perp}$ adds a streamwise body force ($+\hat{\boldsymbol{z}}$) that grows linearly with $z$ and a transverse component antisymmetric about the channel mid-plane $y = 0.01$. Between slip walls the throughflow cannot be deflected, so the steady solution is a uniform stream $w$ along $\hat{\boldsymbol{z}}$ whose pressure field balances the two body forces:
+
+$$\frac{\partial p}{\partial y} = \rho\left[2\,\omega\,w + \omega^2\,(y - 0.01)\right], \qquad \frac{\partial p}{\partial z} = \rho\,\omega^2\,z .$$
+
+The Coriolis term dominates the cross-channel gradient, $2\rho\omega w \approx 2450$ Pa/m, and the centrifugal term raises the pressure by $\rho\omega^2 z^2/2 \approx 61$ Pa along the channel. The case verifies sign and magnitude of both source terms together and that the inflow/outflow BCs remain stable when they are active.
+
+**Result.** The run reaches the default residual threshold ($10^{-10}$) in 30 503 iterations. The mass flux is 12.250 kg m⁻² s⁻¹ at the inlet and 12.255 at the outlet, with $w$ between 9.78 and 10.24 m/s and no cross-flow ($|v| < 0.1$ m/s away from the outlet). At mid length the pressure difference across the channel is 45.1 Pa, against 46.6 Pa from the balance above. Away from the walls, the cross-channel gradient is within 0.3 % of the balance over the first third of the channel and within 2.6 % over the middle third; the streamwise gradient is within 2 % from the third cell layer to two thirds of the length. Both fall short towards the outlet (by up to 20 % and 35 % in the last layers), where the imposed pressure is uniform and cannot hold the cross-channel gradient. The cross-channel gradient is also 6–10 % short in the two cell rows next to each wall. Over the region that leaves out 5 layers at the inlet and 8 at the outlet, the $L_2$ deviation from the balance is 5.0 % for $\partial p/\partial y$ and 3.3 % for $\partial p/\partial z$.
 
 ## Rotating annulus (`test/3D/pressure-centrifugal`)
 
@@ -39,7 +47,7 @@ A full annulus of quiescent air rotates about its axis. With $\boldsymbol{w}=\bo
 
 **Rotating frame.** $\omega = 100$ rad/s, axis $\hat{\boldsymbol{x}}$, origin $(0,0,0)$ on the axis (which lies *outside* the fluid domain).
 
-**Initial state.** Quiescent air at $T = 300$ K, $p = 1.054725\times 10^{5}$ Pa, $\boldsymbol{w}=\boldsymbol{0}$.
+**Initial state.** Quiescent air at $T = 300$ K, $p = 1.054725\times 10^{5}$ Pa, $\boldsymbol{w}=\boldsymbol{0}$: the uniform field of `[ICB-Block1]`, which ATLAS ICB writes to `INPUT/ic.tec`.
 
 **Boundary conditions (from `test/3D/pressure-centrifugal/input.ini`).**
 
@@ -47,9 +55,9 @@ A full annulus of quiescent air rotates about its axis. With $\boldsymbol{w}=\bo
 |---|---|---|---|
 | 1, 2 | axial ends ($x = 0,\,0.02$ m) | symmetry | axially homogeneous closure |
 | 3, 4 | radial ends ($r_\perp = 0.05$ and $0.15$ m) | symmetry | inviscid wall (slip) at hub and shroud |
-| 5, 6 | azimuthal periodic pair ($\theta = 0$) | periodic | closes the full ring via `src/lib/numerics/fluxes/bc/Lib_BC_Fluxes_Rotational.f90` since the domain is a curved rectangle. |
+| 5, 6 | azimuthal periodic pair ($\theta = 0$) | periodic | closes the full ring: the two faces coincide, so the pair is a connection of the block with itself (type 201, no rotation). |
 
-**Solver.** Euler, RK3 with local time stepping, CFL $= 2.0$, MUSCL/minmod, HLLC.
+**Solver.** Euler, RK3 with local time stepping, CFL $= 2.0$ with implicit residual smoothing (`irs-beta = 0.5`), MUSCL/minmod, HLLC.
 
 **Closed-form reference.** For inviscid steady rigid-body rotation with no heat transfer, the equilibrium is **isentropic** ($p/\rho^\gamma$ uniform). Combining $\nabla p = \rho\omega^2 \boldsymbol{r}_\perp$ with the isentropic relation gives
 
@@ -57,10 +65,32 @@ $$\frac{p(r_\perp)}{p_{\rm ref}} = \left[1 + \frac{\gamma-1}{2}\,\frac{\omega^2\
 
 The reference state $(p_{\rm ref}, T_{\rm ref})$ at $r_{\rm ref}$ is fixed by total-mass conservation against the initial uniform field.
 
-**Expected behaviour.** The centrifugal source builds a radially stratified field with $p$ increasing monotonically with $r_\perp$ at constant entropy, while $\boldsymbol{w}$ relaxes back to zero. The case verifies that
+**Expected behaviour.** The centrifugal source builds a radially stratified field with $p$ increasing monotonically with $r_\perp$ at constant entropy, while $\boldsymbol{w}$ should relax back to zero. The case verifies that
 
 - the centrifugal contribution is wired into both the momentum and energy residuals with the correct sign and magnitude,
-- the rotational-periodic BC closes the ring with the proper velocity rotation,
-- the converged pressure and temperature profiles match the isentropic closed form above (radial $L_2$ error against the analytical reference is the verification metric). The initial solution in **ic.tec** stores pressure profile that should balance the centrifugal contribution, i.e. the final solution should be similar to the initial one. (Residuals start very low)
+- the periodic connection (`201`) closes the ring,
+- the converged pressure and temperature profiles match the isentropic closed form above (radial $L_2$ error against the analytical reference is the verification metric).
 
-**Sensitivity note.** At $\omega = 100$ rad/s the rim Mach number is $\omega r_{\rm out}/\sqrt{\gamma R T} \approx 0.04$, giving a pressure variation of only $\sim 0.1\%$ across the annulus. Verification at this setting requires tight residual convergence and a precise mass-conservation pinning of $p_{\rm ref}$; running at higher $\omega$ (e.g. 1000 rad/s, $\sim 10\%$ variation) gives the comparison more dynamic range.
+**Result.** From the uniform start the density residual falls from $7\times10^{-4}$ to $10^{-8}$ in 40 000 iterations and then only creeps ($5.5\times10^{-9}$ at 200 000). It does not reach the default threshold of $10^{-10}$, so the run has to be stopped with `iter-threshold`. At 200 000 iterations:
+
+| Quantity | MOSE | Closed form |
+|---|---|---|
+| $p$, range over the cells | 105 413 – 105 530 Pa | 105 414 – 105 528 Pa |
+| $T$, range over the cells | 299.951 – 300.059 K | 299.953 – 300.045 K |
+| Pressure rise hub to shroud | 111.4 Pa | 113.5 Pa |
+| Volume-weighted relative $L_2$ error | $p$: $1.9\times10^{-5}$, $T$: $1.3\times10^{-5}$ | – |
+| Total mass against the initial one | $+5\times10^{-6}$ | 0 |
+
+The fluid does not come fully to rest. A tangential velocity remains in the cell rows next to hub and shroud, up to 1.9 m/s at the shroud against a rim speed $\omega r_{\rm out} = 15$ m/s, and about 0.08 m/s in the core; it grows slowly with the iterations and goes with the 2 % deficit in the pressure rise.
+
+!!! note "Numbers and code version"
+    The numbers of the table and of the paragraph above come from October 2026 (commit `546f99d1`), and
+    the code of 13 October 2026 (commit `b29130b`) gives again the pressure rise, the residual and the
+    tangential velocities (111.4 Pa, $5.5\times10^{-9}$, 1.9 m/s and 0.08 m/s). MOSE at commit
+    `10b59003b72c` gives, at 200 000 iterations, a pressure rise of 112.7 Pa, relative $L_2$ errors of
+    $1.6\times10^{-5}$ ($p$) and $1.4\times10^{-5}$ ($T$), a total mass $2.4\times10^{-6}$ above the
+    initial one, a density residual of $4.4\times10^{-9}$, and 1.66 m/s at the shroud and 0.054 m/s in
+    the core; the ranges of $p$ and $T$ move by about 1 Pa and 0.002 K. The change comes from the commits
+    between `b29130b` and `10b59003b72c`.
+
+**Sensitivity note.** At $\omega = 100$ rad/s the rim Mach number is $\omega r_{\rm out}/\sqrt{\gamma R T} \approx 0.04$, giving a pressure variation of only $\sim 0.1\%$ across the annulus. Verification at this setting requires tight residual convergence and a precise mass-conservation pinning of $p_{\rm ref}$.

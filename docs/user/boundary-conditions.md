@@ -13,10 +13,13 @@ When multigrid is enabled, one BC file per grid level is required:
 
 | File | Level |
 |------|-------|
-| `INPUT/bc_x1.txt` | Finest grid |
-| `INPUT/bc_x2.txt` | 2× coarser |
-| `INPUT/bc_x4.txt` | 4× coarser |
-| `INPUT/bc_x8.txt` | 8× coarser |
+| `INPUT/bc.txt` | 1, the finest grid |
+| `INPUT/bc2.txt` | 2, 2× coarser |
+| `INPUT/bc3.txt` | 3, 4× coarser |
+| `INPUT/bc4.txt` | 4, 8× coarser |
+
+Level $n$ has half the cells of level $n-1$ in each direction, and `INPUT/bc<n>.txt` lists its boundary cells; a direction
+of one cell (j or k of a 1-D or 2-D case) keeps one cell.
 
 For single-grid cases the file is simply `INPUT/bc.txt`.
 
@@ -35,7 +38,11 @@ For a block with $n_i \times n_j \times n_k$ cells the six faces are labelled:
 | 5 | $k = 1$ (kmin) | $i = 1 \ldots n_i$, $j = 1 \ldots n_j$ |
 | 6 | $k = n_k$ (kmax) | $i = 1 \ldots n_i$, $j = 1 \ldots n_j$ |
 
-For 2-D cases (`nk = 1`), faces 5 and 6 are degenerate. They should be set to the null type (`type = 0`) or symmetry (`300`).
+For 2-D cases (`nk = 1`), faces 5 and 6 are degenerate: give them the null type (`type = 0`) or symmetry (`300`). How MOSE
+treats the velocity across the faces of a direction of one cell, and which cells make a run fail, is in the note
+*Degenerate directions* under [Euler Boundaries](#euler-boundaries).
+
+An axisymmetric case is a wedge, symmetric about the plane $z = 0$, with faces 5 and 6 of type `200` (see [Euler Boundaries](#euler-boundaries)).
 
 ---
 
@@ -61,18 +68,27 @@ The format is as follows:
 | `face` | Face index of that cell (1–6, see [Face Numbering](#face-numbering)) |
 | `type` | Numeric BC type code (see table below) |
 
-All boundary cells are listed — one entry per face cell, face by face, block by block.
+All boundary cells are listed — one entry per face cell, face by face, block by block, as ATLAS writes them (another
+order gives the same solution and the same wall output).
 
 **Line 2 — BC data (type-dependent):**
 
 Some BC types carry additional data on the second line (see [BC Types](#bc-types)). For types that carry no data (symmetry, extrapolation, axisymmetry), the second line is **absent**.
+
+Every value of the data line is required, except those with a default value: `k_rough` and `eps_wall` (0), `cp_wall`,
+`Ti_wall` and `dh_wall` (0), `pyro_id` and `reac_id` (0), `rho_grain` (0), `SF_geo` (1), `p_sub` and `p_sup` (0). An
+empty value (two commas with nothing between them) keeps that default; an empty required value stops the run at set-up,
+with the line of `bc.txt`, the record, its type and the name of the value. So does a line short of a value, or with a
+value that is not a number, and a value that is not finite (NaN or infinity), required or with a default, the flow
+directions `alpha` and `beta` included. Blank lines between records are skipped. On a coarse level of a multigrid run the
+messages name the file of that level.
 
 ## BC Types
 
 The following table lists all numeric BC type codes used in `bc.txt`, their physical meaning, and the format of the required data line.
 
 !!! info "BC types and ATLAS"
-    More details on these BC types and their parameters can be found in the ATLAS documentation, which defines the expected format and semantics of the BC file. The above table serves as a reference for users preparing BC files manually or interpreting the output from ATLAS.
+    More details on these BC types and their parameters can be found in the ATLAS documentation, which defines the expected format and semantics of the BC file. The tables below serve as a reference for users preparing BC files manually or interpreting the output from ATLAS.
 
 ### Connection
 
@@ -80,10 +96,13 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 |:----:|------|-----------------------------|
 | `0` | Null / unused | — |
 | `101` | Block connection | `bs  is  js  ks  fs  d11  d12  d21  d22` |
+| `201` | Periodic connection (a block connection between two faces that differ by a translation) | `bs  is  js  ks  fs  d11  d12  d21  d22` |
 | `102` | Chimera overset | `n1  n2` then `n1+n2` donor lines: `bD iD jD kD  vol_frac` |
 | `103` | Coupled wall | `bs  is  js  ks  fs  d11  d12  d21  d22` |
 
 `d11, d12, d21, d22` are the $2 \times 2$ index-direction cosine matrix mapping source to target indices.
+
+The two records of a connection face (`101`, `201`) must point at each other (each one's `bs is js ks fs` is the other's block, cell and face, not its own); MOSE stops at setup otherwise. The block across a connection face must have at least two cells across that face, at every multigrid level: the two ghost cells of the face are its first two cells, and their metrics come from its first two node planes past the face. A record whose block across has one cell stops the run at setup, with the message that names the record, the block and its cells; blocks one cell thick across a connection are not supported. The flux of the face is computed once, by the record of the cell on the low-index side (between faces of the same parity, by the record with the smaller block, face, k, j, i, whatever the order of the records in the file), and given with the opposite sign to the other cell, also across MPI ranks (see [Spatial Discretization](../theory/numerics.md#faces-between-blocks), which states when it is bit for bit the flux of the unsplit mesh). With `preconditioning-Ur-smooth` greater than 0 the smoothing of the preconditioning reference velocity next to such a face also sees the cell across it, with its value at the start of the stage.
 
 ### Euler Boundaries
 
@@ -92,6 +111,86 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 | `200` | Axisymmetry | — |
 | `300` | Symmetry / slip wall | — |
 | `400` | Extrapolation | — |
+
+!!! note "Extrapolation (400)"
+    A `400` face needs no data: it takes the flux of the state of its boundary cell, $\mathbf{F}(q_1)\cdot\mathbf{n}\,A$,
+    whatever the direction of the gas. Where the gas of the boundary cell moves into the domain, it enters with the state of that
+    cell: the characteristics that enter take the values of the cell, not data from outside, so a `400` face keeps any uniform
+    inflow going by itself, whether the case wants it (the inlet of a truncated domain whose state outside is that of its
+    boundary cells) or not (a free boundary through which the flow draws gas in, a plenum fed through its outlet). Where the gas
+    outside has a known state, use an inlet (`401`–`405`, `408`, `410`), or the ambient `407` where the surroundings can push
+    gas into the domain.
+
+    The run says where the gas enters through `400` faces. The first time it enters through the `400` faces of one face of a
+    block (on each grid level), the run prints one line with the block, the face (and the grid level, with more than one),
+    the iteration, the faces through which the gas enters at that stage and the largest $|w|/a$ among them, $w$ the velocity
+    of the gas of the boundary cell along the normal out of the domain and $a$ its speed of sound. Each time the largest
+    $|w|/a$ of that boundary at a stage is more than 10 times that of its last line, one more line follows, with that value
+    and the faces above 10 times the last one: a boundary has at most one line for each order of magnitude that its inflow
+    grows, not one for each stage. The lines are written at the end of the boundary fluxes of their stage, before the cells
+    are updated, so a run that then stops on an error has them in its output. At the end of a run in which the gas entered
+    through `400` faces, one more line reports the flux evaluations of `400` faces where it entered, over the stages, grid
+    levels and ranks, and the largest $|w|/a$ among them; a run in which no gas entered, and a run that stops on an error, do
+    not print it. The lines do
+    not say whether or when the inflow ends; the end line says how many flux evaluations it lasted. After a restart the lines
+    and the end line count from the restart, with the iteration of the restarted run. $|w|/a$ of about $10^{-9}$ or less:
+    only round-off moves the gas towards the domain, as on the side faces of 1-D cases; from $10^{-6}$ to $10^{-3}$: small
+    motions towards the domain, such as the numerical oscillations next to a shock or a junction between blocks, or a weak
+    flow across the face; from $10^{-2}$ up: the gas really enters, at the inlet of a truncated domain or where the flow
+    draws gas in through a free boundary.
+
+!!! note "Axisymmetry (200)"
+    With one cell in $k$, type `200` on faces 5 and 6 makes the mesh a 2-D axisymmetric wedge: the two faces lie at
+    $\theta = \mp\delta/2$ and the ghost cell across each is the cell rotated by $\mp\delta$ about the $x$ axis. The
+    inviscid flux gives the pressure and centrifugal terms; with the Navier–Stokes equations the viscous stress of the
+    faces is applied as well ($-\tau_{\theta\theta}/r$ in the radial momentum, see
+    [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge)). Keep the wedge thin: the azimuthal
+    derivatives carry an error of order $\delta^2$. With more than one cell in $k$, type `200` is a rotational
+    periodicity: faces 5 and 6 make one interior face of the whole annulus, with its inviscid and viscous fluxes (see
+    [Spatial Discretization](../theory/numerics.md#3-d-sector)).
+
+    Type `200` joins the two $k$ faces of one block: beyond face 5 lies the cell next to face 6 of the same block, in the
+    same column $(i, j)$, turned back by the angle, and beyond face 6 the cell next to face 5, turned forward; the
+    record names no other block. So in every column a record of type `200` on one $k$ face needs one on the other $k$
+    face of the same block, and a block closed by type `200` holds the whole wedge or sector in $k$. A record of type
+    `200` on a face 1 to 4, with its cell outside its block, or without that partner stops the run at setup with a
+    message that names the record: so do a sector cut along $k$ into several blocks, a ring of 360° in several blocks
+    closed by type `200` between the last block and the first, and a wedge with type `200` on one $k$ face only. Cut a
+    sector along $i$ or $j$; join the blocks of a ring by block connections (`101`), the junction at $\theta = 2\pi$
+    included, and keep type `200` for a block that holds the whole sector or the whole turn. Two blocks each closed by
+    its own type `200` are two separate periodic sectors, with no flux between them.
+
+    The mesh decomposer of ATLAS (MDB) cuts blocks along $i$, $j$ and $k$ unless `split-directions` (of
+    `[MDB-Parameters]`, or of `[MDB-Block<n>]` for block $n$) says otherwise, and keeps each record of type `200` on
+    its face: a block closed by type `200` that it cuts along $k$ gives blocks with type `200` on one $k$ face only, and
+    the run stops at setup. Give such a block `split-directions` without $k$ (for example `ij`); a ring whose blocks
+    are joined by `101`, the junction at $\theta = 2\pi$ included, can be cut along $k$. MDB does not split the file
+    of a `410` face and does not rewrite the keys of `input.ini` that name blocks: see
+    [Parallel Execution](parallel.md#block-to-rank-assignment).
+
+!!! note "Degenerate directions (1-D and 2-D cases)"
+    A direction of one cell (the $k$ direction of a 2-D case, $j$ and $k$ of a 1-D case) has two faces across it: the null
+    type `0` has no flux through them. With $u_\perp$ the velocity across and $\Delta$ the thickness of the cell across
+    ($a$ the speed of sound), symmetry (`300`) on both faces makes the two mirror planes one cell apart give $u_\perp$ the
+    mode $du_\perp/dt = -2\,a\,u_\perp/\Delta$, which the explicit schemes cannot follow at the time step of the cells,
+    about $\text{cfl}\,\Delta x/a$: round-off in $u_\perp$ would grow until the run fails. So in a planar case (not an
+    axisymmetric wedge) with symmetry on all the faces of such a direction MOSE sets $u_\perp$ to zero and does not
+    integrate it, when every one of those faces is a plane normal to the axis of the direction (the other components of
+    its unit normal at most $10^{-10}$). Where they are not normal to it, as in a layer between parallel planes inclined to
+    $z$ or in a channel whose section varies along $x$, one cell across with its faces along the walls, symmetry asks the
+    gas to move along them, across the cell, and setting $u_\perp$ to zero would change the flow (the mass flow, the
+    pressure): there MOSE integrates $u_\perp$, with a warning. With extrapolation (`400`) on one or both faces $u_\perp$
+    is integrated too, since the extrapolation face lets the gas through. The modes and the cells that make the run fail:
+
+    | Faces across | $u_\perp$ | Mode | Stable step, Heun / RK3 | The run fails for cells thinner across than, Heun / RK3 |
+    |---|---|---|---|---|
+    | `300` + `300`, planes normal to the axis | set to zero, not integrated | — | — | — |
+    | `300` + `300`, planes inclined to the axis | integrated, with a warning | $-2\,a\,u_\perp/\Delta$ | $\Delta/a$ / $1.26\,\Delta/a$ | $\text{cfl}\,\Delta x$ / $0.8\,\text{cfl}\,\Delta x$ |
+    | `300` + `400` | integrated | $-a\,u_\perp/\Delta$ | $2\,\Delta/a$ / $2.51\,\Delta/a$ | $\text{cfl}\,\Delta x/2$ / $0.4\,\text{cfl}\,\Delta x$ |
+    | `400` + `400`, parallel planes | integrated | none: the fluxes of the two faces cancel | — | — |
+
+    Cells as wide across as along $x$ are within all these limits up to cfl 1. Give both faces the type `300` where the
+    velocity across must stay zero: MOSE then does not integrate it.
 
 ### Inlet / Outlet
 
@@ -106,17 +205,85 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 | `407` | Ambient ($T_0$, $p_0$, $p_\text{back}$) | `T0,  p0,  p_back,  alpha,  beta,  rel_fac,  [massf],  [turb]` |
 | `408` | Inlet — velocity + $T$ static | `T,   un,  alpha,  beta,  rel_fac,  [massf],  [turb]` |
 | `410` | Assigned state (time-varying file) | `filename  [periodic]` |
-| `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  r_throat,  rel_fac,  [massf],  [turb]` |
+| `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  g,  rel_fac,  [massf],  [turb]` |
+
+Type `409` (a forced outlet named in the reader of the boundary file) is not implemented: a record of type `409`, or of any
+type not listed on this page, gets no flux, and MOSE does not stop on it. Type `410` reads its data on the finest
+grid level only: do not use it with a sequence of grid levels. Its file is a Tecplot ASCII file with one zone per block
+and time: a `VARIABLES` line with `p`, `u`, `v`, `w` and at least one `rho(N)`; zone headers with `I=` and `J=` in upper
+case and no blank around `=` (`I=3, J=2`), `SOLUTIONTIME` and the title `T="B<block>_T<n>"`; each zone with exactly
+the values that its `I` and `J` give, and the header of the next zone on the line after them; the zones in increasing
+time (the zones of other blocks at a time already given may come anywhere after it). Every value must be finite. A file
+that departs from this, or that cannot be opened, stops the run at set-up with the file and, for a zone, the zone, the
+line of its header and the value, the variable, the times or the form to write at fault.
 
 **Common fields:**
 
 | Field | Description |
 |-------|-------------|
-| `alpha` | In-plane flow angle [rad] or the token `normal` (face-normal inflow) |
-| `beta` | Out-of-plane flow angle [rad] or `normal` |
-| `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation) |
+| `alpha` | In-plane flow angle [rad] or the token `normal` (face-normal inflow); anything else stops the run |
+| `beta` | Out-of-plane flow angle [rad] or `normal`; anything else stops the run |
+| `g` | Mass flux through the face [kg/(m²·s)] (types `403`, `404`, `420`) |
+| `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation); no effect on `401`, `402` and `407` |
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
-| `turb_vars` | Turbulence quantities ($k$, $\omega$ or $k$, $\varepsilon$) |
+| `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |
+
+**Inlets at total conditions (`401`, `402`, `407`).** The gas enters when $p_0$ is above
+$p_\text{stop} = p\,\bigl(1 + \tfrac{\gamma-1}{2}\,w/a\bigr)^{2\gamma/(\gamma-1)}$, the pressure that the gas of
+the boundary cell (pressure $p$, speed of sound $a$, velocity $w$ along the outward normal) reaches when the outgoing
+acoustic wave brings it to rest: a cell at rest takes the inflow as soon as $p_0 > p$, a cell moving out takes it
+when $p_0$ is high enough to turn the flow back, and a cell moving in at $2a/(\gamma-1)$ or faster, which no pressure
+brings to rest ($p_\text{stop} = 0$), takes it for every $p_0 > 0$. The face state then follows from $T_0$, $p_0$, the
+flow direction and the invariant $a + \tfrac{\gamma-1}{2}\,w$ that reaches the face from inside, whatever its sign: the
+wave that links the cell to the face is a rarefaction or a shock, as for slower gas. When that state would be supersonic
+across the face, the invariant can no longer reach it and the face is choked: normal Mach number 1, with the total
+temperature and pressure of the reservoir (with the direction normal, the critical state $a_0\sqrt{2/(\gamma+1)}$, the
+largest mass flux the reservoir can give). The face is choked too when no inflow state exists: when the gas of the cell
+moves in so fast that, even expanded to vacuum, it leaves the face faster than the gas of the reservoir can follow
+(with the direction normal, when $a + \tfrac{\gamma-1}{2}\,w < -a_0\sqrt{(\gamma-1)/2}$). The mass flux is continuous
+where $a + \tfrac{\gamma-1}{2}\,w$ changes sign. When the gas does not enter, `401` and
+`402` make the face a slip wall: they let no gas out, and reflect a wave that reaches them with a stagnation pressure
+above $p_0$. `407` is then an outlet at `p_back`: with the gas of the cell at rest or moving out, the outlet treatment of
+`406`; with the gas moving in, the face takes the state that the outgoing wave gives at the pressure
+$\min(p_\text{back}, p_\text{stop})$, where its velocity points out (at $p_\text{stop}$ the gas is at rest at the face).
+A `407` face whose gas moves in at $2a/(\gamma-1)$ or faster is an outlet only with $p_0 \le 0$ or $T_0 \le 0$, a
+reservoir that feeds nothing, and then has no flux. `rel_fac` has no effect on these three types: when the gas enters,
+the face state exists with $p_0$ as given.
+
+The inlets `403`, `404`, `405` and `408` make the face a slip wall when the gas of the boundary cell moves out of the
+domain or is at rest, and `420` when that gas moves out or is at rest, or when its pressure is not below `p0`: they
+let no gas out. A duct at rest therefore starts from a `401`, `402` or `407` face, and not from a `403`, `404`, `405`,
+`408` or `420` face, unless something else moves its gas.
+
+**Assigned state (`410`).** The file gives, for each cell of a face of type `410`, the state of the cell across the face,
+as across a face between blocks: the densities of the species, `rho(N)` (a species that the file does not name has zero
+density), and `u`, `v`, `w` and `p`. It gives no other quantity: the turbulence variables and the soot variables of its
+ghost cells are those of the cell next to the face per unit mass, so the turbulence that enters through a face of type `410`
+is that of the first cell. The cell across the face is taken as wide as the first cell of the block (see
+[Spatial Discretization](../theory/numerics.md#gradient-computation-for-diffusive-fluxes)).
+
+**Time-varying data (`402`, `410`).** The `p0_file` of an inlet `402` is a text file of pairs `time [s]  p0 [bar]`,
+one per line, in increasing time (two equal times make a jump); a first line holding the word `periodic` makes the
+table repeat. Its pressures are in bar: MOSE multiplies them by $10^5$, while every pressure of a line of `bc.txt`,
+the $p_0$ of `401` and `407` among them, is read as written, in Pa. MOSE does not check the unit: a table written in
+Pa gives a $p_0$ $10^5$ times too large. For example, a $p_0$ that rises from 1 bar to 5 bar over the first 10 ms and
+then stays at 5 bar:
+
+```
+0.00   1.0
+0.01   5.0
+```
+
+The file name is taken as written on the line, directories included (for example `INPUT/p0.dat`, relative to
+the directory of the run), up to 256 characters; a name with blanks goes in quotes. MOSE interpolates linearly in
+time; before the first instant it uses the first value, after the last instant the last one (unless the table is
+periodic). Steady runs evaluate the data at time $-1$: with a periodic table this time is wrapped into the period, so
+a steady run should use a constant table (or type `401`). In time-accurate runs the data of `402` and `410` are
+evaluated at the time of each Runge–Kutta stage (see
+[Time Integration](../theory/time-integration.md#stage-times-and-time-dependent-boundary-data)). A table that cannot
+be opened, holds no pair, holds a time or a value that is not finite (NaN or infinity: the message gives its line and
+column) or has decreasing times stops the run at set-up, and so does a `402` line with fewer values than listed above
+or with an empty one.
 
 ### Viscous Walls
 
@@ -132,11 +299,21 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
 | `k_rough` | Sand-grain roughness height $k_s$ [m] (`0.0` for smooth wall). Modelled with SA only ([SA-rough](../theory/turbulence.md#rough-walls-sa-rough)) |
 | `eps_wall` | Wall emissivity (0–1) |
 
+The wall output, `OUTPUT/wall.tec`, writes the same quantities on every face of every wall, oriented into the gas: the
+stress `tauX`, `tauY`, `tauZ` is the traction of the gas on the wall, $\boldsymbol{\tau}\cdot\mathbf{n}$ with
+$\mathbf{n}$ the unit normal into the gas (along the flow under an attached boundary layer); the heat flux `qw` is
+positive into the gas, as `q_wall` (a `301` wall writes its `q_wall`, a `503` wall that melts minus the heat its surface
+absorbs, conducted and radiated, the other walls the heat they conduct into the gas); the mass flux `mdot` of the walls
+`503`–`505` is positive into the gas, the mass the surface blows in.
+
 ### Physical Models
 
 | Type | Name | Data line |
 |:----:|------|-----------|
 | `501` | Manifold connection | `bs  fs` |
+
+Type `501` is not applied: MOSE computes the mean state of the connected face and does not use it, so the face
+gets no flux. Do not use it.
 
 ### Gas–Surface Interaction
 
@@ -144,10 +321,14 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 
 |  Type | Name               | Data line                                                                  |
 | :---: | ------------------ | -------------------------------------------------------------------------- |
-| `502` | SRM grain boundary | `T_af, a, n, p_ref, rho_grain, SF_geo`                                     |
+| `502` | SRM grain boundary | `T_af, a, n, p_ref, rho_grain, SF_geo, [massf_1 … massf_ns]`               |
 | `503` | Melting            | `cp_wall, T_wall, Ti_wall, dh_wall, q_rad, eps_wall, [massf_1 … massf_ns]` |
 | `504` | Pyrolysis          | `pyro_id, q_rad, eps_wall, [massf_1 … massf_ns]`                           |
 | `505` | Surface reactions  | `reac_id, q_rad`                                                           |
+| `506` | Surface reactions and pyrolysis | `pyro_id, reac_id, q_rad, eps_wall, [massf_1 … massf_ns]`     |
+
+Type `506` is read and not applied: the face gets no flux. Do not use it; `504` and `505` are the pyrolysis and
+the surface reactions alone.
 
 
 | Field       | Description                                                                                       |
@@ -163,7 +344,7 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 | `Ti_wall`   | Initial temperature of the solid [K]                                                              |
 | `dh_wall`   | Latent heat of melting [J/kg]                                                                     |
 | `q_rad`     | Radiative heat flux absorbed by the surface [W/m²]                                                |
-| `eps_wall`  | Wall emissivity — **parsed but currently unused**                                                 |
+| `eps_wall`  | Wall emissivity — **parsed, not used**                                                            |
 | `pyro_id`   | Pyrolysis model: `1` = HTPB, `2` = HDPE, `3` = PP                                                 |
 | `reac_id`   | Surface reaction mechanism: `1` = carbon (Bradley)                                                |
 | `massf_s`   | Composition of the material leaving the surface (one value per species)                           |
@@ -174,6 +355,15 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
     ablation takes place.  The same fallback — an impermeable wall — is used
     whenever the flow cannot sustain the process; see
     [Inert surfaces](../theory/gsi.md#inert-surfaces).
+
+!!! note
+    With a RANS model (`turbulence` set) the gas a `502` grain injects carries
+    the turbulence values of a smooth wall: $\tilde\nu = 0$ (Spalart–Allmaras),
+    $k = 0$ and the wall value of $\omega$ (SST, Wilcox 2006), whose distance is
+    the wall distance of the cell. The grain is a wall for the wall distance of
+    the turbulence models, as the walls `301`, `302` and `503`–`505`. The ghost
+    cells behind the grain take these wall values, as behind a wall; a grain that
+    does not burn is a wall at the flame temperature.
 
 !!! warning
     Type `505` requires a thermodynamic table containing O₂, CO₂, CO, H₂O, H₂,
@@ -186,7 +376,7 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 
 ## Examples
 
-**1-D Case (100 cells, all faces extrapolation)**
+**1-D Case (100 cells, extrapolation on faces 1 to 4)**
 
 ```
        1       1       1       1       1     400
@@ -197,7 +387,7 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
        1     100       1       1       4     400
 ```
 
-Faces 1 and 2 each have 1 entry (the single cell at the end of the 1-D domain). Faces 3 and 4 each have 100 entries (one per $i$-cell).
+Faces 1 and 2 each have 1 entry (the single cell at the end of the 1-D domain). Faces 3 and 4 each have 100 entries (one per $i$-cell), and so do faces 5 and 6, of the null type `0`. With `400` on faces 3 and 4, two parallel planes, the velocity across is integrated and the fluxes of the two faces cancel; `300` on both, on faces normal to $y$, keeps it zero (see [Face Numbering](#face-numbering)).
 
 **2-D Supersonic Inlet (type 405)**
 

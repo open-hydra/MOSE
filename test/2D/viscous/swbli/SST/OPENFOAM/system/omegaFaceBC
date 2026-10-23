@@ -1,0 +1,59 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+\*---------------------------------------------------------------------------*/
+// omega wall condition applied the way MOSE applies it (Lib_SST.f90,
+// SST_Set_Wall_Values with omega-wall-bc = asymptotic): the wall FACE value is
+//     omega_w = 6*nu_w/(beta1*y_c^2) = 80*nu_w/y_c^2,
+// y_c = wall-to-cell-centre distance, and the wall-adjacent cell is SOLVED.
+//
+// OpenFOAM's omegaWallFunction instead FIXES the wall-adjacent CELL to the same
+// number and does not solve there.  Same formula, different place: the face
+// form puts omega in the first cell at about 1/4 of the sublayer value and
+// moves the separation bubble about 1 mm upstream, so for a code-to-code
+// verification both codes must apply it identically.
+//
+// Included from 0/omega (bottomWall, topWall).  Compiled at run time
+// (dynamicCode/), which needs the OpenFOAM build environment on the nodes.
+
+type            codedFixedValue;
+name            omegaFaceMOSE;
+
+codeInclude
+#{
+    #include "momentumTransportModel.H"
+#};
+
+codeOptions
+#{
+    -I$(LIB_SRC)/MomentumTransportModels/momentumTransportModels/lnInclude \
+    -I$(LIB_SRC)/physicalProperties/lnInclude \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude
+#};
+
+codeLibs
+#{
+    -lmomentumTransportModels \
+    -lfiniteVolume \
+    -lmeshTools
+#};
+
+code
+#{
+    const momentumTransportModel& turb =
+        db().lookupObject<momentumTransportModel>
+        (
+            IOobject::groupName
+            (
+                momentumTransportModel::typeName,
+                internalField().group()
+            )
+        );
+    const label patchi = patch().index();
+    const scalarField& y = turb.y()[patchi];           // y_c, as MOSE's blk%yn
+    const tmp<scalarField> tnuw = turb.nu(patchi);     // nu at the wall face (T = 300 K)
+    operator==(80.0*tnuw()/sqr(y));
+#};
+
+// ************************************************************************* //

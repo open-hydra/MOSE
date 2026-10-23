@@ -93,7 +93,7 @@ module MOSE_Lib_BC_Fluxes_GSI_Core
   !> Geometry and orientation of a boundary face, gathered once per call.
   type :: wall_face_t
     integer  :: dir        !< index of the face-normal direction (1, 2 or 3)
-    integer  :: modfm2     !< +1 on a low face, -1 on a high face: outward sign
+    integer  :: modfm2     !< -1 on a low face, +1 on a high face: the outward normal is modfm2 * normal
     integer  :: modfm3     !< one-sided finite-difference factor for the wall gradient
     integer  :: ghost(3)   !< indices of the ghost cell behind the face
     real(R8) :: normal(3)  !< face normal
@@ -435,15 +435,16 @@ contains
                                  mul=mu_wall, rho=rho_wall, area=face % area, &
                                  normal=face % normal, dist=WALL_DISTANCE )
 
-      call RANS_Extrapolate_Wall ( Prim(nt:nprim), Prim_wall(nt:nprim), rho, rho_wall, &
-                                   Blk % P(nt:nprim, face % ghost(1), face % ghost(2), face % ghost(3)) )
+      ! The ghost cells of the wall, turbulence variables included, are those of Fill_Ghost_Cell (Ghost_Wall in
+      ! MOSE_Lib_Ghost; for an SRM grain Ghost_SRM_Turbulence, with these wall values): one set of ghost cells for the
+      ! fluxes and the source terms
     end if
 
     ! Residual update
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) - face % modfm2 * Flux
 
     if ( present(Ovar) ) &
-      call Compute_Wall_Properties ( stress=Stress, pw=Prim(np), qw=q_wall, mdot=mdot, &
+      call Compute_Wall_Properties ( stress=Stress, pw=Prim(np), into=-face % modfm2, qw=q_wall, mdot=mdot, &
                                      y=Blk % dl(Im,Jm,Km) % c(face % dir) * 0.5d0, &
                                      Tw=T_wall, rhow=rho_wall, mu=mu_wall, exit_array=Ovar )
 

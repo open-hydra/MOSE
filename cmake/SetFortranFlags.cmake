@@ -37,23 +37,36 @@ ENDIF(BT STREQUAL "RELEASE")
 # ar each time project() runs.  Wrapped in a macro so it can also be applied on
 # the early-return path below, where the flags are already cached and the rest
 # of this file is skipped.  A macro, not a function: it must set variables in
-# the caller's scope.
+# the caller's scope.  The flags change in the cache only, through a variable of
+# another name: a plain CMAKE_Fortran_FLAGS_RELEASE would hide the cache entry
+# (policy CMP0126 is NEW with cmake_minimum_required 3.23), so the flags that
+# SET_COMPILE_FLAG adds below would reach the cache but not the targets.  Every
+# configure gives the same flags.
 MACRO(SET_IPO_ARCHIVER)
 IF(CMAKE_Fortran_FLAGS_RELEASE MATCHES "(^| )[-/]Q?ipo( |$)")
 
-    # 1. The link line must carry -ipo too: IPO objects hold IR, not ELF, so the
-    #    real optimisation and code generation happen at link time.
-    SET(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -ipo"
-        CACHE STRING "Set the CMAKE_EXE_LINKER_FLAGS_RELEASE flags" FORCE)
-
-    # 2. An IPO-aware archiver.  GNU ar/ranlib cannot index IR objects ("archive
+    # 1. An IPO-aware archiver.  GNU ar/ranlib cannot index IR objects ("archive
     #    has no index" / "file format not recognized") and xiar merely forwards to
-    #    ar, so both fail.  oneAPI ships llvm-ar/llvm-ranlib beside the compiler.
-    GET_FILENAME_COMPONENT(_ipo_bindir "${CMAKE_Fortran_COMPILER}" DIRECTORY)
-    FIND_PROGRAM(IPO_AR     NAMES llvm-ar     HINTS "${_ipo_bindir}/compiler" "${_ipo_bindir}")
-    FIND_PROGRAM(IPO_RANLIB NAMES llvm-ranlib HINTS "${_ipo_bindir}/compiler" "${_ipo_bindir}")
+    #    ar, so both fail.  oneAPI ships llvm-ar/llvm-ranlib with the compiler: in
+    #    <bin>/compiler from oneAPI 2024 on, in <bin>/../bin-llvm up to oneAPI 2023
+    #    (where CMake's own IntelLLVM module looks), <bin> the directory of the
+    #    compiler with its symbolic links resolved.  -DIPO_AR=... -DIPO_RANLIB=...
+    #    give them by hand, for any other layout.
+    GET_FILENAME_COMPONENT(_ipo_bindir "${CMAKE_Fortran_COMPILER}" REALPATH)
+    GET_FILENAME_COMPONENT(_ipo_bindir "${_ipo_bindir}" DIRECTORY)
+    FIND_PROGRAM(IPO_AR     NAMES llvm-ar
+                 HINTS "${_ipo_bindir}/compiler" "${_ipo_bindir}/../bin-llvm" "${_ipo_bindir}")
+    FIND_PROGRAM(IPO_RANLIB NAMES llvm-ranlib
+                 HINTS "${_ipo_bindir}/compiler" "${_ipo_bindir}/../bin-llvm" "${_ipo_bindir}")
 
     IF(IPO_AR AND IPO_RANLIB)
+        # 2. The link line must carry -ipo too: IPO objects hold IR, not ELF, so the
+        #    real optimisation and code generation happen at link time.  Once: the
+        #    macro runs at every configure.
+        IF(NOT CMAKE_EXE_LINKER_FLAGS_RELEASE MATCHES "(^| )[-/]Q?ipo( |$)")
+            SET(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -ipo"
+                CACHE STRING "Set the CMAKE_EXE_LINKER_FLAGS_RELEASE flags" FORCE)
+        ENDIF()
         SET(CMAKE_AR     "${IPO_AR}"     CACHE FILEPATH "Archiver used for IPO objects" FORCE)
         SET(CMAKE_RANLIB "${IPO_RANLIB}" CACHE FILEPATH "Ranlib used for IPO objects"   FORCE)
         # CMakeFindBinUtils has already left plain variables of the same names in
@@ -67,13 +80,25 @@ IF(CMAKE_Fortran_FLAGS_RELEASE MATCHES "(^| )[-/]Q?ipo( |$)")
         MESSAGE(STATUS "IPO                : enabled (archiver ${IPO_AR})")
     ELSE()
         MESSAGE(WARNING "IPO was requested and -ipo compiles, but no llvm-ar/llvm-ranlib "
-                        "was found next to ${CMAKE_Fortran_COMPILER}. Disabling IPO: a "
-                        "static library of IPO objects cannot be indexed by GNU ar. "
-                        "Re-run with -DUSE_IPO=OFF to silence this.")
-        STRING(REGEX REPLACE "(^| )([-/]Q?ipo)( |$)" " " CMAKE_Fortran_FLAGS_RELEASE
-               "${CMAKE_Fortran_FLAGS_RELEASE}")
-        SET(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE}"
+                        "was found with ${CMAKE_Fortran_COMPILER} (in <bin>/compiler, "
+                        "<bin>/../bin-llvm or <bin>, <bin> its directory). Disabling IPO: "
+                        "a static library of IPO objects cannot be indexed by GNU ar. "
+                        "Give the tools with -DIPO_AR=... -DIPO_RANLIB=..., or re-run "
+                        "with -DUSE_IPO=OFF to silence this.")
+        # -ipo out of the compile and the link flags, every occurrence, in the cache only
+        SET(_ipo_flags "${CMAKE_Fortran_FLAGS_RELEASE}")
+        WHILE(_ipo_flags MATCHES "(^| )[-/]Q?ipo( |$)")
+            STRING(REGEX REPLACE "(^| )([-/]Q?ipo)( |$)" " " _ipo_flags "${_ipo_flags}")
+        ENDWHILE()
+        SET(CMAKE_Fortran_FLAGS_RELEASE "${_ipo_flags}"
             CACHE STRING "Set the CMAKE_Fortran_FLAGS_RELEASE flags" FORCE)
+        SET(_ipo_flags "${CMAKE_EXE_LINKER_FLAGS_RELEASE}")
+        WHILE(_ipo_flags MATCHES "(^| )[-/]Q?ipo( |$)")
+            STRING(REGEX REPLACE "(^| )([-/]Q?ipo)( |$)" " " _ipo_flags "${_ipo_flags}")
+        ENDWHILE()
+        SET(CMAKE_EXE_LINKER_FLAGS_RELEASE "${_ipo_flags}"
+            CACHE STRING "Set the CMAKE_EXE_LINKER_FLAGS_RELEASE flags" FORCE)
+        UNSET(_ipo_flags)
     ENDIF()
 ENDIF()
 ENDMACRO(SET_IPO_ARCHIVER)
@@ -100,7 +125,11 @@ ENDIF(CMAKE_Fortran_FLAGS_RELEASE AND CMAKE_Fortran_FLAGS_TESTING AND CMAKE_Fort
 ### GENERAL FLAGS ###
 #####################
 
-# Don't add underscores in symbols for C-compatability
+# Don't add underscores in symbols for C-compatability.
+# With gfortran the MPI sentinels in COMMON blocks (MPI_IN_PLACE, MPI_BOTTOM, MPI_STATUS_IGNORE,
+# MPI_STATUSES_IGNORE, MPI_ERRCODES_IGNORE, MPI_ARGV_NULL, MPI_ARGVS_NULL) are not recognised while this
+# flag is set: the MPI library exports the blocks with an underscore (mpipriv1_), MOSE refers to them
+# without one. Do not use them (src/lib/parallel/Mod_MPI.f90).
 SET_COMPILE_FLAG(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS}"
                  Fortran "-fno-underscoring")
 

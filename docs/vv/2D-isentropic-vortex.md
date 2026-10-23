@@ -64,12 +64,25 @@ $p = \log_2\!\big(e(N)/e(2N)\big)$.
 | $128^2$ | 0.17 % | 1.75 |
 
 The error decreases at close to second order (mean $p \approx 2$), confirming the
-MUSCL/RK3 scheme is second-order accurate on smooth flow. The slight drop on the
-finest pair is the Van Leer limiter mildly clipping the smooth vortex core.
+MUSCL/RK3 scheme is second-order accurate on smooth flow. The lower order of the
+finest pair does not come from the scheme. The runs do not cut their last time
+step at $t = 10$ and end slightly later ($t = 10.056$, $10.001$ and $10.007$ for
+the three grids of the table, measured with the code of commit `b29130b`),
+while `verify.py` measures the error against the
+exact vortex at $t = 10$. Against the exact vortex at the time each run ends, the
+errors are 2.51 %, 0.562 % and 0.128 % and the observed orders 2.16 and 2.13.
 
 <figure>
   {% include "vv/images/IsentropicVortex.svg" %}
 </figure>
+
+!!! note "Figure and code version"
+    The figure and the table come from July 2026 (commit `0b3b3c64`), and the code of 13 October 2026
+    (commit `b29130b`) gives them again. MOSE at commit `10b59003b72c` takes a time step about half as
+    large here (one additive rule over the directions, commit `667fc3c0`), and its runs end at
+    $t = 10.002$, $10.013$ and $10.007$: `verify.py` gives 2.49 %, 0.61 % and 0.17 % (observed orders
+    2.04 and 1.84), 2.4 % of the range of the axes from the figure at $N = 64$; at the time each run ends,
+    2.49 %, 0.562 % and 0.128 % (observed orders 2.15 and 2.13), within 0.5 % of those of `b29130b`.
 
 ## Limiter choice and observed order
 
@@ -78,25 +91,6 @@ The case fixes the **Van Leer** limiter on purpose. Only the *smooth* limiters
 aggressive **MC** and **Superbee** do not — which is expected limiter behaviour,
 **not** a loss of accuracy of the base scheme.
 
-Two effects are at play:
-
-- **Godunov barrier.** The vortex core is a *smooth
-  extremum*, where the upwind/downwind slopes have opposite signs
-  ($r = \Delta_\text{up}/\Delta_\text{down} < 0$). Every TVD limiter returns
-  $\phi = 0$ there, so all of them locally drop to first order at the core. This
-  is fundamental to TVD reconstruction and unavoidable.
-- **Behaviour in the smooth, monotone regions.**
-    - *Van Leer* $\phi=\dfrac{r+|r|}{1+|r|}$ and *Van Albada*
-      $\phi=\dfrac{r^2+r}{1+r^2}$ are **smooth ($C^1$ at $r=1$)** and
-      non-compressive: away from the tiny core the reconstruction is cleanly
-      second order, so the global $L_2$ error converges at $\approx 2$.
-    - *MC* $\phi=\max\!\big(0,\min(2r,\tfrac{1+r}{2},2)\big)$ is
-      **piecewise-linear (kinked)** and steeper, so it clips the smooth extremum
-      harder — the observed order dips (a marginal, coarse-grid effect that
-      recovers toward 2 as the core is better resolved).
-    - *Superbee* $\phi=\max\!\big(0,\min(2r,1),\min(r,2)\big)$ sits on the
-      **maximally compressive edge** of the TVD region. It is anti-diffusive by
-      design and artificially steepens smooth gradients into staircases
-      ("terracing"), so its error barely converges — Superbee is a known poor
-      choice for smooth-accuracy tests (it targets keeping contact
-      discontinuities sharp, the opposite regime).
+At the vortex core, a smooth extremum, the slopes on the two sides have opposite signs and every TVD
+limiter returns $\phi = 0$: all of them drop locally to first order there. The limiter functions are in
+[Flux Limiters](../theory/numerics.md#flux-limiters).

@@ -57,7 +57,7 @@ def read_tec(path):
     names = re.findall(r'"([^"]+)"', header) or re.split(r'[\s,]+', header.strip())
     zone = lines[1]
     I, J, K = (int(re.search(rf'{c}=\s*(\d+)', zone).group(1)) for c in 'IJK')
-    vals = [float(v) for v in ' '.join(lines[2:]).split()]
+    vals = [float(v) for v in ' '.join(l for l in lines[2:] if not l.startswith('DATASETAUXDATA')).split()]
     n_node = I * J * K
     n_cell = max(I - 1, 1) * max(J - 1, 1) * max(K - 1, 1)
     out, pos = {}, 0
@@ -87,7 +87,7 @@ def verify_inert(cfg, wall, field, dims, wall_face, T_init):
     close('wall held at the prescribed temperature',
           float(np.mean(wall['Tw'])), Tw_ref, 1e-12, ' K')
     check('surface is losing heat to the gas, which is why it cannot melt',
-          np.all(wall['qw'] < 0.0), f'qw = {float(np.mean(wall["qw"])):.4g} W/m2')
+          np.all(wall['qw'] > 0.0), f'qw = {float(np.mean(wall["qw"])):.4g} W/m2 into the gas')
 
     shape = (max(K - 1, 1), max(J - 1, 1), max(I - 1, 1))
     T = field['T'].reshape(shape)
@@ -189,13 +189,12 @@ def main():
 
     wall, _ = read_tec('OUTPUT/wall.tec')
 
-    # The BC reports mdot and qw signed by the face orientation: the factor is
-    # +1 on a low face and -1 on a high one. Undo it, so every identity below is
-    # checked on the physical (unsigned) quantities.
-    orient = 1.0 if wall_face == 3 else -1.0
+    # The wall output writes mdot and qw into the gas on every face: mdot as it
+    # is (the mass leaves the solid), qw with its sign changed, since the
+    # identities below take the heat into the wall.
     Tw_s = wall['Tw']
-    qw_s = orient * wall['qw']
-    md_s = orient * wall['mdot']
+    qw_s = -wall['qw']
+    md_s = wall['mdot']
 
     # ---- 0. nothing went non-finite -------------------------------------
     finite = all(np.all(np.isfinite(v)) for v in field.values()) and \

@@ -25,6 +25,8 @@ module MOSE_Config_Types_m
     integer         :: iter_from_call
     real(R8)        :: time_from_call
     real(R8), allocatable :: residuotot(:)
+    real(R8)        :: res_reference = 0._R8   ! Density residual of the first iteration (grid level), the unit of res-threshold
+    logical         :: res_restored = .false.  ! res_reference read with the restart solution: its first iteration keeps it
     integer         :: nthreads         ! Number of threads for simulation
     integer         :: TODO             ! Decide solve and/or postprocess
     logical         :: HYDRA_time_accurate = .false.
@@ -37,6 +39,23 @@ module MOSE_Config_Types_m
   !! ------------------------------------------------------
   !! Input-Output -----------------------------------------
   !! ------------------------------------------------------
+  !> Counters stored with every solution (field data of the vtk files, data set auxiliary data of
+  !> the Tecplot files) and read back by a restart, so that the restarted run goes on as the uninterrupted one would: CFL ramp and
+  !> output cadence, output numbering, residual history and probe rows, multigrid level,
+  !> convergence test; and what a restart reads of the time of its solution, in every format.
+  type :: restart_counters_t
+    logical   :: found = .false.            ! The restart solution holds the counters
+    logical   :: time_found = .false.       ! The restart solution holds a time (vtk TIME, Tecplot SOLUTIONTIME)
+    logical   :: steady = .false.           ! The restart solution is a steady one: negative time (vtk TIME, Tecplot SOLUTIONTIME)
+    integer   :: cycle = 0                  ! Iteration count over all grid levels (CYCLE)
+    integer   :: iteration = 0              ! Iteration count of the grid level of the solution
+    integer   :: output_number = 0          ! Number of the last numbered solution
+    integer   :: grid_level = 1             ! Grid level being solved
+    real(R8)  :: last_output_time = 0._R8   ! Time of the last time-based solution
+    real(R8)  :: res_reference = 0._R8      ! Density residual of the first iteration of the grid level
+    logical   :: res_found = .false.        ! The solution holds it (vtk solutions written before it was stored do not)
+  end type restart_counters_t
+
   type :: io_t
     character(len=llen)  :: warning_message
     character(len=llen)  :: error_message
@@ -49,7 +68,9 @@ module MOSE_Config_Types_m
     character(len=llen)  :: sol_variables, wall_variables   ! Variables to be printed in solution and wall files
     integer              :: shell_diter  ! Shell update
     integer              :: ini_diter    ! input.ini update
+    character(len=llen)  :: ini_error    ! input.ini read again with an error: warn (the reading not taken) or stop
     integer              :: timer_diter  ! Wall-clock timing report (0 = off)
+    character(len=llen)  :: decomposition_map   ! Block-to-rank map in INPUT/ (none: MOSE assigns the blocks)
     ! Useful variables
     character(len=llen)  :: nameinit  ! Initial file name
     logical              :: write_thermo, write_transport, write_composition
@@ -61,6 +82,8 @@ module MOSE_Config_Types_m
     integer              :: Onwall
     integer              :: unitRES             ! Residuals file unit
     character(len=llen)  :: unitRES_format      ! Format for residual_history_file
+    integer              :: output_number = 0   ! Number of the last numbered solution (sol-overwrite = false)
+    type(restart_counters_t) :: restart         ! Counters read with a vtk restart solution
   end type io_t
 
   type :: io_probes_t
@@ -100,7 +123,8 @@ module MOSE_Config_Types_m
     integer             :: rampa_cfl_iter   ! Numero di iterazioni per rampa di cfl
     logical             :: time_accurate    ! Flag per integrazione time-accurate
     integer             :: n_RK
-    character(len=llen) :: integration_variables ! Integration variables (cons/prim)
+    character(len=llen) :: integration_variables ! Integration variables (cons/prim/prec), as input.ini gives them
+    character(len=llen) :: integration_name = '' ! Their name in the set-up summary
     ! Useful variables
     ! ...
   end type time_scheme_t
@@ -151,9 +175,13 @@ module MOSE_Config_Types_m
     character(len=llen) :: description
     ! USER-DEFINED INPUTS
     character(len=llen) :: space_reconstruction ! Space reconstruction method
-    character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction
+    character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction, as input.ini gives it
+    character(len=llen) :: limiter_name = ''    ! Name of the limiter in use in the set-up summary (blank: first order)
+    character(len=llen) :: diffusive_metric     ! Face metric of the viscous fluxes (stencil/inverse-mean/mean)
     ! Useful variables
-    ! ...
+    logical             :: inverse_metric = .false. ! diffusive_metric == inverse-mean
+    logical             :: stencil_metric = .true.  ! diffusive_metric == stencil
+    integer             :: metric_mode = 2          ! 0 mean, 1 inverse-mean, 2 stencil (MOSE_Lib_Stencil_Metrics)
   end type space_scheme_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -164,7 +192,8 @@ module MOSE_Config_Types_m
   type :: riemann_t
     character(len=llen) :: warning_message
     character(len=llen) :: error_message
-    character(len=llen) :: description
+    character(len=llen) :: description          ! The solver as input.ini gives it (riemann-solver)
+    character(len=llen) :: name = ''            ! Its name in the set-up summary
     ! USER-DEFINED INPUTS
     real(R8) :: Mco
     ! Useful variables
@@ -284,12 +313,15 @@ module MOSE_Config_Types_m
     real(R8) :: Prt    ! Prandtl turbolento
     character(len=llen) :: model
     logical :: SAcomp, SpalartShur, SAR
-    logical :: QCR2000, blowing_corr, k_energy_coupling
-    logical :: point_implicit  ! Point-implicit (Patankar) treatment of turbulence destruction source terms
+    logical :: QCR2000, blowing_corr
+    logical :: k_energy_coupling = .false. ! k in the total energy (k-energy-coupling, two-equation models)
+    logical :: point_implicit  ! Point-implicit factor on the increment of the turbulence equations (steady runs)
     character(len=llen) :: omega_wall_bc  ! omega wall condition: 'practical' or 'asymptotic'
+    character(len=llen) :: sst_production ! SST production: 'incompressible' or 'compressible'
     ! Useful variables
     logical :: RSM, SD
     real(R8) :: omega_wall_coef  ! coefficient C in omega_wall = C*mi_l/dist**2 (set by Setup_RANS_Model)
+    logical :: sst_compressible  ! SST production with the dilatation terms (set by Setup_RANS_Model)
   end type rans_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -313,6 +345,7 @@ module MOSE_Config_Types_m
     !> Each stationary_face_str(k) = 'block_index face_direction', parsed in setup.
     ! Useful variables
     logical               :: enabled
+    character(len=llen)   :: model_setup = ''   !> The model read at set-up: input.ini read again may not change it
     integer :: n_stationary = 0
     character(len=32), allocatable :: stationary_face_str(:)
     !> Stationary wall patches in the lab frame, stored as (2, N) pairs:

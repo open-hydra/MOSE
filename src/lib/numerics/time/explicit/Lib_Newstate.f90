@@ -1,9 +1,13 @@
 module MOSE_Lib_Newstate
-  use iso_fortran_env, only: I4 => int32, R8 => real64
+  use iso_fortran_env, only: I4 => int32, I8 => int64, R8 => real64
+  use MOSE_Finite_m,   only: Not_Finite
 
   implicit none
   private
-  public :: Newstate_Conservative, Newstate_Primitive
+  public :: Newstate_Conservative, Newstate_Primitive, Count_Negative_Turbulence, Report_Negative_Turbulence
+
+  !> Cell updates of this process in which a stage made nu~, k or omega negative, before the realizability floor
+  integer(I8) :: n_negative_turbulence = 0
 
 contains
 
@@ -458,12 +462,14 @@ contains
     integer, intent(in) :: b, i, j, k
     integer :: s
 
-    ! Bail out on NaN or negative pressure (product trick is expensive; use
-    ! any(isnan()) + separate pressure check instead)
-    if ( any( isnan(prim(1:nprim)) ) .or. prim(np) < 0d0 ) then
+    ! Bail out on a value that is not finite (NaN or infinity) or on a negative pressure. STOP 1, not
+    ! mpi_abort_all: this runs inside OpenMP threads and MPI is initialised FUNNELED; the non-zero exit code makes
+    ! the launcher end the other ranks.
+    if ( any( Not_Finite(prim(1:nprim)) ) .or. prim(np) < 0d0 ) then
       write(*,'(A,4I4)') "Integration failed at b, i, j, k:", b, i, j, k
       write(*,*) prim(1:nprim)
-      stop "NaN or p<0 detected"
+      write(*,'(A)') "NaN, infinity or p<0 detected"
+      stop 1
     endif
 
     ! Floor species densities
@@ -471,8 +477,11 @@ contains
       if ( prim(s) < 1d-20 ) prim(s) = 1d-20
     enddo
 
-    ! Realizability for turbulence
-    if (model==2) call RANS_Enforce_Realizability( prim(nt:) )
+    ! Realizability for turbulence, after counting a stage that made nu~, k or omega negative
+    if (model==2) then
+      call Count_Negative_Turbulence( prim )
+      call RANS_Enforce_Realizability( prim(nt:) )
+    endif
 
     ! Floor soot variables
     if (nsoot == 2) then
@@ -483,6 +492,42 @@ contains
     endif
 
   end subroutine Check_And_Fix_State
+
+
+  !> Counts one cell update whose stage made nu~, k or omega negative, before the realizability floor (one- and
+  !> two-equation models, whose variables are all positive; thread-safe: atomic only when it happens). Check_And_Fix_State
+  !> calls it; an integrator with its own update of the cells calls it in the same way, on the updated primitive
+  !> vector and before RANS_Enforce_Realizability, so that Report_Negative_Turbulence counts its stages too.
+  subroutine Count_Negative_Turbulence ( prim )
+    use MOSE_Global_m, only: model, nt, nprim, nrans
+    implicit none
+    real(R8), intent(in) :: prim(:)
+
+    if ( model /= 2 .or. nrans > 2 ) return
+    if ( any( prim(nt:nprim) < 0d0 ) ) then
+      !$omp atomic
+      n_negative_turbulence = n_negative_turbulence + 1
+    end if
+
+  end subroutine Count_Negative_Turbulence
+
+
+  !> One line at the end of a RANS run in which a stage made nu~, k or omega negative, so that the realizability floor
+  !> changed the solution: how many cell updates had such a stage, over the ranks. A run in which none did prints no
+  !> line. Collective: every rank of a run with a one- or two-equation model calls it and the reduction (model and nrans
+  !> are the same on every rank), so that no rank takes another MPI path; rank 0 writes the line when the total is not zero.
+  subroutine Report_Negative_Turbulence ()
+    use MOSE_Global_m, only: model, nrans
+    use MOSE_Mod_MPI,  only: mpi_is_root, mpi_allreduce_sum_r8
+    implicit none
+    real(R8) :: total
+
+    if ( model /= 2 .or. nrans > 2 ) return
+    call mpi_allreduce_sum_r8 ( real(n_negative_turbulence, R8), total )
+    if ( mpi_is_root .and. total > 0d0 ) &
+      write(*,'(A,I0)') ' Turbulence variables below zero after a stage (set to the floor): ', nint(total, I8)
+
+  end subroutine Report_Negative_Turbulence
 
 
 end module MOSE_Lib_Newstate

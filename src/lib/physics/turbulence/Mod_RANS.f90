@@ -45,17 +45,32 @@ contains
     end if
 
     ! Omega wall condition (k-omega models): omega_wall = C * mi_l / dist**2.
-    ! 'practical'  -> C = 60/beta_1 = 800 : Menter's robust form, meant for meshes
-    !                 that do not resolve the viscous sublayer.
-    ! 'asymptotic' -> C =  6/beta_1 =  80 : exact y->0 limit of the omega equation,
-    !                 the consistent choice on a wall-resolved (y+ < 1) mesh.
+    ! 'practical'  -> C = 60/beta_1 = 800 : Menter's robust form, as the NASA TMR gives it on the SST
+    !                 page (with the beta_1 of SST) and as its Wilcox 2006 page refers to it, for both
+    !                 models; meant for meshes that do not resolve the viscous sublayer.
+    ! 'asymptotic' -> C = 6/beta : exact y->0 limit of the omega equation of the model, beta_1 for SST
+    !                 (80) and beta_0 for Wilcox 2006 (84.7, set with the model below); the consistent
+    !                 choice on a wall-resolved (y+ < 1) mesh.
     select case ( trim(obj_rans%omega_wall_bc) )
     case ( 'practical' )
       obj_rans%omega_wall_coef = 8d2
     case ( 'asymptotic' )
-      obj_rans%omega_wall_coef = 8d1
+      obj_rans%omega_wall_coef = SST_omega_wall_asymptotic
     case default
       error stop ( 'Error: omega-wall-bc must be "practical" or "asymptotic".' )
+    end select
+
+    ! SST production term.
+    ! 'incompressible' -> P = mu_t*S^2 (SST-2003).
+    ! 'compressible'   -> P = tau_ij*du_i/dx_j with tau_ij = mu_t*(2 S_ij - 2/3 divU delta_ij)
+    !                     - 2/3 rho k delta_ij: the dilatation terms matter across shocks.
+    select case ( trim(obj_rans%sst_production) )
+    case ( 'incompressible' )
+      obj_rans%sst_compressible = .false.
+    case ( 'compressible' )
+      obj_rans%sst_compressible = .true.
+    case default
+      error stop ( 'Error: sst-production must be "incompressible" or "compressible".' )
     end select
 
     obj_rans%description = 'RANS model: '//trim(obj_rans%model)
@@ -78,6 +93,7 @@ contains
         Stress_Vector => Stress_Vector_Std
       end if
       RANS_Source_Terms => Spalart_Source_Terms
+      RANS_Stiffness_Bound => Spalart_Stiffness_Bound
       RANS_Set_Wall_Values => Spalart_Set_Wall_Values
       RANS_Set_Blowing_Wall => Spalart_Set_Blowing_Wall
       RANS_Extrapolate_Wall => Spalart_Extrapolate_Wall
@@ -93,7 +109,9 @@ contains
         Stress_Vector => Stress_Vector_Std
       end if
       RANS_Source_Terms => Wilcox2006_Source_Terms
+      RANS_Stiffness_Bound => Wilcox2006_Stiffness_Bound
       RANS_Set_Wall_Values => Wilcox2006_Set_Wall_Values
+      if ( trim(obj_rans%omega_wall_bc) == 'asymptotic' ) obj_rans%omega_wall_coef = Wilcox2006_omega_wall_asymptotic
       if (obj_rans%blowing_corr) then
         RANS_Set_Blowing_Wall => SST_Blowing_Correction
       else
@@ -112,6 +130,7 @@ contains
         Stress_Vector => Stress_Vector_Std
       end if
       RANS_Source_Terms => SST_Source_Terms
+      RANS_Stiffness_Bound => SST_Stiffness_Bound
       RANS_Set_Wall_Values => SST_Set_Wall_Values
       if (obj_rans%blowing_corr) then
         RANS_Set_Blowing_Wall => SST_Blowing_Correction
@@ -132,6 +151,7 @@ contains
       end if
       Stress_Vector => Stress_Vector_RSM
       RANS_Source_Terms => SSGLRR_Source_Terms
+      RANS_Stiffness_Bound => SSGLRR_Stiffness_Bound
       RANS_Set_Wall_Values => SSGLRR_Set_Wall_Values
       RANS_Extrapolate_Wall => SSGLRR_Extrapolate_Wall
       RANS_Enforce_Realizability => SSGLRR_Enforce_Realizability

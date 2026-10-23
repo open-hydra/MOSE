@@ -50,6 +50,6 @@ The User Guide describes how to set up, configure, and run simulations with MOSE
 This section is intended for:
 
 - Users running MOSE simulations for the first time
-- Experienced users with few memory
+- Experienced users who need a reminder
 
 If you are new to MOSE, start from [Getting Started](../getting-started/index.md).

@@ -32,16 +32,19 @@ contains
     use MOSE_Lib_Newstate
     implicit none
 
+    ! integration-variables keeps the value of input.ini, which is read again during the run and checked against its rule;
+    ! the name of the set-up summary goes to integration_name
+    obj_time_scheme%integration_name = obj_time_scheme%integration_variables
     select case (obj_time_scheme%integration_variables)
     case ('prim')
       RK_Newstate => Newstate_Primitive
-      obj_time_scheme%integration_variables = 'Primitive'
+      obj_time_scheme%integration_name = 'Primitive'
     case ('cons')
       RK_Newstate => Newstate_Conservative
-      obj_time_scheme%integration_variables = 'Conservative'
+      obj_time_scheme%integration_name = 'Conservative'
     case ('prec')
       RK_Newstate => Newstate_Primitive
-      obj_time_scheme%integration_variables = 'Preconditioned'
+      obj_time_scheme%integration_name = 'Preconditioned'
     end select
 
   end subroutine Assign_Integration_Variables

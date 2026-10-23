@@ -12,10 +12,9 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 // NASA Turbulence Modeling Resource freestream for SST:
-//   k_inf = 9e-9 * a_inf^2 = 9e-9 * 27442.9 = 2.47e-4 m2/s2
-// (a_inf = 165.66 m/s). Gives nut_inf/nu_inf = 0.009.
-// See README: the MOSE input (kappa = 1e-7) is a near-zero level that would
-// leave the OpenFOAM SST boundary layer laminar.
+//   k_inf = 9e-9 * a_inf^2 = 9e-9 * 27442.9 = 2.4699e-4 m2/s2
+// (a_inf = 165.66 m/s). With omega_inf this gives nut_inf/nu_inf = 0.009.
+// MOSE input: kappa = rho_inf * k_inf = 5.040e-5 (density-weighted).
 
 dimensions      [0 2 -2 0 0 0 0];
 

@@ -62,7 +62,62 @@ jobs:
 
       - name: Run tests
         # Exclude cases that need heavy/optional dependencies disabled in this build
-        # (Cantera, SUNDIALS, MPI). See test/TESTING-PLAN.md for the tiering.
+        # (Cantera, SUNDIALS, MPI) and the full forms of the verification cases
+        # (label verification), which run on request. See test/TESTING-PLAN.md
+        # for the tiering.
         run: >
           ctest --test-dir build --output-on-failure --timeout 300
-          --label-exclude "needs-cantera|needs-sundials|needs-mpi"
+          --label-exclude "needs-cantera|needs-sundials|needs-mpi|verification"
+
+  test-mpi:
+    # gfortran with the MPI library of Ubuntu (Open MPI): the build with
+    # USE_MPI=ON and the needs-mpi tier, which the job above does not register.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran libopenmpi-dev openmpi-bin
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy matplotlib sympy \
+            "ExactPack @ git+https://github.com/lanl/ExactPack.git@1.7.11"
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=TESTING \
+            -DCMAKE_Fortran_COMPILER=gfortran \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DUSE_OPENMP=ON \
+            -DUSE_MPI=ON \
+            -DUSE_TECIO=OFF \
+            -DUSE_SUNDIALS=OFF \
+            -DUSE_CANTERA=OFF
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Run MPI tests
+        # Up to 4 ranks per test: let Open MPI run more ranks than the runner
+        # has cores (Open MPI 4 and Open MPI 5 read different variables).
+        env:
+          OMPI_MCA_rmaps_base_oversubscribe: "1"
+          PRTE_MCA_rmaps_default_mapping_policy: ":oversubscribe"
+        run: >
+          ctest --test-dir build --output-on-failure --timeout 900
+          --label-regex needs-mpi --no-tests=error

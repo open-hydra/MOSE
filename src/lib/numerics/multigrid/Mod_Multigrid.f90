@@ -33,6 +33,8 @@ contains
         simulation%domain(m) % Blk(b) % Dim(2) = Max ( 1, simulation%domain(m) % Blk(b) % Dim(2) ) ! 1D case
         simulation%domain(m) % Blk(b) % Dim(3) = Max ( 1, simulation%domain(m) % Blk(b) % Dim(3) ) ! 2D case
         call Allocate_Block ( simulation%domain(m) % Blk(b), simulation%domain(m) % Blk(b) % Dim )
+        ! exclude-blocks on every level: the step of each level applies the chemistry (Mod_Explicit)
+        simulation%domain(m) % Blk(b) % no_chem = simulation%domain(m-1) % Blk(b) % no_chem
       enddo
 
       call Coarse_Grid ( simulation%domain(m-1), simulation%domain(m) )

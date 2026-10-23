@@ -20,7 +20,7 @@ schemes, turbulence closures, and the thermochemistry framework.
 
     ---
 
-    Cell-centred finite volume method, MUSCL reconstruction, seven flux limiters, Jameson shock detection
+    Cell-centred finite volume method, MUSCL reconstruction, five flux limiters, Jameson shock detection
 
     [:octicons-arrow-right-24: Spatial discretization](numerics.md)
 
@@ -52,7 +52,7 @@ schemes, turbulence closures, and the thermochemistry framework.
 
     ---
 
-    Spalart–Allmaras (+ SA-RC, SAcomp, SAR), Menter SST k–ω, Wilcox 2006 k–ω
+    Spalart–Allmaras (SA, SA-R, SA-RC), Menter SST k–ω (SST, SST-RC), Wilcox 2006 k–ω
 
     [:octicons-arrow-right-24: Turbulence models](turbulence.md)
 

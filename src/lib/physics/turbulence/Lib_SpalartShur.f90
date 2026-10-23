@@ -1,35 +1,35 @@
-!>@brief: Module to evaluate correction terms (depending on DSij/Dt) in -RC turbulence corrections.
+!>@brief: Module to evaluate correction terms (depending on DSij/Dt) in -RC turbulence corrections:
+!> the factor 2 r*/(1 + r*) of f_r1 (r* = S/Omega) and the numerator of r~, 2 W_ik S_jk DS_ij/Dt, shared by
+!> SA-RC (Spalart & Shur 1997;
+!> Shur et al. 2000) and SST-RC (Smirnov & Menter 2009).  DS_ij/Dt is the steady convective part
+!> u.grad(S_ij); in a rotating frame the frame-rotation term (eps_imn S_jn + eps_jmn S_in) Omega_m
+!> of the published r~ is added to it (c + c^T in Compute_RC_Terms).
 module MOSE_Lib_SpalartShur
   use iso_fortran_env, only: I4 => int32, R8 => real64
   implicit none
 
 contains
-  
+
+  !> Velocity gradient of every cell, from the central differences of the velocity along the index directions and the
+  !> cell metric of the source terms, and in the first layer of ghost cells the gradient that the strain-rate gradient of
+  !> Compute_RC_Terms takes there: behind the faces between blocks and of rotational periodicity the gradient of the cell
+  !> across (Ghost_Velocity_Gradient), behind the other faces a copy of the cell.
   subroutine Compute_Velocity_Gradient ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Global_m
     use MOSE_Mod_MPI, only: is_local_block
 
     implicit none
-    type(MOSE_domain_type), intent(inout) :: domain
+    type(MOSE_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b, i, j, k, n
-    real(R8), dimension(3,3) :: vel_diff
+
+    call Cell_Velocity_Gradient ( domain )
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
-      !$omp do collapse(3)
-      do k = 1, domain % blk(b) % dim(3)
-      do j = 1, domain % blk(b) % dim(2)
-      do i = 1, domain % blk(b) % dim(1)
-        ! Cell-centered velocity gradient
-        vel_diff(:,1) = ( domain%blk(b)%P(nu:nw,i+1,j,k) - domain%blk(b)%P(nu:nw,i-1,j,k) )/2d0
-        vel_diff(:,2) = ( domain%blk(b)%P(nu:nw,i,j+1,k) - domain%blk(b)%P(nu:nw,i,j-1,k) )/2d0
-        vel_diff(:,3) = ( domain%blk(b)%P(nu:nw,i,j,k+1) - domain%blk(b)%P(nu:nw,i,j,k-1) )/2d0
-        domain%blk(b)%vel_gradient(i,j,k)%c = matmul ( vel_diff + 1d-40, domain%blk(b)%m(i,j,k)%c )
-      end do ; end do ; end do
 
-      ! Extrapolation in ghost cells -as second derivatives must be computed
+      ! Ghost cells, as second derivatives must be computed: a copy of the cell (replaced below behind the faces between
+      ! blocks and of rotational periodicity)
       ! i faces
       !$omp do collapse(2) private(n)
       do k = 1, domain % blk(b) % dim(3)
@@ -59,10 +59,111 @@ contains
 
     end do
 
+    call Ghost_Velocity_Gradient ( domain )
+
   end subroutine Compute_Velocity_Gradient
 
 
-  ! Computation of rstar and rtilde (missing denominator) for the Spalart-Shur correction.
+  !> Velocity gradient of every cell of the blocks of the rank, blk%vel_gradient(1:n1,1:n2,1:n3), from the central
+  !> differences of the velocity along the index directions and the cell metric of the source terms (Source_Metrics).
+  !> The ghost cells of the state must be filled; the ghost layers of the gradient are not touched, and no message is
+  !> sent. Compute_Velocity_Gradient adds them for the rotation-curvature correction; the reference velocity of the
+  !> preconditioner (Update_Derived_Variables) takes the cells alone.
+  subroutine Cell_Velocity_Gradient ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m
+    use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
+    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
+
+    implicit none
+    type(MOSE_domain_type), intent(inout), target :: domain
+    ! Local
+    integer :: b, i, j, k
+    real(R8), dimension(3,3) :: vel_diff
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:)   ! cell metric of the sources (Source_Metrics)
+
+    do b = 1, domain % nb
+      if (.not. is_local_block(b)) cycle
+      call Source_Metrics ( domain % blk(b), Mi )
+      !$omp do collapse(3) private(vel_diff)
+      do k = 1, domain % blk(b) % dim(3)
+      do j = 1, domain % blk(b) % dim(2)
+      do i = 1, domain % blk(b) % dim(1)
+        ! Cell-centered velocity gradient
+        vel_diff(:,1) = ( domain%blk(b)%P(nu:nw,i+1,j,k) - domain%blk(b)%P(nu:nw,i-1,j,k) )/2d0
+        vel_diff(:,2) = ( domain%blk(b)%P(nu:nw,i,j+1,k) - domain%blk(b)%P(nu:nw,i,j-1,k) )/2d0
+        vel_diff(:,3) = ( domain%blk(b)%P(nu:nw,i,j,k+1) - domain%blk(b)%P(nu:nw,i,j,k-1) )/2d0
+        domain%blk(b)%vel_gradient(i,j,k)%c = matmul ( vel_diff + 1d-40, Mi(i,j,k)%c )
+      end do ; end do ; end do
+    end do
+
+  end subroutine Cell_Velocity_Gradient
+
+
+  !> First layer of ghost cells of the velocity gradient behind the faces between blocks (101), of a periodic pair (201)
+  !> and of rotational periodicity (200): the gradient of the cell across, as Ghost_Connection and Ghost_Axysimmetry fill
+  !> the velocity, so that next to these faces the strain-rate gradient of Compute_RC_Terms is that of the undivided mesh.
+  !> The gradient is a tensor in Cartesian components: it is copied whatever the orientation of the two blocks, and from
+  !> another rank by exchange_velocity_gradient. Behind a 200 face it is that of the image cell turned about x as the
+  !> velocity is, R G R^T; with a zero sector angle (a planar mesh, a translated sector) the copy of the cell stays.
+  !> Cell_Source_Metrics puts each of these values at the position of its cell.
+  subroutine Ghost_Velocity_Gradient ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m, only: ndir
+    use MOSE_Parameters_m, only: guide
+    use MOSE_Lib_Metrics, only: delthe, cos_delthe, sin_delthe
+    use MOSE_Mod_MPI, only: is_local_block, mpi_size_
+    use MOSE_Mod_GhostExchange, only: exchange_velocity_gradient
+
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    ! Local
+    integer  :: ii, r, b, bs, f, g(3), s(3)
+    real(R8) :: Rot(3,3), cs, sn
+    logical  :: turned
+
+    turned = .not. ( delthe >= 0d0 .and. delthe <= 0d0 )   ! a wedge or a sector turned about x
+    cs = cos_delthe                                         ! computed once with delthe (Check_Mesh_Type)
+    sn = sin_delthe
+
+    !$omp do schedule (dynamic, 64) private(ii, r, b, bs, f, g, s, Rot)
+    do ii = 1, domain % n_local_bc
+      r = domain % local_bc_idx(ii)
+      b = domain % bc(r) % b
+      f = domain % bc(r) % f
+      g = [ domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k ] - guide(f,:)
+      select case ( domain % bc(r) % type )
+        case (101, 201)
+          bs = domain % bc(r) % bs
+          if ( .not. is_local_block(bs) ) cycle              ! from another rank, below
+          domain % blk(b) % vel_gradient(g(1),g(2),g(3)) % c = &
+            domain % blk(bs) % vel_gradient(domain % bc(r) % is, domain % bc(r) % js, domain % bc(r) % ks) % c
+        case (200)
+          if ( .not. turned ) cycle
+          ! the image of Ghost_Axysimmetry: the cell itself on a wedge, the cell next to the opposite k face of a sector,
+          ! turned about x by -guide(f,3) delthe (v' = cos v + guide(f,3) sin w, w' = -guide(f,3) sin v + cos w)
+          s = [ domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k ]
+          if ( ndir == 3 ) s(3) = domain % blk(b) % dim(3) - s(3) + 1
+          Rot = reshape ( [ 1d0, 0d0, 0d0,  0d0, cs, -guide(f,3)*sn,  0d0, guide(f,3)*sn, cs ], [3,3] )
+          domain % blk(b) % vel_gradient(g(1),g(2),g(3)) % c = &
+            matmul ( Rot, matmul ( domain % blk(b) % vel_gradient(s(1),s(2),s(3)) % c, transpose ( Rot ) ) )
+      end select
+    enddo
+    !$omp end do
+
+    ! Faces between ranks: the gradient of the source cell, by message (MPI_THREAD_FUNNELED: the primary thread)
+    if ( mpi_size_ > 1 ) then
+      !$omp master
+      call exchange_velocity_gradient ( domain )
+      !$omp end master
+      !$omp barrier
+    end if
+
+  end subroutine Ghost_Velocity_Gradient
+
+
+  ! Computation of 2 r*/(1 + r*) and rtilde (missing denominator) for the Spalart-Shur correction.
   ! fr1 (the overall correction term) is not computed here as the model constants and rtilde
   ! denominator definition are different between SA and SST.
   subroutine Compute_RC_Terms ( domain )
@@ -71,19 +172,23 @@ contains
     use MOSE_Lib_Fluid, only: Strain_Tensor, Vorticity_Vector, Vorticity_Tensor
     use MOSE_Lib_RotatingFrame, only: obj_rot
     use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
+    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
 
     implicit none
-    type(MOSE_domain_type), intent(inout) :: domain
+    type(MOSE_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b, i, j, k, ii, jj, kk
     real(R8), dimension(3,3,3) :: strain_gradient
-    real(R8), dimension(3,3) :: Sij, Wij, strain_transport
+    real(R8), dimension(3,3) :: Sij, Wij, strain_transport, c
     real(R8) :: omega(3), S, O, rtilde
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:), Ma(:,:,:)   ! Ma: the positions of the ghost velocity gradients
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
+      call Source_Metrics ( domain % blk(b), Mi, Ma=Ma )
       !$omp do collapse(3) private (i, j, k, ii, jj, kk, strain_gradient), &
-      !$omp private (Sij, Wij, strain_transport, omega, S, O, rtilde)
+      !$omp private (Sij, Wij, strain_transport, c, omega, S, O, rtilde)
       do k = 1, domain % blk(b) % dim(3)
       do j = 1, domain % blk(b) % dim(2)
       do i = 1, domain % blk(b) % dim(1)
@@ -99,7 +204,7 @@ contains
         ! Transformation component by component
         do ii = 1, 3
         do jj = 1, 3
-          strain_gradient(ii,jj,:) = matmul ( strain_gradient(ii,jj,:), domain%blk(b)%m(i,j,k)%c )
+          strain_gradient(ii,jj,:) = matmul ( strain_gradient(ii,jj,:), Ma(i,j,k)%c )
         enddo
         enddo
 
@@ -113,7 +218,16 @@ contains
         Wij = Vorticity_Tensor( omega )
         S = sqrt ( 2d0*sum (Sij**2) )
         O = sqrt ( sum(omega**2) )
-        domain%blk(b)%rc_term1(i,j,k) = S/O
+        ! The factor 2 r*/(1 + r*) of fr1, r* = S/O, as 2 S/(S + O): where the vorticity vanishes it takes its limit 2.
+        ! Where strain and vorticity are both below 1e-30 1/s, in a fluid at rest in a fixed frame or a uniform flow, r* is
+        ! not defined (the velocity gradient there is the 1d-40 added to the differences in Compute_Velocity_Gradient,
+        ! times the metric of the cell): the factor is 1, the value of simple shear, and rtilde is 0 below, so the
+        ! correction does not act and the production is that of the model without it
+        if ( S + O > 1d-30 ) then
+          domain%blk(b)%rc_term1(i,j,k) = 2d0*S/(S + O)
+        else
+          domain%blk(b)%rc_term1(i,j,k) = 1d0
+        end if
         ! Material derivative of strain rate tensor, neglecting the time term
         do ii = 1, 3
         do jj = 1, 3
@@ -121,6 +235,16 @@ contains
                                                   strain_gradient(ii,jj,:) )
         enddo
         enddo
+        ! In a rotating frame also (eps_imn S_jn + eps_jmn S_in) Omega_m (NASA TMR, SA-RC and SST-RC): with c(:,jj) the cross
+        ! product of Omega and row jj of S, the term (ii,jj) is c(ii,jj) + c(jj,ii)
+        if (obj_rot%enabled) then
+          do jj = 1, 3
+            c(1,jj) = obj_rot%Omega_vec(2)*Sij(jj,3) - obj_rot%Omega_vec(3)*Sij(jj,2)
+            c(2,jj) = obj_rot%Omega_vec(3)*Sij(jj,1) - obj_rot%Omega_vec(1)*Sij(jj,3)
+            c(3,jj) = obj_rot%Omega_vec(1)*Sij(jj,2) - obj_rot%Omega_vec(2)*Sij(jj,1)
+          enddo
+          strain_transport = strain_transport + c + transpose(c)
+        end if
         rtilde = 0d0
         do ii = 1, 3
         do jj = 1, 3
@@ -130,7 +254,10 @@ contains
         enddo
         enddo
         ! Note ! Denominator is missing as its different between models
-        domain%blk(b)%rc_term2(i,j,k) = 2d0*rtilde 
+        ! Below the threshold of the factor, rtilde is a ratio of the 1d-40 of the velocity gradient, not zero where the
+        ! metric of the cells changes along the flow: it is 0 there, as in simple shear
+        if ( S + O <= 1d-30 ) rtilde = 0d0
+        domain%blk(b)%rc_term2(i,j,k) = 2d0*rtilde
         ! Note !
       enddo
       enddo

@@ -1,4 +1,38 @@
-!> @brief Module for Kappa-Omega SST (2003) model. see https://turbmodels.larc.nasa.gov/sst.html.
+!> @brief Menter k-omega SST model in its SST-2003 form (Menter, Kuntz & Langtry 2003), as specified
+!> by the NASA Turbulence Modeling Resource (TMR): https://tmbwg.github.io/turbmodels/sst.html
+!> (formerly https://turbmodels.larc.nasa.gov/sst.html).
+!>
+!> Production term, by option. TMR naming; MOSE keeps -2/3 rho k delta_ij out of the stress
+!> tensor of the momentum and energy equations (Stress_Vector_Std), hence the m/e suffixes:
+!>   sst-production = incompressible (default)  P = mu_t S^2, S^2 = 2 S_ij S_ij   -> SST-2003m
+!>   sst-production = compressible              P = tau_ij du_i/dx_j (exact)     -> SST-2003e
+!>     with the dilatation terms arranged as in OpenFOAM's kOmegaSST (OpenFOAM-10,
+!>     kOmegaSSTBase.C): the limiter acts on the deviatoric part mu_t (S^2 - 2/3 divU^2), and
+!>     -2/3 rho k divU (k equation) and -2/3 gamma rho omega divU (omega equation) are added
+!>     outside it.
+!> In both forms P is limited to 10 beta* rho omega k and the omega production is
+!> (gamma rho / mu_t) times the limited P (SST-2003 with the TMR correction of the paper's typo).
+!> k-energy-coupling = .true. puts k in the total energy (the full compressible RANS form of the
+!> TMR "Implementing Turbulence Models into the Compressible RANS Equations" page): -2/3 rho k
+!> delta_ij enters the stress of the momentum and energy equations (Stress_Vector_2eq) and the
+!> k-equation source is removed from the mean-flow energy. TMR names then drop the m/e suffix:
+!> SST-2003s (incompressible production) and SST-2003 (compressible production).
+!> turbulence = SST-RC multiplies P by the Spalart-Shur rotation/curvature function fr1 of
+!> Smirnov & Menter (2009), TMR SST-RC (here on SST-2003: SST-2003RC).
+!>
+!> References
+!>   Menter, F. R., "Two-Equation Eddy-Viscosity Turbulence Models for Engineering Applications",
+!>     AIAA J. 32(8), 1994, pp. 1598-1605, doi:10.2514/3.12149 (SST).
+!>   Menter, F. R., Kuntz, M., Langtry, R., "Ten Years of Industrial Experience with the SST
+!>     Turbulence Model", Turbulence, Heat and Mass Transfer 4, Begell House, 2003, pp. 625-632
+!>     (SST-2003).
+!>   Smirnov, P. E., Menter, F. R., "Sensitization of the SST Turbulence Model to Rotation and
+!>     Curvature by Applying the Spalart-Shur Correction Term", J. Turbomach. 131(4), 2009,
+!>     041010, doi:10.1115/1.3070573 (SST-RC).
+!>   NASA TMR, "Implementing Turbulence Models into the Compressible RANS Equations",
+!>     https://tmbwg.github.io/turbmodels/implementrans.html (k-energy-coupling).
+!>   Wilcox, D. C., Turbulence Modeling for CFD, 3rd ed., DCW Industries, 2006, ch. 5
+!>     (compressible two-equation models, k in the total energy).
 module MOSE_Lib_SST
   use iso_fortran_env, only: I4 => int32, R8 => real64
 
@@ -20,22 +54,32 @@ module MOSE_Lib_SST
   cr2 = 2.d0, &
   cr3 = 1.d0
 
+  !> C of the asymptotic omega wall condition, omega_wall = C nu/d**2: the limit 6/beta_1 of the omega equation as y -> 0,
+  !> where the blending of the model is 1 (NASA Turbulence Modeling Resource, SST page)
+  real(R8), parameter, public :: SST_omega_wall_asymptotic = 6d0/beta_1
+
 contains
 
   subroutine SST_Source_Terms ( domain )
     use MOSE_Advanced_Types_m
-    use MOSE_Config_Types_m, only: obj_rans
+    use MOSE_Config_Types_m, only: obj_rans, obj_time_scheme
     use MOSE_Lib_SpalartShur, only : Compute_Velocity_Gradient, Compute_RC_Terms
     use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Base_Types_m, only: MOSE_tensor_3D_type
+    use MOSE_Lib_Stencil_Metrics, only: Source_Metrics
 
     implicit none
-    type(MOSE_domain_type), intent(inout) :: domain
+    type(MOSE_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b
-    logical :: SpalartShur, k_energy_coupling
+    type(MOSE_tensor_3D_type), pointer :: Mi(:,:,:), Mt(:,:,:)   ! cell metrics of the sources (Source_Metrics)
+    logical :: SpalartShur, k_energy_coupling, point_implicit
       
     SpalartShur       = obj_rans%SpalartShur
     k_energy_coupling = obj_rans%k_energy_coupling
+    ! The point-implicit factor serves steady runs only: in time-accurate runs the sources are explicit and their
+    ! stiffness enters the time step (Compute_dt)
+    point_implicit = obj_rans%point_implicit .and. .not. obj_time_scheme%time_accurate
 
     if ( SpalartShur ) then
       call Compute_Velocity_Gradient ( domain )
@@ -45,9 +89,10 @@ contains
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
+      call Source_Metrics ( domain % blk(b), Mi, Mt=Mt )
       call SST_Blk ( domain % blk(b) % P,            &
                      domain % blk(b) % r,            &
-                     domain % blk(b) % M,            &
+                     Mi, Mt,                        &
                      domain % blk(b) % vol,          &
                      domain % blk(b) % yn,           &
                      domain % blk(b) % vel_gradient, &
@@ -56,14 +101,15 @@ contains
                      domain % blk(b) % dtlocal,      &
                      domain % blk(b) % dim,          &
                      SpalartShur, k_energy_coupling, &
-                     obj_rans%point_implicit )
+                     point_implicit, obj_rans%sst_compressible )
 
     end do
 
   end subroutine SST_Source_Terms
 
 
-  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, point_implicit )
+  subroutine SST_Blk ( Prim, Res, M, Mt, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, &
+                       point_implicit, compressible )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -71,23 +117,25 @@ contains
     use MOSE_Lib_RotatingFrame, only: obj_rot
     implicit none
     integer, intent(in) :: n(3)
-    logical, intent(in) :: SpalartShur, k_energy_coupling, point_implicit
+    logical, intent(in) :: SpalartShur, k_energy_coupling, point_implicit, compressible
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: WDist
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
+    type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variables
     type(MOSE_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
     ! Local
     integer :: i, j, k, ii, jj
     real(R8) :: rho, Rgas, mil, kap, ome, dist, Gradvel(3,3), Divel, Sij(3,3), S, Wij(3,3), diag, mi_t, F(2)
-    real(R8) :: vort(3), O, rstar, D, rtilde, frot, fr1
+    real(R8) :: vort(3), O, D, rtilde, frot, fr1
     real(R8) :: Tij(3,3), Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2), fk, fw
 
     !$omp do collapse (3) private ( rho, Rgas, mil, kap, ome, dist, Gradvel, Divel, Sij, S, Wij, diag, mi_t, F ), &
-    !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj )
+    !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj ), &
+    !$omp private ( vort, O, D, rtilde, frot, fr1 )
     
     do k = 1, n(3)
     do j = 1, n(2)
@@ -118,7 +166,7 @@ contains
                     Prim(nt:nt+1,i,j-1,k) / sum( Prim(1:nsc,i,j-1,k) ) ) * 0.5d0
       Grad(:,3) = ( Prim(nt:nt+1,i,j,k+1) / sum( Prim(1:nsc,i,j,k+1) ) - &
                     Prim(nt:nt+1,i,j,k-1) / sum( Prim(1:nsc,i,j,k-1) ) ) * 0.5d0
-      Grad = Matmul ( Grad, M(i,j,k) % c )
+      Grad = Matmul ( Grad, Mt(i,j,k) % c )
 
       ! Blending of coefficients
       F = compute_F ( rho=rho, w=ome, k=kap, mil=mil, gradk=Grad(1,:), gradw=Grad(2,:), d=dist )
@@ -139,33 +187,33 @@ contains
       O = Sqrt ( 2d0 * sum ( Wij**2 ) )
       mi_t = rho*kap*alpha_1 / Max ( alpha_1*ome, S*F(2) )
 
-      ! Turbulent stress tensor
-      ! Tij = 2d0 * mi_t * Sij
-      ! diag = 2d0/3d0*mi_t*Divel + 2d0/3d0*rho*kap
-      ! Tij(1,1) = Tij(1,1) - diag
-      ! Tij(2,2) = Tij(2,2) - diag
-      ! Tij(3,3) = Tij(3,3) - diag
+      ! Production (see the module header for the variants and references)
+      Prod(1) = mi_t * S**2 ! SST-2003m (TMR), sst-production = incompressible
+      ! sst-production = compressible (SST-2003e, OpenFOAM kOmegaSST arrangement), deviatoric part:
+      ! mu_t*(S^2 - 2/3 divU^2) = 2 mu_t S_dev:S_dev >= 0
+      if ( compressible ) Prod(1) = Prod(1) - 2d0/3d0 * mi_t * Divel**2
 
-      ! Production term
-      ! Prod(1) = 0d0
-      ! do ii = 1, 3
-      ! do jj = 1, 3
-      !   Prod(1) = Prod(1) + Tij(ii,jj)*Gradvel(ii,jj)
-      ! end do
-      ! end do
-      Prod(1) = mi_t * S**2 ! SST-2003m
-
+      ! Rotation/curvature correction, Smirnov & Menter (2009), TMR SST-RC
       if ( SpalartShur ) then
-        rstar = rc1(i,j,k)
+        ! rc1 is 2 r*/(1 + r*) (Compute_RC_Terms); where the vorticity vanishes rc2 is zero, and so is rtilde
         D = sqrt( max ( S**2, 0.09d0*ome**2) )
-        rtilde = rc2(i,j,k) / ( O*D**3 )
-        frot = (1.d0 + cr1)*(2.d0*rstar/(1.d0 + rstar))*(1.d0 - cr3*atan(cr2*rtilde)) - cr1
+        rtilde = 0d0
+        if ( O > 0d0 ) rtilde = rc2(i,j,k) / ( O*D**3 )
+        frot = (1.d0 + cr1)*rc1(i,j,k)*(1.d0 - cr3*atan(cr2*rtilde)) - cr1
         fr1 = max ( min(frot, 1.25d0), 0d0 )
         Prod(1) = fr1*Prod(1)
       end if
 
-      Prod(1) = Min( Prod(1), 10d0*beta_star*rho*ome*kap ) ! k-eqn production limiter
+      ! SST-2003 production limiter (10 beta*, Menter et al. 2003); the omega production uses the
+      ! limited value, as corrected on the TMR page (the 2003 paper has the unlimited one)
+      Prod(1) = Min( Prod(1), 10d0*beta_star*rho*ome*kap )
       Prod(2) = ( gamma*rho / mi_t ) * Prod(1)
+
+      ! Compressible form, dilatation part (-2/3 rho k delta_ij in tau_ij), outside the limiter
+      if ( compressible ) then
+        Prod(1) = Prod(1) - 2d0/3d0 * rho * kap * Divel
+        Prod(2) = Prod(2) - 2d0/3d0 * gamma * rho * ome * Divel
+      end if
 
       ! Cross Diffusion term
       dkDotdw = Dot_Product ( Grad(1,:), Grad(2,:) )
@@ -179,16 +227,32 @@ contains
       Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
 
-      ! Point-implicit (Patankar) treatment of the destruction terms.
+      ! Point-implicit factors of steady runs. Each multiplies the whole increment of its row: the fluxes already in
+      ! Res (Internal_Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not depend
+      ! on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1;
+      ! T. H. Pulliam, AIAA Paper 93-3360, eq. 8)
+      ! With k in the total energy (k_energy_coupling) the energy row has the source -Source(1), whose derivative in rho k
+      ! is +beta* omega. The point-implicit system of the k and energy rows, D = [[1 + dt beta* omega, 0],
+      ! [-dt beta* omega, 1]], gives the energy row its own increment plus dt beta* omega times that of the k row: before
+      ! the factor, the energy row takes dt beta* omega fk = 1 - fk times the residual of the k row, and below the source
+      ! with the factor. The row of E_m + k then has the fluxes alone at every stage, and the steady state, where the
+      ! energy fluxes balance -Source(1) Volume, does not depend on the step. Written 1 - fk, the line shares no product
+      ! with the line of fk: written dt beta* omega fk, it made the compilers round fk otherwise (likely no longer fusing
+      ! the product with the + 1 in one multiply-add), and the runs without the coupling changed at round-off. 1 - fk
+      ! loses relative digits when dt beta* omega is small, where the term is below the round-off of the energy row.
+      ! Without the factor (fk = 1) the line does not run
       fk = 1d0 ; fw = 1d0
       if ( point_implicit ) then
         fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
         fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
+        if ( k_energy_coupling ) Res(np,i,j,k) = Res(np,i,j,k) + ( 1d0 - fk ) * Res(nt,i,j,k)
+        Res(nt,  i,j,k) = Res(nt,  i,j,k) * fk
+        Res(nt+1,i,j,k) = Res(nt+1,i,j,k) * fw
       end if
 
       Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
       Res(nt+1,i,j,k) = Res(nt+1,i,j,k) - Source(2) * Volume(i,j,k) * fw
-      if ( k_energy_coupling ) Res(np,i,j,k) = Res(np,i,j,k) + Source(1) * Volume(i,j,k)
+      if ( k_energy_coupling ) Res(np,i,j,k) = Res(np,i,j,k) + Source(1) * Volume(i,j,k) * fk
 
     enddo ; enddo ; enddo ! (i, j, k) loop
 
@@ -220,6 +284,22 @@ contains
     mi_t = rho*kap*alpha_1 / Max ( alpha_1*ome, S*F2 )
 
   end subroutine SST_Eddy_Viscosity
+
+
+  !> Bound of the stiffness of the destruction terms, beta* rho k omega and beta rho omega^2: their derivatives with
+  !> respect to k and omega are beta* omega and 2 beta omega, and beta = F1 beta_1 + (1 - F1) beta_2 <=
+  !> max(beta_1, beta_2), so d <= max(beta*, 2 max(beta_1, beta_2)) omega: from the cell alone, without F1, which takes
+  !> gradients.
+  pure function SST_Stiffness_Bound ( rans_variables, rho, walldist, k_rough ) result ( stiff )
+    use MOSE_Global_m
+    implicit none
+    real(R8), intent(in), dimension(nRANS) :: rans_variables  ! : rho k, rho omega
+    real(R8), intent(in)                   :: rho, walldist, k_rough
+    real(R8)                               :: stiff
+
+    stiff = max ( beta_star, 2d0 * max ( beta_1, beta_2 ) ) * max ( rans_variables(2) / rho, 0d0 )
+
+  end function SST_Stiffness_Bound
 
 
   subroutine SST_RANS_Diffusive_Flux ( Flux, rkw, mi_l, Gradvel, Gradkw, rho, Area, Normal, Dist )
@@ -262,7 +342,7 @@ contains
 
     rkw(1) = 0d0 ! Solid surface condition on k
     ! Smooth-surface BC: omega_wall = C*mi_l/dist**2, with C set by omega-wall-bc
-    ! (800 = Menter practical, 80 = asymptotic y->0 limit). See Setup_RANS_Model.
+    ! (800 = Menter practical, 6/beta_1 = 80 = asymptotic y->0 limit). See Setup_RANS_Model.
     rkw(2) = obj_rans%omega_wall_coef * mi_l / ( dist**2 )
 
   end subroutine SST_Set_Wall_Values

@@ -22,6 +22,8 @@ contains
     
     call reg%add( section, 'ic-format', obj_io%ini_format, 'tecplot ascii', 'Initial condition (INPUT/ic.*) format', 'tecplot ascii, tecplot binary, vtk ascii, vtk raw', .false. )
     call reg%add( section, 'sol-format', obj_io%sol_format, 'tecplot ascii', 'Solution (OUTPUT/field.*) format', 'tecplot ascii, tecplot binary, vtk ascii, vtk raw', .false. )
+    call reg%add( section, 'decomposition-map', obj_io%decomposition_map, 'none', &
+                  'Block-to-rank map in INPUT/ (none: MOSE assigns the blocks)', '', .false. )
 
     call reg%add( section, 'sol-diter', obj_io%sol_diter, '1000000000', 'Solution output iter frequency', '> 0', .false. )
     call reg%add( section, 'sol-dtime', obj_io%sol_dtime, '1e30', 'Solution output time frequency', '> 0', .false. )
@@ -37,6 +39,9 @@ contains
     ! Shell options
     call reg%add( section, 'shell-diter', obj_io%shell_diter, '1', 'Shell update iter frequency', '> 0', .false. )
     call reg%add( section, 'ini-diter', obj_io%ini_diter, '10000', 'input.ini update iter frequency', '> 0', .false. )
+    call reg%add( section, 'ini-error', obj_io%ini_error, 'warn', &
+                  'input.ini read again with an error: warn and keep the values held before the reading, or stop '// &
+                  '(at set-up every error stops)', 'warn, stop', .false. )
 
     ! Wall-clock timing report
     call reg%add( section, 'timer-diter', obj_io%timer_diter, '0', 'Wall-clock timing report iter frequency (0 = off)', '>= 0', .false. )

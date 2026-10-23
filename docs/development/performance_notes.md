@@ -110,9 +110,11 @@ Combined with `ipow`, Fer14 goes 13185 → 9314 ms, **−29.4%**. `ctest` 14/14.
 grows 2475 → 3530 bytes; the binary shrinks 7.07 → 5.65 MB.
 
 **Correctness under parallelism** — 2 MPI ranks and 4 OpenMP threads both produce
-output bit-identical to serial, same as the non-IPO build. Worth stating because
-`ctest` has no MPI coverage at all: the `needs-mpi` label appears only in the
-header comment of `test/CMakeLists.txt` and is not attached to any test.
+output bit-identical to serial, same as the non-IPO build. Worth stating because,
+when this was measured, `ctest` had no MPI coverage at all. MPI builds
+register a `needs-mpi` tier that checks parallel runs: bit for bit against the
+serial run or the uninterrupted one, and which thread makes the MPI calls
+([Testing](testing.md#mpi-tier-contents)).
 
 **Numerics** — IPO changes results at round-off, growing from ~1e-14 relative at
 t = 10 µs to ~3e-9 at 250 µs on Fer14, three orders below the ODE solver's own
@@ -145,16 +147,30 @@ it cost 3.5% on premixed-flame.
 
 `USE_IPO` defaults to `ON` and **self-disables** rather than producing a broken
 build: the flag is probed with a link step, and if either the probe or the
-archiver lookup fails, the build falls back to a plain `RELEASE` with a warning.
+archiver lookup fails, the build falls back to a plain `RELEASE` with a warning:
+`-ipo` leaves the compile and the link flags, and every other `RELEASE` flag
+stays. The macro that does this changes the flags in the CMake cache only: a
+plain variable of the same name would hide the cache entry (policy `CMP0126`,
+`NEW` here), and the flags added after it would be lost: each one would rewrite
+the cache entry from the plain variable, so the targets would be compiled without
+`-ffast-math`, and without `-fomit-frame-pointer` until a second configure, which
+is what an earlier version did with oneAPI 2023. Every configure gives the same
+flags: `-ipo` enters the link flags once. A build directory configured with an
+earlier version keeps what it cached then, as `-ipo` twice in the link flags:
+configure a new one.
 
-Three things were needed to make `-ipo` work at all, all now handled in
+Three things were needed to make `-ipo` work at all, all handled in
 `cmake/SetFortranFlags.cmake`:
 
 - **The flag must be on the link line too.** IPO objects hold IR, not ELF; code
   generation happens at link time.
 - **An IPO-aware archiver.** GNU `ar`/`ranlib` cannot index IR objects
   (*"archive has no index"*), and `xiar` merely forwards to `ar`. oneAPI ships
-  `llvm-ar`/`llvm-ranlib` beside the compiler. Note that setting only the *cache*
+  `llvm-ar`/`llvm-ranlib` with the compiler: in `<bin>/compiler` from oneAPI
+  2024 on, in `<bin>/../bin-llvm` (`linux/bin-llvm`) up to oneAPI 2023, `<bin>`
+  being the directory of `ifx` with its symbolic links resolved; both are
+  searched, and `-DIPO_AR=... -DIPO_RANLIB=...` give the tools of any other
+  layout. Note that setting only the *cache*
   variables `CMAKE_AR`/`CMAKE_RANLIB` is not enough — `CMakeFindBinUtils` leaves
   plain variables of the same name in scope, and those shadow the cache when
   CMake expands the archive rules.
@@ -162,7 +178,7 @@ Three things were needed to make `-ipo` work at all, all now handled in
   flags through `TRY_COMPILE(... COMPILE_DEFINITIONS)`, i.e. compile-only, so
   `-ipo` compiled fine, failed to link, and was silently rejected. It had
   therefore **never** been enabled on any Intel compiler, despite being listed in
-  the release flags since the first commit. `SetCompileFlag.cmake` now takes a
+  the release flags since the first commit. `SetCompileFlag.cmake` takes a
   `LINK` keyword that also puts the flag on the test program's link line. It is
   opt-in per call site on purpose: `LINK_OPTIONS` is a list, so a multi-word flag
   like `-check bounds` would reach the linker as one quoted argument.
@@ -305,6 +321,94 @@ run-time stride test, not on the hot path). The temporaries were one level down,
 inside the callee. **When hunting for this defect class, attribute the calls to
 source lines** — compile with `-S -g` and read the `.loc` directives — rather
 than counting them per file.
+
+### 6. Boundary fluxes walk only the rank's own records
+
+Before this entry `BC_Fluxes` ran one worksharing loop for every (block, face) pair of the
+**whole** mesh, on every rank and at every Runge–Kutta stage, and skipped the
+records of blocks owned by other ranks one at a time inside the loop. Every rank
+therefore read every boundary record of the mesh — a large derived type — at
+every stage: work that does not shrink when ranks are added. On an axisymmetric
+wedge mesh the wedge faces are boundary records too, about two per cell, so that
+the scan grows with the whole mesh rather than with the share of a rank.
+
+The loop walks per-(block, face) lists of the rank's own records, built once
+at set-up next to `local_bc_idx` (`build_local_bc_index`). The (block, face)
+granularity is kept on purpose:
+
+- the records of one face of one block write distinct target cells (the
+  periodic boundary also writes the partner cell on the opposite face, one per
+  record), so one worksharing loop over them is race-free; a single loop over
+  all local records would not be, because a corner cell takes the fluxes of two
+  or three faces into the same `R(:,i,j,k)`;
+- the implicit barrier between faces keeps the face contributions of every
+  cell summed in the order 1, 2, …, 6.
+
+With a `bc.txt` sorted by block and face (the documented format) the solution
+is therefore **bit-identical** to the old loop. With the records in any other
+order the solution is the one of the sorted file, and deterministic; the
+old loop summed the faces of a corner cell in file order and, with more than
+one thread, could even give a different solution from run to run (two threads
+updating the same corner cell). The wall output (`IO_Wall`) groups all the
+records by block and face before laying them out, so it does not depend on the
+order of the file either. `test/mpi/boundary-records` checks ranks × threads
+layouts and the reversed file with and without threads, the wall output and a
+Spalart–Allmaras run included.
+
+### 7. Viscous kernels compute each quantity once
+
+The viscous fluxes computed again, at every face that read them, quantities
+that do not change within a stage or at all. Four changes, each doing the same
+operations on the same values, once:
+
+- the metric of the faces of type `200` (the wedge faces of an axisymmetric
+  mesh and the faces that close a 3-D sector), three 3×3 inversions per face
+  and stage, is computed once at set-up (`Rotational_Periodic_Face_Metric`);
+- the cosine and sine of the periodicity angle, up to twenty calls per face of
+  type `200` and stage, are computed once when the mesh is read;
+- with `diffusive-metric = stencil` the stored metric of each viscous face is
+  read in place, not copied into a local 3×3 at every face and stage;
+- the viscous variables of each cell (mass fractions, velocity, temperature
+  and turbulence variables per unit mass) are computed once per stage
+  (`Viscous_Variables`, array `Visc`), not at every face that reads the cell:
+  up to 30 times per cell and stage in 3-D.
+
+Solver time per iteration (`Solver per iteration`, rule 5) on the axisymmetric
+nozzle of entry 6 (Navier–Stokes, RK3 time-accurate), ifx RELEASE
+(`-ipo -ffast-math`), OpenMP threads pinned to one socket of the node with its
+memory, the two builds interleaved on the same cores (rule 1): with
+Spalart–Allmaras and with SST the time per iteration is lower after the four
+changes, by more than the spread of the repetitions of each build. The other
+sockets of the node ran other jobs, the same for both builds. A control case, on
+inviscid flows that the four changes do not touch (PrandtlMeyer and the
+isentropic vortex), ran with the same builds and protocol and stayed within the
+spread of its runs: the gain comes from the viscous kernels the changes touch,
+not from a general effect of the build. A VTune hotspots profile of each build
+(rule 6: the breakdown within one binary) shows the work removed: in the build
+after, the viscous variables of the rotational faces, `viscous_face_metric` and
+`sincos` no longer appear, `inverse3` no longer runs per face, and
+`Viscous_Variables` appears, once per stage.
+
+Output (rules 2–4). Each of the four changes writes the same bits as its parent
+with gfortran (TESTING, the fast tier), and with ifx: the first one with the
+RELEASE flags already, the others built with `-fp-model=strict`, which is
+`-fp-model=precise` without contractions as rule 4 asks, and also enables
+`fenv_access` (the tests with viscous faces; the whole tier for the last
+change): the work is the same. With the ifx RELEASE flags (`-fp-model fast=2`)
+outputs of viscous tests differ at round-off, for the second, the third and the
+last change. For those, per variable, with the components of a vector against
+the scale of the vector:
+
+- fields: round-off of the scale;
+- wall output: round-off, except y+, in a patch test where the wall stress of
+  some faces is round-off and y+ takes its square root;
+- the binary `.vts` outputs, decoded: round-off;
+- the four largest outputs (the diagnostic files of the 64 × 64 cases of
+  parts 1 and 4 of `MMSResiduals`): round-off;
+- residuals (diagnostic files and residual histories): where a run has
+  converged or its gas is at rest they are round-off themselves, and differ by
+  up to their own size (the ω residual of `PointImplicitSteady`, a column of
+  the residual history of `AblatingWall`).
 
 ---
 

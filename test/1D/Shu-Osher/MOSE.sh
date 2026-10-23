@@ -62,8 +62,10 @@ if [[ $1 == solve ]]; then
   export KMP_STACKSIZE=100M
   export OMP_NUM_THREADS=$NTHREADS
   if [[ "$MASTER" -nt "$LOCAL" ]]; then cp $MASTER $LOCAL; fi
+  rm -f OUTPUT/field.tec            # no field of an earlier run left behind
   if [[ $BG == 0 ]]; then
     $LOCAL
+    [[ -f OUTPUT/field.tec ]] || { echo "MOSE.sh: the run wrote no OUTPUT/field.tec"; exit 1; }
   else
     $LOCAL 2>errors_file >logfile &
     echo $! > .ID
@@ -83,13 +85,15 @@ if [[ $1 == test ]]; then
   export KMP_STACKSIZE=100M
   export OMP_NUM_THREADS=$NTHREADS
   if [[ "$MASTER" -nt "$LOCAL" ]]; then cp $MASTER $LOCAL; fi
+  # No field of an earlier run left behind; a run that writes none stops the script (mv)
+  rm -f OUTPUT/field.tec OUTPUT/field_x*.tec
   for r in 1 2 4; do
     cd INPUT
     ln -sf ic_x$r.tec ic.tec
     ln -sf bc_x$r.txt bc.txt
     cd ..
     $LOCAL
-    mv OUTPUT/field.tec OUTPUT/field_x$r.tec
+    mv OUTPUT/field.tec OUTPUT/field_x$r.tec || exit 1
   done
 fi
 

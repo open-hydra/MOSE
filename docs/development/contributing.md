@@ -60,7 +60,7 @@ cd MOSE
 
 | Rule | Detail |
 |------|--------|
-| **Standard** | Fortran 2008 (`-std=f2008`) |
+| **Standard** | Fortran 2008 (the build does not enforce it: it sets no `-std` flag) |
 | **Line length** | Hard limit of **132 characters**; use `&` continuation |
 | **Indentation** | 2 spaces; no tabs |
 | **Module naming** | `MOSE_<Name>` for public modules |
@@ -99,8 +99,8 @@ Riemann solver:
 flowchart TD
     A["1. Create<br/>Lib_Riemann_New.f90<br/>in numerics/fluxes/"] --> B["2. Implement<br/>riemann_New(...)"]
     B --> C["3. Register in<br/>Mod_Riemann.f90"]
-    C --> D["4. Add case to<br/>Assign_Setup.f90"]
-    D --> E["5. Add test case<br/>in test/basic/Riemann/"]
+    C --> D["4. Add the name to<br/>Register_Numerics.f90"]
+    D --> E["5. Add test case<br/>in test/fast/riemann-smoke/"]
     E --> F["6. Document in<br/>docs/theory/riemann-solvers.md"]
 
     style A fill:#1a237e,stroke:#7986cb,color:#e8eaf6
@@ -111,10 +111,12 @@ flowchart TD
    subroutine matching the `Riemann` procedure-pointer interface.
 2. Implement the solver; the interface receives left/right primitive
    states, the face normal, and returns the numerical flux.
-3. In `Mod_Riemann.f90`, add the new solver name to the selection
-   logic.
-4. In `config/Assign_Setup.f90`, bind the procedure pointer
-   `Riemann => riemann_New` for the new keyword.
+3. In `Mod_Riemann.f90`, `Assign_Riemann_Solver`, use the new module
+   and add a `case` for the new name that binds the procedure pointer
+   `Riemann => riemann_New`.
+4. In `config/Register_Numerics.f90`, add the new name to the values
+   that the rule of `riemann-solver` accepts: MOSE stops at set-up on
+   a value that the rule does not list.
 5. Add a test case that exercises the solver on a known Riemann
    problem.
 6. Document the solver's theory and properties.
@@ -178,10 +180,10 @@ graph TB
 
 Before submitting a PR, please verify:
 
-- [ ] Code compiles with `-std=f2008 -Wall -Wextra` without warnings
+- [ ] Code compiles without new warnings in the DEBUG build (`-DCMAKE_BUILD_TYPE=DEBUG`, which adds `-Wall` and `-Wextra` with gfortran)
 - [ ] No line exceeds 132 characters
 - [ ] All new subroutines have `implicit none` and argument intents
-- [ ] Existing tests pass (`ctest` from the build directory; at minimum `ctest -L fast`)
+- [ ] Existing tests pass (`ctest -LE verification` from the build directory; at minimum `ctest -L fast`)
 - [ ] New functionality has at least one test case
 - [ ] Documentation updated if user-facing behaviour changed
 - [ ] Commit messages follow the convention above

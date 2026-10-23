@@ -9,22 +9,24 @@ module MOSE_Lib_BC_Fluxes_Inflow
   private
 
   public :: BC_Inlet_StagnCond, BC_Inlet_MassFlux_T0, BC_Inlet_MassFlux_T, BC_Inlet_Supersonic_Static, BC_Inlet_un_T
-  public :: Stagn_Inflow, setup_inflow_geometry
+  public :: Stagn_Inflow, setup_inflow_geometry, Compute_Inflow_Direction
 
 contains
 
   !─────────────────────────────────────────────────────────────────────────────
   ! BC 401/402: Subsonic inlet — stagnation total temperature T0 and total
   ! pressure p0.  Flow direction from BC_alpha/BC_beta (or face-normal if specified).
+  ! The gas enters when p0 is above the pressure that the gas of the cell reaches at rest
+  ! (Stagn_Inflow); otherwise error = 1 and the caller makes the face a slip wall.
   subroutine BC_Inlet_StagnCond ( Bm, Im, Jm, Km, Fm, Blk, BC_T0, BC_p0, &
-                                   BC_rel_fac, BC_alpha, BC_beta, BC_ci, BC_RANS, BC_mdot, error )
+                                   BC_alpha, BC_beta, BC_ci, BC_RANS, BC_mdot, error )
     use MOSE_Config_Types_m, only: obj_rot
     use MOSE_Lib_RotatingFrame, only: RF_Convert_BC_Inflow
     use FLINT_Lib_Thermodynamic
     implicit none
     type(MOSE_block_type), intent(inout) :: Blk
     integer,  intent(in)    :: Bm, Im, Jm, Km, Fm
-    real(R8), intent(in)    :: BC_T0, BC_p0, BC_rel_fac, BC_alpha, BC_beta
+    real(R8), intent(in)    :: BC_T0, BC_p0, BC_alpha, BC_beta
     real(R8), intent(in)    :: BC_ci(nsc), BC_RANS(1:)
     real(R8), intent(out)   :: BC_mdot
     integer,  intent(inout) :: error
@@ -35,6 +37,7 @@ contains
     real(R8) :: Un, Bound_rho, Bound_Rgas, Bound_Sound, Bound_Gamma, Riem
     real(R8) :: T0_loc, p0_loc, alpha_loc, beta_loc, Face_Rgas_loc, Mach_rel_dummy
     real(R8) :: Flux(nprim)
+    logical  :: enters
 
     error = 0
 
@@ -42,12 +45,6 @@ contains
                                   Int_i, Int_j, Int_k, Normal, Area, t_Vec, BC_Sign,   &
                                   Bound_Prim, Int_Prim, Un, Bound_rho, Bound_Rgas,    &
                                   Bound_Sound, Bound_Gamma, Riem )
-
-    ! Reject if flow is directed outward (pure inflow BC)
-    if (BC_Sign * Un >= 0d0) then
-      error = 1
-      return
-    end if
 
     call Compute_Inflow_Direction (Normal, BC_alpha, BC_beta, alpha, beta)
 
@@ -66,9 +63,15 @@ contains
     end if
 
     Flux = 0d0
-    call Stagn_Inflow ( Bound_Prim, Un, Bound_Sound, Bound_Gamma, Riem,      &
+    call Stagn_Inflow ( Bound_Prim, Bound_Sound, Bound_Gamma, Riem,          &
                                alpha_loc, beta_loc, BC_ci, BC_RANS, T0_loc, p0_loc, &
-                               BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux, BC_mdot )
+                               BC_Sign, t_Vec, Normal, Area, Flux, BC_mdot, enters )
+
+    ! The reservoir does not drive gas in: a pure inlet lets none out, the face is a slip wall
+    if ( .not. enters ) then
+      error = 1
+      return
+    end if
 
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
 
@@ -151,7 +154,7 @@ contains
     Face_Prim(1:nsc)  = Face_rho * BC_ci
     Face_Prim(nu:nw)  = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Prim(np)     = p3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
 
     call Compute_Flux_from_Face (Face_Prim, Face_rho, Face_Rgas, Area, Normal, Flux, fmass)
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
@@ -230,7 +233,7 @@ contains
     Face_Prim(1:nsc)  = Face_rho * BC_ci
     Face_Prim(nu:nw)  = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Prim(np)     = p3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
 
     call Compute_Flux_from_Face (Face_Prim, Face_rho, Face_Rgas, Area, Normal, Flux, fmass)
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
@@ -308,7 +311,7 @@ contains
     Face_Prim(1:nsc)  = Face_rho * BC_ci
     Face_Prim(nu:nw)  = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Prim(np)     = p3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
 
     call Compute_Flux_from_Face (Face_Prim, Face_rho, Face_Rgas, Area, Normal, Flux, fmass)
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
@@ -407,7 +410,7 @@ contains
     Sup_Prim(nu) = BC_Mach_local * Sup_Sound * cos(alpha_eff) * cos(beta_eff)
     Sup_Prim(nv) = BC_Mach_local * Sup_Sound * sin(alpha_eff) * cos(beta_eff)
     Sup_Prim(nw) = BC_Mach_local * Sup_Sound * sin(beta_eff)
-    if (model==2) Sup_Prim(nt:nprim) = Sup_rho * BC_RANS
+    if (model==2) Sup_Prim(nt:nprim) = BC_RANS * Sup_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
 
     ! building a 3 cell stencil to extrapolate the solution at the interface
 
@@ -465,21 +468,30 @@ contains
   ! Subsonic inflow: prescribed stagnation conditions (T0, p0).
   ! Solves the characteristic equations to find the face state compatible with
   ! the interior Riemann invariant and the prescribed total conditions.
-  subroutine Stagn_Inflow ( Prim, Un, Sound, Gamma, Riem, alpha, beta, &
-                                 BC_ci, BC_RANS, BC_T0, BC_p0, BC_rel_fac, BC_Sign, &
-                                 t_Vec, Normal, Area, Flux, Fmass )
+  ! The gas enters (enters = .true.) when p0 is above p_stop = p (Riem/a)**(2 gamma/(gamma-1)),
+  ! the pressure that the gas of the cell reaches when the outgoing wave brings it to rest:
+  ! with Riem > 0 that is YC < 0. With Riem <= 0 (the gas of the cell moving in at 2 a/(gamma-1)
+  ! or faster) no pressure brings it to rest, p_stop = 0, and a reservoir with p0 > 0 and T0 > 0
+  ! drives gas in. Otherwise Flux = 0 and the caller applies its own branch.
+  ! When the inflow root would make the face supersonic across (w + a3 <= 0), or when no inflow
+  ! root exists (Riem <= 0 with D Riem**2 > (g a0)**2), the face is choked.
+  subroutine Stagn_Inflow ( Prim, Sound, Gamma, Riem, alpha, beta, &
+                                 BC_ci, BC_RANS, BC_T0, BC_p0, BC_Sign, &
+                                 t_Vec, Normal, Area, Flux, Fmass, enters )
     use FLINT_Lib_Thermodynamic
     implicit none
-    real(R8), intent(in)  :: Prim(nprim), Un, Sound, Gamma, Riem, alpha, beta
-    real(R8), intent(in)  :: BC_ci(nsc), BC_RANS(1:), BC_T0, BC_p0, BC_rel_fac
+    real(R8), intent(in)  :: Prim(nprim), Sound, Gamma, Riem, alpha, beta
+    real(R8), intent(in)  :: BC_ci(nsc), BC_RANS(1:), BC_T0, BC_p0
     real(R8), intent(in)  :: BC_Sign, t_Vec(3), Normal(3), Area
     real(R8), intent(out) :: Flux(nprim), Fmass
+    logical,  intent(out) :: enters
     ! Local
-    integer  :: s, iter_discr
-    real(R8) :: Face_Rgas, Sound0, Coef_D, Coef_C, YA, YB, YC, Discr, Un_Sign, Un3, Sound3
-    real(R8) :: p3, Ut3, Ub3, BC_p0_try
+    integer  :: s
+    real(R8) :: Face_Rgas, Sound0, Coef_D, Coef_C, YA, YB, YC, Discr, Un3, Sound3
+    real(R8) :: p3, Ut3, Ub3
     real(R8) :: Face_T, Face_Sound, Face_Prim(nprim), Face_rho, Face_Enthalpy, Face_Un
     real(R8) :: XA, XB, XC, XD, XE, XF, check, E1, E2, b_Vec(3), b_Mod
+    logical  :: choked
 
     ! Vector product n x t (why?)
     b_Vec(1) = Normal(2)*t_Vec(3) - Normal(3)*t_Vec(2)
@@ -499,35 +511,53 @@ contains
     E1 = ( XF * XA - XC * XD ) / check ! ??
     E2 = ( XD * XB - XE * XA ) / check ! ??
 
-    discr = -1.d0
-    BC_p0_try = BC_p0
-    iter_discr = 0
-    do while (discr<0)
-      iter_discr = iter_discr + 1
-      ! Mach in BC input >0: Subsonic inflow with assigned total pressure and temperature (po To)
-      Face_Rgas = sum ( BC_ci * Ri_tab )
-      Sound0 = sqrt ( Gamma * Face_Rgas * BC_T0 )
-      Coef_D = ( 1d0 + E1**2 + E2**2 ) * ( Gamma - 1d0 )/2d0
-      Coef_C = ( BC_p0_try / Prim(np) )**( ( Gamma - 1d0 ) / Gamma )
-      Coef_C = Coef_C * ( ( Sound / Sound0 )**2 )
-      YA = ( ( Gamma - 1d0 ) / 2d0 )**2 + Coef_C * Coef_D
-      YB = BC_Sign * Riem * ( ( Gamma - 1d0 ) / 2d0 )
-      YC = Riem**2 - Coef_C * Sound0**2
-      Discr = YB**2 - YA * YC
-      if ( ( discr < 0d0 ) .and. ( abs(discr) < 1d-2 ) ) Discr = 0d0
-      if ( ( discr < 0d0 ) .and. ( abs(discr) > 1d-2) ) then
-       BC_p0_try = BC_rel_fac*BC_p0_try + (1-BC_rel_fac)*Prim(np)
-      end if
-      if ( iter_discr > 1000 ) then
-        Discr = 0d0
-        exit
-      end if
-    enddo
+    ! Does the reservoir drive gas in? With Riem > 0, when YC < 0 (p0 > p_stop); then the quadratic
+    ! below has the inflow root, since its discriminant is at least YB**2: p0 is used as given. With
+    ! Riem <= 0, p_stop = 0: when the reservoir has a pressure and a speed of sound, p0 > 0 and
+    ! a0 > 0 (with p0 <= 0 or T0 <= 0, which the reader takes, nothing enters, as with Riem > 0)
+    Face_Rgas = sum ( BC_ci * Ri_tab )
+    Sound0 = sqrt ( Gamma * Face_Rgas * BC_T0 )
+    Coef_C = ( BC_p0 / Prim(np) )**( ( Gamma - 1d0 ) / Gamma )
+    Coef_C = Coef_C * ( ( Sound / Sound0 )**2 )
+    YC = Riem**2 - Coef_C * Sound0**2
+    enters = ( Riem > 0d0 .and. YC < 0d0 ) .or. ( Riem <= 0d0 .and. BC_p0 > 0d0 .and. Sound0 > 0d0 )
+    Flux  = 0d0
+    Fmass = 0d0
+    if ( .not. enters ) return
 
-    Un_Sign = sign ( 1d0, Un )  ! Sign of normal velocity at the boundary interface
-    Un3 = ( YB + Un_Sign * sqrt( Discr ) ) / YA
-    Sound3 = sqrt ( Sound0**2 - Coef_D * Un3**2 )
-    p3 = BC_p0_try * ( Sound3 / Sound0 )**( 2d0 * Gamma / ( Gamma - 1d0 ) )
+    Coef_D = ( 1d0 + E1**2 + E2**2 ) * ( Gamma - 1d0 )/2d0
+    YA = ( ( Gamma - 1d0 ) / 2d0 )**2 + Coef_C * Coef_D
+    YB = BC_Sign * Riem * ( ( Gamma - 1d0 ) / 2d0 )
+    Discr = YB**2 - YA * YC
+
+    ! The quadratic joins the curve of the reservoir (total enthalpy, a3**2 = a0**2 - D w**2, and total
+    ! pressure) to that of the cell, Riem = sqrt(C) a3 + g w, with g = (gamma-1)/2 and sqrt(C) a3 the speed
+    ! of sound of the gas of the cell brought isentropically to p3. The relation of the cell holds whatever
+    ! the sign of Riem: the wave of the family w - a links the cell to the face state, and the invariant is
+    ! exact across a rarefaction (p3 < p) and the isentropic approximation across a shock (p3 > p), as for
+    ! Riem > 0. With Riem <= 0 the two curves meet only if D Riem**2 < (g a0)**2: otherwise the gas of the
+    ! cell, even expanded to vacuum, moves away at |Riem|/g, faster than the gas of the reservoir can follow
+    ! (a0/sqrt(D) at most), no inflow state exists, and the face is choked.
+    ! Where they meet, the smaller root of the quadratic in w = BC_Sign*Un3 is the inflow. The larger one is
+    ! a spurious outflow (w = 4 a0/(gamma+1) with the cell at rest at the reservoir state), and the sign of the
+    ! cell velocity cannot choose between them: at rest it would take the larger one on the faces 2, 4, 6.
+    ! The max only takes the rounding next to the vacuum limit, where a3 -> 0 and the root is choked. The test of the
+    ! vacuum, -Riem sqrt(D) > g a0, takes no product that the lines above take: with Riem > 0 they round as before
+    if ( Riem <= 0d0 .and. - Riem * sqrt ( Coef_D ) > ( Gamma - 1d0 ) / 2d0 * Sound0 ) then
+      choked = .true.
+    else
+      Un3 = ( YB - BC_Sign * sqrt( Discr ) ) / YA
+      Sound3 = sqrt ( max ( 0d0, Sound0**2 - Coef_D * Un3**2 ) )
+      ! Choked face. With w + a3 <= 0 the outgoing characteristic no longer reaches the face: every one
+      ! enters, the face state depends on the reservoir alone, and the one that joins the subsonic state
+      ! on w + a3 = 0 has normal Mach 1: from the total enthalpy, a3**2 = a0**2 - D a3**2
+      choked = ( BC_Sign * Un3 + Sound3 <= 0d0 )
+    end if
+    if ( choked ) then
+      Sound3 = Sound0 / sqrt ( 1d0 + Coef_D )
+      Un3    = - BC_Sign * Sound3
+    end if
+    p3 = BC_p0 * ( Sound3 / Sound0 )**( 2d0 * Gamma / ( Gamma - 1d0 ) )
     Ut3 = Un3 * E1
     Ub3 = Un3 * E2
     Face_Sound = Sound3
@@ -536,7 +566,7 @@ contains
     Face_Prim(1:nsc) = BC_ci * Face_rho
     Face_Prim(nu:nw) = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Un = Un3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
 
     Face_Enthalpy = 0d0
     Face_T = Face_Prim(np) / ( Face_Rgas * Face_rho )
