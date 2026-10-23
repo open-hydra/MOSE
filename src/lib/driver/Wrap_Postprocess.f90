@@ -40,20 +40,17 @@ contains
 
     level = obj_multigrid%MG_level
 
-    ! Update IOfield solutiontime, on every grid level: a coarse level writes its own solutions
-    ! (field-level<L>) with its IOfield
+    ! Update IOfield and IOwall solutiontime, on every grid level: a coarse level writes its own solutions
+    ! (field-level<L>, wall-level<L>) with its IOfield and IOwall
     do m = 1, obj_multigrid%MGL
       if ( obj_time_scheme%time_accurate ) then
         simulation%IOfield(m)%solutiontime = simulation%domain(m)%time
+        IOwall(m)%solutiontime = simulation%domain(m)%time
       else
         simulation%IOfield(m)%solutiontime = -real(obj_sim_param%iter_general,8)
+        IOwall(m)%solutiontime = -real(obj_sim_param%iter_general,8)
       endif
     enddo
-    if ( obj_time_scheme%time_accurate ) then
-      IOwall%solutiontime = simulation%domain(1)%time
-    else
-      IOwall%solutiontime = -real(obj_sim_param%iter_general,8)
-    endif
 
     if (level == 1) then
       solfile  = '/'//trim(MOSE_phase_prefix)//'field'
@@ -197,11 +194,13 @@ contains
         endif
       end if
       
-      ! Solution output (collective — all ranks participate in gather)
+      ! Solution output (collective — all ranks participate in gather). Every field write of a level also
+      ! writes its wall quantities: wall on the finest level, wall-level<n> on a coarse one
       ! Iter-based solution
       if ( mod(simulation%domain(level) % iter, obj_io%sol_diter) == 0d0 ) then
         if (mpi_is_root) write(*,*) ' ... writing iter-based solution'
         call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
+        if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
         if (obj_multigrid%MGL > 1 .and. level > 1) then
           if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
           do m = obj_multigrid%MG_level, 2, -1
@@ -210,15 +209,14 @@ contains
           call Write_Solution (  simulation%domain(1), simulation%IOfield(1), mgsol )
           if (obj_io % write_wall) call Write_Wall_Solution( simulation%domain(1), mgwall )
         endif
-        if (level == 1) then
-          if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
-          if (.not. obj_time_scheme%time_accurate) call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
-        endif
+        if (level == 1 .and. .not. obj_time_scheme%time_accurate) &
+          call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
       ! Time-based solution
       elseif ( simulation%domain(level) % time >= obj_sim_param%time_from_call + obj_io%sol_dtime ) then
         obj_sim_param%time_from_call = simulation%domain(level) % time
         if (mpi_is_root) write(*,*) ' ... writing time-based solution'
         call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
+        if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
         if (obj_multigrid%MGL > 1 .and. level > 1) then
           if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
           do m = obj_multigrid%MG_level, 2, -1
@@ -227,15 +225,14 @@ contains
           call Write_Solution (  simulation%domain(1), simulation%IOfield(1), mgsol )
           if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(1), mgwall )
         endif
-        if (level == 1) then
-          if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
-          if (.not. obj_time_scheme%time_accurate) call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
-        endif
+        if (level == 1 .and. .not. obj_time_scheme%time_accurate) &
+          call Write_Diagnostic ( simulation%domain(level), simulation%IOfield(level), dgsfile )
       endif
 
       if (obj_multigrid%change_MG) then
         if (mpi_is_root) write(*,*) ' ... writing solution of grid-level ', level
         call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
+        if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
         if (obj_multigrid%MGL > 1 .and. level > 1) then
           if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
           do m = obj_multigrid%MG_level, 2, -1
@@ -301,6 +298,7 @@ contains
     if ( obj_sim_param%HYDRA_postprocess ) then
       if (mpi_is_root) write(*,*) ' ... writing HYDRA-coupling solution'
       call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
+      if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
       if (obj_multigrid%MGL > 1 .and. level > 1) then
         if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
         do m = obj_multigrid%MG_level, 2, -1
@@ -309,7 +307,6 @@ contains
         call Write_Solution (  simulation%domain(1), simulation%IOfield(1), mgsol )
         if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(1), mgwall )
       endif
-      if (obj_io % write_wall .and. level == 1) call Write_Wall_Solution ( simulation%domain(1), wallfile )
     endif
 
   end subroutine MOSE_postprocess

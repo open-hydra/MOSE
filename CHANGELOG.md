@@ -27,6 +27,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   first, and ran stable with `all` (measured before the time step and face metric of this release). `all` is for
   Spalart–Allmaras: with the k-omega models it diverges (the SST and Wilcox 2006 flat plates of the tests, IRS 0.5: stop at
   iterations 28 and 95; with `flow` both run). Smoothing changes the path to the steady state, not the steady state.
+- Multigrid runs write the wall quantities of a coarse level, `wall-level<n>`, with every field output of that level
+  (`field-level<n>`) and at the end of the level, with the same solution time. The name was built, but the wall file was
+  written on the finest level only: the friction and heat flux of a coarse level could be read only from `wall-prolongated`,
+  the wall of its solution prolongated to the finest grid, not from the level itself. The other files do not change.
 - Probes can record `mi_tilde`, the first turbulence variable, which the solution files name `rhoNuTilde`
   (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model).
 - Builds with `USE_MPI=ON` register a `needs-mpi` test tier (`ctest -L needs-mpi`). Each of its tests writes its own small
