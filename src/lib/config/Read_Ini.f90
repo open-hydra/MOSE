@@ -162,15 +162,15 @@ contains
   !> Loads input.ini into fini, and stops the run if it cannot be read: a file that cannot be opened (missing, or without
   !> read permission), a file with no line that is not blank, a file whose read ends with an I/O error, or an error of
   !> the INI reader (FiNeR load gives an error code other than 0: a file with no section, a line that it cannot parse;
-  !> FiNeR names such a line on stderr, without its number). Without this stop, the parameters kept their defaults at
-  !> set-up and the values of the previous reading during the run, and an empty file ended the run inside the reader.
+  !> FiNeR names such a line on stderr, without its number). Without this stop, the parameters would keep their defaults
+  !> at set-up and the values of the previous reading during the run, and an empty file would end the run in the reader.
   !> During the run with ini-error = warn (warn present and true) such a file leaves the reading not taken instead: a
   !> warning (Write_Not_Taken) and taken false, so that the caller keeps every value it had (Read_Inifile_Runtime).
   !> Rank 0 alone reads the file, as FiNeR reads a file (string%read_file of StringiFor), and passes its text to every
   !> rank (mpi_bcast_chars); every rank, rank 0 too, gives that text to FiNeR (load from a source), so every rank takes
-  !> the same values. When each rank read input.ini on its own, a file rewritten while the ranks read it during the run
-  !> could give them different values, and a value that decides a collective call (sol-diter, res-diter, ini-diter) made
-  !> the ranks call their collectives in different orders, which MPI forbids (MPI-4.1, section 6.14): the run hung. A file
+  !> the same values. If each rank read input.ini on its own, a file rewritten while the ranks read it during the run
+  !> could give them different values, and a value that decides a collective call (sol-diter, res-diter, ini-diter)
+  !> would make them call their collectives in different orders (forbidden by MPI-4.1, section 6.14), and hang. A file
   !> that rank 0 cannot read stops every rank, or leaves the reading not taken on every rank: rank 0 writes why and
   !> passes the outcome (mpi_bcast_integer), then every rank stops with mpi_stop_all (exit code 1), or returns; an error
   !> of the INI reader, the same on every rank, is decided together too (the largest of a flag), and the first rank that

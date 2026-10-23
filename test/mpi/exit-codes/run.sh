@@ -7,8 +7,8 @@
 #  within 60 s with exit code 1, the message of the rule and the STOP line
 #  of both ranks: rank 0 broadcasts the error and the ranks stop together,
 #  with MPI_FINALIZE, once rank 0 has written its message (with MPI_ABORT
-#  from rank 0 alone, Intel MPI 2021.12 ended once in ten runs with exit
-#  code 141, SIGPIPE, and lines lost). The run without input.ini, which rank 0
+#  from rank 0 alone, Intel MPI 2021.12 ends one run in ten with exit code
+#  141, SIGPIPE, and lines lost). The run without input.ini, which rank 0
 #  cannot read and whose outcome rank 0 passes to every rank, must end within
 #  60 s with exit code 1 to 128 and its message (the ranks stop together, with
 #  MPI_FINALIZE). A rank that ends alone, with STOP and without MPI_FINALIZE,
@@ -70,9 +70,9 @@
 #  tests in an MPI build), must end within 60 s with exit code 1 to 128 and
 #  keep in its log the message, the line "Boundary conditions OK" of the
 #  set-up summary, written before it, and the warning of FLINT. Built with
-#  gfortran and run with Open MPI 4.1.4, the process ended without writing
-#  them out and the log held only the lines of Open MPI; with Intel MPI
-#  2021.12 nothing was lost.
+#  gfortran and run with Open MPI 4.1.4, a process that calls MPI_ABORT without
+#  writing them out first keeps only the lines of Open MPI in its log; with
+#  Intel MPI 2021.12 nothing is lost.
 #===============================================================================
 set -uo pipefail
 

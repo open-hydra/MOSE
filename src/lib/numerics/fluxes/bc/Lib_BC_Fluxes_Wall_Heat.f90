@@ -53,7 +53,7 @@ contains
     ! that moves (below): the velocity of a no-slip wall is uniform along it, while the turbulence values that vary
     ! along it (omega of the k-omega models, from the wall distance of the cell; nu~ on a rough wall) leave out their
     ! derivative along the wall (docs/theory/numerics.md); the wall temperature below is estimated with the metric of
-    ! the cell, as before
+    ! the cell
     wst = .false.
     if ( present(rec) ) wst = rec % wstencil
     if ( wst ) M => rec % wM

@@ -313,17 +313,17 @@ contains
 
 
   !> One flux per connection face (101, 201). Computed by each block for its
-  !> own cell, the flux of a face between blocks was the same on the two sides
-  !> only when their inputs were: not with the shock sensor, where each side
-  !> took the switch of its own cell, nor with the preconditioned solver, where
-  !> the reference velocity of the ghost was zero. Here the record that owns the
+  !> own cell, the flux of a face between blocks would be the same on the two
+  !> sides only when their inputs are: not with the shock sensor, where each side
+  !> takes the switch of its own cell, nor with the preconditioned solver, unless
+  !> the ghost carries the reference velocity of the other block. Here the record that owns the
   !> face (Pair_Connections: the cell on the low-index side of the face, as on an
   !> interior face) computes it, inviscid and viscous, for its cell, with the
   !> shock sensor of its cell and the reference velocities of both cells (the
   !> ghost carries that of the other block), and gives it with the opposite sign
   !> to the record of the other cell: in the same process directly, between
   !> processes through exchange_connection_flux. BC_Fluxes then adds to each
-  !> cell its share, in the order of the records, as before.
+  !> cell its share, in the order of the records.
   subroutine Connection_Fluxes ( domain, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Advanced_Types_m
     use MOSE_Config_Types_m, only: obj_space_scheme

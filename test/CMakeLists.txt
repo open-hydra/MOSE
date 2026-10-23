@@ -398,7 +398,7 @@ endif()
 # folds between blocks, a fan of index lines at a wall (the second layer of
 # extrapolated ghost cells turned over, and both layers), points shared by 3 and 5 blocks,
 # symmetry planes and
-# walls with a prescribed heat flux; the old face metrics (inverse-mean, mean)
+# walls with a prescribed heat flux; the face metrics inverse-mean and mean
 # against an independent replica of their formulas. ViscousWallPatch: the
 # cells next to walls of prescribed temperature varying along the wall, and
 # next to faces of type 410 (assigned state from a file).

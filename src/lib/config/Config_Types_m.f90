@@ -53,7 +53,7 @@ module MOSE_Config_Types_m
     integer   :: grid_level = 1             ! Grid level being solved
     real(R8)  :: last_output_time = 0._R8   ! Time of the last time-based solution
     real(R8)  :: res_reference = 0._R8      ! Density residual of the first iteration of the grid level
-    logical   :: res_found = .false.        ! The solution holds it (vtk solutions written before it was stored do not)
+    logical   :: res_found = .false.        ! The solution holds it (vtk solutions of earlier versions of MOSE do not)
   end type restart_counters_t
 
   type :: io_t

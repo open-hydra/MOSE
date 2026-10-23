@@ -41,7 +41,7 @@
 #     input.ini also writes integration-variables = prim, riemann-solver =
 #     HLLE and flux-limiter = minmod, each read again every 5 iterations,
 #     must reach iteration 10, end normally and write the residual history
-#     of the same run without readings, byte for byte. A setup that turned
+#     of the same run without readings, byte for byte. A setup that turns
 #     some values into names (integration-variables cons into
 #     Conservative, riemann-solver HLLC into HLLC Batten, flux-limiter
 #     vanleer into Van Leer) would make the check after each reading find
@@ -73,7 +73,7 @@
 #        faces, cannot change during the run;
 #     d. axis = NaN 0.0 0.0: with ini-error = stop the run must stop when it
 #        reads input.ini again, at iteration 20, with the message that a
-#        value of axis is not finite (read as a number, the NaN went into
+#        value of axis is not finite (read as a number, the NaN would go into
 #        every term of the frame);
 #     b, c, d and g. axis = 1.0 abc 0.0 (a value that does not read) with
 #        ini-error left out (warn): the reading is not taken: the run must

@@ -70,10 +70,10 @@
 #              solution). residual-history.dat must hold the rows of
 #              iterations 1 to 30, every row written before the kill, and
 #              the restart from field2 (iteration 20), 30 iterations,
-#              must give the files of the run in one go of probes. The
-#              rows waited in the buffers of the files, written out only
-#              when the process ended normally: the killed run left the
-#              history and the probe files empty.
+#              must give the files of the run in one go of probes. Rows
+#              in the buffers of the files are written out only when the
+#              process ends normally: without a flush of each row the
+#              killed run would leave the history and the probe files empty.
 #   torque     time-accurate, a solution every 10 iterations, with the
 #              rotating frame on (rigid-body, omega = 1 rad/s about x):
 #              OUTPUT/torque.dat gets a header line and a row at every

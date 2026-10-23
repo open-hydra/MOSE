@@ -9,13 +9,13 @@
 #   - plane: 2-D, u = G y; plane3d: 3-D, u = G (y + z). The cells at the ends
 #     of the chimera faces must have the y (and z) momentum residual of the
 #     other cells, zero, within 1e-9 of mu G / H per unit volume: with the
-#     ghost cell copied beyond the edge of the block face the chimera face took
-#     3/4 of the tangential derivative there, a residual of 1/4 of it;
+#     ghost cell copied beyond the edge of the block face the chimera face would
+#     take 3/4 of the tangential derivative there, a residual of 1/4 of it;
 #   - wedge: a 2-D axisymmetric wedge of 1 degree, a radial velocity
 #     proportional to the radius: every cell of the two blocks must have the
 #     residual of the same cell in one block (wedgeref), within 1e-9 of
 #     mu G / H: with the ghost cell itself as the k neighbours of the ghost
-#     row, the chimera faces took half of the v/r of the divergence.
+#     row, the chimera faces would take half of the v/r of the divergence.
 #  And a control: fanchim, plane with the y spacing of block 1 growing 4
 #  times across its last cell, which turns over the first layer of ghost
 #  cells extrapolated behind the chimera face, whose viscous flux takes
