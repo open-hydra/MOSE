@@ -42,10 +42,10 @@ and each was wrong for one of these reasons.
    `MOSE_Mod_Timers` is the measurement instrument: it reports the time inside
    the iteration loop, as the maximum over the ranks, separated from set-up and
    from output, plus the exchange and collective waits
-   ([Timing](../user/using.md#timing)). It replaces the old
-   `Time of operation` line, which was CPU time on rank 0 divided by the thread
-   count — a figure that measured wall clock only when every thread was busy
-   and no rank ever blocked. Entries below dated before that change quote it.
+   ([Timing](../user/using.md#timing)). The `Time of operation` that
+   [Landed §5](#5-kill-the-array-temporaries-inside-the-diffusive-kernels) quotes is
+   CPU time on rank 0 divided by the thread count — a figure that measures wall
+   clock only when every thread is busy and no rank blocks.
 6. **Do not compare VTune totals across binaries with different inlining.**
    VTune's user-mode sampler instruments call/return, so a heavily inlined binary
    makes fewer calls and looks artificially cheap. Use wall clock for the verdict
@@ -135,9 +135,8 @@ That ordering is the signature of **lost vectorisation**: `-ffast-math` vectoris
 the Arrhenius loops, `-ipo` then inlined `f_kf` into them, the body grew past what
 the vectoriser would accept, and it fell back to scalar. `ipow` shrinks that loop
 enough that the problem disappears — with `ipow` in, full `-ipo` is the fastest
-option on Fer14 by 10.6%. An earlier workaround that excluded
-`Lib_Chemistry_wdot.f90` from IPO is therefore **not** needed, and was removed;
-it cost 3.5% on premixed-flame.
+option on Fer14 by 10.6%. Excluding `Lib_Chemistry_wdot.f90` from IPO is
+therefore **not** needed; it costs 3.5% on premixed-flame.
 
 #### Turning it off
 
@@ -153,11 +152,10 @@ stays. The macro that does this changes the flags in the CMake cache only: a
 plain variable of the same name would hide the cache entry (policy `CMP0126`,
 `NEW` here), and the flags added after it would be lost: each one would rewrite
 the cache entry from the plain variable, so the targets would be compiled without
-`-ffast-math`, and without `-fomit-frame-pointer` until a second configure, which
-is what an earlier version did with oneAPI 2023. Every configure gives the same
-flags: `-ipo` enters the link flags once. A build directory configured with an
-earlier version keeps what it cached then, as `-ipo` twice in the link flags:
-configure a new one.
+`-ffast-math`, and without `-fomit-frame-pointer` until a second configure.
+Every configure gives the same flags: `-ipo` enters the link flags once. A build
+directory whose cache holds `-ipo` twice in the link flags keeps it: configure a
+new one.
 
 Three things were needed to make `-ipo` work at all, all handled in
 `cmake/SetFortranFlags.cmake`:
@@ -174,12 +172,11 @@ Three things were needed to make `-ipo` work at all, all handled in
   variables `CMAKE_AR`/`CMAKE_RANLIB` is not enough — `CMakeFindBinUtils` leaves
   plain variables of the same name in scope, and those shadow the cache when
   CMake expands the archive rules.
-- **A probe that actually tests linking.** `SET_COMPILE_FLAG` passed candidate
-  flags through `TRY_COMPILE(... COMPILE_DEFINITIONS)`, i.e. compile-only, so
-  `-ipo` compiled fine, failed to link, and was silently rejected. It had
-  therefore **never** been enabled on any Intel compiler, despite being listed in
-  the release flags since the first commit. `SetCompileFlag.cmake` takes a
-  `LINK` keyword that also puts the flag on the test program's link line. It is
+- **A probe that actually tests linking.** `SET_COMPILE_FLAG` passes candidate
+  flags through `TRY_COMPILE(... COMPILE_DEFINITIONS)`, i.e. to the compile step
+  only, which does not test a flag that the link step needs too, as `-ipo` does.
+  `SetCompileFlag.cmake` takes a `LINK` keyword that also puts the flag on the
+  test program's link line. It is
   opt-in per call site on purpose: `LINK_OPTIONS` is a list, so a multi-word flag
   like `-check bounds` would reach the linker as one quoted argument.
 
@@ -324,15 +321,14 @@ than counting them per file.
 
 ### 6. Boundary fluxes walk only the rank's own records
 
-Before this entry `BC_Fluxes` ran one worksharing loop for every (block, face) pair of the
-**whole** mesh, on every rank and at every Runge–Kutta stage, and skipped the
-records of blocks owned by other ranks one at a time inside the loop. Every rank
-therefore read every boundary record of the mesh — a large derived type — at
-every stage: work that does not shrink when ranks are added. On an axisymmetric
-wedge mesh the wedge faces are boundary records too, about two per cell, so that
-the scan grows with the whole mesh rather than with the share of a rank.
+A loop over every (block, face) pair of the **whole** mesh, which skips the
+records of blocks owned by other ranks one at a time, has every rank read every
+boundary record of the mesh — a large derived type — at every Runge–Kutta stage:
+work that does not shrink when ranks are added. On an axisymmetric wedge mesh the
+wedge faces are boundary records too, about two per cell, so that such a scan
+grows with the whole mesh rather than with the share of a rank.
 
-The loop walks per-(block, face) lists of the rank's own records, built once
+`BC_Fluxes` walks per-(block, face) lists of the rank's own records, built once
 at set-up next to `local_bc_idx` (`build_local_bc_index`). The (block, face)
 granularity is kept on purpose:
 
@@ -344,12 +340,12 @@ granularity is kept on purpose:
 - the implicit barrier between faces keeps the face contributions of every
   cell summed in the order 1, 2, …, 6.
 
-With a `bc.txt` sorted by block and face (the documented format) the solution
-is therefore **bit-identical** to the old loop. With the records in any other
-order the solution is the one of the sorted file, and deterministic; the
-old loop summed the faces of a corner cell in file order and, with more than
-one thread, could even give a different solution from run to run (two threads
-updating the same corner cell). The wall output (`IO_Wall`) groups all the
+The solution therefore does not depend on the order of the records in
+`bc.txt`: with any order it is the one of the file sorted by block and face (the
+documented format), and it is deterministic. A loop in file order would sum the
+faces of a corner cell in that order and, with more than one thread, could give
+a different solution from run to run (two threads updating the same corner
+cell). The wall output (`IO_Wall`) groups all the
 records by block and face before laying them out, so it does not depend on the
 order of the file either. `test/mpi/boundary-records` checks ranks × threads
 layouts and the reversed file with and without threads, the wall output and a
@@ -357,9 +353,9 @@ Spalart–Allmaras run included.
 
 ### 7. Viscous kernels compute each quantity once
 
-The viscous fluxes computed again, at every face that read them, quantities
-that do not change within a stage or at all. Four changes, each doing the same
-operations on the same values, once:
+Quantities that do not change within a stage, or at all, are computed once
+rather than at every face that reads them; four changes do this, each with the
+same operations on the same values:
 
 - the metric of the faces of type `200` (the wedge faces of an axisymmetric
   mesh and the faces that close a 3-D sector), three 3×3 inversions per face
@@ -386,13 +382,13 @@ spread of its runs: the gain comes from the viscous kernels the changes touch,
 not from a general effect of the build. A VTune hotspots profile of each build
 (rule 6: the breakdown within one binary) shows the work removed: in the build
 after, the viscous variables of the rotational faces, `viscous_face_metric` and
-`sincos` no longer appear, `inverse3` no longer runs per face, and
+`sincos` do not appear, `inverse3` does not run per face, and
 `Viscous_Variables` appears, once per stage.
 
-Output (rules 2–4). Each of the four changes writes the same bits as its parent
-with gfortran (TESTING, the fast tier), and with ifx: the first one with the
-RELEASE flags already, the others built with `-fp-model=strict`, which is
-`-fp-model=precise` without contractions as rule 4 asks, and also enables
+Output (rules 2–4). With each of the four changes the outputs are the same bits
+as without it with gfortran (TESTING, the fast tier), and with ifx: the first
+one with the RELEASE flags already, the others built with `-fp-model=strict`,
+which is `-fp-model=precise` without contractions as rule 4 asks, and also enables
 `fenv_access` (the tests with viscous faces; the whole tier for the last
 change): the work is the same. With the ifx RELEASE flags (`-fp-model fast=2`)
 outputs of viscous tests differ at round-off, for the second, the third and the
@@ -416,7 +412,7 @@ the scale of the vector:
 
 ### Static dispatch for `rlimiter` — no gain on its own
 
-Previously listed in this file as "expected 10–20%". **Measured: 1.00x.**
+Predicted gain: 10–20%. **Measured: 1.00x.**
 
 A standalone kernel reproducing `Reconstruction` exactly (elemental over `nprim`,
 two limiter calls per element), built with the production flags, limiter chosen
@@ -441,7 +437,7 @@ refactor.
 
 ### Static dispatch for `Riemann` — not worth it
 
-Previously listed as "expected 5–10%". One indirect call per face into a routine
+Predicted gain: 5–10%. One indirect call per face into a routine
 of several hundred flops; the middle row of the table above is exactly that
 pattern and shows 1.00x. Would touch 7 call sites for nothing. `-ipo` covers it.
 
@@ -562,8 +558,8 @@ convective one: `co_fiij` is the hottest function overall at 6.8%, and `co_fiij`
 path.
 
 **SWBLI, post-`-ipo`** (SA, 60 it, 57.90 s CPU) — use this one for anything you
-plan to act on. `co_rotot_Rtot` no longer appears as a symbol at all: `-ipo`
-inlines it, so its cost now sits inside `Diffusive_Flux` and
+plan to act on. `co_rotot_Rtot` does not appear as a symbol at all: `-ipo`
+inlines it, so its cost sits inside `Diffusive_Flux` and
 `Tangential_Gradient`.
 
 | Function | % | | Function | % |
@@ -594,7 +590,7 @@ the flux kernels as a solve-loop target.
 
 ## Open items
 
-Predictions carried over from the original (April 2026) version of this file.
+Predicted gains of possible optimisations.
 **None of these have been measured** — the estimates are the original author's and
 should be treated as hypotheses, given that the two predictions in this file that
 *were* checked (limiter and Riemann dispatch) both came out at 1.00x.
@@ -690,11 +686,6 @@ Two things still argue for caution, and neither is resolved:
   load per use. On nodes that are already DRAM-starved at high thread counts,
   that can be a loss at exactly the thread counts that matter. Measure it
   threaded, not just single-threaded.
-
-### Resolved
-
-- *"Priority 0 — stray `stop` in `Mod_Fluxes.f90` disables directions 2 and 3."*
-  No `stop` exists in that file; fixed at some point since April 2026.
 
 ---
 
