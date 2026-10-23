@@ -51,9 +51,9 @@ module MOSE_Lib_Stencil_Metrics
 
   implicit none
   private
-  public :: Setup_Stencil_Metrics, Viscous_Face_Metric, Source_Metrics, METRIC_MEAN, METRIC_INVERSE_MEAN, METRIC_STENCIL
+  public :: Setup_Stencil_Metrics, Viscous_Face_Metric, Source_Metrics, METRIC_MEAN, METRIC_STENCIL
 
-  integer, parameter :: METRIC_MEAN = 0, METRIC_INVERSE_MEAN = 1, METRIC_STENCIL = 2
+  integer, parameter :: METRIC_MEAN = 0, METRIC_STENCIL = 2
 
   !> Cell centres of one block with one layer of ghost cells: x(1:3, 1-gc:n1+gc, 1-gc:n2+gc, 1-gc:n3+gc); behind the walls,
   !> the 400 faces and the mapped faces also a second position, xe (that of the extrapolated quantities; of the turbulence
@@ -69,11 +69,10 @@ module MOSE_Lib_Stencil_Metrics
 contains
 
   !> Face metric of the interior face of direction d between cell (i,j,k) and the next one along d, for the viscous
-  !> fluxes: diffusive-metric = mean (M_L + M_R)/2, inverse-mean [(M_L^-1 + M_R^-1)/2]^-1, stencil the stored metric of
-  !> the face.
+  !> fluxes: diffusive-metric = mean (M_L + M_R)/2 (as Diffusive_Flux computed it before, same operations), stencil the
+  !> stored metric of the face.
   function Viscous_Face_Metric ( blk, d, i, j, k, metric ) result ( Mf )
     use MOSE_Advanced_Types_m, only: MOSE_block_type
-    use MOSE_Lib_Diffusive, only: Inverse3
     implicit none
     type(MOSE_block_type), intent(in) :: blk
     integer, intent(in) :: d, i, j, k, metric
@@ -90,8 +89,6 @@ contains
     select case (metric)
       case (METRIC_STENCIL)
         Mf = blk % dir(d) % Mf(i,j,k) % c
-      case (METRIC_INVERSE_MEAN)
-        Mf = Inverse3 ( 0.5d0 * ( blk % Minv(i,j,k) % c + blk % Minv(i2,j2,k2) % c ) )
       case default
         Mf = 0.5d0 * ( blk % M(i,j,k) % c + blk % M(i2,j2,k2) % c )
     end select
@@ -620,8 +617,8 @@ contains
   !> Metric (J^T)^-1 of face f of cell (i,j,k) of block b, or of the cell itself when f = 0 (kind: which one). The run
   !> stops when the three differences of the stencil do not span the space, |det J^T| <= 1e-12 |D_a x| |D_b x| |D_c x|:
   !> a degenerate face or cell, where the metric is not defined. A declared limit of diffusive-metric = stencil, which
-  !> inverse-mean does not have, although a viscous run with inverse-mean or mean stops on a 3-D mesh at a boundary face
-  !> of zero area (Check_Wedge_Axis). (A wall on a face of zero area, as on the axis of a 3-D mesh around it, stops
+  !> mean does not have, although a viscous run with mean stops on a 3-D mesh at a boundary face of zero area
+  !> (Check_Wedge_Axis). (A wall on a face of zero area, as on the axis of a 3-D mesh around it, stops
   !> before, in Wall_Face_Stencils.)
   function Face_Inverse ( JT, b, i, j, k, f, kind ) result ( Mf )
     use MOSE_Lib_Diffusive, only: Inverse3
@@ -650,7 +647,7 @@ contains
       do t = 1, 3
         write(*,'(A,I0,A,3(1X,ES14.6))') ' [ERROR]   difference ', t, ':', JT(:,t)
       enddo
-      write(*,'(A)') ' [ERROR] A declared limit of diffusive-metric = stencil; diffusive-metric = inverse-mean does not'
+      write(*,'(A)') ' [ERROR] A declared limit of diffusive-metric = stencil; diffusive-metric = mean does not'
       write(*,'(A)') ' [ERROR] need this metric (but on a 3-D mesh it stops at a boundary face of zero area).'
       call mpi_abort_all ( 'metric of diffusive-metric = stencil not defined (see above)' )
     end if

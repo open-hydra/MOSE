@@ -49,9 +49,12 @@ contains
     obj_irs%warning_message = 'none'
     obj_irs%error_message   = 'none'
     call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', &
-          'Implicit Residual Smoothing (steady runs only)', 'logical', .false. )
+          'Implicit Residual Smoothing (steady runs only; switched on only at setup)', 'logical', .false. )
     call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
           'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false. )
+    call reg%add( trim(section), 'irs-variables', obj_irs%variables, 'flow', &
+          'Residuals smoothed by IRS: flow (species, momentum, energy) or all (also the RANS, '// &
+          'soot and passive-scalar equations; for Spalart-Allmaras: the k-omega models diverge with all)', 'flow, all', .false. )
 
     ! Preconditioning controls (used when integration-variables = prec)
     obj_prec%description     = 'none'
@@ -85,11 +88,11 @@ contains
                   'Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of '// &
                   'the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the '// &
                   'k faces of type 200 for the linear fields that they allow) except at the chimera faces (102), which take '// &
-                  'inverse-mean with every value; inverse-mean takes the '// &
-                  'mean edges of the two cells, exact on a stretching normal to the face only; mean also overstates '// &
-                  'the gradient by (1+r)^2/(4r) at a cell-size ratio r; inverse-mean and mean do not converge next to '// &
+                  'the inverse of the mean of the inverse metrics of the two cells with every value; mean takes the mean of '// &
+                  'the two metrics (the faces between blocks the inverse of the mean of the inverse metrics), overstates '// &
+                  'the gradient by (1+r)^2/(4r) at a cell-size ratio r and does not converge next to '// &
                   'a symmetry plane (300) that bounds a sector of a polar mesh', &
-                  'stencil, inverse-mean, mean', .false. )
+                  'stencil, mean', .false. )
 
     ! Shock Detector ---------------------------------------
     obj_shock_detector%warning_message = 'none'
@@ -132,13 +135,17 @@ contains
     if (.not. obj_sim_param%HYDRA_MG) then 
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
-        call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m)), '>= 0', .false. )
+        call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
       enddo
+      call reg%add( trim(codename)//'-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
+        'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write; re-read at runtime)', '>= 0', .false. )
     else
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
-        call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m)), '>= 0', .false. )
+        call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
       enddo
+      call reg%add( 'HYDRA-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
+        'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write; re-read at runtime)', '>= 0', .false. )
     endif
 
   end subroutine Register_Multigrid_Levels  

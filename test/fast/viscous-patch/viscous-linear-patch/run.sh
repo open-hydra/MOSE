@@ -30,8 +30,8 @@
 #  run where the limits of those ghost cells act (counted at the end of the
 #  run). Controls that every face metric passes: walls 301 with q = 0 (here)
 #  and 302 with T_w uniform along the wall (ViscousWallPatch) on parallelogram
-#  cells. Plus the face metrics inverse-mean and mean: they must give the
-#  viscous force of an independent replica of their formulas. The cells next
+#  cells. Plus the face metric mean: it must give the viscous force of an
+#  independent replica of its formula. The cells next
 #  to inlets and outlets (401-408, 420), whose faces have no viscous flux,
 #  are the test ViscousOpenPatch.
 #  Gas: test/common/Air-viscous.
@@ -105,8 +105,8 @@ if [[ $NAME == ViscousWallPatch ]]; then
     step ref "$mesh" momr
     python3 -B "$MC" check "$mesh" momr "OUTPUT/diag-$mesh-momr-ns.tec" "OUTPUT/diag-$mesh-momr-ref.tec" wall302 || status=1
   done
-  echo "-- the same on parallelograms, inverse-mean (wall 302) and mean (adiabatic 301); also the work of the stress --"
-  for case in paraT:inverse-mean:wall302 paraQ:mean:wall301; do
+  echo "-- the same on parallelograms, mean (wall 302 and adiabatic 301); also the work of the stress --"
+  for case in paraT:mean:wall302 paraQ:mean:wall301; do
     IFS=: read -r mesh metric group <<< "$case"
     echo "    $mesh, diffusive-metric = $metric:"
     python3 -B "$MC" case "$mesh" momr "$metric" > /dev/null || exit 1
@@ -197,8 +197,8 @@ else
     step ns "$mesh" rk3
     python3 -B "$MC" check "$mesh" rk3 "OUTPUT/diag-$mesh-rk3-ns.tec" none centre || status=1
   done
-  echo "-- the face metrics inverse-mean and mean against an independent replica of their formulas --"
-  for metric in inverse-mean mean; do
+  echo "-- the face metric mean against an independent replica of its formula --"
+  for metric in mean; do
     python3 -B "$MC" case rand1 mom "$metric" > /dev/null || exit 1
     step ns rand1 mom "$metric"
     step ref rand1 mom "$metric"

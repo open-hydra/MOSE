@@ -28,7 +28,7 @@ contains
     use MOSE_Mod_Metrics,          only: Setup_Metrics
     use MOSE_Mod_Fluxes,           only: Setup_Quasi2D_W
     use MOSE_IO_Probes,            only: Setup_Probes, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
-    use MOSE_IO_Wall,              only: Initialize_Wall_File
+    use MOSE_IO_Wall,              only: Initialize_Wall_File, IOwall
     use MOSE_Lib_Ghost,            only: Fill_Ghost_Cell
     use MOSE_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_stop_all, mpi_bcast_logical
     use MOSE_Mod_Timers,           only: timer_run_begin
@@ -199,9 +199,13 @@ contains
     ! Solution setup
     call Setup_Output_Solution ( simulation%IOfield )
 
-    ! Initialize Wall file
-    if (mpi_is_root .and. obj_io % write_wall) &
-      call Initialize_Wall_File ( simulation%domain(1), simulation%IOfield(1)%tec%extension)
+    ! Initialize the wall files, one per multigrid level (wall, wall-level<n>)
+    allocate ( IOwall(obj_multigrid%MGL) )
+    if (mpi_is_root .and. obj_io % write_wall) then
+      do m = 1, obj_multigrid%MGL
+        call Initialize_Wall_File ( simulation%domain(m), simulation%IOfield(1)%tec%extension)
+      enddo
+    endif
 
     ! Print simulation onto the logfile/shell.
     if (mpi_is_root) call Print_Shell_Info ()

@@ -19,7 +19,6 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer :: b, i, j, k, g
-    logical :: inverse_metric
     integer :: Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s
     type(MOSE_vector_3D_type) :: N1, N2, N3, N4, N5, N6, N7, N8
 
@@ -36,14 +35,8 @@ contains
       domain % bc(:) % k_rough = 0d0
     end if
 
-    ! Inverse metric of the interior cells, for the viscous face metric (diffusive-metric =
-    ! inverse-mean): the face then needs one 3x3 inversion instead of three.
-    inverse_metric = obj_space_scheme % inverse_metric .and. model > 0
-
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
-      if ( inverse_metric .and. .not. allocated(domain % blk(b) % Minv) ) &
-        allocate( domain % blk(b) % Minv ( domain % blk(b) % dim(1), domain % blk(b) % dim(2), domain % blk(b) % dim(3) ) )
       !$omp parallel
       ! Compute metric tensor and cell dimension across i,j,k. => block % M, & block % dl      
       !$omp do collapse(3) private(i, j, k, N1, N2, N3, N4, N5, N6, N7, N8)
@@ -60,7 +53,6 @@ contains
         N8 % c = domain % blk(b) % node(i  ,j  ,k  ) % c
         call Compute_Metric_Tensor ( N1, N2, N3, N4, N5, N6, N7, N8, domain % blk(b) % M(i,j,k), domain % blk(b) % dl(i,j,k), domain % blk(b) % vol(i,j,k), &
                                      loc = [b, i, j, k, 0] )
-        if ( inverse_metric ) domain % blk(b) % Minv(i,j,k) % c = Inverse3 ( domain % blk(b) % M(i,j,k) % c )
       enddo; enddo; enddo
       !$omp end parallel
       ! A degenerate or inverted cell (Compute_Metric_Tensor wrote the first one): no further block here; every rank
@@ -167,7 +159,7 @@ contains
     ! A degenerate or inverted ghost cell (Compute_Metric_Tensor wrote the first one): every rank stops together
     call Stop_On_Bad_Metric ( )
 
-    ! Type 200: the face metric of the viscous flux with inverse-mean and mean depends on the metrics of the cell and of
+    ! Type 200: the face metric of the viscous flux with mean depends on the metrics of the cell and of
     ! its image (above) only: once here, into the record, for the faces of the blocks of this rank
     ! (Rotational_Periodic_Face_Metric); with stencil Setup_Stencil_Metrics (below) takes from it the columns of the index
     ! directions with one cell
@@ -202,7 +194,7 @@ contains
   !> A viscous run on the 2-D axisymmetric wedge (type 200 on the k faces, one cell in k), or on a 3-D sector closed by
   !> type 200 on its k faces, stops at setup when a boundary face of a block so closed has zero area, that is when the
   !> axis is exactly at r = 0, with every diffusive-metric. Behind a face of zero area the ghost cell is a copy of the cell
-  !> (Ghost_Symmetry with a zero normal). With inverse-mean and mean the faces of type 200 (BC_Rotational_Periodic_Visc)
+  !> (Ghost_Symmetry with a zero normal). With mean the faces of type 200 (BC_Rotational_Periodic_Visc)
   !> take the derivative in r across the axis with the ghost cell one cell away: they see half of d u_r/dr, and the hoop
   !> stress of the first row of cells is wrong by 1/6 of it in a Homann flow (on the wedge, 32 and 64 cells, and on a sector
   !> of four cells of 1 degree). With stencil the copy sits at the cell (Ghost_Position) and the faces take the difference
@@ -213,8 +205,8 @@ contains
   !> axis, not copies). The meshes of MOSE put the axis nodes at a small radius, 1e-6 of the radial size of the first cell.
   !> On the polar line of a 3-D mesh (a block around the axis, not closed by type 200) the faces on the axis have zero area
   !> too. The stencil metric places their ghost cells at the cells and is exact there for a linear field; with
-  !> diffusive-metric = inverse-mean or mean the viscous force of the first row of cells grows as the mesh is refined (for a
-  !> linear field, whose exact force is zero, 31.6, 80.6 and 164.5 N/m^3 with inverse-mean on 5 x 4 x 8, 10 x 8 x 16 and
+  !> diffusive-metric = mean the viscous force of the first row of cells grows as the mesh is refined (for a linear
+  !> field, whose exact force is zero, 31.6, 80.6 and 164.5 N/m^3 with the former inverse-mean on 5 x 4 x 8, 10 x 8 x 16 and
   !> 20 x 16 x 32 cells of the polar case of MMSResiduals): a viscous run stops at setup and names stencil.
   subroutine Check_Wedge_Axis ( domain )
     use MOSE_Advanced_Types_m
@@ -244,11 +236,10 @@ contains
         enddo
       end if
     end if
-    ! The other blocks of a 3-D mesh, with diffusive-metric = inverse-mean or mean: a polar line
+    ! The other blocks of a 3-D mesh, with diffusive-metric = mean: a polar line
     polar = ( ndir == 3 .and. .not. obj_space_scheme % stencil_metric )
     if ( .not. ( any ( closed ) .or. polar ) ) return
     metric = 'mean'
-    if ( obj_space_scheme % inverse_metric ) metric = 'inverse-mean'
     do r = 1, domain % nbound
       b = domain % bc(r) % b
       if ( .not. is_local_block(b) .or. .not. ( closed(b) .or. polar ) ) cycle
@@ -267,7 +258,7 @@ contains
                                               domain % bc(r) % k, ', face ', domain % bc(r) % f, &
                                               ': a face of zero area on the 3-D sector (type 200 on the k faces):'
         write(*,'(A)') ' [ERROR]   the axis is exactly at r = 0, where the ghost cells behind the faces of zero area copy the'
-        write(*,'(A)') ' [ERROR]   cells: an axis not treated completely (with inverse-mean and mean the hoop stress of the first'
+        write(*,'(A)') ' [ERROR]   cells: an axis not treated completely (with mean the hoop stress of the first'
         write(*,'(A)') ' [ERROR]   row of cells would be wrong, by 1/6 of it in a Homann flow).'
         write(*,'(A)') ' [ERROR]   Put the axis nodes at a small radius, 1e-6 of the radial size of the first cell, as the meshes'
         write(*,'(A)') ' [ERROR]   of MOSE do.'
@@ -277,7 +268,7 @@ contains
                                               domain % bc(r) % k, ', face ', domain % bc(r) % f, &
                                               ': a face of zero area on the 2-D axisymmetric wedge (type 200):'
         write(*,'(A)') ' [ERROR]   the axis is exactly at r = 0, where the ghost cells behind the faces of zero area copy the'
-        write(*,'(A)') ' [ERROR]   cells: an axis not treated completely (with inverse-mean and mean the hoop stress of the first'
+        write(*,'(A)') ' [ERROR]   cells: an axis not treated completely (with mean the hoop stress of the first'
         write(*,'(A)') ' [ERROR]   row of cells would be wrong, by 1/6 of it in a Homann flow).'
         write(*,'(A)') ' [ERROR]   Put the axis nodes at a small radius, 1e-6 of the radial size of the first cell, as the meshes'
         write(*,'(A)') ' [ERROR]   of MOSE do.'

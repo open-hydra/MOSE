@@ -16,9 +16,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   run in which the gas entered through them, the flux evaluations where it entered and their largest |w|/a. The flux of the
   faces does not change.
 - The key `diffusive-metric` of `[MOSE-Numerics]` chooses the face metric of the viscous fluxes: `stencil`, the default, from the
-  same differences of the cell centres that the face gradient takes of the field (see Changed); `inverse-mean`, the inverse of the
-  mean of the inverse metrics of the two cells, whose face-normal edge is the vector between the cell centres; or `mean`, the mean
-  of the two metrics, as before.
+  same differences of the cell centres that the face gradient takes of the field (see Changed); or `mean`, the mean of the two
+  metrics, as before. Its first value, `inverse-mean`, is removed (see Removed).
+- The key `irs-variables` of `[MOSE-Numerics]` chooses the residuals that implicit residual smoothing smooths: `flow`, the
+  default, those of the species, momentum and energy, as before; or `all`, every residual, those of the turbulence, soot and
+  passive-scalar equations too. With `flow` the turbulence equations advance with the local time step of the smoothed flow
+  equations but without smoothing, and above their explicit limit they are the part that diverges: on a 3-D aerospike nozzle
+  restarted from a converged field, IRS 0.5 at CFL 1.6 stopped after 884 iterations, the Spalart–Allmaras residual growing
+  first, and ran stable with `all` (measured before the time step and face metric of this release). `all` is for
+  Spalart–Allmaras: with the k-omega models it diverges (the SST and Wilcox 2006 flat plates of the tests, IRS 0.5: stop at
+  iterations 28 and 95; with `flow` both run). Smoothing changes the path to the steady state, not the steady state.
+- Multigrid runs write the wall quantities of a coarse level, `wall-level<n>`, with every field output of that level
+  (`field-level<n>`) and at the end of the level, with the same solution time. The name was built, but the wall file was
+  written on the finest level only: the friction and heat flux of a coarse level could be read only from `wall-prolongated`,
+  the wall of its solution prolongated to the finest grid, not from the level itself. The other files do not change.
+- The key `prolongated-diter` of `[MOSE-Multigrid]` spaces the writes of `field-prolongated` and `wall-prolongated` on the
+  coarse levels: with a value above 0 they are written with a field output of the level only once that many iterations of the
+  level have passed since the last one; the end of a level always writes them, so the file written at the end of level 2 is
+  still the exact start of level 1. On a mesh of 23 million cells that file is 3 GB and its write took about 6.5 minutes,
+  half the time of a coarse level at `sol-diter` 5000. The default, 0, writes them with every field output, as before; the
+  key is read again at runtime.
 - Probes can record `mi_tilde`, the first turbulence variable, which the solution files name `rhoNuTilde`
   (Spalart–Allmaras), `rhoK` (two-equation models) or `ru'u'` (Reynolds-stress model).
 - Builds with `USE_MPI=ON` register a `needs-mpi` test tier (`ctest -L needs-mpi`). Each of its tests writes its own small
@@ -174,13 +191,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   blocks, skewed cells on a symmetry plane), at any resolution. The metric is computed at set-up and stored on the faces (27
   values per cell). Results change for viscous runs on meshes that are not Cartesian, on meshes stretched across a boundary
   layer, and at the faces between blocks with SST, Wilcox 2006 or QCR. A face whose stencil does not span three directions stops
-  the run at set-up with its block, cell and face, and the remedy `diffusive-metric = inverse-mean`.
+  the run at set-up with its block, cell and face, and the remedy `diffusive-metric = mean`.
 - A viscous run on a 2-D axisymmetric wedge or on a 3-D sector closed by type `200` whose axis nodes are exactly at r = 0 stops
   at set-up, with every `diffusive-metric`, with a message that asks to put the axis nodes at a small radius (the meshes of MOSE
   put them at 1e-6 of the radial size of the first cell): on such an axis the faces have zero area, their ghost cells copy the
-  cells, and with `inverse-mean` and `mean` the hoop stress of the first row of cells was wrong by 1/6 of the hoop term in
+  cells, and with `mean` (and the removed `inverse-mean`) the hoop stress of the first row of cells was wrong by 1/6 of the hoop term in
   Homann's flow, whatever the refinement. A wall on a face of zero area, as on the axis of a 3-D mesh around it, stops with its
-  remedy, the symmetry condition (`300`) on the axis; with `inverse-mean` and `mean` a viscous run on a 3-D mesh with a
+  remedy, the symmetry condition (`300`) on the axis; with `mean` a viscous run on a 3-D mesh with a
   boundary face of zero area stops at set-up and asks for `diffusive-metric = stencil`.
 - In time-accurate RANS runs the local time step takes, for the stiffness of the turbulence sources, a bound that the state of
   the cell gives alone: Spalart–Allmaras 2 c_w1 (1 + c_w3⁶)^(1/6) ν̃/y², SST max(β*, 2 max(β₁, β₂)) ω, Wilcox 2006
@@ -209,6 +226,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- The value `inverse-mean` of `diffusive-metric` (`[MOSE-Numerics]`): the key takes `stencil`, the default, exact for a
+  linear field on any mesh, or `mean`. A deck that names `inverse-mean` stops at set-up. The inverse-mean face metric stays
+  where the code takes it whatever the key: the chimera faces, and with `mean` the faces between blocks and of type `200`.
 - The compressibility correction of Spalart–Allmaras (`turbulence = SAcomp`): it is refused at set-up. It took c from
   c² f(c) = 25 Ω ν_t / a, a number against a speed, so the factor it gave the production depended on the units: 0.99 with
   lengths in metres and 0.22 with lengths in millimetres for Ω = 1e3 1/s, ν_t = 1e-3 m²/s and a = 340 m/s; at Ω = 1e5 1/s it
@@ -221,9 +241,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Faces between blocks take the inverse of the mean of the inverse metrics with `diffusive-metric = inverse-mean` or `mean`, and
+- Faces between blocks take the inverse of the mean of the inverse metrics with `diffusive-metric = mean`, and
   chimera faces with every value of the key: across a large size jump at a block connection the mean of the two metrics made the
   normal gradient far too steep, and the explicit diffusion unstable on the large cell.
+- `level<n>-iter`, and `iter-threshold` without multigrid, take effect when `input.ini` is read again during the run: the
+  iterations of each level were copied once at set-up, so a changed value did nothing. Lowering one below the iterations
+  already done ends that level at the iteration after that reading.
+- `irs = true`, or `irs-beta` above 0, added to `input.ini` during a run started without IRS is ignored with a warning: the
+  arrays of IRS exist only when it is on at set-up, and the run used them unallocated.
 - With MPI the tangential neighbours of the source cell of a block connection, which on the edge of a face can be ghost cells
   filled from another rank, are taken after the ghost exchange: they were one stage old, and MPI runs drifted from the serial run
   at block edges and junctions.

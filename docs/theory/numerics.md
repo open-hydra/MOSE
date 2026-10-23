@@ -355,7 +355,7 @@ checked at setup (*Checks of the cells at setup*, above). `diffusive-metric` in
 | `diffusive-metric` | Face metric | |
 |---|---|---|
 | `stencil` (default) | $M_f = \left(J_f^{T}\right)^{-1}$, $J_f^{T} = \left[D_a\mathbf{x},\ D_b\mathbf{x},\ D_c\mathbf{x}\right]$ | the same differences of the cell centres as of the field: exact for a linear field on any mesh (at the symmetry faces and the faces of type `200` for the linear fields that they allow), except at the chimera faces (`102`) |
-| `inverse-mean` | $M_f = \left[\tfrac12\left(A_L + A_R\right)\right]^{-T}$ | the face-normal edge is the centre-to-centre vector: exact for a linear field on any stretching normal to the face |
+| (inverse-mean, not a value of the key) | $M_f = \left[\tfrac12\left(A_L + A_R\right)\right]^{-T}$ | the face-normal edge is the centre-to-centre vector: exact for a linear field on any stretching normal to the face; taken by the chimera faces (`102`) whatever the key, and with `mean` by the faces between blocks and of type `200` |
 | `mean` | $M_f = \tfrac12\left(M_L + M_R\right)$ | faster; biased on stretched meshes |
 
 With `stencil`, the columns of $J_f^{T}$ are the differences of the cell

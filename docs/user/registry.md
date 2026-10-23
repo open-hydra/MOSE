@@ -8,7 +8,7 @@
 | newrun | true | true , false |  no | Start a new simulation (false = restart) |
 | res-threshold | 1e-10 | > 0 |  no | Residual convergence threshold, relative to the first iteration (steady runs only) |
 | time-threshold | 1e30 | > 0 |  no | Maximum simulation time |
-| iter-threshold | 1000000000 | > 0 |  no | Maximum number of iterations |
+| iter-threshold | 1000000000 | > 0 |  no | Maximum number of iterations (re-read at runtime) |
 
 ## MOSE-IO
 
@@ -54,8 +54,9 @@
 | cfl-rise-threshold | 0 | >= 0 |  no | CFL rise threshold |
 | time-accurate | .false. | logical | yes | Time accurate switch |
 | integration-variables | cons | cons, prim, prec |  no | Integration variables (cons/prim/prec) |
-| irs | .false. | logical |  no | Implicit Residual Smoothing (steady runs only) |
+| irs | .false. | logical |  no | Implicit Residual Smoothing (steady runs only; switched on only at setup) |
 | irs-beta | 0.0 | >= 0 |  no | IRS beta parameter (> 0 also enables IRS; steady runs only) |
+| irs-variables | flow | flow, all |  no | Residuals smoothed by IRS: flow (species, momentum, energy) or all (also the RANS, soot and passive-scalar equations; for Spalart-Allmaras: the k-omega models diverge with all) |
 | preconditioning-Uref | 0.0 | >= 0 |  no | Reference velocity for preconditioning |
 | preconditioning-Mach | 0.0 | >= 0 |  no | Mach target for preconditioning |
 | preconditioning-eps-min | 0.05 | in (0, 1) |  no | Low-Mach cutoff for Ur |
@@ -64,7 +65,7 @@
 | preconditioning-Ur-smooth | 0 | >= 0 |  no | Ur max-smoothing passes |
 | space-reconstruction |  | MUSCL, first-order | yes | Space reconstruction method |
 | flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order) |
-| diffusive-metric | stencil | stencil, inverse-mean, mean |  no | Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the k faces of type 200 for the linear fields that they allow) except at the chimera faces (102), which take inverse-mean with every value; inverse-mean takes the mean edges of the two cells, exact on a stretching normal to the face only; mean also overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r; inverse-mean and mean do not converge next to a symmetry plane (300) that bounds a sector of a polar mesh |
+| diffusive-metric | stencil | stencil, mean |  no | Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the k faces of type 200 for the linear fields that they allow) except at the chimera faces (102), which take the inverse of the mean of the inverse metrics of the two cells with every value; mean takes the mean of the two metrics (the faces between blocks the inverse of the mean of the inverse metrics), overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r and does not converge next to a symmetry plane (300) that bounds a sector of a polar mesh |
 | shock-detector |  | Tramel, Chen |  no | Shock detector method |
 | riemann-solver | HLLC | HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact |  no | Riemann solver |
 | riemann-options-Mco | 0.0 | >= 0 |  no | Low-Mach acoustic-dissipation cutoff Mach (floor) |
@@ -73,8 +74,9 @@
 
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
-| level1-iter | 0 | >= 0 |  no | Iterations for multigrid level 1 |
-| level2-iter | 0 | >= 0 |  no | Iterations for multigrid level 2 |
+| level1-iter | 0 | >= 0 |  no | Iterations for multigrid level 1 (re-read at runtime) |
+| level2-iter | 0 | >= 0 |  no | Iterations for multigrid level 2 (re-read at runtime) |
+| prolongated-diter | 0 | >= 0 |  no | Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write; re-read at runtime) |
 
 ## MOSE-Physics
 

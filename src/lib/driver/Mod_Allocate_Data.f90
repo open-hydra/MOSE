@@ -504,7 +504,6 @@ contains
       if (allocated(domain%blk(b)%vel_gradient)) deallocate(domain%blk(b)%vel_gradient)
       if (allocated(domain%blk(b)%rc_term1))     deallocate(domain%blk(b)%rc_term1)
       if (allocated(domain%blk(b)%rc_term2))     deallocate(domain%blk(b)%rc_term2)
-      if (allocated(domain%blk(b)%Minv))         deallocate(domain%blk(b)%Minv)
       if (allocated(domain%blk(b)%Visc))         deallocate(domain%blk(b)%Visc)
 
       ! P — free unless this remote block is a chimera donor

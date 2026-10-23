@@ -566,6 +566,21 @@ refuses it because its time-accurate targets include moving shocks.
     - Pass the smoothed residual to the next direction
 3. Use the smoothed residual in the RK stage
 
+By default (`irs-variables = flow`) only the flow residuals (species,
+momentum, energy) are smoothed; the turbulence equations then advance
+with the same local time step without smoothing, and above the explicit
+limit they become the unstable part. `irs-variables = all` smooths every
+residual (turbulence, soot and passive scalars too) in the same way. It is
+meant for Spalart–Allmaras: the k-omega models diverge with it (the SST
+and Wilcox 2006 flat plates of the tests at IRS 0.5).
+Smoothing changes the path to the steady state, not the steady state
+itself (a zero residual stays zero).
+
+IRS is switched on only at setup (`irs = true` or `irs-beta > 0`), where its
+arrays are allocated; on a run started with IRS `irs-beta` and `irs-variables`
+can change at runtime and `irs = false` switches it off; `irs = true`, or
+`irs-beta` above 0, added to a run started without IRS is ignored with a warning.
+
 ---
 
 ## Multigrid Acceleration
@@ -607,6 +622,22 @@ coarse-grid solution.
     $n_j = n_k = 1$). If this is not met, grid generation / setup will reject the
     mesh. Choose $n_i$ (and $n_j$ in 2-D) accordingly **before** generating the
     grid — the hierarchy is built from this mesh, not the other way around.
+
+### Level schedule
+
+The levels run in sequence, coarsest first: level $n$ runs `level<n>-iter`
+iterations (or until `res-threshold` / `time-threshold`, which act on every
+level), then its solution is prolongated onto level $n-1$. `level<n>-iter`
+(and `iter-threshold` without multigrid) is re-read with `input.ini` every
+`ini-diter` iterations: lowering it below the iterations already done ends
+the current level at the iteration after that re-read.
+
+Every field write of a coarse level also prolongates its solution to the
+finest level and writes it (`field-prolongated`, `wall-prolongated`). On a
+large mesh that write costs more than the coarse iterations between two
+writes; `prolongated-diter` (re-read at runtime) spaces it to at least that
+many iterations of the level. The end of a level always writes it, so the one
+written at the end of level 2 is the exact start of level 1.
 
 ### Restriction (fine → coarse)
 

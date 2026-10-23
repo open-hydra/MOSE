@@ -15,7 +15,6 @@ module MOSE_Advanced_Types_m
     real(R8), allocatable                  :: vol(:,:,:)       ! Cell volume
     type(MOSE_vector_3D_type), allocatable :: node(:,:,:)      ! Mesh grid points (including ghost)
     type(MOSE_tensor_3D_type), allocatable :: M(:,:,:)         ! Metric transformation tensor
-    type(MOSE_tensor_3D_type), allocatable :: Minv(:,:,:)      ! Inverse of M (interior cells only), for the viscous face metric; diffusive-metric = inverse-mean only
     type(MOSE_tensor_3D_type), allocatable :: Ms(:,:,:)        ! Cell metric of the RANS source terms, diffusive-metric = stencil (velocity)
     type(MOSE_tensor_3D_type), allocatable :: Msc(:,:,:)       ! the same for the density
     type(MOSE_tensor_3D_type), allocatable :: Msa(:,:,:)       ! the same for the velocity gradients of SA-RC, with their ghost cells

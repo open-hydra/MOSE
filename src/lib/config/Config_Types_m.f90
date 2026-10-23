@@ -140,8 +140,10 @@ module MOSE_Config_Types_m
     character(len=llen) :: description
     ! USER-DRFINED INPUTS
     real(R8)  :: beta
+    character(len=llen) :: variables   ! flow (species, momentum, energy) or all (also RANS, soot, passive scalars)
     ! Useful variables
     logical   :: enabled
+    logical   :: at_setup = .false.            ! IRS on at setup: only then are its arrays allocated
   end type irs_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -177,11 +179,10 @@ module MOSE_Config_Types_m
     character(len=llen) :: space_reconstruction ! Space reconstruction method
     character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction, as input.ini gives it
     character(len=llen) :: limiter_name = ''    ! Name of the limiter in use in the set-up summary (blank: first order)
-    character(len=llen) :: diffusive_metric     ! Face metric of the viscous fluxes (stencil/inverse-mean/mean)
+    character(len=llen) :: diffusive_metric     ! Face metric of the viscous fluxes (stencil/mean)
     ! Useful variables
-    logical             :: inverse_metric = .false. ! diffusive_metric == inverse-mean
     logical             :: stencil_metric = .true.  ! diffusive_metric == stencil
-    integer             :: metric_mode = 2          ! 0 mean, 1 inverse-mean, 2 stencil (MOSE_Lib_Stencil_Metrics)
+    integer             :: metric_mode = 2          ! 0 mean, 2 stencil (MOSE_Lib_Stencil_Metrics)
   end type space_scheme_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -227,9 +228,11 @@ module MOSE_Config_Types_m
     ! USER-DEFINED INPUTS
     integer              :: MGL                ! Number of multigrid levels
     integer, allocatable :: iter_threshold(:)  ! Number of iterations for each level
+    integer              :: prolongated_diter = 0  ! Level iterations between two prolongated writes (0: with every field write)
     ! Useful variables
     integer, public :: MG_level    ! Current MG-level being solved
     logical, public :: change_MG   ! Logical variable to change MG-level
+    integer, public :: prolongated_last = 0  ! Level iteration of the last prolongated write on the current level
   end type multigrid_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
