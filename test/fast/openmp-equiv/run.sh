@@ -13,8 +13,8 @@
 #  RK3 steps, with OMP_NUM_THREADS=1 and =4: the two solution files must be
 #  bit-for-bit identical. Where two chimera faces of a block meet, both write
 #  the ghost cell of their common edge and read it back for the viscous
-#  stencil of their face; in one parallel loop those were unordered writes of
-#  one location by different threads.
+#  stencil of their face; in one parallel loop those would be unordered writes
+#  of one location by different threads.
 #===============================================================================
 set -uo pipefail
 

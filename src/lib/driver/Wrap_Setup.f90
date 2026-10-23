@@ -265,7 +265,7 @@ contains
         ! The counters stored with a solution, in any format: the restart goes on as the uninterrupted run
         ! would (CFL ramp, output cadence and numbering, residual history, multigrid level), if
         ! that run was of the same kind, steady or time-accurate. Otherwise, or with a solution
-        ! that holds no counters, the run starts its counters as a new one, as before.
+        ! that holds no counters, the run starts its counters as a new one.
         resume = .false.
         if ( .not. obj_sim_param%newrun ) &
           resume = obj_io%restart%found .and. ( obj_io%restart%steady .neqv. obj_time_scheme%time_accurate )
@@ -293,7 +293,7 @@ contains
           if (obj_rot%enabled .and. mpi_is_root) &
             call Drop_Rows_After ( 'OUTPUT/torque.dat', 4, obj_io%restart%cycle, simulation%domain(1)%time )
         endif
-        ! Without it (a solution written before it was stored, or a time-accurate one), a steady restart
+        ! Without it (a solution of an earlier version of MOSE, or a time-accurate one), a steady restart
         ! takes the density residual of its own first iteration, as a new run
         if ( .not. ( obj_sim_param%newrun .or. obj_time_scheme%time_accurate .or. obj_sim_param%res_restored ) ) &
           obj_io%warning_message = '[WARNING] The restart solution holds no residual reference of a steady run: '// &
@@ -441,8 +441,8 @@ contains
     !> The initial condition, or the solution that a restart reads, gives the domain the coordinates of its nodes and the
     !> variables of its cells, and a value there that is not finite (NaN, infinity) stops the run at set-up, with the place
     !> of the value. Not_Finite reads the bits of each value, an operation on integers that raises no floating-point
-    !> exception: a build that traps the invalid operations (the DEBUG build; a comparison with a NaN is one) stopped
-    !> with SIGFPE at the first such operation on the value, at the end of the set-up, and -ffast-math cannot fold the
+    !> exception: a test by comparison would stop a build that traps the invalid operations (the DEBUG build) with SIGFPE
+    !> at the first such operation on the value, at the end of the set-up, and -ffast-math cannot fold the
     !> test away. Each rank checks the values it holds: the nodes of every block, the cells of the blocks whose state it
     !> holds (on one grid level with MPI, its own blocks and their chimera donors). The ranks take the decision together
     !> (the largest of a flag), the first rank that found a value writes it, and every rank stops with mpi_stop_all:
@@ -617,7 +617,7 @@ contains
     end subroutine Stop_Simulation
 
 
-    !> A number of exclude-blocks beyond the blocks of the mesh names no block: it used to be ignored, in silence.
+    !> A number of exclude-blocks beyond the blocks of the mesh names no block: it stops the run at set-up.
     subroutine Check_Exclude_Blocks ( nb, has_error )
       implicit none
       integer, intent(in)  :: nb
@@ -642,8 +642,8 @@ contains
     !> A check of the set-up that runs on rank 0 alone writes what it finds there. Rank 0 broadcasts whether it found an
     !> error, and on an error every rank stops together (mpi_stop_all): rank 0 has written its message before any rank
     !> ends, and the run ends with exit code 1. With MPI_ABORT from rank 0 alone, which makes only a best attempt to stop
-    !> the processes (MPI-4.1, section 11.4.2), the launcher could end while rank 0 was still writing: with Intel MPI
-    !> 2021.12 a run ended once in ten with exit code 141 (128 + SIGPIPE) and without the line of the abort.
+    !> the processes (MPI-4.1, section 11.4.2), the launcher can end while rank 0 is writing: with Intel MPI 2021.12,
+    !> one run in ten ends so (measured), with exit code 141 (128 + SIGPIPE) and without the line of the abort.
     subroutine Stop_Together ( found, why )
       implicit none
       logical, intent(inout)       :: found

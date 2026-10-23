@@ -179,7 +179,7 @@ contains
       if ( obj_sim_param%newrun ) then
         ! Initial condition: the .vtm lists its block files relative to its own folder, as ORION writes it (a solution
         ! of MOSE copied into INPUT/ as ic.vtm with its vtk/ folder); the files that put the blocks at
-        ! INPUT/vtk/field<entry>.vts, the place read before, are read there
+        ! INPUT/vtk/field<entry>.vts, where earlier versions of MOSE looked for them, are read there
         vtspath = obj_io%nameinit(1:index(obj_io%nameinit,'/',back=.true.))
         if ( .not. Vtm_First_Block_Exists(obj_io%nameinit, vtspath) .and. &
              Vtm_First_Block_Exists(obj_io%nameinit, 'INPUT/vtk/field') ) vtspath = 'INPUT/vtk/field'
@@ -190,7 +190,7 @@ contains
       ! The ORION reader needs the vtk format of the block files, and it is the one they declare:
       ! MOSE writes vtk raw solutions as raw appended data, older versions wrote base64 (raw after
       ! the first diagnostic output of a steady run), and an initial condition may come in any
-      ! format. When the files cannot tell, the reader keeps its format (base64), as before.
+      ! format. When the files cannot tell, the reader keeps its format (base64).
       IOfield%vtk%format = Vtk_Block_Format(obj_io%nameinit, vtspath, IOfield%vtk%format)
       if ( obj_sim_param%newrun ) then
         error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4), &
@@ -211,7 +211,7 @@ contains
           if ( Restart_Not_Finite ( obj_io%IOtime ) ) return
         endif
         obj_io%restart%time_found = found(nc+1)
-        ! A steady run writes its solutions at time minus the global iteration count (before, -1), a
+        ! A steady run writes its solutions at time minus the global iteration count (earlier versions of MOSE at -1), a
         ! time-accurate one at t >= 0
         obj_io%restart%steady = ( obj_io%IOtime < 0.d0 )
         ! The solution time where the Tecplot reader stores it, with its convention for a steady
@@ -230,7 +230,7 @@ contains
     end select
 
     ! Restart: the counters stored with the solution, the same in every format, when it holds them all (the last
-    ! one, the residual reference, is not in the solutions written before it was stored)
+    ! one, the residual reference, is not in the solutions of earlier versions of MOSE)
     if ( .not. obj_sim_param%newrun .and. .not. present(zone_mask) ) then
       obj_io%restart%found = all(found(1:4))
       if ( obj_io%restart%found ) then

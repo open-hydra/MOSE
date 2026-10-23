@@ -53,10 +53,10 @@ contains
     do i = 1, self%n
       read(UnitFree,*) self%time(i), self%var(i)
     enddo
-    ! Every time and every value is finite. A NaN passes every comparison as false: the check of the times below let a NaN
-    ! time through, and a NaN pressure of an inlet 402 closed its face in silence, the run ending with exit code 0; in a
-    ! build that traps the invalid operations it stopped the run with SIGFPE. Not_Finite reads the bits, with no such
-    ! operation: the run stops here, with the line and the column of the value
+    ! Every time and every value is finite. A NaN passes every comparison as false: the check of the times below lets a
+    ! NaN time through, and a NaN pressure of an inlet 402 would close its face in silence, with exit code 0 at the end;
+    ! in a build that traps the invalid operations the comparison would stop the run with SIGFPE. Not_Finite reads the
+    ! bits, with no such operation: the run stops here, with the line and the column of the value
     do i = 1, self%n
       col = 0
       if ( Not_Finite(self%time(i)) ) then

@@ -231,7 +231,7 @@ contains
 
       ! ── First line: block, ijk, face, ATLAS BC ID ─────────────────────────
       ! Every line is read whole (Next_Line, which counts the lines of the file and skips
-      ! the blank ones as the list-directed read did), then as its values.
+      ! the blank ones as a list-directed read does), then as its values.
       call Next_Line ( unitfile, pline, ios, nline )
       if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%b, bc(i)%i, bc(i)%j, bc(i)%k, bc(i)%f, bc(i)%type
       if ( ios /= 0 ) call BC_Line_Error ( i, -1, nline, pline )
@@ -365,7 +365,7 @@ contains
           has_tdep_bc = .true.
           allocate( bc(i) % ci(1 : nsc+nrans) )
           ! Read as one line and split by hand (Read_Inlet_402): read as a list, a file
-          ! name with a directory ended at its slash, and the values after it were lost.
+          ! name with a directory would end at its slash, and the values after it would be lost.
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) then
             call Read_Inlet_402 ( pline, bc(i), p0file, alpha_tok, beta_tok, ios, msg402 )
@@ -936,7 +936,7 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
-  ! Next_Line: the next line of the boundary file that is not blank (Read_Line), as the list-directed read skipped
+  ! Next_Line: the next line of the boundary file that is not blank (Read_Line), as a list-directed read skips
   !   blank lines; nline counts every line read, blank ones included, so it is the line number in the file.
   subroutine Next_Line ( unit, line, ios, nline )
     implicit none
@@ -1049,8 +1049,8 @@ contains
   !   finite (NaN or infinity): the numbers of a property line, required or with a default value. names as for Need_R.
   !   The test reads the bits of each value (Not_Finite), and comes before the test of EMPTY (Need_R): every comparison
   !   with a NaN is false, so that test lets a NaN through, and with -ffast-math, an option of the RELEASE build, the
-  !   compiler can take a NaN for EMPTY (ifx did); a build that traps the invalid operations (the DEBUG build) stopped
-  !   with SIGFPE at the first operation on the value.
+  !   compiler can take a NaN for EMPTY (observed with ifx); a build that traps the invalid operations (the DEBUG build)
+  !   would stop with SIGFPE at the first operation on the value.
   subroutine Need_Finite ( n, btype, nline, v, names )
     use MOSE_Finite_m, only: Not_Finite
     use MOSE_Mod_MPI,  only: mpi_stop_all
@@ -1155,9 +1155,9 @@ contains
   !   values: T0, p0_file, alpha, beta, rel_fac, mass fractions (nsc), turbulence values (nrans). As in list-directed
   !   input, values are separated by a comma or by blanks (blanks around a comma included), and a value in quotes
   !   (' or ") is taken whole, separators included; unlike list-directed input, a slash is part of a value, so that
-  !   the file name is taken as written: read as a list, a name with a directory (INPUT/p0.dat) ended at the slash, a
-  !   separator that also ends the record, and the values after it were not read. Values after the last one needed
-  !   are ignored, as a list-directed read did. ios /= 0, with msg, when the line is short, a value is empty (two
+  !   the file name is taken as written: read as a list, a name with a directory (INPUT/p0.dat) would end at the slash,
+  !   a separator that also ends the record, and the values after it would not be read. Values after the last one
+  !   needed are ignored, as a list-directed read does. ios /= 0, with msg, when the line is short, a value is empty (two
   !   commas with only blanks between: a null value, which would leave the field as it was) or is not a number, or
   !   the file name does not fit p0file.
   subroutine Read_Inlet_402 ( line, bc, p0file, alpha_tok, beta_tok, ios, msg )
@@ -1300,7 +1300,7 @@ contains
   !─────────────────────────────────────────────────────────────────────────────
   ! parse_dir_tok: convert a direction token (read as character) to real.
   !   If the token contains 'normal', return huge (face-normal flag).
-  !   Otherwise parse it as a floating-point number; ios /= 0 when it is not one (it gave 0 in silence).
+  !   Otherwise parse it as a floating-point number; ios /= 0 when it is not one (the caller then stops the run).
   pure subroutine parse_dir_tok ( tok, val, ios )
     implicit none
     character(len=*), intent(in) :: tok

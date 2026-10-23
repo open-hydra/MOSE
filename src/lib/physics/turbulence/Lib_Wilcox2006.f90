@@ -190,8 +190,8 @@ contains
       ! the factor, the energy row takes dt beta* omega fk = 1 - fk times the residual of the k row, and below the source
       ! with the factor. The row of E_m + k then has the fluxes alone at every stage, and the steady state, where the
       ! energy fluxes balance -Source(1) Volume, does not depend on the step. Written 1 - fk, the line shares no product
-      ! with the line of fk: written dt beta* omega fk, it made the compilers round fk otherwise (likely no longer fusing
-      ! the product with the + 1 in one multiply-add), and the runs without the coupling changed at round-off. 1 - fk
+      ! with the line of fk: written dt beta* omega fk, it makes the compilers round fk otherwise (likely by not fusing
+      ! the product with the + 1 in one multiply-add), and the runs without the coupling change at round-off. 1 - fk
       ! loses relative digits when dt beta* omega is small, where the term is below the round-off of the energy row.
       ! Without the factor (fk = 1) the line does not run (Lib_SST.f90)
       fk = 1d0 ; fw = 1d0

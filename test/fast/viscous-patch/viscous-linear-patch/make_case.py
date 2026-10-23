@@ -126,7 +126,7 @@ boundary face), connection (a face between blocks; corner: two of them, the cell
 symmetry (300), wall 301, wall 302; in the runs momio and eneio a cell with faces of inlets and outlets is in the group
 of each of their types.
 
-ViscousLinearPatch checks every group but wall 302 and coupled, plus the old metrics: on the rand1 mesh, run mom, diffusive-metric =
+ViscousLinearPatch checks every group but wall 302 and coupled, plus other metrics: on the rand1 mesh, run mom, diffusive-metric =
 inverse-mean and mean must give, cell by cell, the viscous force of an independent replica of their face gradients
 (written here from Lib_Diffusive.f90 and Lib_Metrics.f90 at bff5a51, with the ghost values of the 400 faces of
 Ghost_Wall), within 1e-10 of the scale. ViscousWallPatch checks the cells with a 302 face: walls whose temperature varies

@@ -32,8 +32,8 @@
 #         the restarted part and append those rows to pB.txt, and the rows of
 #         both files must be those of the run in one go (check_probes.py; the
 #         restarted run goes on with the iteration count of its solution). A
-#         restart did not open the probes from a missing file on, and the run
-#         ended at its first probe output with a run-time error.
+#         restart that does not open the probes from a missing file on ends
+#         at its first probe output with a run-time error.
 #===============================================================================
 set -uo pipefail
 

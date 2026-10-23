@@ -44,8 +44,8 @@
 !>
 !> Walls: the gradient at a wall face takes the difference between the cell and the wall value across the face and the
 !> differences of the wall values along it, with the metric of the same differences of the positions (cell centre, face
-!> centres): Wall_Face_Stencils. Before, the tangential differences were zero and the metric was that of the cell, wrong
-!> by (dphi_w/ds) tan(theta) on a wall whose value varies along it, on cells skewed by theta.
+!> centres): Wall_Face_Stencils. With inverse-mean and mean the differences along the wall are zero and the metric is
+!> that of the cell, wrong by (dphi_w/ds) tan(theta) on a wall whose value varies along it, on cells skewed by theta.
 module MOSE_Lib_Stencil_Metrics
   use iso_fortran_env, only: I4 => int32, R8 => real64
 
@@ -932,7 +932,7 @@ contains
   !> routines, modfm3 (phi_c - phi_w), with the position difference modfm3 (x_c - x_f); along the wall the differences of
   !> the wall values at the centres (mean of the four nodes) of the neighbouring faces of the same block face and of the
   !> same type, central, or one-sided where the wall ends; along an index direction with one cell, or with no such
-  !> neighbour, the edge of the cell and no difference of the field, as before. Exact for a linear field whose wall values
+  !> neighbour, the edge of the cell and no difference of the field. Exact for a linear field whose wall values
   !> are its values at the face centres: T_w of the 302 records, and the velocity, zero on the wall. The velocity of the
   !> stationary faces of a rotating frame, linear in x, is not stored here: the wall routines take its differences along
   !> the columns of this metric from its gradient. Not here: the temperature of the 503-505 faces, which the surface
@@ -1003,7 +1003,7 @@ contains
             enddo
             nside = count ( rn /= 0 )
             if ( n(tb(q)) == 1 .or. nside == 0 ) then
-              JT(:,tb(q)) = Ac(:,tb(q))                                      ! as before: the edge, no difference
+              JT(:,tb(q)) = Ac(:,tb(q))                                      ! the edge, no difference
               cycle
             end if
             dT = 0d0
@@ -1153,7 +1153,7 @@ contains
 
   !> The cell metrics of the source terms of block blk: with diffusive-metric = stencil those of Cell_Source_Metrics (Mi
   !> for the velocity, Mc for the density, Mt for the turbulence variables, Ma for the velocity gradients of SA-RC, with
-  !> their ghost cells), otherwise the metric of the cell for all of them, as before. The one place that chooses them.
+  !> their ghost cells), otherwise the metric of the cell for all of them. The one place that chooses them.
   subroutine Source_Metrics ( blk, Mi, Mc, Ma, Mt )
     use MOSE_Advanced_Types_m, only: MOSE_block_type
     use MOSE_Base_Types_m, only: MOSE_tensor_3D_type

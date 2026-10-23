@@ -10,8 +10,8 @@
 #  res-diter (the reduction of the residuals) and ini-diter (the reading
 #  itself). With different values the ranks would call their collectives in
 #  different orders, which MPI forbids (MPI-4.1, section 6.14), and the run
-#  would hang: so it did when every rank read input.ini on its own and a file
-#  rewritten during the run gave the ranks different contents.
+#  would hang, as when every rank reads input.ini on its own and a file
+#  rewritten during the run gives the ranks different contents.
 #
 #  Two ranks launched as two programs (MPMD), each in its own folder with its
 #  own input.ini (runs/<case>/A for rank 0, runs/<case>/B for rank 1), on the
