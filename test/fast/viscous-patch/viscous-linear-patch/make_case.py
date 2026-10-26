@@ -15,7 +15,7 @@ paraQ):
   fold2  two blocks of 8 x 8 cells joined at x = 0.5 (block faces 2 and 1); the j lines of block 2 rise as y = t + 0.25 s t,
          so the grid lines fold at the face between the blocks;
   jump   one block of 8 x 8 cells whose sizes alternate in the ratio 1.5 in x and in y, sheared by x += 0.5 y, nodes not
-         moved: the face gradients of inverse-mean and mean are not exact there, but for a linear field their errors
+         moved: the face gradients of mean are not exact there, but for a linear field their errors
          cancel in the sums of the interior cells; on this mesh the check bites in the cells next to the walls;
   jump2  as jump with the sizes 1 and 2 (units of 1/16: the block is 0.75 wide), the first cells next to the faces 1
          and 3 half as wide as the second ones, unit 2^-7 m instead of 1 cm: every coordinate is a dyadic fraction, so
@@ -36,7 +36,7 @@ paraQ):
   sym    one block of 8 x 8 cells sheared by x += 0.35 y on a symmetry plane (300) at y = 2;
   paraT  one block of 8 x 8 parallelogram cells sheared by 20 degrees, walls 302 at y = 2 and 3, faces 400 at the sides,
   paraQ  the same with walls 301: controls, run ene only, where every face metric is exact (every cell has the same
-         metric, T_w uniform along the 302 walls of paraT, q = 0 on the 301 walls of paraQ): inverse-mean and mean pass
+         metric, T_w uniform along the 302 walls of paraT, q = 0 on the 301 walls of paraQ): mean passes
          them too, so the test is not stricter than the defects it is written for;
   rand1  one block of 8 x 8 cells sheared by x += 0.3 y (replica only).
 
@@ -55,8 +55,8 @@ Runs:
          box3d), with the wall y = 2 cm a stationary face of the frame (stationary-face): there the wall moves with
          -Omega x x, which varies along it, and u = -Omega x x + (a, b, c) (y - 2 cm) takes that velocity on the
          wall. The sources of the frame are the same in the reference step. On rand1 and box3d with the default face
-         metric; on parallelogram cells, where the metric of the wall cell is exact too, with inverse-mean on paraT and
-         with mean on paraQ, whose wall is an adiabatic 301. Checked: the momentum of the wall cells; on paraT and paraQ,
+         metric; on parallelogram cells, where the metric of the wall cell is exact too, with mean on paraT and on
+         paraQ, whose wall is an adiabatic 301. Checked: the momentum of the wall cells; on paraT and paraQ,
          at p = 1 Pa (P_WORK), also the energy of the cells, against the work of the uniform stress, tau : grad u (see
          work below).
   rk3    u = 0, uniform p = 10 Pa, T linear (rho = p/(R T)): steady for the Euler equations and, with a face gradient
@@ -126,8 +126,8 @@ boundary face), connection (a face between blocks; corner: two of them, the cell
 symmetry (300), wall 301, wall 302; in the runs momio and eneio a cell with faces of inlets and outlets is in the group
 of each of their types.
 
-ViscousLinearPatch checks every group but wall 302 and coupled, plus other metrics: on the rand1 mesh, run mom, diffusive-metric =
-inverse-mean and mean must give, cell by cell, the viscous force of an independent replica of their face gradients
+ViscousLinearPatch checks every group but wall 302 and coupled, plus another metric: on the rand1 mesh, run mom,
+diffusive-metric = mean must give, cell by cell, the viscous force of an independent replica of its face gradients
 (written here from Lib_Diffusive.f90 and Lib_Metrics.f90 at bff5a51, with the ghost values of the 400 faces of
 Ghost_Wall), within 1e-10 of the scale. ViscousWallPatch checks the cells with a 302 face: walls whose temperature varies
 along the wall, on skewed cells (ene), and the velocity at a no-slip wall whose cells have nodes moved at random (momw),
@@ -139,7 +139,7 @@ enep410, sa410, turb410). ViscousOpenPatch checks every group of the runs momio 
 Usage (from a test directory):
   python3 -B make_case.py case MESH RUN [METRIC]     INPUT/ic.tec; INPUT/bc-ns.txt, input-ns.ini for the Navier-Stokes
                                                       step; INPUT/bc-ref.txt, input-ref.ini, INPUT/transport-ref.dat
-                                                      for the reference step; METRIC: inverse-mean or mean (no key
+                                                      for the reference step; METRIC: mean (no key
                                                       when absent: the default of the solver)
   python3 -B make_case.py check MESH RUN NS REF GROUPS prints the largest error of each group and exits with 0 when the
                                                       groups listed (comma-separated) are below the threshold
@@ -1257,7 +1257,8 @@ def limits(log):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Replica of the face gradients of inverse-mean and mean (Lib_Diffusive.f90, Lib_Metrics.f90 at bff5a51) for the mom run
+# Replica of the face gradients of mean (Lib_Diffusive.f90, Lib_Metrics.f90 at bff5a51) for the mom run; with METRIC =
+# inverse-mean the replica takes the inverse-mean metric, which diffusive-metric does not give to the interior faces
 # ----------------------------------------------------------------------------------------------------------------------
 def inverse3(A):
     """Inverse3 of Lib_Diffusive.f90: adjugate over the determinant."""

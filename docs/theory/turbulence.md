@@ -696,7 +696,7 @@ of the cell whose velocity gradient the ghost cell holds, and the cell itself be
 (see SA-RC above).
 The metrics are computed once at setup (`Cell_Source_Metrics`) and chosen in one place
 (`Source_Metrics`) by the source terms of SA, SA-RC, SST, Wilcox 2006 and SSG/LRR and by the eddy
-viscosity of the output. With `inverse-mean` and `mean` the metric is that of the cell:
+viscosity of the output. With `mean` the metric is that of the cell:
 the central difference across a cell next to a jump of size $r$ is then wrong by $(r-1)/4$, on a
 skewed wall cell a copied density takes a normal gradient it does not have (part 5 of `MMSResiduals`),
 and next to a zero-gradient face the normal component is half the one-sided difference.

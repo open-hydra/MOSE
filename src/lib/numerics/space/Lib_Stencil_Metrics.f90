@@ -44,7 +44,7 @@
 !>
 !> Walls: the gradient at a wall face takes the difference between the cell and the wall value across the face and the
 !> differences of the wall values along it, with the metric of the same differences of the positions (cell centre, face
-!> centres): Wall_Face_Stencils. With inverse-mean and mean the differences along the wall are zero and the metric is
+!> centres): Wall_Face_Stencils. With mean the differences along the wall are zero and the metric is
 !> that of the cell, wrong by (dphi_w/ds) tan(theta) on a wall whose value varies along it, on cells skewed by theta.
 module MOSE_Lib_Stencil_Metrics
   use iso_fortran_env, only: I4 => int32, R8 => real64
@@ -69,8 +69,8 @@ module MOSE_Lib_Stencil_Metrics
 contains
 
   !> Face metric of the interior face of direction d between cell (i,j,k) and the next one along d, for the viscous
-  !> fluxes: diffusive-metric = mean (M_L + M_R)/2 (as Diffusive_Flux computed it before, same operations), stencil the
-  !> stored metric of the face.
+  !> fluxes: with diffusive-metric = mean the mean of the metrics of the two cells, (M_L + M_R)/2; with stencil the
+  !> metric stored on the face at setup (blk%dir(d)%Mf, Setup_Stencil_Metrics).
   function Viscous_Face_Metric ( blk, d, i, j, k, metric ) result ( Mf )
     use MOSE_Advanced_Types_m, only: MOSE_block_type
     implicit none
