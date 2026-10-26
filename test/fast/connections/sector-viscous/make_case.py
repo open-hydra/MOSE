@@ -18,13 +18,13 @@ ring  The sector from -45 to 45 degrees (S45, 4 cells in k) against the sector f
         u = U (0, y, z) + G (0, -z, y)/r^2 + (4 C y z (y^2 - z^2), 0, 0),
       a radial field with uniform stress (normal stress (2/3) mu U on a meridian plane), a potential vortex u_theta = G/r
       (tau_rtheta = -2 mu G/r^2) and an axial harmonic field u_x = C r^4 sin(4 theta) (tau_xtheta = -4 mu C r^3 on the
-      planes at +-45 degrees); each of them has zero viscous force. With diffusive-metric = inverse-mean, and with
-      stencil, whose metric of the periodic face takes the differences of the positions of the cell and of its image row
-      as the interior face takes those of its neighbours, the two meshes compute the same face. The viscous force of a
+      planes at +-45 degrees); each of them has zero viscous force. With diffusive-metric = stencil, whose metric of the
+      periodic face takes the differences of the positions of the cell and of its image row as the interior face takes
+      those of its neighbours, the two meshes compute the same face. The viscous force of a
       cell is r/dt of a Navier-Stokes step minus r/dt of an Euler step from the same state; in every cell of S45, for
       rho u, rho v, rho w and rho E, it must equal that of the same cell of R90 within 1e-9 of the scale
         S = mu (U + 2 G/r0^2 + 4 C r1^3)/(r0 dtheta)   (momentum),   S (U r1 + G/r0 + C r1^4)   (energy),
-      r0 = 0.5, r1 = 1, dtheta = pi/8, with each metric. (A periodic face that took inverse-mean with every value of the
+      r0 = 0.5, r1 = 1, dtheta = pi/8. (A periodic face that took the inverse-mean metric with every value of the
       key would make S45 differ from R90 with stencil on these stretched radii.)
 mirror The sector from -45 to 45 degrees in 2 x 8 x 8 cells (uniform radii, node planes at theta = m pi/16) with the
       radial field alone, k faces of type 200 against type 300: the radial field is its own mirror image across the

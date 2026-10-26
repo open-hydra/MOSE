@@ -206,8 +206,8 @@ contains
   !> On the polar line of a 3-D mesh (a block around the axis, not closed by type 200) the faces on the axis have zero area
   !> too. The stencil metric places their ghost cells at the cells and is exact there for a linear field; with
   !> diffusive-metric = mean the viscous force of the first row of cells grows as the mesh is refined (for a linear
-  !> field, whose exact force is zero, 31.6, 80.6 and 164.5 N/m^3 with the former inverse-mean on 5 x 4 x 8, 10 x 8 x 16 and
-  !> 20 x 16 x 32 cells of the polar case of MMSResiduals): a viscous run stops at setup and names stencil.
+  !> field, whose exact force is zero, 31.6, 80.6 and 164.5 N/m^3 with the inverse-mean metric on every face on 5 x 4 x 8,
+  !> 10 x 8 x 16 and 20 x 16 x 32 cells of the polar case of MMSResiduals): a viscous run stops at setup and names stencil.
   subroutine Check_Wedge_Axis ( domain )
     use MOSE_Advanced_Types_m
     use MOSE_Global_m, only: ndir

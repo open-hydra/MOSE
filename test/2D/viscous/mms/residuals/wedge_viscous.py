@@ -61,11 +61,10 @@ error above that is not round-off (homann: radial, radial on r >= L/2, first row
 r >= L/2) within 2 times the same error of the uniform radii (printed next to it). The axial force of homann is printed
 only: it has no part from the faces of type 200 (tau_xtheta = 0 without swirl), and next to the axis the faces j of
 stretched radii take the derivative of u_r along x at the mean radius of the two rows, not at the face, an error of first
-order there, with stencil as with inverse-mean (1.7e-3 and 1.2e-3 of the largest axial force on N = 64, 6.3e-5 on uniform
-radii). The faces of type 200 take the derivatives
-along r from the differences of the centres of the row of the cell and of its image row (diffusive-metric = stencil); the
-mean edges of the cell and of its image (inverse-mean) give (q - 1)/4 of the hoop term on the first row, 1.7e-3 measured
-here on N = 64.
+order there (1.7e-3 of the largest axial force on N = 64, 6.3e-5 on uniform radii). The faces of type 200 take the
+derivatives along r from the differences of the centres of the row of the cell and of its image row (diffusive-metric =
+stencil); the mean edges of the cell and of its image (the inverse-mean metric, which these faces take with
+diffusive-metric = mean) give (q - 1)/4 of the hoop term on the first row.
 Linear fields (python3 -B wedge_viscous.py radial N LAW, axial N), whose viscous force is zero:
   radial  u_r = U r (U = 5e3 1/s), N = 16 rectangular cells, radii uniform, or growing by 1.1 or 1.2 (LAW uniform, geo1.1,
           geo1.2), 400 on i = 1, i = N and j = N: one Navier-Stokes and one Euler step. The faces of type 200 are exact for
@@ -84,17 +83,17 @@ Linear fields (python3 -B wedge_viscous.py radial N LAW, axial N), whose viscous
           the derivatives in azimuth carry no error: in every cell with no face 400, the wall and axis rows included, the
           viscous force must vanish below 1e-11 of mu |a| (sum of the face areas)/volume.
 Axis at r = 0 on the wedge (homann, N = 32, option axis0): the faces on the axis have zero area and no normal, and their
-ghost cells copy the cells. With diffusive-metric = inverse-mean or mean the faces of the wedge (BC_Rotational_Periodic_Visc)
+ghost cells copy the cells. With diffusive-metric = mean the faces of the wedge (BC_Rotational_Periodic_Visc)
 take the derivative in r across the axis with the ghost cell one cell away: there they would see half of d u_r/dr, and the
 hoop stress of the first row would be wrong (lambda div(u) in tau_thetatheta by mu a f'/3, 1/6 of the hoop term 2 mu a f'/r).
 With stencil the copy sits at the cell and the faces take the difference on one side of it. A viscous run stops at setup
-with the message on the axis at r = 0, with diffusive-metric = stencil and inverse-mean, without NaN before it.
+with the message on the axis at r = 0, with diffusive-metric = stencil and mean, without NaN before it.
 Axis at r = 0 on a 3-D sector (python3 -B wedge_viscous.py sector N [axis0]): Homann's flow on the same box in x and r, N x N
 cells, and SECTOR_K cells of DELTA around the axis, from -SECTOR_K DELTA/2 to +SECTOR_K DELTA/2, closed by type 200 on the k
 faces (u_r turned to the azimuth of each cell), 300 on the axis, 400 on i = 1, i = N and j = N. With axis0 the faces on the axis
-have zero area; with inverse-mean the faces of the first row see half of d u_r/dr, as on the wedge (1/6 of the hoop term):
+have zero area; with mean the faces of the first row see half of d u_r/dr, as on the wedge (1/6 of the hoop term):
 a viscous run stops at setup with the message on the axis at r = 0 of the sector, with diffusive-metric = stencil and
-inverse-mean, without NaN before it.
+mean, without NaN before it.
 Polar line of a 3-D mesh (python3 -B wedge_viscous.py polar AXIS): the same box in x and r, 360 degrees around the axis in 8
 cells closed by a face between the block and itself (101), 5 x 4 cells in x and r, the axis nodes at r = 0, a linear
 velocity U + G x with every entry of G (G_POLAR) at the cell centres, faces 400 on i = 1, i = N and j = N and of type
@@ -102,7 +101,7 @@ AXIS on the axis (j = 1):
   300  symmetry: the faces on the axis have zero area, and their ghost cells copy the cells, which the stencil metric
        places at the cell: the viscous force of the cells with no face 400, the first row next to the axis included, must
        vanish to round-off, below 1e-11 of mu |G| (sum of the face areas)/volume, as for any linear field;
-  300  with diffusive-metric = inverse-mean or mean, whose viscous force of the first row grows as the mesh is refined:
+  300  with diffusive-metric = mean, whose viscous force of the first row grows as the mesh is refined:
        the viscous run must stop at setup with the message that names the metric and stencil, without NaN before it;
   302  wall at 300 K: a wall on faces of zero area, whose gradient is not defined. The run must stop at setup with the
        message that names the block, the cell and the face and says to use the symmetry condition (300) on the axis,
@@ -132,8 +131,8 @@ Usage (from the test directory), FIELD = homann or swirl:
   python3 -B wedge_viscous.py polar AXIS                       INPUT/ic.tec and INPUT/bc.txt of the polar mesh (AXIS: 300 or 302)
   python3 -B wedge_viscous.py linear NS_FILE EU_FILE           exit status 0 when the viscous force of the linear field on the
                                                            polar mesh vanishes (300 on the axis)
-  python3 -B wedge_viscous.py polarstop LOG METRIC            exit status 0 when the run of LOG (300 on the axis, METRIC inverse-mean
-                                                           or mean) stopped at setup with the message that names stencil
+  python3 -B wedge_viscous.py polarstop LOG METRIC            exit status 0 when the run of LOG (300 on the axis, METRIC mean)
+                                                           stopped at setup with the message that names stencil
   python3 -B wedge_viscous.py stopped LOG                      exit status 0 when the run of LOG stopped at setup with the message
                                                            on the wall faces of zero area on the axis, without NaN or trap
 """
@@ -458,7 +457,7 @@ def axis_stop(log):
 
 
 def polar_stop(log, metric):
-    """The viscous run on the polar mesh (300 on the axis) with diffusive-metric = metric (inverse-mean or mean) stopped at
+    """The viscous run on the polar mesh (300 on the axis) with diffusive-metric = metric (mean) stopped at
     setup with the message on a face of zero area on the axis (block 1, a cell of the first row, face 3) that names stencil,
     with no NaN and no floating-point trap before it."""
     text = open(log, errors="replace").read()
@@ -611,8 +610,7 @@ def check_geo(field, a32, a64, g32, g64):
     on r >= L/2 and on the first row) and azimuthal; swirl radial, azimuthal and axial. The axial force of homann is printed
     only: an axisymmetric field without swirl has no axial stress on the faces of type 200 (tau_xtheta = 0), and next to the
     axis the faces j of stretched radii take the derivative of u_r along x at the mean radius of the two rows of cells, not
-    at the face, an error of first order there, with stencil as with inverse-mean (1.7e-3 and 1.2e-3 of the largest axial
-    force on N = 64)."""
+    at the face, an error of first order there (1.7e-3 of the largest axial force on N = 64)."""
     if field == "swirl":
         ok = check_swirl(g32, g64)
         names = (("radial", 0), ("radial on r >= L/2", 1), ("azimuthal", 2), ("azimuthal on r >= L/2", 3))

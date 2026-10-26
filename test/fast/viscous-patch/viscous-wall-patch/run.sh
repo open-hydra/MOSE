@@ -7,8 +7,8 @@
 #  cells are turned over (fan4); a velocity that is linear and zero on a no-slip wall,
 #  the wall cells with nodes moved at random (momw), and the same on a wall
 #  that does not turn with a rotating frame, where the velocity in the frame
-#  is -Omega x r, varying along the wall (momr; also with the face metrics
-#  inverse-mean and mean on parallelogram cells, at a wall 302 and at an
+#  is -Omega x r, varying along the wall (momr; also with the face metric
+#  mean on parallelogram cells, at a wall 302 and at an
 #  adiabatic wall 301, where the energy of every cell must be the work of
 #  the uniform stress, the work of the wall stress included); and a
 #  control that

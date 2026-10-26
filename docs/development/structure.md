@@ -226,15 +226,14 @@ Mf = Viscous_Face_Metric ( blk, d, i, j, k, metric )
 
 for the face of direction `d` between cell `(i,j,k)` and the next one along
 `d`, with `metric = obj_space_scheme%metric_mode` (`METRIC_MEAN` 0,
-`METRIC_INVERSE_MEAN` 1, `METRIC_STENCIL` 2, from `diffusive-metric`). With
-`mean` and `inverse-mean` it computes the metric from the cell metrics
-`blk%M` and `blk%Minv` with the operations `Diffusive_Flux` used before;
-with `stencil` it returns the metric stored at setup in
+`METRIC_STENCIL` 2, from `diffusive-metric`). With `mean` it computes the
+metric as the mean of the cell metrics `blk%M` of the two cells; with
+`stencil` it returns the metric stored at setup in
 `blk%dir(d)%Mf(i,j,k)%c` by `Setup_Stencil_Metrics` (called at the end of
 `Setup_Metrics`, on every multigrid level). `Fluxes_blk` does not copy a
 stored metric: with `stencil` it passes `blk%dir(d)%Mf(i,j,k)%c` itself
 through a contiguous pointer, and calls `Viscous_Face_Metric` only for
-`mean` and `inverse-mean`; the symmetry and wall faces read their stored
+`mean`; the symmetry and wall faces read their stored
 metrics the same way. A caller that evaluates the interior viscous fluxes
 elsewhere, for example with another time scheme, gets the bits of
 `Fluxes_blk` by calling `Viscous_Variables` after its own fill of the ghost
@@ -254,7 +253,7 @@ caller passes (`BC_Fluxes`, the wall output). Faces of type
 with `stencil`, with the metric that `Rotational_Face_Metric` stores on the face
 of the block (one per group of quantities with a wall ghost cell in the row of
 the cell or of the source; the image row is the row of the source turned,
-positions and values), and with `inverse-mean` and `mean` the inverse-mean
+positions and values), and with `mean` the inverse-mean
 metric of the cell and its image, which depends on the mesh only:
 `Setup_Metrics` computes it once (`Rotational_Periodic_Face_Metric`) and stores
 it in the record (`bc%rM`), and `BC_Fluxes` passes it; the routine chooses by

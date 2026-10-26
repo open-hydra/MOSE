@@ -380,23 +380,20 @@ one of [13]. Exactness for linear fields does not certify accuracy on curved,
 highly stretched cells [14]; that case is not measured here. One effect of the
 off-face position of the tangential derivatives is measured (test `MMSResiduals`):
 on a wedge whose cells grow along $r$ by a ratio $q$, the axial viscous force of
-Homann's flow converges at first order on the first rows next to the axis, with
-`stencil` as with `inverse-mean`, as the derivative of $u_r$ along $x$ at the
+Homann's flow converges at first order on the first rows next to the axis, as
+the derivative of $u_r$ along $x$ at the
 faces $j$ is that of the mean of the two rows of cells, off the face by about
-$\Delta r\,(q-1)/4$. `inverse-mean`
+$\Delta r\,(q-1)/4$. The inverse-mean metric
 takes the tangential columns
 from the mean edges of the two cells instead. On smooth meshes they approach
 the centre differences as the cells shrink, but where the mesh is not smooth
 (cells of alternating size, nodes moved at random, folds at the faces between
 blocks) the face gradient of a linear field stays wrong by several per cent or
-more at any resolution. At a fold between two blocks of uniform cells the
-tangential columns of the two metrics coincide; there the error of
-`inverse-mean` came from the ghost cell of the connection, whose geometry is
-extrapolated straight across the fold. The column across the face is kept as $\tfrac12(a_L + a_R)$, which
+more at any resolution. The column across the face is kept as $\tfrac12(a_L + a_R)$, which
 is $\mathbf{x}_R - \mathbf{x}_L$, and so are the columns of the index
 directions with one cell (1-D runs, the $k$ direction of 2-D meshes and
 wedges). On 1-D runs and plane 2-D meshes the field does not vary along them,
-and 1-D runs give the bits of `inverse-mean`. On a wedge the $k$ neighbours are
+and 1-D runs give the bits of the inverse-mean metric. On a wedge the $k$ neighbours are
 the cell turned by $\mp\delta$, so the velocity differs across them, and that
 column, the mean edge of the cells, is the difference of the turned positions
 divided by $\cos^2(\delta/2)$: the error of order $\delta^2$ of the azimuthal
@@ -485,13 +482,13 @@ the nodes, which every rank holds, so no message is needed. Where a face or a
 cell is degenerate, the differences of its stencil can stop spanning the space
 and the metric is not defined there: the run stops at setup with a message that
 names the block, the cell and the face, a declared limit of `stencil`
-(`inverse-mean` does not need this metric, but a viscous run with it stops on a
+(`mean` does not need this metric, but a viscous run with it stops on a
 3-D mesh at a boundary face of zero area, below). A wall on faces of zero area,
 as on
 the axis of a 3-D mesh around it (a polar line), stops too: its gradient is not
 defined there, and the axis takes the symmetry condition (`300`). With `300` on
 the axis the polar line runs, and the face gradients next to it are exact for
-linear fields. With `inverse-mean` and `mean` a viscous run on a 3-D mesh with a
+linear fields. With `mean` a viscous run on a 3-D mesh with a
 boundary face of zero area, as on a polar line with the axis exactly at $r = 0$,
 stops at setup and names `stencil`: next to the axis
 the viscous force of the first row of cells grows as the mesh is refined (a
@@ -501,7 +498,7 @@ With the axis nodes exactly at $r = 0$ the polar line runs with `stencil`, but
 the solution next to the axis is of first order. On smooth fields the residual
 of the two rows of cells next to the axis does not converge as the mesh is
 refined: its viscous part grows as $1/h$ and its convective part does not
-decrease. With `inverse-mean` and `mean` the viscous residual of the cells next
+decrease. With `mean` the viscous residual of the cells next
 to a symmetry plane (`300`) that bounds a sector of a polar mesh does not
 converge either: on smooth fields that the plane allows it stays of order one as
 the mesh is refined, while with `stencil` those cells converge as the others.
@@ -519,13 +516,12 @@ $$
 This bias does not decrease with grid refinement at a fixed growth ratio, and it
 is present in the converged steady solution. `mean` is adequate where adjacent
 cells grow by about 1.2 or less; boundary-layer meshes often grow faster near
-the wall. With `inverse-mean` MOSE stores $A^{T}$ per cell (9 values), so each
-face needs one $3\times 3$ inversion.
+the wall.
 
 With `stencil`, a face between blocks takes one face gradient with its stencil
 metric, as an interior face, and a symmetry face the gradient between the cell
-and its mirror image. With `inverse-mean` and `mean`, block-connection faces
-use the inverse mean, as chimera faces do with every option: across a large
+and its mirror image. With `mean`, block-connection faces
+use the inverse-mean metric, as chimera faces do with every option: across a large
 cell-size jump at a block interface, the mean makes the normal gradient so steep
 that the explicit diffusion becomes unstable.
 
@@ -552,8 +548,8 @@ the boundary diamond of [11] (a value at the midpoint of the boundary edge and
 values along the edge), there at the vertices of the edge and here at the
 neighbouring face centres. A boundary face that keeps only the normal distance,
 as in [13] (Eq. 3.57–3.59) and in OpenFOAM (OpenFOAM-dev, commit dfa6c7e,
-`fvPatch.C`), has the error of `inverse-mean` and `mean` given below.
-With `inverse-mean` and `mean`, and for the quantities whose wall value is not
+`fvPatch.C`), has the error of `mean` given below.
+With `mean`, and for the quantities whose wall value is not
 known along the wall (the temperature of 301 walls and of the surface models
 of 503–505), the derivatives along the wall are zero and the metric is that of
 the wall cell: on a cell skewed by θ the normal gradient is then wrong by
@@ -573,9 +569,9 @@ with $\mathbf{u}_w = -\boldsymbol{\Omega}\times(\mathbf{x}-\mathbf{x}_o)$
 with the constant gradient $-[\boldsymbol{\Omega}\times]$. With every option
 the wall gradient takes the differences of $\mathbf{u}_w$ along the position
 differences of its metric, the columns of $M^{-1}$: those of the wall stencil
-above with `stencil`, the edges of the wall cell with `inverse-mean` and
+above with `stencil`, the edges of the wall cell with
 `mean`. The part of $\mathbf{u}_w$ in the wall gradient is then exact with
-`stencil` on cells of any shape, and with `inverse-mean` and `mean` on
+`stencil` on cells of any shape, and with `mean` on
 parallelepiped cells, where the metric of the wall cell is exact; the rest is
 that of a wall at rest. Without these differences the wall stress would be
 wrong by the order of $\mu\,|\boldsymbol{\Omega}|$ with every metric and on
@@ -613,10 +609,10 @@ ghost cell turned by the wedge angle, as those of a cell are; across a block
 one cell wide in another direction they are the ghost cell itself.
 
 !!! note "Tangential derivatives"
-    With `inverse-mean` and `mean` the tangential derivatives on a face are
+    With `mean` the tangential derivatives on a face are
     central differences over two cells, divided by the cell's own tangential
     edge. With stretching in a tangential direction they carry the same
-    $(1+r)^2/(4r)$ factor, which neither option corrects. In a thin boundary
+    $(1+r)^2/(4r)$ factor, which `mean` does not correct. In a thin boundary
     layer this enters only through the streamwise variation of the shear on
     faces normal to the flow, so its effect is much smaller than that of the
     face-normal gradient. `stencil` divides them by the difference of the
@@ -794,7 +790,7 @@ from the state of the cell:
   in the same way) and, with `diffusive-metric = stencil`, the face metric of
   the same differences of the positions, the row of the image the row of the
   cell turned (exact for the linear fields that the rotation allows, see the 3-D
-  sector below); with `inverse-mean` and `mean`, the inverse-mean face metric of
+  sector below); with `mean`, the inverse-mean face metric of
   the cell and its image. Both are computed once at setup (they depend on the
   mesh only).
 
@@ -827,7 +823,7 @@ $2.5\times10^{-5}$ for $\delta = 1^\circ$). Keep the wedge thin.
 Put the axis nodes at a small radius, as MOSE's meshes do ($10^{-6}\,\Delta r$):
 a viscous run on a wedge whose axis is exactly at $r = 0$ stops at setup, with
 every `diffusive-metric`. On such an axis the faces have zero area and no
-normal, so their ghost cells copy the cells. With `inverse-mean` and `mean` the
+normal, so their ghost cells copy the cells. With `mean` the
 wedge faces and the faces $i$ of the first row of cells take the derivative in
 $r$ across the axis with the ghost cell one cell away and would see half of
 $\partial u_r/\partial r$: an error of the hoop stress of those cells that
@@ -891,7 +887,7 @@ the source, behind a wall too, turned with it). A linear field that the
 periodicity allows, $\mathbf{u}(R\mathbf{x}) = R\,\mathbf{u}(\mathbf{x})$, is so
 exact at these faces on any mesh; where a wall ghost cell enters the row of the
 cell or of the source, the face takes one metric per group of quantities, as an
-interior face. With `inverse-mean` and `mean` the face takes the inverse of the
+interior face. With `mean` the face takes the inverse of the
 mean of the inverse metrics of the cell and of its image, whose columns along
 the face are the mean edges of the two cells, not the differences of the
 centres: where the cell size grows along the face by a ratio $q$ the
@@ -901,14 +897,14 @@ derivatives along the face carry the factor $(1+q)^2/(4q)$ of the note
 symmetry (`300`), whose ghost cell is the mirror image of the cell, $(3+q)/4$, a
 relative error of $(q-1)/4$ ($5\times10^{-2}$ at $q = 1.2$); refinement at a fixed
 ratio does not reduce them. For $u_r = U r$, whose viscous force is zero, the
-radial viscous force of a cell of the wedge is, with `inverse-mean`, that
-relative error times the hoop term $\tau_{\theta\theta}/r$ on top of the error
+radial viscous force of a cell of the wedge is, with the inverse-mean metric on
+every face, that relative error times the hoop term $\tau_{\theta\theta}/r$ on top of the error
 of order $\delta^2$ above, and with `stencil` that error alone,
 $\sin^2(\delta/2)$ of the hoop term in every cell (test `MMSResiduals`).
 A viscous run on a sector whose axis nodes are
 exactly at $r = 0$ stops at setup, as on the wedge, with every
 `diffusive-metric`: behind faces of zero area the ghost cells copy the cells,
-and with `inverse-mean` and `mean` the periodic faces of the first row of cells
+and with `mean` the periodic faces of the first row of cells
 would see half of $\partial u_r/\partial r$ ($1/6$ of the hoop term in Homann's
 flow; with `stencil` the error of a small axis radius, next to the periodic faces
 too). Put the axis nodes at a small radius.
@@ -952,7 +948,7 @@ split mesh does not give the fluxes of the unsplit one bit for bit.
 With `diffusive-metric = stencil` the viscous flux of a face between blocks is
 that of an interior face: one face gradient, from the cell, the ghost cell and
 their tangential neighbours (those of the ghost cell are cells of the other
-block, `bc%Pg(:,3:6)`), with the stencil face metric. With `inverse-mean` and
+block, `bc%Pg(:,3:6)`), with the stencil face metric. With
 `mean` it uses its own stencil (two gradients, each with the tangential
 differences of one of the two cells, and the mean of their fluxes) and the
 inverse-mean face metric.
