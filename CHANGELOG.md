@@ -779,3 +779,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   densities. Viscous runs with a `410` face change next to it; with turbulence or soot, where the density of the file differs
   from that of the cell, runs with a `410` face change in the flux of these quantities through the face with every
   `diffusive-metric`. Runs without a `410` face do not change.
+- The installation guide and the table of CMake options of `docs/development/structure.md` give the defaults that a `cmake`
+  configuration of a new build directory takes for the options it does not set: `USE_TECIO` and `USE_SUNDIALS` are ON (options
+  of ORION and of OSLO), `USE_OPENMP`, `USE_MPI` and `USE_CANTERA` OFF, while `install.sh build` turns TecIO and SUNDIALS on only
+  with `--use-tecio` and `--use-sundials`. The table gave OFF for `USE_TECIO` and `USE_SUNDIALS`, and the installation guide said that SUNDIALS is built
+  if `--use-sundials` is selected. The installation guide and the README say that every configuration needs C and C++ compilers:
+  they said that these compilers were needed only for the optional components (TecIO, Cantera, SUNDIALS).

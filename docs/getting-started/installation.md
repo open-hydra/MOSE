@@ -11,8 +11,7 @@ Before attempting to build MOSE make sure your system provides the following ext
 
 - **CMake** – 3.23 or newer.
 - **Fortran compiler** – the GNU toolchain (`gfortran`) or Intel oneAPI (`ifort`/`ifx`). MOSE is tested with gfortran 12 and 13 and with ifx 2024.1. ifx 2023.0 is not supported: it stops with an internal compiler error on StringiFor, a library that FiNeR needs, and with Intel MPI 2021.8 its runs on several MPI ranks with several OpenMP threads each do not repeat the bits of the run on one rank.
-- **C++ compiler** – required only if you wish to enable optional components that depend on C++ (Cantera, TecIO).
-- **C compiler** – needed when building SUNDIALS (optional).
+- **C and C++ compilers** – required, whatever the options: the CMake project of MOSE enables C and C++ (`project` in `CMakeLists.txt`).
 - **OpenMP** – needed for optional parallelization support.
 
 **ifx 2024.1 and IPO.** ifx 2024.1 (tested: 2024.1.0, build 20240308) compiles a loop of the ghost metrics of MOSE wrongly at `-O2` and `-O3` without interprocedural optimization: a minimal program in standard Fortran gives wrong values at `-O2` and `-O3`, also at the default level with no `-O` option, and the right ones at `-O0`, `-O1` and with `-ipo`. MOSE built so stops at set-up on the check of the ghost metrics, or runs with wrong ghost metrics. CMake therefore refuses ifx 2024.1 at `-O2` or above without IPO, with a message: a RELEASE build with `-DUSE_IPO=OFF` (`--no-ipo`), or whose toolchain cannot do IPO, and the TESTING build. The RELEASE build with IPO (the default) and the DEBUG build (`-O0`) are accepted. Other versions of ifx have not been tested.
@@ -25,7 +24,7 @@ MOSE depends on several repositories that are included as Git submodules.
 |------------------------------------|-------------------------------------------------------|------------------------------------------|
 | `lib/ORION`                        | `https://github.com/MarcoGrossi92/ORION.git`         | I/O routines (TecIO, VTK, Plot3D, etc.)  |
 | `lib/third_party/FiNeR`            | `https://github.com/szaghi/FiNeR.git`                | INI file parser                      |
-| `build/lib/OSLO` (installed by FLINT) | `https://github.com/MarcoGrossi92/OSLO.git`       | ODE solvers library               |
+| `lib/FLINT/lib/OSLO` (submodule of FLINT) | `https://github.com/MarcoGrossi92/OSLO.git`   | ODE solvers library               |
 | `lib/FLINT`                        | `https://github.com/MarcoGrossi92/FLINT.git`         | Thermodynamic database utilities          |
 
 [ExactPack](https://github.com/lanl/ExactPack) is a pip dependency of the test
@@ -136,6 +135,12 @@ cmake --build . --parallel
 The build directory is `build/` in these examples. The static library is `build/src/lib/libMOSEL.a`; the executables (`MOSE`, `DocGen`, `MOSE_mms`) go to `bin/` of the source tree,
 whatever the build directory.
 
+In a new build directory, an option that the command line does not set takes its default. With no `-D` option, `cmake ..`
+configures a RELEASE build with `USE_IPO` ON, `USE_OPENMP`, `USE_MPI` and `USE_CANTERA` OFF, and `USE_TECIO` and `USE_SUNDIALS`
+ON, the defaults of ORION and OSLO, which declare these two options (see [TecIO](#tecio) and [SUNDIALS](#sundials)).
+`install.sh build` sets each of these options, and turns TecIO and SUNDIALS on only with `--use-tecio` and `--use-sundials`;
+with CMake, `-DUSE_TECIO=OFF -DUSE_SUNDIALS=OFF` leave them out.
+
 ## CMake presets
 
 The file `CMakePresets.json` produced by the install script records all of the cache variables that were used during configuration. You can build the project later simply with
@@ -166,10 +171,19 @@ The recipe was tested with gfortran 13.2.1: where `gfortran` is an older version
 ### TecIO
 
 MOSE can be built with support for TecIO, a library for writing Tecplot files. This is an optional feature shipped with ORION. If enabled, MOSE will be able to read and write output in Tecplot binary format, which can be useful for post‑processing and visualization of large datasets. Enabling TecIO requires a working C++ compiler.
+`USE_TECIO` is an option of ORION (`lib/ORION/CMakeLists.txt`), ON by default: a configuration of a new build directory that
+does not set it builds TecIO from its sources in `lib/ORION/lib/TecIO` when that folder holds no install of TecIO for the
+compilers of the configuration and its choice of MPI.
+`install.sh build` enables it only with `--use-tecio`.
 
 ### SUNDIALS
 
-SUNDIALS is a suite of solvers for ODEs. The library is included as a submodule in OSLO and will be built automatically if you select the `--use-sundials` option during installation. Enabling SUNDIALS requires a working C compiler.
+SUNDIALS is a suite of solvers for ODEs. The library is included as a submodule in OSLO (`lib/FLINT/lib/OSLO/lib/sundials`).
+`USE_SUNDIALS` is an option of OSLO (`lib/FLINT/lib/OSLO/CMakeLists.txt`), ON by default: a configuration of a new build
+directory that does not set it builds SUNDIALS from that submodule when it finds in OSLO no install of SUNDIALS, or one built
+with other Fortran flags (the OpenMP flag of `USE_OPENMP`), and stops with
+"Failed to initialize git submodules." when the submodule is missing and `git submodule update --init --recursive` cannot fetch
+it. `install.sh build` enables it only with `--use-sundials`. Enabling SUNDIALS requires a working C compiler.
 
 ### Cantera
 

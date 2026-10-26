@@ -448,9 +448,15 @@ cmake --preset default && cmake --build build
 |--------|:-------:|---------|--------|
 | `USE_OPENMP` | OFF | OpenMP | Enable shared-memory threading |
 | `USE_MPI` | OFF | MPI | Enable distributed-memory parallelism |
-| `USE_SUNDIALS` | OFF | SUNDIALS | Alternative ODE solvers for chemistry |
+| `USE_SUNDIALS` | ON | SUNDIALS | Alternative ODE solvers for chemistry |
 | `USE_CANTERA` | OFF | Cantera | Alternative chemistry backend |
-| `USE_TECIO` | OFF | TecIO | Enable Tecplot binary output |
+| `USE_TECIO` | ON | TecIO | Enable Tecplot binary output |
+
+A default is the value that an option takes when a `cmake` configuration of a new build directory does not set it.
+`USE_OPENMP` and `USE_MPI` are options of MOSE (`CMakeLists.txt`), `USE_TECIO` of ORION
+(`lib/ORION/CMakeLists.txt`), `USE_CANTERA` of FLINT (`lib/FLINT/CMakeLists.txt`) and
+`USE_SUNDIALS` of OSLO (`lib/FLINT/lib/OSLO/CMakeLists.txt`). `install.sh build` sets each of
+them, OFF unless its `--use-*` option is given.
 
 ### Dependency paths
 
