@@ -21,11 +21,20 @@ that SIGN[KIND] gives: neg404, neg408, neg420 a negative value, zero403, zero404
 nozzle 420 is that of an exit-to-throat area ratio of 2 fed from (T0, P0), calorically perfect (nozzle_record below), with
 -g or 0 as its g.
 
+Nozzles 420 that cannot be the record of a nozzle. The thresholds p_sub and p_sup of a nozzle are required and must
+satisfy 0 < p_sup <= p_sub < p0, its g must not be above the choked mass flux G* of the reservoir, and its T0 must not be
+above one kelvin below the last row of the tables of the gas, where their interpolation ends: otherwise the run stops at
+set-up. The case of p0.dat with its inlet (face 1, record 1) the nozzle of area ratio 2, changed as NOZZLE[KIND] says
+(G* = 2 g of that nozzle). Fed from the last row of the tables, T_TOP, the same nozzle has the same thresholds and its g
+times sqrt(T0/T_TOP), as G* of a calorically perfect gas.
+
 Usage (from the test directory):
   python3 -B make_case.py case NAME      INPUT/ic.tec, INPUT/bc.txt naming the table NAME, and the table under that name
   python3 -B make_case.py same A B       exit status 0 when the fields A and B hold the same values (cell data, bit for bit)
   python3 -B make_case.py bad KIND       the case of p0.dat with the line of bc.txt that BAD[KIND] gives
   python3 -B make_case.py sign KIND      the case of p0.dat with its inlet of the type and value that SIGN[KIND] gives
+  python3 -B make_case.py nozzle KIND    the case of p0.dat with its inlet the nozzle of area ratio 2 changed as
+                                         NOZZLE[KIND] says
   python3 -B make_case.py srm [rest] [sst]   the duct with a viscous gas and nu~, its inlet an SRM grain boundary (502);
                                          rest: the gas at rest at T0 and PB; sst: k and omega instead of nu~
   python3 -B make_case.py srmcheck DIAG   exit status 0 when the change of rho nu~ over one step is that of the wall value
@@ -115,6 +124,7 @@ def write_bad(kind):
 
 
 CP = 1004.5                                          # test/common/Air: cp, J/(kg K)
+T_TOP = 10000.0                                      # test/common/Air: the last row of the tables, K
 G_IN, UN_IN = 120.0, 100.0                           # a mass flux, kg/(m2 s), and a velocity, m/s
 SIGN = {                                             # record 1 (face 1): type, value (None: -g of the nozzle record)
     "neg404": (404, -G_IN), "neg408": (408, -UN_IN), "neg420": (420, None),
@@ -161,6 +171,42 @@ def write_sign(kind):
         lines[1] = f"{T0}, {P0}, {p_sub:.17E}, {p_sup:.17E}, {-g if value is None else value:.17E}, 1.0, 1.0\n"
     else:                                            # T0 (403) or T (404, 408), g or un, alpha, beta, rel_fac, mass fraction
         lines[1] = f"{T0}, {value}, normal, normal, 1.0, 1.0\n"
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(lines))
+
+
+NOZZLE = {                                           # record 1 (face 1): the nozzle of area ratio 2, then what changes
+    "psub-empty": "p_sub empty",
+    "swapped": "p_sub and p_sup swapped",
+    "psub-p0": "p_sub at p0",
+    "psup-zero": "p_sup zero",
+    "choked": "g at 1.01 G*",
+    "t0-above": "T0 at the last row of the tables, T_TOP",
+}
+
+
+def write_nozzle(kind):
+    if kind not in NOZZLE:
+        sys.exit(f"unknown nozzle {kind}")
+    write_case("p0.dat")
+    p_sub, p_sup, g = nozzle_record(2.0)
+    t0 = T0
+    if kind == "swapped":
+        p_sub, p_sup = p_sup, p_sub
+    elif kind == "psub-p0":
+        p_sub = P0
+    elif kind == "psup-zero":
+        p_sup = 0.0
+    elif kind == "choked":                           # G* = 2 g, the choked mass flux of the reservoir
+        g = 1.01 * 2.0 * g
+    elif kind == "t0-above":                         # the same nozzle fed from T_TOP: G* scales as 1/sqrt(T0)
+        t0 = T_TOP
+        g = g * math.sqrt(T0 / T_TOP)
+    psub = " " if kind == "psub-empty" else f"{p_sub:.17E}"
+    with open("INPUT/bc.txt") as f:
+        lines = f.readlines()
+    lines[0] = "       1       1       1       1       1     420\n"
+    lines[1] = f"{t0}, {P0}, {psub}, {p_sup:.17E}, {g:.17E}, 1.0, 1.0\n"
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(lines))
 
@@ -260,6 +306,8 @@ def main():
         write_bad(sys.argv[2])
     elif what == "sign":
         write_sign(sys.argv[2])
+    elif what == "nozzle":
+        write_nozzle(sys.argv[2])
     elif what == "srm":
         write_srm("rest" in sys.argv[2:], "sst" in sys.argv[2:])
     elif what == "srmcheck":

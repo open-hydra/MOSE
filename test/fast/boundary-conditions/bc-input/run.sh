@@ -19,7 +19,14 @@
 #  or zero (403, 404, 408, 420) must stop the run at set-up with exit code 1,
 #  no solution and a message with the line, the record, the type, the value
 #  and the face, and for a negative value the outlet types (make_case.py
-#  sign). An SRM grain boundary (502) with the
+#  sign). So must a nozzle 420 without p_sub, one whose thresholds do not
+#  satisfy 0 < p_sup <= p_sub < p0 (p_sub and p_sup swapped, p_sub at p0,
+#  p_sup zero), with the three values, one whose g is above the choked mass
+#  flux G* of its reservoir (1.01 G*), with g and G*, and one whose T0 is
+#  above one kelvin below the last row of the tables of the gas, where their
+#  interpolation ends (T0 = 10000 K, the last row of test/common/Air), with
+#  T0 and that temperature, 9999 K (make_case.py
+#  nozzle). An SRM grain boundary (502) with the
 #  Spalart-Allmaras model runs (40 steps), and so with SST, its ghost cells
 #  hold the wall value nu~ = 0 and it is a wall for the wall distance: one
 #  explicit step at rest from a uniform rho nu~ changes it in the cell next to
@@ -169,6 +176,28 @@ sign zero403 'bc.txt line 2 \(record 1, type 403\): g = 0 on face 1: an inlet ne
 sign zero404 'bc.txt line 2 \(record 1, type 404\): g = 0 on face 1: an inlet needs a mass flux into the domain \(g > 0 on every face\)'
 sign zero408 'bc.txt line 2 \(record 1, type 408\): un = 0 on face 1: an inlet needs a velocity into the domain \(un > 0 on every face\)'
 sign zero420 'bc.txt line 2 \(record 1, type 420\): g = 0 on face 1: an inlet needs a mass flux into the domain \(g > 0 on every face\)'
+
+echo "-- nozzles whose thresholds are out of order, whose g is above the choked mass flux, or whose T0 is above the tables --"
+nozzle() {   # nozzle <kind> <pattern>: the run must stop at set-up with exit code 1, a message matching the pattern, no solution
+  python3 -B make_case.py nozzle "$1" || exit 1
+  rm -f OUTPUT/field.tec
+  timeout 60 "$LOCAL" > "OUTPUT/nozzle-$1.log" 2>&1
+  local rc=$?
+  if [[ $rc -eq 1 && ! -f OUTPUT/field.tec ]] && grep -a -q -E "$2" "OUTPUT/nozzle-$1.log"; then
+    echo "  [ok  ] $1: stopped at set-up, exit code 1"
+  else
+    echo "  [FAIL] $1: exit code $rc, the record was not refused as it should (see OUTPUT/nozzle-$1.log)"
+    fail=1
+  fi
+}
+val='[0-9]\.[0-9]{16}E[-+][0-9]{2}'
+order="bc.txt line 2 \\(record 1, type 420\\): p_sup = $val, p_sub = $val, p0 = $val: the thresholds must satisfy 0 < p_sup <= p_sub < p0"
+nozzle psub-empty 'bc.txt line 2 \(record 1, type 420\): the value of p_sub is empty'
+nozzle swapped "$order"
+nozzle psub-p0 "$order"
+nozzle psup-zero "$order"
+nozzle choked "bc.txt line 2 \\(record 1, type 420\\): g = $val is above the choked mass flux G\\* = $val of T0, p0 and the gas: no nozzle exit has that mass flux"
+nozzle t0-above "bc.txt line 2 \\(record 1, type 420\\): T0 = $val is above 9999 K, one kelvin below the last row of the tables of the gas, where their interpolation ends: extend the tables to higher temperatures"
 
 echo "-- an SRM grain boundary (502) with a RANS model --"
 python3 -B make_case.py srm || exit 1
