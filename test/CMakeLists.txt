@@ -467,6 +467,16 @@ add_test(NAME BilinearDistance
          COMMAND bilinear_distance_check ${CMAKE_CURRENT_SOURCE_DIR}/unit/bilinear_distance_cases.txt)
 set_tests_properties(BilinearDistance PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 120)
 
+# Blocks whose state an MPI rank holds (RemoteBlocks): a unit check of
+# blocks_needing_full_arrays and deallocate_remote_computation_data on four
+# blocks of three ranks, each rank set as a run on three ranks sets it (no MPI
+# call): a rank holds its own blocks and the chimera (102) donors of the
+# receivers it owns, not the donors of the receivers of other ranks, nor the
+# donors of a face 104, which are cells of the other solver.
+add_fortran_executable(remote_blocks_check unit/remote_blocks_check.f90)
+add_test(NAME RemoteBlocks COMMAND remote_blocks_check)
+set_tests_properties(RemoteBlocks PROPERTIES LABELS "fast;implementation;unit" TIMEOUT 60)
+
 # ===========================================================================
 #  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
 #  Each test generates its own small multi-block case and launches the solver
