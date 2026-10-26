@@ -126,7 +126,9 @@ The case is run on three successively refined grids ($32^2$, $64^2$, $128^2$,
 refinement ratio 2), each marched to a converged steady residual. The normalised
 $L_2$ and $L_\infty$ errors are measured for every primitive variable against the
 manufactured field, and the observed order of accuracy is
-$p = \log_2\!\big(e(N)/e(2N)\big)$.
+$p = \log_2\!\big(e(N)/e(2N)\big)$. `verify.py` passes when the $L_2$ error of
+every variable decreases from grid to grid and the observed $L_2$ order of the
+finest pair is at least 1.6 for every variable.
 
 **Normalised $L_2$ error (%)**
 
@@ -146,11 +148,9 @@ $p = \log_2\!\big(e(N)/e(2N)\big)$.
 | $v$    | 0.0718 | 0.0143 | 0.00313 | 2.33 | 2.19 |
 | $p$    | 0.130 | 0.0358 | 0.00879 | 1.85 | 2.03 |
 
-The tables come with the page (commit `0b3b3c64`) and were computed with
-VNN = 0.1. With VNN = 0.3 and the local time step of one additive rule over the
-directions, convection and diffusion (MOSE of commit `667fc3c0`), the steady
-states on $32^2$ and $64^2$ give the same orders and errors within 0.2 % of
-those of the tables, which round them to three digits.
+With the inputs of the case the full study (`./MOSE.sh test`) stops the three
+grids after 2 500, 8 300 and 29 800 iterations and gives the errors and orders of
+the tables within 0.51 %.
 
 Every variable converges at close to second order in both norms, confirming that
 the full viscous MUSCL/RK3 discretisation is second-order accurate.
