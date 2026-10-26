@@ -298,6 +298,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | N9 | Volume of a cell, a unit check of Compute_Metric_Tensor: ten cells (cubes with one twisted face, T_n/h = 1 and 5; a valid non-convex cell with six twisted faces; a collapsed edge with two twisted faces; a 2-D prism; wedge cells of 5°, one on the axis; the first cube and the prism moved by 1e3; the first cube mirrored, left-handed), a twisted mesh of 8³ cells, an inverted cell with det A > 0 at its centre and V < 0 | the integral of det J of the trilinear cell (exact, in rational arithmetic from the binary64 nodes) within 32 u; the volumes of the mesh sum to the volume enclosed by its boundary faces within 1e-13; the inverted cell raises the flag of degenerate or inverted cells | ☑ `CellVolume` | <1 s |
 | N10 | Order of rounding of `VOLATILE` variables, on which the geometry of the cells relies: (q − c1) − (c2 − c1) with q = 1, c1 = 2⁵⁴, c2 = 3 from the command line, through `VOLATILE` variables (a pair, an array) and through plain ones | −4 through the `VOLATILE` variables, the order of the source (plain ones printed: −2 with `-ffast-math` is allowed) | ☑ `VolatileOrder` | <1 s |
 | N11 | Wall distance to a bilinear face, a unit check of the certified minimum (Bilinear_Face_Distance) on 203 cases: twisted (twist 1 to 1e-6), plane, non-convex, degenerate (a collapsed side, nearly collapsed by 1e-6 to 1e-12, two collapsed sides, three coincident corners, a bowtie, a pinch, a needle of aspect 1e6), turned at random and moved by 1e3, points on the normal down to 1e-9, beyond sides and corners, at the focal point of a saddle, adverse cases; and of the fast-path test (Face_Fast_Test) on 108 faces | within 288 u S of the exact distance of the stationarity equations (rational arithmetic), certificate within 256 u S, no piece cut at the deepest level, at most 1e5 pieces; the fast path taken by every plane face (convex, thin tapered up to aspect 1e5, triangles of a collapsed side also far from the origin, parallelograms, 2-D extruded), not by twisted faces and darts, its bound of the gap at least the exact gap | ☑ `BilinearDistance` | <1 s |
+| I14 | Blocks whose state an MPI rank holds, a unit check of blocks_needing_full_arrays and deallocate_remote_computation_data: four blocks on three ranks, each rank set as a run on three ranks sets it (no MPI call); a chimera face (102) of block 2 (rank 1) with its donors in block 3 (rank 2), one of block 4 (rank 2) with its donors in block 2 (rank 1), and a face 104 of block 1 (rank 0) whose donors carry the number 4, a block of the other solver | the blocks with full arrays at set-up, and the blocks that keep P after it with every block allocated in full first (as with multigrid): block 1 on rank 0, blocks 2 and 3 on rank 1, blocks 2, 3 and 4 on rank 2; rank 0, which owns no receiver, holds no chimera donor | ☑ `RemoteBlocks` | <1 s |
 
 **Rule of a row.** The ~Cost of a row is its CPU time at one thread in the build of the
 first CI job (gfortran, `TESTING`), the part run alone as its area runs it
@@ -326,13 +327,13 @@ as CPU time at one thread on the same machine at a load average of ~100 to ~190.
 tests of main keep their tier: with the time step of commit `667fc3c0` `AblatingWall` takes
 11.4 s and `Noh87` and `PrandtlMeyer` up to 9.6 s.
 
-Current `ctest -L fast`: **24 tests, ~134 s of CPU time** at one thread, one test at a
+Current `ctest -L fast`: **25 tests, ~134 s of CPU time** at one thread, one test at a
 time (gfortran 13 `TESTING`, a machine with 192 logical CPUs at a load average of
-150-156). The 24 tests: Sod79, Einfeldt91,
+150-156). The 25 tests: Sod79, Einfeldt91,
 Noh87, Toro99, ShuOsher, PrandtlMeyer, RiemannSmoke,
 NumericsSmoke, InputChecks, TimeIntegration, BoundaryConditions, Conservation,
 OpenMPEquiv, Connections, Restart, OutputFiles, MMSResiduals, ViscousPatch, AblatingWall,
-MeshGeometry, QCR2000Stress, CellVolume, VolatileOrder, BilinearDistance. The 12 fast tests
+MeshGeometry, QCR2000Stress, CellVolume, VolatileOrder, BilinearDistance, RemoteBlocks. The 12 fast tests
 of main took ~41 s at commit `b29130b`, on the same machine at a load average of
 ~190. MPI builds also register the `needs-mpi` tier (`test/mpi/`; `MPIConnectionFlux`,
 `MPIConnectionOrder`: the two-block cases with one block per rank;
