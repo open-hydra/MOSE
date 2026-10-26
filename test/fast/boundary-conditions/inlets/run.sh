@@ -47,6 +47,22 @@
 #     Each mass flux must equal that of the face state within 1e-9 of rho a,
 #     and the mass fluxes of riemplus and riemminus must agree within 1e-9 of
 #     rho a: the face state is continuous where the invariant changes sign.
+#  3. Inlets with a mass flux or a normal velocity: g of 403, 404 and 420 and
+#     un of 408 are positive into the domain on every face (inward_flux.py).
+#     The tube of part 2, its gas moving in at 0.1 a through the inlet, an
+#     extrapolation face (400) at the other end, one forward Euler step:
+#       imax403, imax404, imax408  the inlet on face 2 (i = NX, the normal
+#                  of the solver out of the domain), g = 0.3 rho a and
+#                  un = 0.1 a;
+#       imax420    a nozzle on face 2 with g = 0.3 rho a, fed from T0 = T and
+#                  p0 = 2 p, its p_sub and p_sup those of the nozzle that
+#                  this reservoir chokes at g: the cell is in the band of g;
+#       imaxneg403, imaxneg404, imaxneg408  the same with -g and -un;
+#       imin403, imin404, imin408  the inlet on face 1 (i = 1), g and un.
+#     Each mass flux into the domain must equal that of the record, g or
+#     rho un (rho of the pressure of the cell and the T of the record), within
+#     1e-9 of rho a, and on face 2 the negative value must give the field of
+#     the positive one, bit for bit.
 #  Gas: test/common/Air.
 #===============================================================================
 set -uo pipefail
@@ -168,6 +184,35 @@ else
   echo "  [FAIL] the mass flux jumps where the invariant of the cell changes sign"
   fail=1
 fi
+
+echo "-- 3. inlets with a mass flux or a normal velocity: positive into the domain --"
+# input.ini of part 2: one forward Euler step, first order
+for name in imax403 imax404 imax408 imax420 imaxneg403 imaxneg404 imaxneg408 imin403 imin404 imin408; do
+  echo "   $name"
+  python3 -B inward_flux.py case "$name" || exit 1
+  rm -f OUTPUT/field.tec "OUTPUT/$name.tec"
+  timeout 60 "$LOCAL" > "OUTPUT/$name.log" 2>&1
+  if [[ $? -ne 0 || ! -f OUTPUT/field.tec ]]; then
+    echo "  [FAIL] the run did not complete (see OUTPUT/$name.log)"
+    fail=1
+    continue
+  fi
+  cp OUTPUT/field.tec "OUTPUT/$name.tec"
+  if python3 -B inward_flux.py check "$name" "OUTPUT/$name.tec"; then
+    echo "  [ok  ] $name: the mass flux into the domain is that of the record"
+  else
+    echo "  [FAIL] $name: the mass flux into the domain is not that of the record"
+    fail=1
+  fi
+done
+for t in 403 404 408; do
+  if [[ -f OUTPUT/imax$t.tec && -f OUTPUT/imaxneg$t.tec ]] && cmp -s "OUTPUT/imax$t.tec" "OUTPUT/imaxneg$t.tec"; then
+    echo "  [ok  ] $t on face 2: the negative value gives the field of the positive one, bit for bit"
+  else
+    echo "  [FAIL] $t on face 2: the negative value does not give the field of the positive one"
+    fail=1
+  fi
+done
 
 if [[ $fail -ne 0 ]]; then
   echo "Inlets: FAILED"

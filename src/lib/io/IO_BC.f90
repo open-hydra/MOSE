@@ -402,6 +402,7 @@ contains
           if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%mdot ], 'T0 g', &
                                             alpha_tok, beta_tok )
           if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
+          if ( ios == 0 ) call Need_Inward ( i, bc(i)%type, nline, bc(i)%f, bc(i)%mdot, 'g' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Inlet, mass-flux g + T (static)
@@ -417,6 +418,7 @@ contains
           if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%mdot ], 'T g', &
                                             alpha_tok, beta_tok )
           if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
+          if ( ios == 0 ) call Need_Inward ( i, bc(i)%type, nline, bc(i)%f, bc(i)%mdot, 'g' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Supersonic inlet, M + T (static) + p (static)
@@ -473,6 +475,7 @@ contains
           if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%T0, bc(i)%un ], 'T un', &
                                             alpha_tok, beta_tok )
           if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
+          if ( ios == 0 ) call Need_Inward ( i, bc(i)%type, nline, bc(i)%f, bc(i)%un, 'un' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Assigned state via time-varying file
@@ -511,6 +514,7 @@ contains
             call Need_R ( i, bc(i)%type, nline, [ bc(i)%mdot, bc(i)%rel_fac ], 'g rel_fac' )
             call Need_R ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
             call Need_R ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
+            call Need_Inward ( i, bc(i)%type, nline, bc(i)%f, bc(i)%mdot, 'g' )
           end if
 
         ! ─────────────────────────────────────────────────────────────────────
@@ -1042,6 +1046,45 @@ contains
     call Need_R ( n, bc%type, nline, bc%ci(1:nrans), 'turb' )
 
   end subroutine Need_Inlet
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Need_Inward: the mass flux g of an inlet 403, 404 or 420, or the velocity un of an inlet 408 (v, named name), of
+  !   record n, type btype, line nline of the file, on face face of its block, already finite and given (Need_Inlet, or
+  !   Need_Finite and Need_R). v is positive into the domain on every face: an inlet only lets gas in, so zero, or a
+  !   negative value on a face 1, 3 or 5, stops the run. On a face 2, 4 or 6 a negative value is taken as its
+  !   magnitude: it is the component of a gas that enters along the face normal of the solver, which points toward
+  !   growing index, out of the domain on those faces. The flux routines take -BC_Sign |v| along that normal.
+  subroutine Need_Inward ( n, btype, nline, face, v, name )
+    use MOSE_Mod_MPI, only: mpi_stop_all
+    implicit none
+    integer, intent(in)          :: n, btype, nline, face
+    real(R8), intent(in)         :: v
+    character(len=*), intent(in) :: name
+    ! Local
+    character(len=400) :: msg
+    character(len=16)  :: what, val
+
+    if ( btype == 408 ) then
+      what = 'a velocity'
+    else
+      what = 'a mass flux'
+    end if
+    if ( v == 0d0 ) then
+      write(msg,'(3A,I0,A,I0,A,I0,3A,I0,5A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type ', &
+        btype, '): ', name, ' = 0 on face ', face, ': an inlet needs ', trim(what), ' into the domain (', name, &
+        ' > 0 on every face)'
+      call mpi_stop_all ( trim(msg) )
+    else if ( v < 0d0 .and. mod(face, 2) == 1 ) then
+      write(val,'(ES12.5)') v
+      write(msg,'(3A,I0,A,I0,A,I0,5A,I0,3A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type ', &
+        btype, '): ', name, ' = ', trim(adjustl(val)), ' on face ', face, &
+        ' means gas leaving the domain: an inlet only lets gas in (', name, &
+        ' > 0 into the domain on every face); give an outlet type (406, or 400) to a face where the gas leaves'
+      call mpi_stop_all ( trim(msg) )
+    end if
+
+  end subroutine Need_Inward
 
 
   !─────────────────────────────────────────────────────────────────────────────

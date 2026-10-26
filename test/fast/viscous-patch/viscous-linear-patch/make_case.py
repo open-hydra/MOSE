@@ -710,17 +710,25 @@ def outward_area(X, sgn, face, i, j, k):
     return n, (n * a if face % 2 == 0 else -n * a)
 
 
+def inward(v):
+    """g or un of a property line, positive into the domain on every face: the magnitude of the component v of the gas of
+    the cell along the normal of the solver, or 1 where it is zero (the gas at rest)."""
+    return abs(v) if v != 0.0 else 1.0
+
+
 def open_line(mesh, run, X, sgn, face, i, j, k, t):
     """Property line of an inlet or outlet face (boundary-conditions.md, Inlet / Outlet) from the state of its cell:
     T0 or T the temperature of the cell, p0, p or p_back its pressure, the mass flux g and the velocity un its own across
-    the face, rho u . n and u . n (n the normal of the solver, toward growing index), a 405 face the Mach number and the
+    the face, |rho u . n| and |u . n| (n the normal of the solver, toward growing index: g and un are positive into the
+    domain on every face; 1 where the gas is at rest), a 405 face the Mach number and the
     direction of the velocity of the cell (alpha, beta as angles: Supersonic_Inflow takes the velocity along them, so the
     face gets the velocity of the cell, where with the token normal the direction would come from the normal of the
     solver, toward growing index), the other inlets the token normal, rel_fac 1 and the mass fraction of the single
     species 1. Each face takes the branch of its type that the state of its cell selects: an inflow where the gas
     of the cell moves in, else an outflow or the slip wall of a face the gas does not enter (eneio: the gas is at rest;
-    the 420 faces, with p0 = p, are slip walls in both runs). So the inviscid flux of the face stays at the scale of the
-    flux of the cell. The ghost cells of these types do not read the line."""
+    the 420 faces, with p0 = p and g = 1, are slip walls in both runs). So the inviscid flux of the face stays at the
+    scale of the flux of the cell. A slip wall does not read g or un, and the ghost cells of these types do not read the
+    line."""
     rho, u, p = state(mesh, run, centres(X)[i - 1, j - 1, k - 1])
     T = p / (rho * RGAS)
     n, _ = outward_area(X, sgn, face, i, j, k)
@@ -731,7 +739,7 @@ def open_line(mesh, run, X, sgn, face, i, j, k, t):
     if t == 402:
         return f'    {T:.17E}, {P0_TABLE}, normal, normal, {tail}'
     if t in (403, 404):
-        return f'    {T:.17E}, {rho * un:.17E}, normal, normal, {tail}'
+        return f'    {T:.17E}, {inward(rho * un):.17E}, normal, normal, {tail}'
     if t == 405:
         mach = float(np.linalg.norm(u)) / math.sqrt(GAMMA_AIR * RGAS * T)
         alpha, beta = math.atan2(u[1], u[0]), math.atan2(u[2], math.hypot(u[0], u[1]))
@@ -741,9 +749,9 @@ def open_line(mesh, run, X, sgn, face, i, j, k, t):
     if t == 407:
         return f'    {T:.17E}, {p:.17E}, {p:.17E}, normal, normal, {tail}'
     if t == 408:
-        return f'    {T:.17E}, {un:.17E}, normal, normal, {tail}'
+        return f'    {T:.17E}, {inward(un):.17E}, normal, normal, {tail}'
     if t == 420:                         # T0, p0, p_sub, p_sup, g: p0 = p, the branch of a face the gas does not enter
-        return f'    {T:.17E}, {p:.17E}, 0.0, 0.0, 0.0, {tail}'
+        return f'    {T:.17E}, {p:.17E}, 0.0, 0.0, 1.0, {tail}'
     sys.exit(f'no property line for type {t}')
 
 
