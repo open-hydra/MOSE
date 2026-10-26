@@ -399,6 +399,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sentinel value of the token for an angle (tan(huge) = −4.96e-3), so the gas entered with a spurious transverse component
   (1.21e-3 of the normal velocity in a test duct) and the closure of the inflow used a wrong coefficient. Results change
   wherever a `407` record gives `normal`; records with angles are unchanged.
+- A supersonic inlet (`405`) whose flow direction is given as `normal` lets the gas in along the normal of the face into the
+  domain, on every face; with one angle `normal` and the other a number, that angle is the azimuth or the elevation of this
+  normal. It took the angles of the normal toward growing index, atan(n_y/n_x) and atan(n_z/n_x), and built a velocity
+  (cos α cos β, sin α cos β, sin β) whose x component is never negative: where the normal into the domain has a negative x
+  component (face 2 of a block whose i grows along x, face 1 of one whose i grows along −x) the gas left through the inlet,
+  0.463 ρa out of the face of a tube at Mach 2 instead of 1.968 ρa in, and where it has components along both y and z the gas
+  entered off it, by 9.7° for (1, 1, 1)/√3. Results change where the angles taken, atan(n_y/n_x) for `alpha` and
+  atan(n_z/n_x) for `beta`, are not the azimuth and the elevation of the normal into the domain, for the angles that the
+  record gives as `normal`; where they are, as on a face whose normal into the domain is (1, 0, 0), at most the last digits
+  change. Records with angles are unchanged.
 - A 1-D case (one cell in j and in k) with symmetry (`300`) on all its j faces, or on all its k faces, no longer fails on
   round-off in v or w: the two mirror planes one cell apart give v the mode dv/dt = −2av/Δy, outside the stability region of
   the explicit schemes at the step of the x cells (three such cases stopped with `NaN or p<0` after 14 and 15 steps). Such a

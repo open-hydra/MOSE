@@ -722,8 +722,8 @@ def open_line(mesh, run, X, sgn, face, i, j, k, t):
     the face, |rho u . n| and |u . n| (n the normal of the solver, toward growing index: g and un are positive into the
     domain on every face; 1 where the gas is at rest), a 405 face the Mach number and the
     direction of the velocity of the cell (alpha, beta as angles: Supersonic_Inflow takes the velocity along them, so the
-    face gets the velocity of the cell, where with the token normal the direction would come from the normal of the
-    solver, toward growing index), the other inlets the token normal, rel_fac 1 and the mass fraction of the single
+    face gets the velocity of the cell, where with the token normal the direction would be the normal of the face into
+    the domain), the other inlets the token normal, rel_fac 1 and the mass fraction of the single
     species 1. Each face takes the branch of its type that the state of its cell selects: an inflow where the gas
     of the cell moves in, else an outflow or the slip wall of a face the gas does not enter (eneio: the gas is at rest;
     the 420 faces, with p0 = p and g = 1, are slip walls in both runs). So the inviscid flux of the face stays at the
