@@ -88,6 +88,13 @@ R_cea_fz = Runi / mw_cea_fz  # J/(kg·K)
 R_cea_eq = Runi / mw_cea_eq  # J/(kg·K)
 g_cea_fz = (cp_cea_fz * 1000) / (cp_cea_fz * 1000 - R_cea_fz)  # convert Cp to J/(kg·K)
 g_cea_eq = (cp_cea_eq * 1000) / (cp_cea_eq * 1000 - R_cea_eq)
+# The Mach number of MOSE below is the velocity over sqrt(g p / rho), g the ratio of specific heats of the mixture at fixed
+# composition: the frozen speed of sound, defined for every state of the three configurations. The CEA frozen stations have the
+# same Mach number. CEA gives the equilibrium stations the velocity over the equilibrium speed of sound (SON VEL, from the
+# isentropic exponent GAMMAs of the equilibrium mixture), which is defined only at equilibrium; the comparison divides their
+# velocity, MACH times SON VEL, by the frozen speed of sound of the same state, sqrt(g R T) with the gamma above.
+a_cea_eq  = np.array([1240.7,   1201.2,  1093.0,   1022.2,   951.0,    879.7])   # SON VEL of the equilibrium stations [m/s]
+Mf_cea_eq = M_cea_eq * a_cea_eq / np.sqrt(g_cea_eq * R_cea_eq * T_cea_eq)
 # Ratios to the stagnation values of CEA (the temperature panel draws T/T0)
 pp0_cea_fz   = P_cea_fz / P0_cea
 TT0_cea_fz   = T_cea_fz / T0_cea
@@ -178,45 +185,72 @@ M_avg_eq  = mfr_avg_1d(rho2d_eq, u2d_eq, M2d_eq)
 g_avg_eq  = mfr_avg_1d(rho2d_eq, u2d_eq, g2d_eq)
 mv_avg_eq = mfr_avg_1d(rho2d_eq, u2d_eq, mw2d_eq)
 
-# Inlet stagnation recovered via isentropic relations
+# The temperature panel divides by the stagnation temperature of CEA
 T0_sim = T0_cea
 
-# CEA x-positions: locate each Ae/At station in the mesh geometry.
-# Subsonic stations live in the converging section, supersonic in the diverging.
-R_wall      = r_hi[:, -1]
+# CEA stations on the grid. The wall of the grid is straight between its nodes and the area of a cross-section goes with the
+# square of the wall radius, so the narrowest section, the throat of the area ratios, is the wall node of smallest radius.
+# Each station is where the wall has the area ratio of CEA: in the converging part for the subsonic station, in the diverging
+# part for the others; a station beyond the last node of its part is taken at that node, the inlet or the exit plane.
+# The column averages are interpolated linearly in x between the centres of the two cell columns around the station; beyond
+# the first or the last centre the station takes that column (at the exit plane, the outlet face takes the state of the last
+# column).
+x_wall      = xn[:, -1]
+R_wall      = yn[:, -1]
 i_throat    = int(np.argmin(R_wall))
 R_t         = R_wall[i_throat]
-AeAt_1d     = R_wall**2 / R_t**2            # local area ratio at each axial cell
-sub_idx     = np.where(x_c < x_c[i_throat])[0]
-sup_idx     = np.where(x_c >= x_c[i_throat])[0]
 
 x_cea_list = []
-i_cea_list = []
+AeAt_grid = []
+st_cols = []          # (first column, second column, weight of the second)
 for k, AeAt in enumerate(AeAt_cea):
-    if M_cea_fz[k] < 1.0:                      # subsonic → converging section
-        region = sub_idx
-    else:                                    # sonic/supersonic → diverging section
-        region = sup_idx
-    i = region[np.argmin(np.abs(AeAt_1d[region] - AeAt))]
-    x_cea_list.append(x_c[i])
-    i_cea_list.append(i)
+    if M_cea_fz[k] < 1.0:                      # subsonic → converging part, from the throat back to the inlet
+        nodes = np.arange(i_throat, -1, -1)
+    else:                                      # sonic/supersonic → diverging part, from the throat to the exit
+        nodes = np.arange(i_throat, len(R_wall))
+    R_k = R_t * np.sqrt(AeAt)
+    x_k = x_wall[nodes[-1]]
+    for n0, n1 in zip(nodes[:-1], nodes[1:]):
+        if (R_wall[n0] - R_k) * (R_wall[n1] - R_k) <= 0.0:
+            s = (R_k - R_wall[n0]) / (R_wall[n1] - R_wall[n0]) if R_wall[n1] != R_wall[n0] else 0.0
+            x_k = x_wall[n0] + s * (x_wall[n1] - x_wall[n0])
+            break
+    x_cea_list.append(x_k)
+    AeAt_grid.append((np.interp(x_k, x_wall, R_wall) / R_t)**2)
+    if x_k <= x_c[0]:
+        st_cols.append((0, 0, 0.0))
+    elif x_k >= x_c[-1]:
+        st_cols.append((len(x_c) - 1, len(x_c) - 1, 0.0))
+    else:
+        i0 = int(np.searchsorted(x_c, x_k, side='right')) - 1
+        st_cols.append((i0, i0 + 1, (x_k - x_c[i0]) / (x_c[i0 + 1] - x_c[i0])))
 x_cea = np.array(x_cea_list)
 
-# The comparison of the figure, as numbers: mass-flow-weighted averages in the cell nearest to each CEA station
-print("Stations of the CEA reference: the cell nearest to each area ratio")
-print("  Ae/At of CEA  : " + "  ".join(f"{a:7.3f}" for a in AeAt_cea))
-print("  Ae/At of cell : " + "  ".join(f"{AeAt_1d[i]:7.3f}" for i in i_cea_list))
-print("  x [m]         : " + "  ".join(f"{x_c[i]:7.4f}" for i in i_cea_list))
+
+def at_stations(q):
+    """Column quantity q (one value per cell column) at the CEA stations."""
+    return np.array([(1.0 - t) * q[i0] + t * q[i1] for i0, i1, t in st_cols])
+
+
+# The comparison of the figure, as numbers: mass-flow-weighted averages at the CEA stations
+print("Stations of the CEA reference on the grid: area ratio to the narrowest section, mass-flow-weighted averages")
+print("interpolated linearly in x between the centres of two cell columns; Mach numbers with the frozen speed of sound")
+print("  Ae/At of CEA    : " + "  ".join(f"{a:9.3f}" for a in AeAt_cea))
+print("  x [m]           : " + "  ".join(f"{x:9.5f}" for x in x_cea))
+print("  Ae/At of grid   : " + "  ".join(f"{a:9.3f}" for a in AeAt_grid))
+print("  columns, weight : " + "  ".join(f"{i0:3d}-{i1:3d} {t:.2f}" for i0, i1, t in st_cols))
+print("  CEA equilibrium Mach number with its own (equilibrium) speed of sound: "
+      + "  ".join(f"{m:.3f}" for m in M_cea_eq) + "; with the frozen one: " + "  ".join(f"{m:.4f}" for m in Mf_cea_eq))
 for name, avg in (("Frozen", (M_avg_fz, p_avg_fz, T_avg_fz, g_avg_fz, mv_avg_fz)),
                   ("Finite-rate", (M_avg_fr, p_avg_fr, T_avg_fr, g_avg_fr, mv_avg_fr)),
                   ("Equilibrium", (M_avg_eq, p_avg_eq, T_avg_eq, g_avg_eq, mv_avg_eq))):
     print(f"MOSE {name}: value, % from CEA frozen, % from CEA equilibrium")
-    for qname, q, ref_fz, ref_eq, scale in (("Mach", avg[0], M_cea_fz, M_cea_eq, 1.0),
+    for qname, q, ref_fz, ref_eq, scale in (("Mach", avg[0], M_cea_fz, Mf_cea_eq, 1.0),
                                             ("p [bar]", avg[1], P_cea_fz, P_cea_eq, 1e-5),
                                             ("T [K]", avg[2], T_cea_fz, T_cea_eq, 1.0),
                                             ("gamma", avg[3], g_cea_fz, g_cea_eq, 1.0),
                                             ("M_w [g/mol]", avg[4], mw_cea_fz, mw_cea_eq, 1.0)):
-        val = np.array([q[i] * scale for i in i_cea_list])
+        val = at_stations(q) * scale
         print(f"  {qname:12s}" + "  ".join(f"{v:9.4f}" for v in val))
         print(f"  {'':12s}" + "  ".join(f"{d:+9.2f}" for d in (val / ref_fz - 1) * 100) + "   (CEA frozen)")
         print(f"  {'':12s}" + "  ".join(f"{d:+9.2f}" for d in (val / ref_eq - 1) * 100) + "   (CEA equilibrium)")
@@ -229,8 +263,8 @@ ax.plot(x_c, M_avg_fz,  label='MOSE Frozen', linewidth=2)
 ax.plot(x_c, M_avg_fr,  color='green', label='MOSE Finite-rate', linewidth=2)
 ax.plot(x_c, M_avg_eq,  color='orange', label='MOSE Equilibrium', linewidth=2)
 ax.scatter(x_cea, M_cea_fz, color='blue', zorder=5, label='CEA Frozen', s=60)
-ax.scatter(x_cea, M_cea_eq, color='red', zorder=5, label='CEA Equilibrium', s=60)
-ax.set_ylabel('Mach')
+ax.scatter(x_cea, Mf_cea_eq, color='red', zorder=5, label='CEA Equilibrium', s=60)
+ax.set_ylabel('Mach number (frozen speed of sound)')
 ax.set_xlabel('x  [m]')
 ax.legend()
 ax.grid(True, alpha=0.3)

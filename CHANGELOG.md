@@ -650,6 +650,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   number of the frozen run was 0.39 % low. The script prints the averages at the CEA stations and their differences from CEA; the
   page calls the averages weighted by the mass flow (it called them area-weighted) and names the run of the Mach contours,
   finite-rate, and the panels of the comparison.
+- The comparison of the rocket nozzle with CEA (`test/2D/euler/rocket-nozzle/verify.py`, page `docs/vv/2D-nozzle.md`) takes
+  the Mach number of the CEA equilibrium stations with the frozen speed of sound, as for the runs of MOSE and the CEA frozen
+  stations, and the averages of the runs at the area ratios of the stations, interpolated linearly in x between two columns of
+  cells, with the areas relative to the narrowest section of the grid. It divided the velocity of the equilibrium stations by
+  the equilibrium speed of sound of CEA, so that one state had Mach number 1 for CEA and 0.974 in the definition of the curves
+  of MOSE, and it took the column of cells nearest to each area ratio, relative to the middle of the narrowest column, 0.16 %
+  wider than the narrowest section: at the subsonic station the column had an area ratio of 1.883 instead of 2. With the runs
+  of the case, the Mach number of the equilibrium run at the subsonic station is 13.3 % above CEA instead of 16.7 %, and its
+  pressure in the diverging part 5.8 % to 11.9 % above CEA instead of 7.0 % to 16.4 %.
 - The figure of the grids of the 3-D manufactured-solution page (`docs/vv/images/mms3d-grids.svg`, drawn by `verify.py` of
   `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
   iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z

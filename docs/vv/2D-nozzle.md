@@ -1,6 +1,6 @@
 # Rocket Nozzle – Multi-Chemistry
 
-A 2D axisymmetric Euler simulation of a rocket nozzle operating on RP-1/LOX propellants mocking the Falcon 9 Merlin1D. Three configurations are tested: **frozen composition** (fixed species frozen at chamber state), **equilibrium** (species adjust instantaneously to maintain thermochemical equilibrium), and **finite-rate** (species composition evolves according to reaction kinetics). Mass-flow-weighted quasi-1D averages of the 2D solutions are compared with 1D CEA (Chemical Equilibrium with Applications) references at the area ratios of the CEA stations. `verify.py` prints and draws this comparison; it has no pass criterion.
+A 2D axisymmetric Euler simulation of a rocket nozzle operating on RP-1/LOX propellants mocking the Falcon 9 Merlin1D. Three configurations are tested: **frozen composition** (fixed species frozen at chamber state), **equilibrium** (species adjust instantaneously to maintain thermochemical equilibrium), and **finite-rate** (species composition evolves according to reaction kinetics). Mass-flow-weighted quasi-1D averages of the 2D solutions are compared with 1D CEA (Chemical Equilibrium with Applications) references at the area ratios of the CEA stations. `verify.py` prints and draws this comparison; it has no pass criterion. The finite-rate configuration has a check of its own, `finite-rate/verify.py`: it stops with an error when pressure, density, the two velocity components or the ratio of specific heats of the run differ by more than a relative $10^{-3}$ from those of the stored solution `reference/field.tec`, in the cell on the axis that contains the throat of the contour, x = 0.
 
 **Reference**: CEA (Chemical Equilibrium with Applications), NASA Glenn Research Center.
 
@@ -44,31 +44,37 @@ Boundary conditions (same for all configurations):
 
 ## Results and verification
 
-`verify.py` reads the solution of each run, averages Mach number, pressure, temperature, ratio of specific heats and molar mass
-over each cross-section with the mass flow as weight, and takes the cell nearest to the area ratio of each CEA station (it prints
-the area ratio of that cell: 1.883 for the subsonic station at 2, 1.944 for the supersonic one at 2, 3.932, 7.919 and 15.898 for
-4, 8 and 16). The frozen run stops when its residual has fallen by $10^{-10}$ from the first iteration (6211 iterations); the
-equilibrium run does not converge (after its 10 000 iterations the residual is 3 times its first value); the finite-rate run
-stops at its 2000 iterations, with the residual at 1.7 % of its first value.
+`verify.py` reads the solution of each run and averages Mach number, pressure, temperature, ratio of specific heats and molar
+mass over each column of cells, with the mass flow as weight. It places each CEA station where the wall of the grid has the
+area ratio of the station, the area being taken relative to the narrowest section, at the wall node of smallest radius, and
+interpolates the averages linearly in x between the centres of the two columns around the station. The station at 16 is the
+nozzle exit: the grid reaches an area ratio of 15.993 there, and the solution at the exit is that of the last column, whose
+state the exit face takes. The frozen run stops when its residual has fallen to $10^{-10}$ of its value at the first iteration (6196
+iterations); the equilibrium run does not converge (after its 10 000 iterations the residual is 3 times its first value); the
+finite-rate run stops at its 2000 iterations, with the residual at 1.7 % of its first value.
 
-In the frozen and equilibrium runs temperature, ratio of specific heats and molar mass stay within 2.6 % of the CEA reference
-of the same model at the six stations; Mach number and pressure differ more, as the list below gives. Part of the Mach
-difference comes from the cells
-taken, which are not at the area ratios of the stations: at the subsonic station the area ratio 1.883 instead of 2 alone
-raises the quasi-1D isentropic Mach number by 7 % (from 0.312 to 0.334 with the ratio of specific heats of the frozen run,
-1.214).
+The Mach number is the velocity over the frozen speed of sound, $\sqrt{\gamma p/\rho}$ with $\gamma$ the ratio of specific heats
+of the mixture at fixed composition, which MOSE writes for every configuration, for the three runs and for both CEA references.
+CEA gives the Mach number of its equilibrium stations with the equilibrium speed of sound; `verify.py`
+divides their velocity by the frozen speed of sound of the same state, from the specific heat with frozen reactions of
+`reference/CEA.out` (at the equilibrium throat this Mach number is 0.974, where CEA prints 1).
 
-- **Frozen** against CEA frozen: temperature within −0.46 % and +2.57 % at the six stations, ratio of specific heats within 0.08 %,
-  the molar mass of the chamber mixture; Mach number 19.9 % above CEA at the subsonic station and between −3.8 % and +1.9 % at
-  the others; pressure 7.5 % to 17.5 % above CEA in the diverging part.
-- **Equilibrium** against CEA equilibrium: temperature within −0.33 % and +1.56 %, ratio of specific heats within 0.03 %, molar
-  mass within 0.19 %; Mach number 16.7 % above CEA at the subsonic station and between −5.5 % and −0.8 % at the others; pressure
-  7.0 % to 16.4 % above CEA in the diverging part.
+In the frozen and equilibrium runs temperature, ratio of specific heats and molar mass stay within 1.8 % of the CEA reference
+of the same model at the six stations; Mach number and pressure differ more, as the list below gives. The averages at the
+stations change by up to 0.21 % with the order of the interpolation (linear, quadratic or cubic), and the Mach numbers of CEA are
+printed with three decimals, 0.16 % at the subsonic station.
+
+- **Frozen** against CEA frozen: temperature from −0.31 % to +1.79 % at the six stations, ratio of specific heats within 0.06 %,
+  the molar mass of the chamber mixture; Mach number 13.3 % above CEA at the subsonic station and from −2.6 % to −0.6 % at
+  the others; pressure 6.2 % to 12.8 % above CEA in the diverging part.
+- **Equilibrium** against CEA equilibrium: temperature from −0.22 % to +1.05 %, ratio of specific heats within 0.03 %, molar
+  mass within 0.15 %; Mach number 13.3 % above CEA at the subsonic station and from −2.5 % to −0.5 % at the others; pressure
+  5.8 % to 11.9 % above CEA in the diverging part.
 - **Finite-rate**: close to equilibrium: molar mass within 0.45 % of CEA equilibrium (and up to 4.1 % above CEA frozen),
-  temperature within −1.57 % and +1.36 % of CEA equilibrium.
+  temperature from −1.57 % to +0.80 % of CEA equilibrium.
 
 <figure>
   {% include "vv/images/Merlin-XY.svg" %}
-  Mass-flow-weighted 1D averages of Mach number, temperature ratio T/T0, ratio of specific heats and molar mass of the three
-  configurations, against the CEA stations (frozen and equilibrium).
+  Mass-flow-weighted 1D averages of Mach number (with the frozen speed of sound), temperature ratio T/T0, ratio of specific
+  heats and molar mass of the three configurations, against the CEA stations (frozen and equilibrium).
 </figure>
