@@ -43,9 +43,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   compares output files byte by byte. The CI runs this tier in a second job, `test-mpi`, which builds MOSE with gfortran,
   the Open MPI of Ubuntu and `USE_MPI=ON`.
 - A `verification` test tier holds the full forms of the verification cases, whose short forms run in the `validation`
-  tier: `MMSViscous3DFull`, the full form of `MMSViscous3D` with the grid with walls (about a day at one thread, an
-  estimate; TIMEOUT three days). The PR CI leaves the label out, and `ctest -L verification` runs it on request: a plain
-  `ctest` now runs it too, so the whole suite without it is `ctest -LE verification`.
+  tier: `MMSViscous3DFull`, the full form of `MMSViscous3D` with the grid with walls (18 h at one thread with a RELEASE
+  build on one core of a shared cluster node; TIMEOUT three days). The PR CI leaves the label out, and
+  `ctest -L verification` runs it on request: a plain `ctest` now runs it too, so the whole suite without it is
+  `ctest -LE verification`.
 - The key `decomposition-map` of `[MOSE-IO]` names a file of `INPUT/` that gives the MPI rank of every block (with the phase
   prefix of `bc.txt` in multi-phase runs), in the format of the decomposition map that the ATLAS mesh decomposer (MDB) writes
   next to the split mesh; with `none`, the default, MOSE assigns the blocks itself and reads no map. A map that does not fit the
@@ -268,6 +269,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The testing guide and the test plan say what the tests take and give: the fast tier holds parts of about 10 s of CPU time or
+  less at one thread each, the rule of a row of the plan (the guide said "a few seconds each"); `MMSViscous3DFull` takes 18 h
+  at one thread with a RELEASE build on one core of a shared cluster node and about 1 h 10 min with 18 or 32 threads (the
+  plan, the guide and the comment of its `TIMEOUT` gave an estimate of about a day); the results of the cases outside CTest
+  and of the isentropic vortex are those of the code of the repository (the plan named the commit of MOSE they came from).
+  The plan gives the times of `AblatingWall`, `Noh87` and `PrandtlMeyer` without a cause: it put them down to the time step
+  alone, while `Noh87` takes the same steps, each dearer, and `AblatingWall` also runs one more column. No test or
+  registration changes.
 - The face of a choked nozzle (`420`) below `p_sup` takes the supersonic design exit state of its record, the supersonic root
   of the mass flux `g` on the isentrope of the reservoir, at every exit Mach number. From an exit Mach number of about 2.8 in
   air, and of about 3.6 in the gas of the frozen rocket nozzle of the tests, the Newton iteration of the face reached the
