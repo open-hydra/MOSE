@@ -155,10 +155,13 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
     face of the same block, and a block closed by type `200` holds the whole wedge or sector in $k$. A record of type
     `200` on a face 1 to 4, with its cell outside its block, or without that partner stops the run at setup with a
     message that names the record: so do a sector cut along $k$ into several blocks, a ring of 360° in several blocks
-    closed by type `200` between the last block and the first, and a wedge with type `200` on one $k$ face only. Cut a
-    sector along $i$ or $j$; join the blocks of a ring by block connections (`101`), the junction at $\theta = 2\pi$
-    included, and keep type `200` for a block that holds the whole sector or the whole turn. Two blocks each closed by
-    its own type `200` are two separate periodic sectors, with no flux between them.
+    closed by type `200` between the last block and the first, and a wedge with type `200` on one $k$ face only. Where a
+    wedge or a sector reaches the axis, the axis lies on one of the faces 1 to 4 and takes symmetry (`300`), as the
+    message of a record of type `200` there says. In the input of the boundary-condition builder of ATLAS that face is `symmetry`:
+    `axisymmetric` writes type `200`. Cut a sector along $i$ or $j$; join the blocks of a ring by block connections
+    (`101`), the junction at $\theta = 2\pi$ included, and keep type `200` for a block that holds the whole sector or
+    the whole turn. Two blocks each closed by its own type `200` are two separate periodic sectors, with no flux
+    between them.
 
     The mesh decomposer of ATLAS (MDB) cuts blocks along $i$, $j$ and $k$ unless `split-directions` (of
     `[MDB-Parameters]`, or of `[MDB-Block<n>]` for block $n$) says otherwise, and keeps each record of type `200` on

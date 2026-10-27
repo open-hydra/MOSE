@@ -449,9 +449,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   message that names the record and the remedy. A 3-D sector cut along k into blocks, a ring of 360 degrees in several blocks
   closed by type `200` between the last block and the first, type `200` on a face 1 to 4 of a 2-D wedge, and a wedge with
   type `200` on one k face only ran in silence with wrong fluxes, and a record outside its block read outside the arrays. Cut a
-  sector along i or j, and join the blocks of a ring by `101`, the junction at 2π included. The mesh decomposer of ATLAS (MDB)
-  cuts blocks along k unless `split-directions` says otherwise: give it `split-directions` without k for a block closed by
-  type `200` (see the guide). Other meshes do not change.
+  sector along i or j, and join the blocks of a ring by `101`, the junction at 2π included. Declare the axis of a wedge or
+  of a sector, on one of the faces 1 to 4, symmetry (`300`): the boundary-condition builder of ATLAS writes type `200` for
+  `axisymmetric`. The mesh decomposer of ATLAS (MDB) cuts blocks along k unless `split-directions` says otherwise: give it
+  `split-directions` without k for a block closed by type `200` (see the guide). Other meshes do not change.
 - The inlets at total conditions (`401`, `402`) and the ambient boundary (`407`) let the gas in when the reservoir can push it
   in, when p0 is above p_stop, the pressure that the gas of the boundary cell reaches when the outgoing wave brings it to rest.
   The choice followed the sign of the velocity of the cell: a tube at rest never started from a `401` or `402`, a `407` at rest

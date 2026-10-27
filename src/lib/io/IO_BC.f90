@@ -883,7 +883,7 @@ contains
       if ( f /= 5 .and. f /= 6 ) then
         write(msg,'(3A,I0,A,I0,A,I0,A,I0,1X,I0,1X,I0,A)') '[ERROR] ', trim(bc_name), ', record ', n, &
           ': type 200 on face ', f, ' of block ', b, ' at i, j, k = ', i, j, k, &
-          ': type 200 is for the k faces (5 and 6) of a wedge or a sector only'
+          ': type 200 is for the k faces (5 and 6) of a wedge or a sector only; declare symmetry (300) on the axis'
       else if ( b < 1 .or. b > domain % nb ) then
         ! Reached in builds without bound checks only: Read_BCfile counts the records of a block face (n_bf) first
         write(msg,'(3A,I0,A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ', record ', n, ': type 200 on face ', f, &
