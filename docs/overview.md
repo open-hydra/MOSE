@@ -175,7 +175,7 @@ placed — see [Parallel Execution](user/parallel.md).
 |------|----------------|
 | CMake | 3.23 |
 | Fortran compiler | GNU gfortran 11+ or Intel ifx/ifort |
-| C compiler | GCC or ICC (for C bindings) |
+| C and C++ compilers | GCC and G++, or Intel icx and icpx: every configuration needs both |
 | Python | 3.9+ (for validation scripts) |
 
 ---

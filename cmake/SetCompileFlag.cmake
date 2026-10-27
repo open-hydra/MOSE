@@ -56,12 +56,14 @@ FUNCTION(SET_COMPILE_FLAG FLAGVAR FLAGVAL LANG)
         IF(UP STREQUAL "REQUIRED")
             SET(FLAG_REQUIRED TRUE)
         ELSEIF(UP STREQUAL "LINK")
-            # Also put the flag on the link line of the test program.  Needed for
-            # flags whose object output cannot be linked without them -- -ipo emits
-            # IR rather than ELF, so a compile-only probe reports success and the
-            # real build then dies at link time.  Only pass LINK for single-token
-            # flags: LINK_OPTIONS is a list, so "-check bounds" would reach the
-            # linker as one quoted argument and be rejected.
+            # Also put the flag on the link line of the test program, which the
+            # probe compiles and links: some flags make objects that only a link
+            # with the same flag accepts.  With -ipo, ifx 2024.1 writes the
+            # objects as LLVM bitcode, and a link without -ipo stops on them
+            # ("file format not recognized"), so without LINK the probe would
+            # drop -ipo.  Only pass LINK for single-token flags: LINK_OPTIONS is
+            # a list, so "-check bounds" would reach the linker as one quoted
+            # argument and be rejected.
             SET(FLAG_LINK TRUE)
         ELSE()
             SET(FLAGLIST ${FLAGLIST} "${var}")

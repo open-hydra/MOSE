@@ -31,7 +31,7 @@ MOSE is an open-source compressible flow solver for the Euler and Navier–Stoke
 |---|---|
 | **CMake** | ≥ 3.23 |
 | **Fortran compiler** | GNU (`gfortran`) or Intel/oneAPI (`ifort` / `ifx`) |
-| **C/C++ compiler** | Required only for optional components (Cantera, TecIO, SUNDIALS) |
+| **C/C++ compiler** | Required, whatever the options: the CMake project of MOSE enables C and C++ |
 
 ### Build
 
