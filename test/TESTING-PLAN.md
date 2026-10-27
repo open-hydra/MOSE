@@ -54,7 +54,7 @@ nightly/local tier.
 Cases of [`docs/vv`](../docs/vv/index.md) count as tested in this map only when CTest runs them. For every case
 folder: its CTest test, which fails when the criterion fails, or outside CTest; the reference data; the criterion
 of the case; the result. A case in CTest has the result of its CTest test. A case outside CTest has the result of a
-run of its folder (its `MOSE.sh`, `input.ini` and script) with MOSE of commit `10b59003b72c`: *passes* or *fails*
+run of its folder (its `MOSE.sh`, `input.ini` and script): *passes* or *fails*
 against its criterion, *runs* where it has none (the run ends with exit status 0):
 
 | Case (`test/`) | Page (`docs/vv/`) | CTest | Reference | Criterion | Result |
@@ -101,8 +101,8 @@ against its criterion, *runs* where it has none (the run ends with exit status 0
 ### Numerics (biggest gap: order-of-accuracy verification)
 - ☑ **N1 — Isentropic vortex convection** (2D, smooth, periodic): convect one period,
   grid-refine 32²/64²/128², **measure observed order** (→2 with MUSCL). *Done:*
-  `test/2D/euler/isentropic-vortex` (`IsentropicVortex`, validation tier). With MOSE at
-  commit `10b59003b72c`, `verify.py` gives a normalised L2 density error of 2.49 → 0.61 →
+  `test/2D/euler/isentropic-vortex` (`IsentropicVortex`, validation tier).
+  `verify.py` gives a normalised L2 density error of 2.49 → 0.61 →
   0.17 % and observed orders 2.04 then 1.84 against the exact vortex at t = 10; the runs
   end slightly after t = 10 (the last time step is not cut), and against the exact vortex
   at the time each run ends the orders are 2.15 and 2.13. Meshes/ICs/BCs
@@ -133,7 +133,8 @@ against its criterion, *runs* where it has none (the run ends with exit status 0
   equations with zero boundary flux within the smallest L2 error of each grid.
   The full form of the 3-D case (zigzag on N = 16, 24, 36, iface periodic and with
   walls on N = 20, 30, 45) is `MMSViscous3DFull`, label `verification`, out of the PR
-  CI: about a day at one thread (an estimate), TIMEOUT three days. The short form
+  CI: 18 h at one thread with a `RELEASE` build on one core of a shared cluster node,
+  TIMEOUT three days. The short form
   leaves out the grid with walls for its cost, so run the full form after any change
   to the wall boundary conditions, to the face metrics or to the generator of the
   cases.
@@ -250,7 +251,8 @@ against its criterion, *runs* where it has none (the run ends with exit status 0
 
 ## 4. Pre-push fast suite (GitHub-runner friendly)
 
-Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, assert
+Rules: minimal build only, tiny meshes (≤ ~1k cells), each part about 10 s of CPU time or
+less at one thread (the rule of a row, below the table), assert
 **hard invariants** (no digitized references, no plotting, no Cantera). Target **< 60 s** total (a target, not a limit: see the rule of a row and the count below the table).
 
 | # | Test | Asserts | Status | ~Cost |
@@ -272,7 +274,7 @@ Rules: minimal build only, tiny meshes (≤ ~1k cells), ≤ a few seconds each, 
 | F9 | Viscous stencil of chimera faces: two blocks of 8 x 6 cells (8 x 6 x 4 in 3-D) overlapping by 4 cells in x, each ghost cell on a cell of the other block; one step of a steady run with u = G y (2-D), u = G (y + z) (3-D), and a radial velocity on a 2-D wedge of 1 degree against the same wedge as one block; a control: the 2-D case with the y spacing of block 1 growing 4 times across its last cell, which turns over the first layer of extrapolated ghost cells behind the chimera face | y and z momentum residual zero within 1e-9 of μ G / H, also in the cells at the ends of the chimera faces (1/4 of it with the ghost cell copied beyond the edge); on the wedge the momentum residual of every cell that of the one block within 1e-9 of μ G / H (half of v/r at the chimera faces with the ghost cell as its own k neighbour); the control stops at set-up on the ghost cell behind the chimera face, whose viscous flux takes its metric | ☑ `Connections`/`ChimeraFace` | ~1 s |
 | F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
 | F8 | Shu–Osher coarse (N=200) | L1 vs N=1600 ref < 5 %, finite | ☑ `ShuOsher` | ~2 s |
-| P1 | Ablative wall BCs (503/504); the melting column also without `schmidt` (default 0: one species needs no `diffusion.dat`) | wall state vs closed form, both face orientations, inert-surface fallback | ☑ `AblatingWall` | ~12 s |
+| P1 | Ablative wall BCs (503/504); the melting column also without `schmidt` (default 0: one species needs no `diffusion.dat`) | wall state vs closed form, both face orientations, inert-surface fallback | ☑ `AblatingWall` | ~11 s |
 | I9 | Exit codes of the error stops: the Sod tube as a viscous mixture of four species without `schmidt` and without `diffusion.dat` ([thermo](../docs/theory/thermo.md)); the Sod tube in air with a probe of an unknown variable; a steady run with the soot model LL91, with and without Spalart–Allmaras (six species with C(gr)), and the same state with `turbulence = SAcomp`; the Sod tube in air, steady, with sol-variables = none; the Sod tube that diverges (CFL 20), with an initial condition of too few variables, with a rotating frame of zero axis, of NaN axis or of infinite origin, with chemistry = equilibrium and no `INPUT/composition.txt`, with a value outside the rule of the registry: an interval, a list of reals, a list of integers; the Sod tube with a NaN velocity in one cell and with an infinite coordinate of one node; the duct of BCInput with a NaN and an infinite pressure, and a NaN time, in the table of its inlet 402; the duct with a NaN and an infinite total pressure and a NaN alpha of an inlet 401, an infinite total temperature of its inlet 402 and a NaN roughness of a wall 302 in its bc.txt; the duct with its inlet a face 410 whose file holds a NaN pressure and an infinite SOLUTIONTIME, and the same file missing, cut in the values of its second zone, with a word among them, with I=two in the header of its second zone, with I = 3 or j=2 there (no I= or no J=), with one value more in its first zone and with its two zones in decreasing time, and without p, without u and w, without rho(1); the duct in two blocks of 50 cells, two cells across in z, with faces 410 on its ends, on its faces in y and on its faces in z, read from three files in the form that the boundary-condition builder of ATLAS writes: as written, restarted, with the nodes of the faces in z moved by 5e-5 m (0.5e-2 of their shortest edge) and with the coordinates written with 15 digits, which run, and with the zones of its two blocks in the file of the faces in z under each other's title, those nodes moved by 2e-4 m, no zone of block 2, no zone of block 2 at the second time, the zones of block 2 cut to 25 cells, and the zone of block 1 at the second time taken from block 2, which stop at set-up; the Sod tube restarted from its solution with a NaN SOLUTIONTIME and with an infinite MOSE_LAST_OUTPUT_TIME; input.ini missing, empty, of comment lines only; the Sod tube with sol-dtime = NaN, Infinity and 0,5, sol-diter = seven and 2.5, sol-overwrite = yes and levels = 2.0 of [MOSE-Multigrid]; a valid run with finite-rate chemistry and exclude-blocks = 1; exclude-blocks with a word that is not a block number or with a block beyond the mesh, which stops at set-up; the tube filled with steam far from chemical equilibrium, its block excluded from chemistry = equilibrium, on one grid and on two multigrid levels; on 2 MPI ranks (`MPIExitCodes`, needs-mpi tier), cfl = -1, without input.ini, the NaN velocity with the block on rank 1 alone and the infinite coordinate, the duct in two blocks with the zones of its two blocks under each other's title, a block on each rank, and cfl = -1 written during the run in the input.ini of rank 0 with ini-error = stop (two folders, MPMD), and the initial condition of rank 1 alone cut in the middle (two folders), and one process without the launcher stopped with `MPI_ABORT` (a probe of an unknown variable, in the tube with chemistry = finite-rate) | non-zero exit code and the diffusion-table error, no solution; exit status 1 and the name of the variable, no solution; exit status 0 and a diagnostic output that names every variable it writes, the local time step under dt; with SAcomp, exit code 1 to 128 at set-up, the message and no diagnostic output; exit status 1 and a message that names thermo or transport; exit code 1 to 128 and the error message (for input.ini, the reason it cannot be read, and no solution); for a key of input.ini whose value does not read as its type, exit code 1, the file, the section, the key and the value as written and the STOP line, no solution; for a value that is not finite, exit code 1, the place of the value and the STOP line, no solution; for the table, exit code 1, the line and the column, no solution; for bc.txt, exit code 1, the line, the record, its type and the name of the value, no solution; for the file of the face 410, exit code 1, the file, the zone, the line of its header, the variable and the cell, no solution, and for a file that cannot be read, exit code 1, the file and, for a zone, the zone and the line of its header (with the two times for zones out of time order, and the form of I and J to write for a header without I= or J=), no solution, and for a file that lacks a part of the state, exit code 1, the file and the variables it lacks, no solution; for the files of the duct in two blocks that stop, exit code 1, the file, the block and the record, and for the nodes the zone, the line of its header and the node, no solution, and for those that run, exit code 0 and the solution of the files as written, bit for bit (the restart: exit code 0 and its steps); for the restart, exit code 1, the file and the name of the value, the STOP line, the solution left as it was; exit code 0 and block 1 under the inactive blocks of the set-up summary; the field of the excluded block bit-identical to the run without chemistry, and different with the block not excluded; on 2 ranks, with cfl = -1 exit code 1 within 60 s, the message and the STOP line of both ranks, without input.ini exit code 1 to 128 within 60 s and the message, and for a value that is not finite exit code 1, the place written once and the STOP line of both ranks; with the zones of the duct under each other's title, exit code 1, the message and the STOP line of both ranks; with the input.ini of rank 0, which rank 0 passes to every rank, exit code 1 at iteration 20 and the rule, not a hang; with the initial condition of rank 1 cut, exit code 1, Initial conditions FAIL, the error of the read written once and the STOP line of both ranks; for the process stopped with `MPI_ABORT`, exit code 1 to 128 and, in its log, the message, the line of the set-up summary before it and the warning of FLINT on the error output | ☑ `ExitCodes` (validation) | ~13 s |
 | F10 | Quasi-2D with symmetry k faces; 1-D with symmetry j and k faces; a channel of variable section in a layer between parallel planes inclined to z and a 1-D channel of variable section, steady subsonic flow | p, u, v uniform; round-off in w does not grow (Heun, RK3); in 1-D, round-off in v and w does not grow; in the layer and in the channel the velocity across is integrated, with the warning, and p within 0.03 p0 of the quasi-1-D flow | ☑ `TimeIntegration`/`Quasi2DSymmetry` | ~7 s |
 | F11 | Local time step (square and skewed 2-D cells, cubic 3-D cells, heat-conduction and species-diffusion cells, 1-D at cfl 0.99; heat conduction on a periodic block of 8³ rhombohedra at 115°, Heun at vnn 0.5, 600 steps); with integration-variables = prec, a 2-D column in simple shear over a wall with SST and Wilcox 2006 | stable, uniform state kept, no NaN; the temperature wave of the rhombohedra decays; with prec the step of every cell (but the row next to the symmetry plane) equal to the rule with U_r from the viscous floor with the eddy viscosity of the model at the strain rate of the cell, within 1e-10, after one and after two steps | ☑ `TimeIntegration`/`LocalTimeStep` | ~7 s |
@@ -328,8 +330,8 @@ of the duct in two blocks, `ExitCodes` takes 12.9 s, against 10.9 s without them
 measured one after the other on the same machine at a load average of 85. The costs of the
 other rows were measured when each row was added,
 as CPU time at one thread on the same machine at a load average of ~100 to ~250. The
-tests of main keep their tier: with the time step of commit `667fc3c0` `AblatingWall` takes
-11.4 s and `Noh87` and `PrandtlMeyer` up to 9.6 s.
+tests of main keep their tier: measured the same way at a load average of 140 to 145,
+`AblatingWall` takes 10.6 s, `Noh87` 8.5 s and `PrandtlMeyer` 8.4 s.
 
 Current `ctest -L fast`: **25 tests, ~134 s of CPU time** at one thread, one test at a
 time (gfortran 13 `TESTING`, a machine with 192 logical CPUs at a load average of
@@ -337,9 +339,8 @@ time (gfortran 13 `TESTING`, a machine with 192 logical CPUs at a load average o
 Noh87, Toro99, ShuOsher, PrandtlMeyer, RiemannSmoke,
 NumericsSmoke, InputChecks, TimeIntegration, BoundaryConditions, Conservation,
 OpenMPEquiv, Connections, Restart, OutputFiles, MMSResiduals, ViscousPatch, AblatingWall,
-MeshGeometry, QCR2000Stress, CellVolume, VolatileOrder, BilinearDistance, RemoteBlocks. The 12 fast tests
-of main took ~41 s at commit `b29130b`, on the same machine at a load average of
-~190. MPI builds also register the `needs-mpi` tier (`test/mpi/`; `MPIConnectionFlux`,
+MeshGeometry, QCR2000Stress, CellVolume, VolatileOrder, BilinearDistance, RemoteBlocks. MPI
+builds also register the `needs-mpi` tier (`test/mpi/`; `MPIConnectionFlux`,
 `MPIConnectionOrder`: the two-block cases with one block per rank;
 `MPIDecompositionMap`).
 

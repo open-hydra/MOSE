@@ -215,7 +215,7 @@ through CTest **labels**
 
 | Label | Meaning |
 |-------|---------|
-| `fast` | Tiny, dependency-free, a few seconds each — run by the pre-push hook |
+| `fast` | Tiny, dependency-free, each of its parts about 10 s of CPU time or less at one thread (test plan, section 4) — run by the pre-push hook |
 | `validation` | Analytic or reference comparison |
 | `numerics` / `implementation` | Coverage area (numerical scheme vs. plumbing) |
 | `needs-cantera` / `needs-sundials` / `needs-mpi` | Requires the matching optional dependency; excluded from the minimal CI build |
@@ -369,9 +369,10 @@ form of `MMSViscous3D`, the runs of the [V&V page](../vv/3D-mms.md): zigzag on
 N = 16, 24, 36 and iface, periodic and with walls, on N = 20, 30, 45. The short
 form leaves out the grid with walls for its cost; run the full form after any
 change to the wall boundary conditions, to the face metrics or to the generator
-of the manufactured cases. CTest runs it at one thread, about a day (an
-estimate), with a TIMEOUT of three days: run it on a cluster node, or faster
-with `./MOSE.sh -p <threads> test` and `python3 -B verify.py` in its folder.
+of the manufactured cases. CTest runs it at one thread: 18 h with a `RELEASE`
+build on one core of a shared cluster node (Intel Xeon Gold 6230), under a
+TIMEOUT of three days; `./MOSE.sh -p <threads> test` and `python3 -B verify.py`
+in its folder run it on a cluster node in about 1 h 10 min with 18 or 32 threads.
 
 ### MPI tier contents
 
@@ -473,9 +474,10 @@ mose_add_test(NAME MyCase DIR 1D/MyCase
 mose_add_fast_script(MySmoke fast/my-smoke "fast;numerics;1D")
 ```
 
-Add the `fast` label only if the case runs in a few seconds on a tiny mesh
-and asserts a hard invariant — anything needing Cantera, Sundials or MPI
-must instead carry the matching `needs-*` label so it is excluded from the
+Add the `fast` label only if each part of the case takes about 10 s of CPU
+time or less at one thread, on a tiny mesh (the rule of a row of the test
+plan, section 4), and asserts a hard invariant — anything needing Cantera,
+Sundials or MPI must instead carry the matching `needs-*` label so it is excluded from the
 minimal CI build. The full form of a verification case (families of grids,
 hours of runs) carries the `verification` label and an explicit `TIMEOUT`,
 so that the PR CI leaves it out.
