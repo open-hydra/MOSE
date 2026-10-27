@@ -354,7 +354,7 @@ checked at setup (*Checks of the cells at setup*, above). `diffusive-metric` in
 
 | `diffusive-metric` | Face metric | |
 |---|---|---|
-| `stencil` (default) | $M_f = \left(J_f^{T}\right)^{-1}$, $J_f^{T} = \left[D_a\mathbf{x},\ D_b\mathbf{x},\ D_c\mathbf{x}\right]$ | the same differences of the cell centres as of the field: exact for a linear field on any mesh (at the symmetry faces and the faces of type `200` for the linear fields that they allow), except at the chimera faces (`102`) |
+| `stencil` (default) | $M_f = \left(J_f^{T}\right)^{-1}$, $J_f^{T} = \left[D_a\mathbf{x},\ D_b\mathbf{x},\ D_c\mathbf{x}\right]$ | the same differences of the cell centres as of the field: exact for a linear field on any mesh (at the symmetry faces and the faces of type `200` for the linear fields that they allow), except at the chimera faces (`102`), and at the symmetry faces with one cell across them, the walls `502` and the walls `503`–`505` while they ablate, which take the metric of the cell |
 | (inverse-mean, not a value of the key) | $M_f = \left[\tfrac12\left(A_L + A_R\right)\right]^{-T}$ | the face-normal edge is the centre-to-centre vector: exact for a linear field on any stretching normal to the face; taken by the chimera faces (`102`) whatever the key, and with `mean` by the faces between blocks and of type `200` |
 | `mean` | $M_f = \tfrac12\left(M_L + M_R\right)$ | faster; biased on stretched meshes |
 
@@ -724,9 +724,16 @@ Declared limits:
   with $\mu \propto T^{0.7}$): of order one but bounded, it enters only the
   source terms (the gradient of $\omega$ in the cross-diffusion of SST,
   $\nabla k\cdot\nabla\omega$) and the limited MUSCL reconstruction of the
-  first face, while the wall flux keeps the state of the surface; with the
-  blowing correction of $\omega$ (`-blowcorr`) the wall flux takes the corrected
-  value, the ghost cell the uncorrected one;
+  first face, while the wall flux keeps the state of the surface; the wall flux
+  of `504` and `505` while they ablate takes the value of a wall that blows,
+  $\omega_\text{wall} = 800\,\nu_w/y_c^2$ ($y_c$ the wall distance of the centre
+  of the wall cell) for SST and Wilcox 2006 with either value of
+  `omega-wall-bc`, so that with `asymptotic` it is $800/80$ (SST) or
+  $800/84.7$ (Wilcox 2006) times that of the ghost cell on top of this factor;
+- the coupled walls `103` and `104` take, as `503`–`505`, the wall values of the
+  turbulence variables of an adiabatic wall at the state of the cell, with the
+  same factor for $\omega$, $T_s$ the temperature of the coupled surface; their
+  viscous flux comes from the other solver;
 - the temperature of a `301` wall is extrapolated (consistent, exact for every
   linear field) rather than set from the heat flux;
 - the SRM grain (`502`) and the other types keep the extrapolation

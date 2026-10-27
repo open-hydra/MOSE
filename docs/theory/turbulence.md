@@ -466,6 +466,9 @@ laminar viscosity at the wall.  `omega-wall-bc` selects $C$:
 - `asymptotic`: $C = 6/\beta_1 = 80$, the viscous-sublayer solution
   $\omega = 6\nu/(\beta_1 y^2)$ evaluated at $y_c$, for wall-resolved meshes.
 
+The wall flux of the walls that blow (`504` and `505` while they ablate, a `502` grain while it
+burns) takes $C = 800$ with either value.
+
 MOSE imposes $\omega_\text{wall}$ on the wall **face** (ghost value
 $2\,\omega_\text{wall} - \omega_P$) and solves the $\omega$ equation in the
 wall-adjacent cell.  Codes that instead **fix the wall-adjacent cell** to
@@ -575,7 +578,8 @@ $k_\text{wall} = 0$. With `omega-wall-bc = asymptotic` the wall takes the near-w
 model, $\omega_\text{wall} = 6\nu/(\beta_0 y^2)$ with $\beta_0 = 0.0708$ (NASA Turbulence Modeling Resource, Wilcox 2006
 page), that is $84.7\,\nu/y^2$, $y$ the distance of the centre of the wall cell from the wall. With `practical`, the default,
 it takes Menter's condition of the [SST section](#wall-boundary-conditions), $800\,\nu/y^2$ with the $\beta_1$ of SST,
-as the same page advises for this model.
+as the same page advises for this model. The wall flux of the walls that blow (`504` and `505` while they ablate, a `502`
+grain while it burns) takes $800\,\nu/y^2$ with either value.
 
 ### Cross-diffusion *(conditional)*
 
@@ -977,7 +981,10 @@ prints no such line:
 
 In a steady run the count covers the whole run: the start, and the fronts of $k$ that the fluxes
 push below zero where $k$ is about zero, which can last to the last iteration; it is a total, which
-convergence does not bring back to zero.
+convergence does not bring back to zero. The residuals of `residual-history.dat` are the change of
+each variable over a step ([Stopping criteria](../user/using.md#stopping-criteria)): a variable
+that the floor holds at its value in a cell from one step to the next adds nothing there to its
+residual, so these fronts do not show in the residual history, and the count is their trace.
 
 ### Relation to under-relaxation
 

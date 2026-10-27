@@ -88,10 +88,11 @@ contains
                   'Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of '// &
                   'the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the '// &
                   'k faces of type 200 for the linear fields that they allow) except at the chimera faces (102), which take '// &
-                  'the inverse of the mean of the inverse metrics of the two cells with every value; mean takes the mean of '// &
-                  'the two metrics (the faces between blocks the inverse of the mean of the inverse metrics), overstates '// &
-                  'the gradient by (1+r)^2/(4r) at a cell-size ratio r and does not converge next to '// &
-                  'a symmetry plane (300) that bounds a sector of a polar mesh', &
+                  'the inverse of the mean of the inverse metrics of the two cells with every value, and at the symmetry '// &
+                  'faces with one cell across them, the walls 502 and the walls 503-505 while they ablate, which take the '// &
+                  'metric of the cell; mean takes the mean of the two metrics (the faces between blocks and of type 200 the '// &
+                  'inverse of the mean of the inverse metrics), overstates the gradient by (1+r)^2/(4r) at a cell-size ratio '// &
+                  'r and does not converge next to a symmetry plane (300) that bounds a sector of a polar mesh', &
                   'stencil, mean', .false. )
 
     ! Shock Detector ---------------------------------------
