@@ -47,6 +47,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   build on one core of a shared cluster node; TIMEOUT three days). The PR CI leaves the label out, and
   `ctest -L verification` runs it on request: a plain `ctest` now runs it too, so the whole suite without it is
   `ctest -LE verification`.
+- The turbulent flat plate of the NASA Turbulence Modeling Resource as a verification case, `test/2D/viscous/flat-plate-turbulent-tmr`,
+  with its V&V page: Spalart–Allmaras, SST and Wilcox 2006 on the 35 × 25, 69 × 49 and 137 × 97 grids of the TMR, with the
+  inflow at the total conditions of the TMR and its free-stream turbulence. `FlatPlateTMR` (validation tier, about 71 s of
+  CPU at one thread) restarts each model for 5000 iterations from its converged 35 × 25 solution: the skin friction at
+  x = 0.970084071 and 1.90334 and the drag must stay within 1e-5 (relative) of the converged values, and the criteria of the page, computed
+  again from the stored results of the full form, must hold. `FlatPlateTMRFull` (label `verification`, about 24.5 h at one
+  thread, an estimate) runs the nine cases to 300 000 iterations and checks the 137 × 97 grid against CFL3D and FUN3D on that
+  grid and the limit of the three grids against CFL3D on the 545 × 385 grid.
 - The key `decomposition-map` of `[MOSE-IO]` names a file of `INPUT/` that gives the MPI rank of every block (with the phase
   prefix of `bc.txt` in multi-phase runs), in the format of the decomposition map that the ATLAS mesh decomposer (MDB) writes
   next to the split mesh; with `none`, the default, MOSE assigns the blocks itself and reads no map. A map that does not fit the

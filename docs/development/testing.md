@@ -88,6 +88,7 @@ test/
 │   └── viscous/               # Viscous cases
 │       ├── flat-plate-laminar/
 │       ├── flat-plate-turbulent/  # Subdirs: SA/ SST/ Wilcox2006/
+│       ├── flat-plate-turbulent-tmr/ # Flat plate of the NASA TMR on three grids, SA, SST, Wilcox 2006 (validation tier; full form: verification)
 │       ├── ablating-wall/     # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column
 │       ├── mms/                   # residuals/: right-hand sides on manufactured fields (RANS, wedge); skewed/: order on skewed grids (validation tier)
 │       ├── wedge-axis-step/       # Local time step next to the axis of the wedge (validation tier)
@@ -355,6 +356,14 @@ jumps, made of blocks that meet with permuted indices, and `PlanarNozzleGrids`
 (`test/2D/viscous/planar-nozzle`) that a turbulent nozzle stays mirror-symmetric
 on grids whose blocks have different index orientations; they are there for
 their cost, 15 to 80 s of CPU time each.
+`FlatPlateTMR` (`test/2D/viscous/flat-plate-turbulent-tmr`) restarts the
+Spalart–Allmaras, SST and Wilcox 2006 runs of the turbulent flat plate of the
+NASA TMR from their converged solutions on the 35 × 25 grid, 5000 iterations
+each: the restarts must do their iterations, the skin friction at
+x = 0.970084071 and 1.90334 and the drag must stay within 1e-5 (relative) of the converged
+values, and the criteria of the [V&V page](../vv/2D-flat-plate-turbulent-tmr.md),
+computed again from the stored results of the full form, must hold; about 71 s
+of CPU at one thread.
 `ExitCodes` and `RuntimeInput` (`test/fast/input-checks`) and `ViscousWallPatch`
 (`test/fast/viscous-patch`) are there for their cost alone, 13 to 31 s of CPU
 time each at one thread, over the cap of a row of the fast tier (test plan,
@@ -373,6 +382,16 @@ of the manufactured cases. CTest runs it at one thread: 18 h with a `RELEASE`
 build on one core of a shared cluster node (Intel Xeon Gold 6230), under a
 TIMEOUT of three days; `./MOSE.sh -p <threads> test` and `python3 -B verify.py`
 in its folder run it on a cluster node in about 1 h 10 min with 18 or 32 threads.
+
+`FlatPlateTMRFull` (`test/2D/viscous/flat-plate-turbulent-tmr`, label
+`verification`) runs the full form of `FlatPlateTMR`, the nine runs of the
+[V&V page](../vv/2D-flat-plate-turbulent-tmr.md): the three models on the
+35 × 25, 69 × 49 and 137 × 97 grids of the TMR, 300 000 iterations each from the
+uniform field, and the criteria of the page. It writes in `RUN/reference/` the
+files to copy to `reference/` when a change of MOSE moves the steady state that
+the short form guards. CTest runs it at one thread, about 24.5 h (an estimate),
+with a TIMEOUT of 49 h: run it on a cluster node, or faster with
+`./MOSE.sh -p <threads> test` and `python3 -B verify.py` in its folder.
 
 ### MPI tier contents
 

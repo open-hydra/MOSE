@@ -143,6 +143,40 @@ mose_add_test(NAME PlanarNozzleGrids DIR 2D/viscous/planar-nozzle
               LABELS "validation;numerics;2D"
               TIMEOUT 900)
 
+# Turbulent flat plate of the NASA TMR (validation tier): Spalart-Allmaras,
+# SST and Wilcox 2006 on three grids of the TMR family (35x25, 69x49, 137x97),
+# inflow at the total conditions of the TMR, outflow at the free-stream
+# pressure on the top boundary and at the exit. The short form ("testfast")
+# restarts each model for 5000 iterations from the converged 35x25 solution of
+# the full form (reference/field-35x25-<model>.tec): the restart must do its
+# iterations (global iteration count and rows of residual-history.dat) and
+# keep c_f at x = 0.970084071 and 1.90334 and C_D within 1e-5 (relative) of the converged
+# values; verify.py then computes again, from the stored results of the full
+# form (reference/), the criteria of the V&V page, which must hold. It guards
+# the steady state of the page on the 35x25 grid; the order and the limit of
+# the grids need the full form. About 71 s of CPU at one thread.
+mose_add_test(NAME FlatPlateTMR DIR 2D/viscous/flat-plate-turbulent-tmr
+              RUN "./MOSE.sh testfast" VERIFY verify.py
+              LABELS "validation;physics;2D"
+              TIMEOUT 300)
+# The full form of FlatPlateTMR (verification tier, out of the PR CI): the nine
+# runs from the uniform field, 300 000 iterations each, and the criteria of the
+# V&V page (iterative error, the 137x97 grid against CFL3D and FUN3D on the
+# same grid, the limit of the three grids against CFL3D on the 545x385 grid); it
+# writes in RUN/reference/ the files of reference/ that the runs give. Run it
+# after any change that moves the steady state of the short form, and copy
+# RUN/reference/ to reference/. At one thread, as CTest runs it, it takes
+# about 24.5 h, an estimate, not a measurement: the solver time per iteration
+# of each run in a chain of 500 iterations (4.3 to 84 ms) times 300 000. The
+# TIMEOUT, 49 h, is twice that. On a cluster node, ./MOSE.sh -p <threads> test
+# and python3 -B verify.py in the folder run it in a few hours.
+mose_add_test(NAME FlatPlateTMRFull DIR 2D/viscous/flat-plate-turbulent-tmr
+              RUN "./MOSE.sh test" VERIFY verify.py
+              LABELS "verification;physics;2D"
+              TIMEOUT 176400)
+#   the short and the full form run in the same folder and write RUN/ there: never at the same time (ctest -j)
+set_tests_properties(FlatPlateTMR FlatPlateTMRFull PROPERTIES RESOURCE_LOCK flat-plate-tmr)
+
 # ===========================================================================
 #  Additional fast tests defined in their own directories
 #  (added incrementally — see test/TESTING-PLAN.md, section 4)
