@@ -2,13 +2,15 @@
 #===============================================================================
 #  Boundary conditions (fast tier)
 #
-#  Boundary conditions: inlets, the records of bc.txt, walls, walls in a
-#  rotating frame, and extrapolation faces and the gas entering through them.
+#  Boundary conditions: inlets, the choked nozzle, the records of bc.txt,
+#  walls, walls in a rotating frame, and extrapolation faces and the gas
+#  entering through them.
 #
 #  One part per folder, each with its own case and checks, described at
 #  the head of its run.sh; each part runs in its folder, as CTest runs a
 #  test:
 #    Inlets (inlets): inlet boundary conditions
+#    Nozzle (nozzle): the face of a choked nozzle (420) below p_sup
 #    BCInput (bc-input): property lines of bc.txt
 #    RotatingFrame (rotating-frame): stationary walls of a rotating frame
 #    WallHeatSign (wall-heat-sign): sign of the wall heat flux and wall
@@ -23,7 +25,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(inlets bc-input rotating-frame wall-heat-sign extrapolation-400 supersonic-inlet)
+PARTS=(inlets nozzle bc-input rotating-frame wall-heat-sign extrapolation-400 supersonic-inlet)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

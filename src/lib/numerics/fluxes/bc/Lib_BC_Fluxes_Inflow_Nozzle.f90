@@ -11,12 +11,14 @@ module MOSE_Lib_BC_Fluxes_Inflow_Nozzle
 
 contains
 
-  subroutine BC_Inflow_Nozzle ( Im, Jm, Km, Fm, Blk, BC_T0, BC_p0, BC_rel_fac, BC_sub, BC_sup, BC_g, BC_ci, BC_RANS, error )
+  subroutine BC_Inflow_Nozzle ( Im, Jm, Km, Fm, Blk, BC_T0, BC_p0, BC_rel_fac, BC_sub, BC_sup, BC_g, &
+                                BC_p_design, BC_rho_design, BC_ci, BC_RANS, error )
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout) :: Blk
     real(R8), intent(in) :: BC_T0, BC_p0, BC_rel_fac, BC_sub, BC_sup, BC_g, BC_ci(nsc), BC_RANS(1:)
+    real(R8), intent(in) :: BC_p_design, BC_rho_design   ! supersonic design exit state of the record (Nozzle_Design_State)
     integer, intent(inout) :: error
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k, Dir, Face_i, Face_j, Face_k
@@ -94,8 +96,8 @@ contains
         call BC_Nozzle_Subsonic ( Bound_Prim, Un, Bound_Sound, Bound_Gamma, Riem, alpha_app, beta_app, &
                                  -10.d0, BC_ci, BC_RANS, BC_T0, g, BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux )
       elseif ( Bound_Prim(np) < pSup ) then
-        call BC_Nozzle_Supersonic ( Bound_Prim, Int_Prim, modfm, modfm1, modfm2, g, BC_p0, &
-                                    BC_T0, BC_ci, BC_RANS, alpha_app, beta_app, Normal, Area, Flux )
+        call BC_Nozzle_Supersonic ( Bound_Prim, Int_Prim, modfm, modfm1, modfm2, g, BC_p_design, &
+                                    BC_rho_design, BC_ci, BC_RANS, alpha_app, beta_app, Normal, Area, Flux )
     endif
     ! Residual update
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + Modfm2 * Flux
@@ -103,26 +105,25 @@ contains
   end subroutine BC_Inflow_Nozzle
 
 
-  subroutine BC_Nozzle_Supersonic ( Prim2, Int_Prim, modfm, modfm1, modfm2, g, BC_p0, BC_T0, BC_ci, & 
+  subroutine BC_Nozzle_Supersonic ( Prim2, Int_Prim, modfm, modfm1, modfm2, g, p_design, rho_design, BC_ci, &
                                     BC_RANS, alpha_app, beta_app, Normal, Area, Flux )
     use MOSE_Lib_Limiters, only : rlimiter
     use MOSE_Mod_Riemann
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in) :: modfm, modfm1, modfm2
-    real(R8), intent(in) :: Prim2(nprim), Int_Prim(nprim), g, BC_p0, BC_T0
+    real(R8), intent(in) :: Prim2(nprim), Int_Prim(nprim), g, p_design, rho_design
     real(R8), intent(in) :: BC_ci(nsc), BC_RANS(1:), alpha_app, beta_app, Normal(3), Area
     real(R8), intent(out) :: Flux(nprim)
     ! Local
     integer :: s
-    real(R8) :: Sup_Prim(nprim), Sup_T, Sup_Rgas, Sup_rho, Sup_Sound, Prim1(nprim), Prim3(nprim)
+    real(R8) :: Sup_Prim(nprim), Sup_rho, Prim1(nprim), Prim3(nprim)
     real(R8), dimension(nprim) :: Diff32, Diff21, Slope, Face_Prim, Prim_L, Prim_R
     real(R8) :: rho_L, rho_R, Rgas_L, Rgas_R, Sound_L, Sound_R, F_r, F_u, F_v, F_w, F_E, Fmass
     real(R8) :: su, Sel_L, Sel_R
-    real(R8) :: h0_, cpSup, dcpSup, hSup, uSup, Sup_h0_, duSup, Sup_p, dpSup, dh0_Sup, gamSup, dgamSup, daSup
-    real(R8) :: fun_T, diff_h0_, alpha, beta
+    real(R8) :: alpha, beta
 
-    ! supersonic inflow. BC_Mach enforced at boundary, T0 and p0 total
+    ! Flow angles of the face: not used, the ghost state moves along the face normal
     if ( ( alpha_app == 0d0 ) .and. ( beta_app == 0d0 ) ) then
       alpha = Atan ( Normal(2)/( Normal(1) + 1d-20 ) )
       beta  = Atan ( Normal(3)/( Normal(1) + 1d-20 ) )
@@ -131,48 +132,11 @@ contains
       beta = beta_app
     endif
 
-    h0_ = 0d0
-    Sup_Rgas = 0d0
-    do s = 1, nsc
-      h0_ = h0_ + BC_ci(s) * f_tabT( BC_T0,s,h_tab )
-      Sup_Rgas = Sup_Rgas + BC_ci(s) * Ri_tab(s)
-    enddo
-    Sup_T = 0.5d0*BC_T0
-    diff_h0_ = 1d0
-
-    do while (diff_h0_ >= 1.d-9)
-      hSup = 0d0
-      cpSup = 0d0
-      dcpSup = 0d0
-      do s = 1, nsc
-        hSup = hSup + BC_ci(s) * f_tabT( Sup_T,s,h_tab )
-        cpSup = cpSup + BC_ci(s) * f_tabT( Sup_T,s,cp_tab )
-        dcpSup = dcpSup + BC_ci(s) * f_tabT( Sup_T,s,dcpi_tab )
-      enddo
-      call Trapezoidal ( sup_T, BC_T0, BC_ci, Sup_Rgas, fun_T ) 
-      Sup_p = BC_P0 / exp (fun_T)
-      Sup_rho = Sup_p / ( Sup_Rgas * Sup_T )
-      uSup = g / Sup_rho
-      Sup_h0_ = hSup + 0.5d0 * uSup ** 2
-      diff_h0_ = abs(Sup_h0_-h0_)/abs(h0_)
-      dpSup = BC_P0 / exp (fun_T) * cpSup / (Sup_Rgas * Sup_T)
-      duSup = g * Sup_Rgas * (Sup_p - dpSup * Sup_T) / Sup_p**2
-      dh0_Sup = cpSup + uSup * duSup
-      Sup_T = Sup_T - (Sup_h0_ - h0_)/(dh0_Sup)
-    enddo  
-    
-    ! Numerical Integration (Trapezoidal) to compute p
-    call Trapezoidal ( sup_T, BC_T0, BC_ci, Sup_Rgas, fun_T )
-    
-    ! Compute p from isentropy (II Law of Thermodynamics)
-    Sup_Prim(np) = BC_P0 / exp (fun_T)
-
-    Sup_rho = Sup_Prim(np) / ( Sup_Rgas * Sup_T )
+    ! The ghost state is the supersonic design exit state of the record, the isentropic state of the reservoir with
+    ! the mass flux g, computed once at set-up (Nozzle_Design_State)
+    Sup_Prim(np) = p_design
+    Sup_rho = rho_design
     Sup_Prim(1:nsc) = Sup_rho * BC_ci
-    Sup_Sound = f_ss ( Sup_Prim(1:nsc), Sup_Prim(np), Sup_rho, Sup_Rgas )
-   !        Sup_Prim(nu) = BC_Mach * Sup_Sound / Sqrt( 1d0 + Tan(alpha)**2 + Tan(beta)**2 )
-   !        Sup_Prim(nv) = Sup_Prim(nu) * Tan(alpha)
-   !        Sup_Prim(nw) = Sup_Prim(nu) * Tan(beta)
     Sup_Prim(nu:nw) = g / Sup_rho * normal
     if (model==2) Sup_Prim(nt:nprim) = BC_RANS * Sup_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
 
@@ -524,6 +488,209 @@ contains
 
 
   end subroutine BC_Nozzle_Subsonic_QS
+
+
+  !> The states of a choked-nozzle record (420) that depend on the record alone, computed once at set-up (IO_BC): the
+  !> choked mass flux Gstar of the reservoir (T0, p0, mass fractions BC_ci) at its critical temperature Tstar, and the
+  !> supersonic design exit state of the mass flux g > 0, pressure p_design and density rho_design, on the tables of
+  !> the gas with the arithmetic of the face (f_tabT; the isentrope p(T) = p0/exp(int_T^T0 cp/(R T') dT') by
+  !> Trapezoidal; rho = p/(R T)). Along the isentrope the mass flux G(T) = rho(T) sqrt(2 (h0 - h(T))) is zero at T0
+  !> and grows as T falls, up to its maximum at the sonic throat.
+  !>   Gstar: the maximum of G on [Tlo, T0], Tlo = max(Tmin, 1) the coldest state of the tables, by a scan of 65
+  !>   points and a golden-section search down to 1e-10 T0 (at most 41 steps), the algorithm and the arithmetic with
+  !>   which the boundary-condition builder of ATLAS computes the g it writes for an exit at the throat.
+  !>   Design state: the root on [Tlo, Tstar] of phi(T) = h(T) + (g/rho(T))**2/2 - h0, which is <= 0 exactly where
+  !>   G(T) >= g, so phi(Tlo) > 0 > phi(Tstar) brackets it. Newton steps from 0.5 T0 with the operations and the stop
+  !>   test of the face (|phi| < 1e-9 |h0|), taken only inside the bracket; a bisection otherwise and after 32 Newton
+  !>   steps in a row. The bracket halves at least every 33 steps, and from T0 < 2**14 K down to 4 units in the last
+  !>   place of T > 1 K it takes at most 66 halvings: 2178 steps at most. With g up to 1e-9 above Gstar the state is
+  !>   the sonic one, at Tstar; with g at Gstar to the rounding it is Tstar, or the root that the stop test of the face
+  !>   allows, within 1e-5 Tstar in air, when phi(Tstar) rounds below zero.
+  !> status: 0 the design state; 1 the sonic state; 2 T0 not above Tlo, or the maximum of G at an end of [Tlo, T0] (the
+  !> tables do not hold the sonic state); 3 g above (1 + 1e-9) Gstar; 4 phi(Tlo) <= 0 (the design state lies below the
+  !> tables); 5 a loop did not end within its bound (not reached with a valid bracket); 6 T0 above Tmax - 1, where the
+  !> interpolation of the tables ends (f_tabT holds their values above it).
+  subroutine Nozzle_Design_State ( BC_T0, BC_p0, g, BC_ci, Gstar, p_design, rho_design, status )
+    use FLINT_Lib_Thermodynamic
+    implicit none
+    real(R8), intent(in)  :: BC_T0, BC_p0, g, BC_ci(nsc)
+    real(R8), intent(out) :: Gstar, p_design, rho_design
+    integer, intent(out)  :: status
+    ! Local
+    integer,  parameter :: nscan = 64, max_golden = 60, max_newton = 32, max_steps = 2300
+    real(R8), parameter :: gr = 0.6180339887498949_R8           ! golden ratio conjugate
+    real(R8), parameter :: band = 1.0e-9_R8                     ! g accepted up to (1 + band) Gstar
+    integer  :: s, k, kmax, it, run
+    real(R8) :: h0_, Rgas, Tlo, Ta, Tb, Tc, Td, Gc, Gd, Gmax, Tstar, fun_T
+    real(R8) :: a, b, x, c, phi, dphi, diff, T_e
+
+    status = 5
+    Gstar = 0d0
+    p_design = 0d0
+    rho_design = 0d0
+    h0_ = 0d0
+    Rgas = 0d0
+    do s = 1, nsc
+      h0_ = h0_ + BC_ci(s) * f_tabT( BC_T0,s,h_tab )
+      Rgas = Rgas + BC_ci(s) * Ri_tab(s)
+    enddo
+    Tlo = real(max(Tmin, 1), R8)
+    if (.not. (BC_T0 > Tlo)) then         ! the isentrope from T0 has no state in the tables
+      status = 2
+      return
+    endif
+    if (BC_T0 > real(Tmax - 1, R8)) then  ! above Tmax - 1 f_tabT holds the values of the tables: T0 outside them
+      status = 6
+      return
+    endif
+
+    ! Throat: a scan of [Tlo, T0] for the bracket of the maximum of G ...
+    kmax = 0
+    Gmax = -1d0
+    do k = 0, nscan
+      Tc = Tlo + (BC_T0 - Tlo) * real(k, R8) / real(nscan, R8)
+      Gc = Mass_Flux ( Tc )
+      if (Gc > Gmax) then
+        Gmax = Gc
+        kmax = k
+      endif
+    enddo
+    if (kmax == 0 .or. kmax == nscan) then
+      status = 2
+      return
+    endif
+    ! ... then a golden-section search inside it
+    Ta = Tlo + (BC_T0 - Tlo) * real(kmax - 1, R8) / real(nscan, R8)
+    Tb = Tlo + (BC_T0 - Tlo) * real(kmax + 1, R8) / real(nscan, R8)
+    Tc = Tb - gr * (Tb - Ta)
+    Td = Ta + gr * (Tb - Ta)
+    Gc = Mass_Flux ( Tc )
+    Gd = Mass_Flux ( Td )
+    do it = 1, max_golden
+      if (.not. (Tb - Ta > 1.0e-10_R8 * BC_T0)) exit
+      if (Gc > Gd) then
+        Tb = Td; Td = Tc; Gd = Gc
+        Tc = Tb - gr * (Tb - Ta)
+        Gc = Mass_Flux ( Tc )
+      else
+        Ta = Tc; Tc = Td; Gc = Gd
+        Td = Ta + gr * (Tb - Ta)
+        Gd = Mass_Flux ( Td )
+      endif
+    enddo
+    if (Tb - Ta > 1.0e-10_R8 * BC_T0) return
+    Tstar = 0.5d0 * (Ta + Tb)
+    Gstar = Mass_Flux ( Tstar )
+
+    if (g > (1d0 + band) * Gstar) then
+      status = 3
+      return
+    endif
+
+    call Design_Residual ( Tstar, phi, dphi, diff )
+    if (phi >= 0d0) then
+      T_e = Tstar
+      status = 1
+    else
+      call Design_Residual ( Tlo, phi, dphi, diff )
+      if (phi <= 0d0) then
+        status = 4
+        return
+      endif
+      a = Tlo
+      b = Tstar
+      x = 0.5d0 * BC_T0
+      if (.not. (x > a .and. x < b)) x = 0.5d0 * (a + b)
+      run = 0
+      do it = 1, max_steps
+        call Design_Residual ( x, phi, dphi, diff )
+        if (phi > 0d0) then
+          a = x
+        else if (phi < 0d0) then
+          b = x
+        else
+          T_e = x
+          status = 0
+          exit
+        endif
+        c = x - phi/dphi
+        ! The stop test of the face, which takes the step c as well
+        if (diff < 1.d-9) then
+          if (c >= a .and. c <= b) then
+            T_e = c
+          else
+            T_e = x
+          endif
+          status = 0
+          exit
+        endif
+        if (b - a <= 4d0 * spacing(b)) then
+          T_e = x
+          status = 0
+          exit
+        endif
+        if (c > a .and. c < b .and. run < max_newton) then
+          x = c
+          run = run + 1
+        else
+          x = 0.5d0 * (a + b)
+          run = 0
+        endif
+      enddo
+      if (status == 5) return
+    endif
+
+    call Trapezoidal ( T_e, BC_T0, BC_ci, Rgas, fun_T )
+    p_design = BC_P0 / exp (fun_T)
+    rho_design = p_design / ( Rgas * T_e )
+
+  contains
+
+    !> The mass flux G(T) of the isentropic expansion from (T0, p0)
+    function Mass_Flux ( T ) result ( G )
+      real(R8), intent(in) :: T
+      real(R8) :: G
+      integer  :: s
+      real(R8) :: h, p, rho, fun_T
+
+      h = 0d0
+      do s = 1, nsc
+        h = h + BC_ci(s) * f_tabT( T,s,h_tab )
+      enddo
+      call Trapezoidal ( T, BC_T0, BC_ci, Rgas, fun_T )
+      p = BC_p0 / exp (fun_T)
+      rho = p / ( Rgas * T )
+      G = rho * sqrt ( max ( 2d0 * (h0_ - h), 0d0 ) )
+
+    end function Mass_Flux
+
+    !> phi(T) = h(T) + (g/rho(T))**2/2 - h0, its derivative and |phi|/|h0|, with the operations of the face
+    subroutine Design_Residual ( Sup_T, phi, dh0_Sup, diff_h0_ )
+      real(R8), intent(in)  :: Sup_T
+      real(R8), intent(out) :: phi, dh0_Sup, diff_h0_
+      integer  :: s
+      real(R8) :: hSup, cpSup, fun_T, Sup_p, Sup_rho, uSup, Sup_h0_, dpSup, duSup
+
+      hSup = 0d0
+      cpSup = 0d0
+      do s = 1, nsc
+        hSup = hSup + BC_ci(s) * f_tabT( Sup_T,s,h_tab )
+        cpSup = cpSup + BC_ci(s) * f_tabT( Sup_T,s,cp_tab )
+      enddo
+      call Trapezoidal ( Sup_T, BC_T0, BC_ci, Rgas, fun_T )
+      Sup_p = BC_P0 / exp (fun_T)
+      Sup_rho = Sup_p / ( Rgas * Sup_T )
+      uSup = g / Sup_rho
+      Sup_h0_ = hSup + 0.5d0 * uSup ** 2
+      diff_h0_ = abs(Sup_h0_-h0_)/abs(h0_)
+      dpSup = BC_P0 / exp (fun_T) * cpSup / (Rgas * Sup_T)
+      duSup = g * Rgas * (Sup_p - dpSup * Sup_T) / Sup_p**2
+      dh0_Sup = cpSup + uSup * duSup
+      phi = Sup_h0_ - h0_
+
+    end subroutine Design_Residual
+
+  end subroutine Nozzle_Design_State
 
 
   subroutine Trapezoidal ( sup_T, BC_T0, BC_ci, Rgas, integral )

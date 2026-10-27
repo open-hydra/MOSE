@@ -76,7 +76,7 @@ order gives the same solution and the same wall output).
 Some BC types carry additional data on the second line (see [BC Types](#bc-types)). For types that carry no data (symmetry, extrapolation, axisymmetry), the second line is **absent**.
 
 Every value of the data line is required, except those with a default value: `k_rough` and `eps_wall` (0), `cp_wall`,
-`Ti_wall` and `dh_wall` (0), `pyro_id` and `reac_id` (0), `rho_grain` (0), `SF_geo` (1), `p_sub` and `p_sup` (0). An
+`Ti_wall` and `dh_wall` (0), `pyro_id` and `reac_id` (0), `rho_grain` (0), `SF_geo` (1). An
 empty value (two commas with nothing between them) keeps that default; an empty required value stops the run at set-up,
 with the line of `bc.txt`, the record, its type and the name of the value. So does a line short of a value, or with a
 value that is not a number, and a value that is not finite (NaN or infinity), required or with a default, the flow
@@ -295,6 +295,17 @@ The inlets `403`, `404`, `405` and `408` make the face a slip wall when the gas 
 domain or is at rest, and `420` when that gas moves out or is at rest, or when its pressure is not below `p0`: they
 let no gas out. A duct at rest therefore starts from a `401`, `402` or `407` face, and not from a `403`, `404`, `405`,
 `408` or `420` face, unless something else moves its gas.
+
+**Choked nozzle (`420`).** The face is the exit of a nozzle fed from the reservoir at `T0` and `p0`, and the pressure
+`p` of the boundary cell selects its state: with `p_sub` ≤ `p` < `p0` the inflow at the total conditions `T0` and `p0`;
+with `p_sup` ≤ `p` < `p_sub` the inflow with the mass flux `g` and the total temperature `T0`; with `p` < `p_sup` the
+supersonic design exit state, the isentropic state of the reservoir with the mass flux `g`, computed once at set-up on
+the tables of the gas, and the flux of the Riemann solver between that state and the cell. `p_sub` and `p_sup` are
+required and must satisfy `0 < p_sup <= p_sub < p0`; `g` must not be above the choked mass flux `G*` of the reservoir
+on the tables of the gas, the `g` that ATLAS writes for an exit at the throat (`Ae_At = 1`), by more than 1e-9 of it.
+A record that does not satisfy these conditions stops the run at set-up, and so does a record whose critical or design
+exit state is at or below the lowest temperature above 0 K of the tables of the gas, or whose `T0` is above one kelvin
+below their last row, where their interpolation ends: the message asks to extend the tables.
 
 **Assigned state (`410`).** The file gives, for each cell of a face of type `410`, the state of the cell across the face,
 as across a face between blocks: the densities of the species, `rho(N)` (a species that the file does not name has zero

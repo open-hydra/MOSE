@@ -87,6 +87,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   do those with a positive value on the faces 1, 3 and 5. A value of zero, or a negative value on the faces 1, 3 and 5, stops
   the run at set-up with the line of `bc.txt`: an inlet only lets gas in. With zero a `403` stopped on a NaN, and a `420` hung
   at the first step where the gas of a cell entered at a pressure between `p_sup` and `p_sub`.
+- A `420` record whose `g` is above the choked mass flux `G*` of its reservoir on the tables of the gas, by more than 1e-9 of
+  it, whose thresholds do not satisfy `0 < p_sup <= p_sub < p0`, whose critical or design exit state is at or below the lowest
+  temperature above 0 K of the tables, or whose `T0` is above one kelvin below their last row, where their interpolation ends,
+  stops the run at set-up with the line of `bc.txt`; for the tables the message asks to extend them. No exit of the reservoir
+  has a mass flux above `G*`: below `p_sup` the iteration of the face left the tables and stopped the run (an index out of
+  bounds, or a segmentation fault without bounds checks), and between `p_sup` and `p_sub` the face took a state of total
+  pressure above `p0`. With the thresholds out of that order a band of the face was never used. With such a `T0` the face took
+  the enthalpy and the heat capacity of the gas held at their values one kelvin below the last row. ATLAS writes `G*` for an
+  exit at the throat, refuses thresholds out of that order, and from `Ae_At` these states too. `p_sub` and `p_sup` are
+  required: a record without them, which made the face an inlet at the total conditions `T0` and `p0` at every pressure of the
+  cell below `p0`, stops the run at set-up; an inlet at total conditions is a `401`.
 - The interior faces of the viscous fluxes no longer take by default the mean of the two metrics, which divided the difference
   across a face by the mean of 1/h instead of the distance between the cell centres: it overstated the face-normal gradient, and
   with it the viscous, conductive and diffusive fluxes, by (1 + r)²/(4r) at a cell-size ratio r (4.2 % at r = 1.5, 8.9 % at
@@ -257,6 +268,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The face of a choked nozzle (`420`) below `p_sup` takes the supersonic design exit state of its record, the supersonic root
+  of the mass flux `g` on the isentrope of the reservoir, at every exit Mach number. From an exit Mach number of about 2.8 in
+  air, and of about 3.6 in the gas of the frozen rocket nozzle of the tests, the Newton iteration of the face reached the
+  subsonic root, which let several times `g` into the domain (8.4 times at Mach 4 in air), or left the tables and stopped the
+  run (an index out of bounds, or a segmentation fault without bounds checks). The state is computed once at set-up, with a
+  Newton iteration kept inside the bracket of the supersonic root.
 - Faces between blocks take the inverse of the mean of the inverse metrics with `diffusive-metric = mean`, and
   chimera faces with every value of the key: across a large size jump at a block connection the mean of the two metrics made the
   normal gradient far too steep, and the explicit diffusion unstable on the large cell.

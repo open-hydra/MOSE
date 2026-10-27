@@ -82,6 +82,8 @@ module MOSE_Advanced_Types_m
     real(R8)                            :: SF_geo   = 1.0_R8                 ! SRM geometric scale factor    (SRM BC 502)
     real(R8)                            :: psub     = 0.0_R8                 ! Nozzle subsonic  pressure     (nozzle BC 420)
     real(R8)                            :: psup     = 0.0_R8                 ! Nozzle supersonic pressure    (nozzle BC 420)
+    real(R8)                            :: p_design   = 0.0_R8               ! Nozzle supersonic design exit pressure, set at set-up (nozzle BC 420)
+    real(R8)                            :: rho_design = 0.0_R8               ! Nozzle supersonic design exit density, set at set-up  (nozzle BC 420)
     type(time_series_type)              :: p0time
     type(time_series_type), allocatable :: q2d_map(:)                        ! BC 667 (Q2D mapped) time-varying primitive data (one per primitive)
     character(len=llen)                 :: q2d_file = ' '                    ! BC 667 (Q2D mapped) Tecplot filename from bc.txt

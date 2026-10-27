@@ -177,6 +177,7 @@ contains
     integer :: cc, i, s, nnozzle, nmanifold
     integer :: unitfile, ios, cios, ip
     integer :: nline                         ! lines of the file read so far (Next_Line)
+    integer :: last420                       ! the last record of type 420 read (Nozzle_States), 0 before the first
     integer :: nzero_chim
     character(len=llen) :: p0file
     character(len=32) :: alpha_tok, beta_tok
@@ -227,6 +228,7 @@ contains
 
     ! Read file
     nline = 0
+    last420 = 0
     do i = 1, size(bc)
 
       ! ── First line: block, ijk, face, ATLAS BC ID ─────────────────────────
@@ -500,7 +502,8 @@ contains
         case(420)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : nsc+nrans) )
-          bc(i)%T0 = EMPTY ; bc(i)%p0 = EMPTY ; bc(i)%mdot = EMPTY ; bc(i)%rel_fac = EMPTY ; bc(i)%ci = EMPTY
+          bc(i)%T0 = EMPTY ; bc(i)%p0 = EMPTY ; bc(i)%psub = EMPTY ; bc(i)%psup = EMPTY ; bc(i)%mdot = EMPTY
+          bc(i)%rel_fac = EMPTY ; bc(i)%ci = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) &
             bc(i)%T0, bc(i)%p0, bc(i)%psub, bc(i)%psup, bc(i)%mdot, bc(i)%rel_fac, &
@@ -510,11 +513,14 @@ contains
                                bc(i)%rel_fac ], 'T0 p0 p_sub p_sup g rel_fac' )
             call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
             call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
-            call Need_R ( i, bc(i)%type, nline, [ bc(i)%T0, bc(i)%p0 ], 'T0 p0' )
+            call Need_R ( i, bc(i)%type, nline, [ bc(i)%T0, bc(i)%p0, bc(i)%psub, bc(i)%psup ], 'T0 p0 p_sub p_sup' )
             call Need_R ( i, bc(i)%type, nline, [ bc(i)%mdot, bc(i)%rel_fac ], 'g rel_fac' )
             call Need_R ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
             call Need_R ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
             call Need_Inward ( i, bc(i)%type, nline, bc(i)%f, bc(i)%mdot, 'g' )
+            ! The thresholds of the record and the supersonic design exit state of its nozzle
+            call Nozzle_States ( i, nline, bc, last420 )
+            last420 = i
           end if
 
         ! ─────────────────────────────────────────────────────────────────────
@@ -1085,6 +1091,82 @@ contains
     end if
 
   end subroutine Need_Inward
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Nozzle_States: the thresholds of the choked nozzle of record n (type 420, line nline of the file) and the
+  !   supersonic design exit state that its face takes below p_sup (Nozzle_Design_State). The run stops when the
+  !   thresholds do not satisfy 0 < p_sup <= p_sub < p0, the order of the three branches of the face; when g is above
+  !   the choked mass flux G* of the reservoir by more than 1e-9 of it (no exit of the reservoir has that mass flux;
+  !   the boundary-condition builder of ATLAS writes G* for an exit at the throat); and, with a message that asks to
+  !   extend the tables of the gas, when the critical state or the design state is at or below their lowest temperature
+  !   above 0 K, or T0 above Tmax - 1, one kelvin below their last row, where their interpolation ends. A record with
+  !   the T0, p0, g and mass fractions of the previous record of type 420, prev (0: none), takes its design state.
+  subroutine Nozzle_States ( n, nline, bc, prev )
+    use MOSE_Advanced_Types_m,            only: MOSE_bc_type
+    use MOSE_Global_m,                    only: nsc, nrans
+    use MOSE_Mod_MPI,                     only: mpi_stop_all
+    use MOSE_Lib_BC_Fluxes_Inflow_Nozzle, only: Nozzle_Design_State
+    use FLINT_Lib_Thermodynamic,          only: Tmin, Tmax
+    implicit none
+    integer, intent(in)                              :: n, nline, prev
+    type(MOSE_bc_type), dimension(:), intent(inout) :: bc
+    ! Local
+    character(len=120) :: head
+    character(len=480) :: msg
+    character(len=24)  :: txt(4)
+    real(R8) :: g, Gstar
+    integer  :: status
+
+    write(head,'(3A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type 420)'
+    if ( .not. ( bc(n)%psup > 0d0 .and. bc(n)%psup <= bc(n)%psub .and. bc(n)%psub < bc(n)%p0 ) ) then
+      write(txt(1),'(ES23.16)') bc(n)%psup
+      write(txt(2),'(ES23.16)') bc(n)%psub
+      write(txt(3),'(ES23.16)') bc(n)%p0
+      call mpi_stop_all ( trim(head)//': p_sup = '//trim(adjustl(txt(1)))//', p_sub = '//trim(adjustl(txt(2)))//', p0 = '// &
+                          trim(adjustl(txt(3)))//': the thresholds must satisfy 0 < p_sup <= p_sub < p0' )
+    end if
+
+    g = abs(bc(n)%mdot)
+    if ( prev > 0 ) then
+      if ( bc(prev)%T0 == bc(n)%T0 .and. bc(prev)%p0 == bc(n)%p0 .and. abs(bc(prev)%mdot) == g .and. &
+           all ( bc(prev)%ci(nrans+1:nrans+nsc) == bc(n)%ci(nrans+1:nrans+nsc) ) ) then
+        bc(n)%p_design = bc(prev)%p_design
+        bc(n)%rho_design = bc(prev)%rho_design
+        return
+      end if
+    end if
+
+    call Nozzle_Design_State ( bc(n)%T0, bc(n)%p0, g, bc(n)%ci(nrans+1:nrans+nsc), Gstar, bc(n)%p_design, &
+                               bc(n)%rho_design, status )
+    if ( status <= 1 ) return
+    write(txt(1),'(ES23.16)') bc(n)%T0
+    write(txt(2),'(ES23.16)') bc(n)%p0
+    write(txt(3),'(ES23.16)') g
+    write(txt(4),'(ES23.16)') Gstar
+    select case ( status )
+    case ( 2 )
+      write(msg,'(6A,I0,A)') trim(head), ': T0 = ', trim(adjustl(txt(1))), ', p0 = ', trim(adjustl(txt(2))), &
+        ': the critical state of the reservoir is at or below the lowest temperature of the tables of the gas, ', &
+        max(Tmin, 1), ' K: extend the tables to lower temperatures'
+    case ( 3 )
+      write(msg,'(5A)') trim(head), ': g = ', trim(adjustl(txt(3))), ' is above the choked mass flux G* = ', &
+        trim(adjustl(txt(4)))//' of T0, p0 and the gas: no nozzle exit has that mass flux'
+    case ( 4 )
+      write(msg,'(7A,I0,A)') trim(head), ': T0 = ', trim(adjustl(txt(1))), ', p0 = ', trim(adjustl(txt(2))), ', g = ', &
+        trim(adjustl(txt(3)))//': the supersonic design exit state is at or below the lowest temperature of the '// &
+        'tables of the gas, ', max(Tmin, 1), ' K: extend the tables to lower temperatures'
+    case ( 6 )
+      write(msg,'(4A,I0,A)') trim(head), ': T0 = ', trim(adjustl(txt(1))), ' is above ', Tmax - 1, &
+        ' K, one kelvin below the last row of the tables of the gas, where their interpolation ends: extend the tables '// &
+        'to higher temperatures'
+    case default
+      write(msg,'(7A)') trim(head), ': T0 = ', trim(adjustl(txt(1))), ', p0 = ', trim(adjustl(txt(2))), ', g = ', &
+        trim(adjustl(txt(3)))//': the states of the nozzle did not converge'
+    end select
+    call mpi_stop_all ( trim(msg) )
+
+  end subroutine Nozzle_States
 
 
   !─────────────────────────────────────────────────────────────────────────────

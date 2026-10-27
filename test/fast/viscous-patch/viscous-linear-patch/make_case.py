@@ -160,6 +160,7 @@ import numpy as np
 RGAS = 8314.46261815324 / 28.970418          # gas constant of FLINT for air, J/(kg K)
 MU = 1.1858686e-5                   # test/common/Air-viscous: constant viscosity, Pa s
 KCOND = 0.016544513989              # test/common/Air-viscous: constant conductivity, W/(m K)
+CP_AIR = 1004.5                     # test/common/Air-viscous: constant cp, J/(kg K)
 P0, T0 = 1.0e5, 300.0
 RHO0 = P0 / (RGAS * T0)
 P_LOW = 10.0                        # mom, rk3: a low pressure. The round-off of the pressure forces, p (face area)/volume,
@@ -716,6 +717,33 @@ def inward(v):
     return abs(v) if v != 0.0 else 1.0
 
 
+def nozzle_record(t0, p0):
+    """p_sub, p_sup and g of the record of a nozzle 420 of exit-to-throat area ratio 2 fed from (t0, p0), in closed form for
+    the air of test/common/Air-viscous (cp = CP_AIR): the exit pressures of the subsonic and of the supersonic isentropic
+    flows, their Mach numbers by bisection on the two branches of the area ratio A/A*(M) (200 halvings: to the spacing of
+    the doubles), and g = G*/2, G* the choked mass flux."""
+    gam = CP_AIR / (CP_AIR - RGAS)
+    e = (gam + 1.0) / (2.0 * (gam - 1.0))
+
+    def area(m):
+        return ((2.0 / (gam + 1.0)) * (1.0 + 0.5 * (gam - 1.0) * m * m)) ** e / m
+
+    def root(lo, hi, increasing):
+        for _ in range(200):
+            mid = 0.5 * (lo + hi)
+            if (area(mid) < 2.0) == increasing:
+                lo = mid
+            else:
+                hi = mid
+        return 0.5 * (lo + hi)
+
+    def pressure(m):
+        return p0 * (1.0 + 0.5 * (gam - 1.0) * m * m) ** (-gam / (gam - 1.0))
+
+    gstar = p0 * math.sqrt(gam / (RGAS * t0)) * (2.0 / (gam + 1.0)) ** e
+    return pressure(root(1.0e-6, 1.0, False)), pressure(root(1.0, 50.0, True)), 0.5 * gstar
+
+
 def open_line(mesh, run, X, sgn, face, i, j, k, t):
     """Property line of an inlet or outlet face (boundary-conditions.md, Inlet / Outlet) from the state of its cell:
     T0 or T the temperature of the cell, p0, p or p_back its pressure, the mass flux g and the velocity un its own across
@@ -726,9 +754,9 @@ def open_line(mesh, run, X, sgn, face, i, j, k, t):
     the domain), the other inlets the token normal, rel_fac 1 and the mass fraction of the single
     species 1. Each face takes the branch of its type that the state of its cell selects: an inflow where the gas
     of the cell moves in, else an outflow or the slip wall of a face the gas does not enter (eneio: the gas is at rest;
-    the 420 faces, with p0 = p and g = 1, are slip walls in both runs). So the inviscid flux of the face stays at the
-    scale of the flux of the cell. A slip wall does not read g or un, and the ghost cells of these types do not read the
-    line."""
+    the 420 faces, with p0 = p, are slip walls in both runs; their record is that of a nozzle of area ratio 2 fed from
+    T0 = T and p0 = p, nozzle_record). So the inviscid flux of the face stays at the scale of the flux of the cell. A slip
+    wall does not read g or un, and the ghost cells of these types do not read the line."""
     rho, u, p = state(mesh, run, centres(X)[i - 1, j - 1, k - 1])
     T = p / (rho * RGAS)
     n, _ = outward_area(X, sgn, face, i, j, k)
@@ -751,7 +779,8 @@ def open_line(mesh, run, X, sgn, face, i, j, k, t):
     if t == 408:
         return f'    {T:.17E}, {inward(un):.17E}, normal, normal, {tail}'
     if t == 420:                         # T0, p0, p_sub, p_sup, g: p0 = p, the branch of a face the gas does not enter
-        return f'    {T:.17E}, {p:.17E}, 0.0, 0.0, 1.0, {tail}'
+        p_sub, p_sup, g = nozzle_record(T, p)
+        return f'    {T:.17E}, {p:.17E}, {p_sub:.17E}, {p_sup:.17E}, {g:.17E}, {tail}'
     sys.exit(f'no property line for type {t}')
 
 
