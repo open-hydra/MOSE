@@ -263,9 +263,13 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # flux or a normal velocity (403, 404, 408, and 420 on face 2): g and un
 # positive into the domain on every face, a negative value on face 2 as its
 # magnitude.
-# Choked nozzle: below p_sup the face of a nozzle 420 takes the supersonic
-# design exit state of its record (air at exit Mach numbers 2.5, 3 and 4, the
-# gas of the frozen rocket nozzle at 4.46, and the sonic state at the throat).
+# Choked nozzle: below p_shock, the pressure behind a normal shock at the exit,
+# and below p_sub, the face of a nozzle 420 takes the supersonic design exit
+# state of its record (air at exit Mach numbers 2.5, 3 and 4, the gas of the
+# frozen rocket nozzle at 4.46, the sonic state at the throat, and air at an
+# exit Mach number of 2.94 with the gas of the tube between p_sup and 1e-6
+# below p_shock), and from p_shock up to p_sub the state of mass flux g (that
+# air 1e-6 above p_shock and at 1.02 p_shock).
 # Boundary input: the property lines of bc.txt are read as written or refused
 # (the inlet 402 table under any file name; a missing or decreasing table stops
 # the run; an inlet on face 1 with g or un negative (404, 408, 420) or zero
