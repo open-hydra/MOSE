@@ -241,7 +241,7 @@ stop_case() {
 }
 rule="type 200 joins the k faces of one block:"
 ring="$rule cut sectors along i or j; join rings by 101 at each junction"
-k_only="type 200 is for the k faces (5 and 6) of a wedge or a sector only"
+k_only="type 200 is for the k faces (5 and 6) of a wedge or a sector only; declare symmetry (300) on the axis"
 stop_case split-cutk "[ERROR] bc.txt, record 49: type 200 on face 5 of block 1 at i, j = 1 1, but face 6 there is of type 101: $ring"
 stop_case split-face4 "[ERROR] bc.txt, record 81: type 200 on face 4 of block 1 at i, j, k = 1 4 1: $k_only"
 stop_case split-outside "[ERROR] bc.txt, record 97: type 200 on face 5 of block 1 at i, j, k = 3 1 1: the cell is outside the block, of 2 x 4 x 8 cells"
