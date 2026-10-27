@@ -651,6 +651,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `506` was missing.
 - The guide names the boundary files of the multigrid levels as MOSE reads them, `bc.txt`, `bc2.txt`, `bc3.txt`, … (it said
   `bc_x1.txt`, `bc_x2.txt`, …).
+- The text of the key `sst-production`, the turbulence guide and the SWBLI page describe the `compressible` production as MOSE
+  computes it: the exact production with the dilatation terms arranged as in OpenFOAM's `kOmegaSST`, with the limiter on its
+  deviatoric part only and -2/3 gamma rho omega div(u) in the omega equation. They named it NASA TMR's SST-2003e (SST-2003 with
+  `k-energy-coupling`), which limits the whole production and takes gamma/nu_t times it in the omega equation. The guide also
+  writes the Boussinesq stress with its -1/3 div(u) delta_ij part, and says that its -2/3 rho k delta_ij term enters the momentum
+  and energy equations only with `k-energy-coupling = true` (it said that the two-equation models include it), that `SA` is the
+  model without the f_t2 term (SA-noft2 in TMR naming), with the limiter of S~ of Note 1(c) of the TMR page and the cap r <= 10
+  that the code applies (the guide gave neither), and that with `compressible` the rotation/curvature factor of SST-RC multiplies
+  only the deviatoric part of the production. The SWBLI page gives the whole variant of its two models, and the models of the
+  Wind-US and SU2 solutions as their sources give them: SPALART and SST, without variant, in the NPARC Alliance archive, and SA-neg
+  and SST-2003m in the SU2 validation study of the case. No run changes.
 - The figure of the grids of the 3-D manufactured-solution page (`docs/vv/images/mms3d-grids.svg`, drawn by `verify.py` of
   `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
   iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z

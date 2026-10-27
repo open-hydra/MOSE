@@ -2,23 +2,23 @@
 !> by the NASA Turbulence Modeling Resource (TMR): https://tmbwg.github.io/turbmodels/sst.html
 !> (formerly https://turbmodels.larc.nasa.gov/sst.html).
 !>
-!> Production term, by option. TMR naming; MOSE keeps -2/3 rho k delta_ij out of the stress
-!> tensor of the momentum and energy equations (Stress_Vector_Std), hence the m/e suffixes:
-!>   sst-production = incompressible (default)  P = mu_t S^2, S^2 = 2 S_ij S_ij   -> SST-2003m
-!>   sst-production = compressible              P = tau_ij du_i/dx_j (exact)     -> SST-2003e
-!>     with the dilatation terms arranged as in OpenFOAM's kOmegaSST (OpenFOAM-10,
+!> Production term, by option. Unless k-energy-coupling is .true., MOSE keeps -2/3 rho k delta_ij out of
+!> the stress tensor of the momentum and energy equations (Stress_Vector_Std), as the TMR m/e variants do:
+!>   sst-production = incompressible (default)  P = mu_t S^2, S^2 = 2 S_ij S_ij   -> TMR SST-2003m
+!>   sst-production = compressible              P = tau_ij du_i/dx_j (exact), no TMR variant:
+!>     the dilatation terms are arranged as in OpenFOAM's kOmegaSST (OpenFOAM-10,
 !>     kOmegaSSTBase.C): the limiter acts on the deviatoric part mu_t (S^2 - 2/3 divU^2), and
 !>     -2/3 rho k divU (k equation) and -2/3 gamma rho omega divU (omega equation) are added
-!>     outside it.
-!> In both forms P is limited to 10 beta* rho omega k and the omega production is
-!> (gamma rho / mu_t) times the limited P (SST-2003 with the TMR correction of the paper's typo).
+!>     outside it, whereas TMR SST-2003e limits all of P and takes (gamma/nu_t) times it for omega.
+!> The limiter is 10 beta* rho omega k, and the omega production is (gamma rho / mu_t) times the
+!> limited value (SST-2003 with the TMR correction of the paper's typo).
 !> k-energy-coupling = .true. puts k in the total energy (the full compressible RANS form of the
 !> TMR "Implementing Turbulence Models into the Compressible RANS Equations" page): -2/3 rho k
 !> delta_ij enters the stress of the momentum and energy equations (Stress_Vector_2eq) and the
-!> k-equation source is removed from the mean-flow energy. TMR names then drop the m/e suffix:
-!> SST-2003s (incompressible production) and SST-2003 (compressible production).
-!> turbulence = SST-RC multiplies P by the Spalart-Shur rotation/curvature function fr1 of
-!> Smirnov & Menter (2009), TMR SST-RC (here on SST-2003: SST-2003RC).
+!> k-equation source is removed from the mean-flow energy. The TMR name is then SST-2003s with the
+!> incompressible production; the compressible one is not TMR SST-2003, which limits all of P as SST-2003e does.
+!> turbulence = SST-RC multiplies P (with compressible production, its deviatoric part) by the
+!> Spalart-Shur rotation/curvature function fr1 of Smirnov & Menter (2009), TMR SST-RC, here on the SST-2003 variants above.
 !>
 !> References
 !>   Menter, F. R., "Two-Equation Eddy-Viscosity Turbulence Models for Engineering Applications",
@@ -189,7 +189,7 @@ contains
 
       ! Production (see the module header for the variants and references)
       Prod(1) = mi_t * S**2 ! SST-2003m (TMR), sst-production = incompressible
-      ! sst-production = compressible (SST-2003e, OpenFOAM kOmegaSST arrangement), deviatoric part:
+      ! sst-production = compressible (exact production, OpenFOAM kOmegaSST arrangement), deviatoric part:
       ! mu_t*(S^2 - 2/3 divU^2) = 2 mu_t S_dev:S_dev >= 0
       if ( compressible ) Prod(1) = Prod(1) - 2d0/3d0 * mi_t * Divel**2
 
