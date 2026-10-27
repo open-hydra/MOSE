@@ -284,6 +284,13 @@ A `407` face whose gas moves in at $2a/(\gamma-1)$ or faster is an outlet only w
 reservoir that feeds nothing, and then has no flux. `rel_fac` has no effect on these three types: when the gas enters,
 the face state exists with $p_0$ as given.
 
+**Flow direction of the supersonic inlet (`405`).** Its velocity, of the magnitude that `mach` gives (blended with the
+Mach number of the boundary cell by `rel_fac`), is along $(\cos\alpha\cos\beta,\ \sin\alpha\cos\beta,\ \sin\beta)$. With
+`alpha` and `beta` both `normal` it is along the normal of the face into the domain, on every face. With one of them
+`normal`, that angle is the one of the normal of the face into the domain: `alpha` its azimuth (the angle of its
+projection on the $x$-$y$ plane from $x$), `beta` its elevation (from the $x$-$y$ plane); on a face whose normal is
+along $z$, which has no azimuth, `alpha` is 0.
+
 The inlets `403`, `404`, `405` and `408` make the face a slip wall when the gas of the boundary cell moves out of the
 domain or is at rest, and `420` when that gas moves out or is at rest, or when its pressure is not below `p0`: they
 let no gas out. A duct at rest therefore starts from a `401`, `402` or `407` face, and not from a `403`, `404`, `405`,

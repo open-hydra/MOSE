@@ -15,13 +15,15 @@
 #      stress
 #    Extrapolation400 (extrapolation-400): extrapolation faces (400) and the
 #      lines of the gas entering through them
+#    SupersonicInlet (supersonic-inlet): the supersonic inlet (405) with the
+#      flow direction normal
 #  ./run.sh runs every part; ./run.sh <part> ... runs those parts only.
 #===============================================================================
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(inlets bc-input rotating-frame wall-heat-sign extrapolation-400)
+PARTS=(inlets bc-input rotating-frame wall-heat-sign extrapolation-400 supersonic-inlet)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

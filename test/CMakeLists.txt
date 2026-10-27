@@ -244,6 +244,11 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # end line of the evaluations with gas entering, also in a run that stops at
 # its first stage and with 1 and 4 threads on a face of 130 records; no end
 # line in a case without 400 faces.
+# Supersonic inlet (405) with the flow direction normal: the gas enters along
+# the normal of the face into the domain on both ends of a tube along x, of its
+# mirror image, of a tube turned to (1, 1, 1)/sqrt(3) and of one along z; with
+# one angle normal, the angle the token stands for on that face; one step,
+# mass flux and velocity of the inlet cell against those of the angles 0, 0.
 mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;physics;1D;2D")
 
 # Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
