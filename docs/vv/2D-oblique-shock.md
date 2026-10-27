@@ -36,31 +36,25 @@ The mesh is composed of two structured blocks:
 
 Boundary conditions:
 
-- Inlet: Riemann invariant extrapolation with Mach 4 state
+- Inlet (`405`): supersonic inflow at the Mach 4 state
 - Wall: slip wall (symmetry)
 - Upper boundary: zero-gradient extrapolation
 - Exit: zero-gradient extrapolation
 
 ## Results and verification
 
-Comparison of numerical shock jump conditions across all Riemann solvers:
+`verify.py` averages $p_2/p_1$, $T_2/T_1$, $\rho_2/\rho_1$ and $M_2$ over a window of block 2 well behind the shock ($i$ = 14 to 34, $j$ = 5 to 49, counted from 0) and passes when every ratio is within 1.5 % of the oblique-shock relations. With HLLE, HLLC+Tramel and SLAU the four ratios are within 0.80 %. HLLC fails, with $T_2/T_1$ +1.94 % and $M_2$ −3.21 % ($p_2/p_1$ +0.42 %): its average over the striations described below is not the post-shock state. The density of both blocks, scaled by the pre-shock density:
 
 <figure>
   {% include "vv/images/OS-fields.svg" %}
 </figure>
 
-Theoretically, a uniform flow should exist behind the oblique shock wave. However, most Riemann solvers except HLLE exhibit instabilities that produce an undesirable zebra-like oscillatory pattern in the post-shock region. The HLLC+ solver, which is explicitly designed to suppress such numerical artifacts, delivers the cleanest solution.
+Behind the oblique shock the exact flow is uniform. HLLC, SLAU and, much less, HLLC+Tramel show density striations along the grid lines behind the shock (a zebra-like pattern); HLLE does not.
 
-The transversal density profile normalized with the analytical solution is plotted along a vertical line in the post-shock region:
+The density along the vertical grid line $i$ = 30 of block 2 (cell centres at $x$ = 0.234), scaled by the exact post-shock density (the pre-shock density times the exact ratio):
 
 <figure>
   {% include "vv/images/OS-slice.svg" %}
 </figure>
 
-!!! note "Figure and code version"
-    The figure comes from the first upload of MOSE (May 2026, commit `ab2bf537`): its code, with the
-    input of that time (MUSCL-SD reconstruction) and 3000 iterations, reproduces it within 0.22 % of the
-    range of the axes. MOSE at commit `10b59003b72c` moves the three profiles compared, HLLC, HLLC+Tramel
-    and SLAU, by 103 %, 76 % and 117 % of that range.
-
-The HLLE solver produces a quite uniform flow with density matching the analytical solution very closely. In contrast, HLLC exhibits errors up to 10% compared to the theoretical value, while HLLC+ remains slightly unstable with oscillations of approximately 2% around the analytical density.
+In $0.09 \le y \le 0.12$ on that line the density departs from the exact post-shock value by up to 0.69 % with HLLE, 2.7 % with HLLC+Tramel, 9.2 % with SLAU and 12.0 % with HLLC.
