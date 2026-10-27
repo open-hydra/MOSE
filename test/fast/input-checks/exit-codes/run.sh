@@ -136,10 +136,11 @@
 #  which the ghost cells of a face of type 410 take whole (the density rho(N)
 #  of at least one species, u, v, w and p), with the file and the variables
 #  it lacks: the same duct with p, with u and w, or with rho(1), the density
-#  of its only species, taken out of the file. The ghost cells took the value
-#  of the cell for a missing p, u or w, and the run ended with exit code 0;
-#  without any rho(N) they had zero density, and the run ended at its first
-#  step with a run-time error (gfortran with bounds checking).
+#  of its only species, taken out of the file. Without the check the ghost
+#  cells would take the value of the cell for a missing p, u or w, and the run
+#  would end with exit code 0; without any rho(N) they would have zero
+#  density, and the run would end at its first step with a run-time error
+#  (gfortran with bounds checking).
 #  So does a file that leaves a cell of a face of type 410 without a value at
 #  one of its times, or whose zones give nodes that are not those of the
 #  faces, with the file, the block and the record, and for the nodes the zone
@@ -150,11 +151,11 @@
 #  with no zone of block 2 at the second time, with the zones of block 2 cut
 #  to their first 25 cells, with the zone of block 1 at the second time
 #  holding that of block 2, and with its nodes moved by 2e-2 of the shortest
-#  edge of these faces. The reader left such cells with the zero state: the
-#  run ended at its first step with a run-time error that named no file, or
-#  took that state at the second time; it did not read the nodes, and the
-#  values of a zone of another block, of another time or of another mesh went
-#  to the face without a word. The files as written must run, with exit code
+#  edge of these faces. Without these checks such cells would keep the zero
+#  state, and the run would end at its first step with a run-time error that
+#  names no file, or take that state at the second time; and the values of a
+#  zone of another block, of another time or of another mesh would go to the
+#  face without a word. The files as written must run, with exit code
 #  0, and so must the same files with the nodes of the faces 5 and 6 moved by
 #  0.5e-2 of that edge, or with the coordinates written with 15 significant
 #  digits, with the solution of the files as written, bit for bit; and so
