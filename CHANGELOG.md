@@ -659,6 +659,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   wider than the narrowest section: at the subsonic station the column had an area ratio of 1.883 instead of 2. With the runs
   of the case, the Mach number of the equilibrium run at the subsonic station is 13.3 % above CEA instead of 16.7 %, and its
   pressure in the diverging part 5.8 % to 11.9 % above CEA instead of 7.0 % to 16.4 %.
+- The comparison of the rocket nozzle with CEA (`test/2D/euler/rocket-nozzle/verify.py`) takes u, v, p, T, γ and R by their
+  names in the solution files, and stops with a message, exit status 1, when one is missing. It took them at fixed places after
+  the species densities, those of the files that the case writes: a file with the variables of another model between p and T
+  (soot, passive scalars, turbulence), or one written with `sol-variables = transport`, which writes `mil` and `kl` where
+  `thermo` writes `g` and `R`, gave it other quantities, with no message.
 - The figure of the grids of the 3-D manufactured-solution page (`docs/vv/images/mms3d-grids.svg`, drawn by `verify.py` of
   `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
   iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z

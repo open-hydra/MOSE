@@ -44,15 +44,17 @@ args = parser.parse_args()
 
 def read_run(case):
     """The solution of the run of one configuration, case/OUTPUT/field.tec: mixture density (every species), velocity, p, T,
-    gamma and R. The species densities come first in the file, then u, v, w, p, T, g, R."""
+    gamma and R, each variable taken by its name in the VARIABLES list of the file."""
     path = os.path.join(case, "OUTPUT", "field.tec")
     if not os.path.exists(path):
         sys.exit(f"verify.py: {path} is missing: run ./MOSE.sh solve in {case} first")
     x_, y_, z_, var_, vnames = read_TEC(path)
-    ns = sum(1 for name in vnames if name.startswith("rho("))
-    v = var_[0]
-    return {'x': x_[0], 'y': y_[0], 'rho': sum(v[0:ns]), 'u': v[ns], 'v': v[ns + 1], 'p': v[ns + 3], 'T': v[ns + 4],
-            'g': v[ns + 5], 'R': v[ns + 6]}
+    var = dict(zip(vnames[3:], var_[0]))  # x, y and z come first in vnames, not in var_[0]
+    missing = [name for name in ('u', 'v', 'p', 'T', 'g', 'R') if name not in var]
+    if missing:
+        sys.exit(f"verify.py: {path} has no variable {', '.join(missing)}")
+    return {'x': x_[0], 'y': y_[0], 'rho': sum(var[n] for n in var if n.startswith("rho(")), 'u': var['u'], 'v': var['v'],
+            'p': var['p'], 'T': var['T'], 'g': var['g'], 'R': var['R']}
 
 
 frozen = read_run("frozen")
