@@ -133,20 +133,26 @@ MOSE prints diagnostic information to the console during loading and iteration. 
     A run that MOSE stops on an error, at loading, at set-up or because the solution diverges («Integration failed at
     b, i, j, k», then «NaN, infinity or p<0 detected»), ends with a non-zero exit code: 1 where MOSE ends with `stop 1`
     or `error stop 1`, otherwise that of `ERROR STOP` (128 with ifx, 1 with gfortran) or the one the MPI launcher gives
-    for `MPI_ABORT` with error code 1. With MPI, an error that every rank finds, an initial condition that cannot be read
-    (also when one rank alone finds it) and an error that rank 0 finds at set-up or when it reads `input.ini` again stop
-    every rank together: each rank writes its message, the ranks finalize MPI and end with exit code 1. A `stop` outside
-    these collective stops, a divergence for instance, ends its own rank only, and the MPI launcher ends the run with a
-    code of its own (255 with the `mpiexec` of Intel MPI 2021.12). A divergence is caught on any value that is not finite
-    or on a negative pressure, in RELEASE builds with fast math too; a value of the initial condition that is not finite
-    stops the run at set-up ([Initial Conditions](initial-conditions.md#required-variables)). The errors of each input are
-    in its page ([Input File](input.md), [Initial Conditions](initial-conditions.md),
+    for `MPI_ABORT` with error code 1. With MPI, an initial condition that cannot be read (also when one rank alone finds
+    it), an error that rank 0 finds at set-up or when it reads `input.ini` again, and most errors that every rank finds
+    stop every rank together: each rank writes its message, the ranks finalize MPI and end with exit code 1. A `stop`
+    outside these collective stops, a divergence for instance, ends its own rank only, and the MPI launcher ends the run
+    with a code of its own (255 with the `mpiexec` of Intel MPI 2021.12). Some errors that one rank finds alone, at
+    set-up in the mesh of its blocks (such as a degenerate or folded cell, an axis at r = 0 or a wall on a face of zero
+    area) or in its probes (a probe file that cannot be opened, an unknown probe variable) and on rank 0 in the
+    diagnostic output, and two errors of `bc.txt` that every rank finds (chimera entries whose donor fractions sum to
+    less than one half, a manifold `501` whose donor block is on another rank) stop the run through `MPI_ABORT`: the rank
+    writes out its output first, but `MPI_ABORT` makes only a best attempt to stop the processes, and what the other
+    ranks hold for their output may not reach the log. A divergence is caught on any value that is not finite or on a
+    negative pressure, in RELEASE builds with fast math too; a value of the initial condition that is not finite stops
+    the run at set-up ([Initial Conditions](initial-conditions.md#required-variables)). The errors of each input are in
+    its page ([Input File](input.md), [Initial Conditions](initial-conditions.md),
     [Boundary Conditions](boundary-conditions.md)).
 
-    Known limit: errors raised inside the ORION library, which reads and writes the solution files, end with code 0,
-    because ORION stops with `STOP` (for example a binary Tecplot file, `ic-format = tecplot binary`, in a build without
-    TecIO: «You can not read in binary format without compiling against TecIO»). Check the end of the log, not only the
-    exit code, when a run reads or writes binary files.
+    A binary Tecplot file, read (`ic-format = tecplot binary`) or written, in a build without TecIO stops the run inside
+    the ORION library with `ERROR STOP` («You can not read in binary format without compiling against TecIO», or «write»
+    for a file it writes), with the exit code of `ERROR STOP` given above; with MPI it is not one of the collective
+    stops, and the exit code is the one the launcher gives.
 
 The [Quick Start](../getting-started/quick-start.md) shows the screen of a whole run, from the loading checks
 to the lines after the timing block.

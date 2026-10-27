@@ -583,6 +583,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `stationary-face-1` at every pass, so stationary walls could not be used. A `rotational-frame` other than `rigid-body`, its
   default `none` included, turns the frame off before its entries are read; with `none` the switch of the frame was left
   undefined.
+- The user guide, the theory guide and the text of the key `diffusive-metric` describe these points as MOSE does them. With MPI
+  some errors that one rank finds alone (at set-up in the mesh of its blocks or in its probes, on rank 0 in the diagnostic
+  output), and two errors of `bc.txt` that every rank finds, stop the run through `MPI_ABORT`,
+  whose best attempt to stop the processes can lose what the other ranks hold for the log (the guide said that every
+  error found by every rank stops the ranks together). A binary Tecplot file in a build without TecIO stops the run inside
+  ORION with `ERROR STOP` (the guide said that the run ended with exit code 0). MDB writes its decomposition map by default as
+  `decomposition.map` in the folder where it runs (the guide said next to the split mesh). ATLAS writes `<name>-bc.txt` for a
+  named phase, and MOSE reads `INPUT/bc.txt`. The outlet `406` with `p_back` = 0 and `rel_fac` = 1, what ATLAS writes for an
+  `outlet` without `p` and `rf`, takes the state of the boundary cell whatever its Mach number, except where that gas moves
+  into the domain (a slip wall). The flow angles give v = u tan(alpha) and w = u tan(beta), and the velocity of `405` the
+  direction (cos(alpha) cos(beta), sin(alpha) cos(beta), sin(beta)). `rel_fac` has no effect on `403` and `420` either. With
+  `diffusive-metric = stencil` the symmetry faces with one cell across them, the
+  walls `502` and the walls `503`-`505` while they ablate take the metric of the cell, and with `mean` the faces of type `200`
+  take the inverse-mean metric, as those between blocks. The coupled walls `103` and `104` share the declared limit of the
+  wall values of the turbulence variables of `503`-`505`; the wall flux of the walls that blow takes C = 800 in the wall value
+  of omega with either value of `omega-wall-bc`, and the guide described a blowing correction of omega that no model name
+  that MOSE accepts selects. The residuals do not show the cells that the turbulence floor holds from one step to the next.
+  The home page builds with `./install.sh build`. No run changes.
 - The user guide gives the data lines of the boundary types `420`, `502` and `506` as MOSE reads them: the fifth value of `420`
   is the mass flux `g` through the face, not a throat radius; the line of `502` ends with the mass fractions of the products;
   `506` was missing.

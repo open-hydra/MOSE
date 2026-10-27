@@ -130,7 +130,7 @@ MOSE can take the rank of every block from a file instead: name it with `decompo
   MPI partition read from INPUT/decomposition.map
 ```
 
-The file has the format of the decomposition map that the ATLAS mesh decomposer (MDB) writes where its `map-file` option says (by default next to the split mesh, with the phase prefix in multi-phase runs). In its `rank` column MDB writes the assignment that MOSE makes itself on the same number of ranks: to run another one, copy the map into `INPUT/` with the split mesh and its `bc.txt` and change that column, or write the file by hand. Lines starting with `#` are comments; then one line per block, blocks 1 to *nb* in order, with 13 integers
+The file has the format of the decomposition map that the ATLAS mesh decomposer (MDB) writes where its `map-file` option says (by default `decomposition.map` in the folder where MDB runs, `<prefix>decomposition.map` in multi-phase runs). In its `rank` column MDB writes the assignment that MOSE makes itself on the same number of ranks: to run another one, copy the map into `INPUT/` with the split mesh and its `bc.txt` and change that column, or write the file by hand. Lines starting with `#` are comments; then one line per block, blocks 1 to *nb* in order, with 13 integers
 
 ```text
 # new  parent   i0   i1    j0   j1    k0   k1      ni   nj   nk        cells  rank
