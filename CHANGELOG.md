@@ -638,6 +638,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
   iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z
   moves onto a face of a block, and stops with a message, exit status 1, when a block has no such face or more than one.
+- The tests that check the number of OpenMP threads of their runs pass in a MOSE built without OpenMP (`USE_OPENMP=OFF`, the
+  default of the configuration), which writes `Serial execution` where it writes the number of threads with OpenMP; they failed
+  there on that line. `BoundaryConditions` skips the part of `Extrapolation400` that compares 1 and 4 threads, `MPIBitIdentity`
+  compares 1×1, 2×1 and 4×1 and does not run 1×4 and 2×2, and `MPIThreadFunnel`, which counts the MPI calls of the threads
+  other than the one that initialised MPI, exits with 77 after its first run, the code its CTest definition declares as that of a
+  skipped test (`SKIP_RETURN_CODE`); each says so in its output. With OpenMP they run as before.
 - Every rule of the parameter registry is checked, at set-up and when `input.ini` is read again: intervals such as the `in (0,
   1)` of `preconditioning-eps-min`, and the rule of a list of numbers on each of its values (`index-position` of a probe, `>=
   0`; `ode-relative-tol-species` and `ode-absolute-tol-species`, `> 0`). Only the bounds of single numbers and the lists of

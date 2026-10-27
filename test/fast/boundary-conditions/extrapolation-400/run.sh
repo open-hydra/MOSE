@@ -43,7 +43,10 @@
 #     face 1 at 0.5 a and through face 3 at 1e-3 a, one step with 1 and with 4
 #     threads (130 records on face 3, more than two pieces of the dynamic
 #     schedule of 64 of the loops of the boundary fluxes): the same lines and
-#     the same end line, faces: 130 on face 3 (threads).
+#     the same end line, faces: 130 on face 3 (threads). A MOSE built without
+#     OpenMP writes "Serial execution" where it writes the number of threads:
+#     the part then stops after its run with 1 thread and is skipped, with a
+#     line that says so.
 #  6. The tube of part 1 with slip walls (300) at its ends, no 400 face, the
 #     gas at 0.5 a, one step: no line of the gas entering, no end line and no
 #     line of the ghost cells (no400).
@@ -148,14 +151,22 @@ echo "-- 5. 130 records on a face, 1 and 4 threads: the same lines --"
 write_ini 1 euler
 echo "   threads"
 ok=1
+skip=0
 for nt in 1 4; do
   OMP_NUM_THREADS=$nt solve threads "OUTPUT/threads_$nt.log" || { ok=0; continue; }
+  # a MOSE built without OpenMP writes "Serial execution" in place of the number of threads: it has one thread only
+  if [[ $nt -eq 1 ]] && grep -q "^ Serial execution\$" OUTPUT/threads_1.log; then
+    skip=1
+    break
+  fi
   if ! grep -q "Number of threads --> *$nt\$" "OUTPUT/threads_$nt.log"; then
     echo "  [FAIL] threads: the run did not use $nt threads (see OUTPUT/threads_$nt.log)"
     ok=0
   fi
 done
-if [[ $ok -eq 1 ]] && python3 -B entering_gas.py same OUTPUT/threads_1.log OUTPUT/threads_4.log; then
+if [[ $skip -eq 1 ]]; then
+  echo "  [skip] threads: MOSE built without OpenMP (OUTPUT/threads_1.log: Serial execution)"
+elif [[ $ok -eq 1 ]] && python3 -B entering_gas.py same OUTPUT/threads_1.log OUTPUT/threads_4.log; then
   echo "  [ok  ] threads"
 else
   echo "  [FAIL] threads"
@@ -171,5 +182,9 @@ if [[ $fail -ne 0 ]]; then
   echo "Extrapolation400: FAILED"
   exit 1
 fi
-echo "Extrapolation400: all checks passed"
+if [[ $skip -eq 1 ]]; then
+  echo "Extrapolation400: all checks passed; threads not run: MOSE built without OpenMP"
+else
+  echo "Extrapolation400: all checks passed"
+fi
 exit 0

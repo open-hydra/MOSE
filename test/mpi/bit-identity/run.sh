@@ -36,6 +36,9 @@
 #  must the lines of the gas entering through each 400 boundary, which the
 #  rank that owns the block prints (sorted: the ranks print in any order),
 #  with at least one where the end line counts evaluations with gas entering.
+#  A MOSE built without OpenMP writes "Serial execution" where it writes the
+#  number of threads: 1x1, 2x1 and 4x1 run with their one thread, and 1x4 and
+#  2x2 are not run, with a line for each case and layout that says so.
 #  Gas: test/common/Air-viscous.
 #===============================================================================
 set -uo pipefail
@@ -110,7 +113,13 @@ run() {
     tail -20 "runs/$c/solve_$label.log"; fail "solver exited non-zero ($c $label)"
   fi
   ls OUTPUT/vtk/fieldBlock*.vts > /dev/null 2>&1 || fail "no field output ($c $label)"
-  grep -q "Number of threads --> *$nt\$" "runs/$c/solve_$label.log" || fail "the run did not use $nt threads ($c $label)"
+  # a MOSE built without OpenMP writes "Serial execution" in place of the number of threads: its one thread is that of a
+  # layout with one thread per rank
+  if [[ $nt -eq 1 ]] && grep -q "^ Serial execution\$" "runs/$c/solve_$label.log"; then
+    serial=1
+  else
+    grep -q "Number of threads --> *$nt\$" "runs/$c/solve_$label.log" || fail "the run did not use $nt threads ($c $label)"
+  fi
   grep -q "Number of ranks *--> *$np\$" "runs/$c/solve_$label.log" || fail "the run did not use $np ranks ($c $label)"
   mv OUTPUT "runs/$c/$label"
 }
@@ -161,11 +170,16 @@ lines() {
 }
 
 status=0
+serial=0
 for c in sa-steady sst-steady sa-unsteady star3 star5; do
   make_inputs "$c" || fail "case generation ($c)"
   write_ini "$c"
   run "$c" 1 1
   for cfg in $LAYOUTS; do
+    if [[ $serial -eq 1 && ${cfg#*x} -gt 1 ]]; then
+      echo "  not run: $c $cfg, MOSE built without OpenMP (runs/$c/solve_1x1.log: Serial execution)"
+      continue
+    fi
     run "$c" "${cfg%x*}" "${cfg#*x}"
     same "$c" "$cfg" || status=1
     endlines "$c" "$cfg" || status=1
@@ -177,5 +191,9 @@ if [[ $status -ne 0 ]]; then
   echo "MPIBitIdentity: FAIL"
   exit 1
 fi
-echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks: 1x1, 1x4, 2x1, 4x1 and 2x2 bit-identical, with the same 400 lines and end lines"
+if [[ $serial -eq 1 ]]; then
+  echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks: 1x1, 2x1 and 4x1 bit-identical, with the same 400 lines and end lines; 1x4 and 2x2 not run: MOSE built without OpenMP"
+else
+  echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks: 1x1, 1x4, 2x1, 4x1 and 2x2 bit-identical, with the same 400 lines and end lines"
+fi
 exit 0

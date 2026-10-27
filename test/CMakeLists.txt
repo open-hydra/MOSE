@@ -247,8 +247,8 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # direction of the gas; the lines of the gas entering through a 400 boundary,
 # the first one and one at each factor of 10 of its largest |w|/a, and the
 # end line of the evaluations with gas entering, also in a run that stops at
-# its first stage and with 1 and 4 threads on a face of 130 records; no end
-# line in a case without 400 faces.
+# its first stage and, with a MOSE built with OpenMP, with 1 and 4 threads on
+# a face of 130 records; no end line in a case without 400 faces.
 # Supersonic inlet (405) with the flow direction normal: the gas enters along
 # the normal of the face into the domain on both ends of a tube along x, of its
 # mirror image, of a tube turned to (1, 1, 1)/sqrt(3) and of one along z; with
@@ -535,12 +535,14 @@ if(USE_MPI)
     # lines of the gas entering through each 400 boundary and the lines at the
     # end of the run (400 faces with gas entering, ghost cells of walls and 400
     # faces, turbulence values below zero) the same as on 1x1, none with a
-    # count of zero.
+    # count of zero. With a MOSE built without OpenMP, 1x1, 2x1 and 4x1 only.
     mose_add_mpi_script(MPIBitIdentity mpi/bit-identity "needs-mpi;implementation;2D;3D")
 
     # MPI calls only from the main thread (MPI_THREAD_FUNNELED): a probe
     # library preloaded into the solver counts the MPI calls made by any
     # other thread; it must count none on 2x2, 2x4 and 2x2 with IRS (steady).
+    # A MOSE built without OpenMP has no other thread: the test then exits with
+    # 77, the code of a skipped test, after its first run.
     # Linux only: the probe is preloaded with LD_PRELOAD, a variable of the
     # dynamic loader of ELF systems (ld.so), and gives the names without the
     # trailing underscore as symbol aliases (the alias attribute of GCC);
@@ -555,6 +557,7 @@ if(USE_MPI)
         if(TEST MPIThreadFunnel)
             set_property(TEST MPIThreadFunnel APPEND PROPERTY
                 ENVIRONMENT "MOSE_MPI_THREAD_PROBE=$<TARGET_FILE:mpi_thread_probe>")
+            set_tests_properties(MPIThreadFunnel PROPERTIES SKIP_RETURN_CODE 77)
         endif()
     endif()
 
