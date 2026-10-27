@@ -8,7 +8,7 @@ Turbulent flow over a flat plate at Mach 0.2, a compressible flow at low Mach nu
 
 ## Problem setup
 
-Uniform flow at Mach 0.2 enters from the left over a flat plate that starts at $x = 0$. The boundary layer rapidly transitions from laminar to turbulent flow, developing a fully turbulent boundary layer downstream. A symmetry condition is imposed upstream of the leading edge (pre-stagnation region), and a no-slip adiabatic wall condition is applied over the plate.
+Uniform flow at Mach 0.2 enters from the left over a flat plate that starts at $x = 0$. A symmetry condition is imposed upstream of the leading edge (pre-stagnation region), and a no-slip adiabatic wall condition is applied over the plate.
 
 The skin friction coefficient is the primary validation metric:
 
@@ -77,13 +77,15 @@ The reference curves of `verify.py` (`reference/cf.dat`) are TMR data:
 
 For each turbulence model, MOSE computes the wall shear stress distribution along the flat plate. The skin friction coefficient is extracted and compared pointwise against reference solutions.
 
-`verify.py` measures the relative difference of $c_f$ from the reference curve at the cell centres of the plate from $x = 0.02$ m to the last one ($x = 1.979$ m on the 137 × 97 grid, $1.957$ m on the 69 × 49 grid). With MOSE at commit `10b59003b72c` (the cases as they are, the differences above included):
+`verify.py` measures the relative difference of $c_f$ from the reference curve at the cell centres of the plate from $x = 0.02$ m to the last one ($x = 1.979$ m on the 137 × 97 grid, $1.957$ m on the 69 × 49 grid). The case passes when the RMS difference is below the tolerance of its model. For the cases as they are (the differences above included):
 
 | Model | RMS difference | Largest difference | Tolerance on the RMS |
 |---|---|---|---|
 | SA | 0.77 % | 3.65 % | 5 % |
 | SST | 0.95 % | 3.15 % | 8 % |
 | Wilcox 2006 | 0.50 % | 2.08 % | 8 % |
+
+On the grids of the case no laminar stretch is seen. From the first cell on the plate ($x = 2$ mm on the 137 × 97 grid, 4 mm on the 69 × 49 grid), where the skin friction is 1.7 to 2.3 times the laminar (Blasius) value, it stays above that value along the whole plate, and it comes within 2 % of the fully turbulent reference curve from $x = 0.044$ m (SA) and $x = 0.029$ m (SST, Wilcox 2006).
 
 <figure>
   {% include "vv/images/TP-cf-sa.svg" %}
@@ -100,22 +102,3 @@ For each turbulence model, MOSE computes the wall shear stress distribution alon
    Wilcox k-ω
 </figure>
 
-!!! note "Figure and code version"
-    The figures come from July 2026 (commit `bd7ce104`), and the code of 13 October 2026 (commit
-    `b29130b`) gives them again, within 0.2 % of the range of the axes with SST and 0.4 % with Wilcox
-    2006. MOSE at commit `10b59003b72c` moves the SST curve by 1.8 % and the Wilcox 2006 curve by 1.7 % of
-    that range.
-
-    - SST: the curve moves at three commits, by 0.4 %, 1.1 % and 3.0 % of the range of the axes, steps
-      that partly cancel: the viscous face metric, from the mean of the metrics of the two cells to the
-      inverse of the mean of their inverses (commit `208f6f14`); the point-implicit factor of the
-      turbulence equations on their whole increment (commit `2cc7bc91`; with the factor on the source
-      alone the steady state depended on the local time step); the face metric from the differences of the cell
-      centres (commit `000d28a12`, measured as the switch of `diffusive-metric` at `10b59003b72c`). A bisection over the commits between `b29130b` and `10b59003b72c`
-      finds no other step above 0.1 %.
-    - Wilcox 2006: with the inverse-mean face metric of commit `208f6f14`
-      (`diffusive-metric = inverse-mean`) the curve is within 0.5 % of the figure, so most of the change
-      comes from the face metric of commit `000d28a12`.
-
-    These numbers compare the skin friction after the 100 000 iterations of the inputs; the change of the
-    time step rule alone (commit `667fc3c0`) moves the SST curve by 0.01 %.
