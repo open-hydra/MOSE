@@ -7,6 +7,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# The jobs read the repository and write nothing to GitHub: a read-only
+# token.
+permissions:
+  contents: read
+
 env:
   # The verifier scripts import pyplot unconditionally; keep them headless.
   MPLBACKEND: Agg
