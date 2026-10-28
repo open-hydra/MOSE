@@ -50,8 +50,16 @@ area ratio of the station, the area being taken relative to the narrowest sectio
 interpolates the averages linearly in x between the centres of the two columns around the station. The station at 16 is the
 nozzle exit: the grid reaches an area ratio of 15.993 there, and the solution at the exit is that of the last column, whose
 state the exit face takes. The frozen run stops when its residual has fallen to $10^{-10}$ of its value at the first iteration (6196
-iterations); the equilibrium run does not converge (after its 10 000 iterations the residual is 3 times its first value); the
-finite-rate run stops at its 2000 iterations, with the residual at 1.7 % of its first value.
+iterations). The residual is the norm, over the cells, of the change of the density in one iteration, and the local time step
+grows linearly over the first 100 iterations (`cfl-rise-threshold = 100`), so the first iteration takes a step a hundred times
+smaller. The residual of the equilibrium run peaks at iteration 130, falls by a factor of 59 and then oscillates about 3.3 times
+its first value (between 2.1 and 7.3 times from iteration 1000 on) up to its 10 000 iterations: the solution keeps changing, most
+in the three rows of cells next to the axis, and in a run continued to 20 000 iterations the averages of the comparison below
+change by less than a relative $2 \cdot 10^{-4}$ between iterations 10 000 and 20 000. The finite-rate run stops at its 2000
+iterations, with the residual at 1.7 % of its first value: with the Strang splitting of the chemistry the residual measures the
+change of the second half step of the transport alone, which does not vanish when the solution is steady; in a run continued to
+10 000 iterations the residual stays at 1.7 % of the first one from iteration 4000 on, and the averages at the stations change by
+less than a relative $10^{-7}$ between iterations 2000 and 10 000.
 
 The Mach number is the velocity over the frozen speed of sound, $\sqrt{\gamma p/\rho}$ with $\gamma$ the ratio of specific heats
 of the mixture at fixed composition, which MOSE writes for every configuration, for the three runs and for both CEA references.
@@ -72,6 +80,29 @@ printed with three decimals, 0.16 % at the subsonic station.
   5.8 % to 11.9 % above CEA in the diverging part.
 - **Finite-rate**: close to equilibrium: molar mass within 0.45 % of CEA equilibrium (and up to 4.1 % above CEA frozen),
   temperature from −1.57 % to +0.80 % of CEA equilibrium.
+
+CEA computes a quasi-one-dimensional flow: one uniform state on each cross-section, moving along the axis, with the entropy and
+the total enthalpy of the chamber (Gordon and McBride, NASA RP-1311, 1994, chapter 6). The frozen and equilibrium solutions keep
+the mass flow, the total enthalpy and the entropy along the nozzle, up to the discretisation error, but their cross-sections are
+not uniform: the flow is inclined to the axis, by the wall angle at the wall (−41° at the subsonic station, from 25° to 10° in the
+divergent part), and the pressure changes from the axis to the wall (at the exit of the frozen run, 26 kPa on the axis and
+100 kPa at the wall). The uniform state with the mass flow, the total enthalpy and the entropy of a cross-section is the CEA state
+at the area ratio divided by the discharge coefficient $C_D = 0.996$, the ratio of the mass flow of the run to that of the
+quasi-one-dimensional flow through the same throat; NASA SP-8120 (*Liquid Rocket Engine Nozzles*, 1976, figure 3) gives for
+potential flow about 0.9945 when the radius of the wall arc upstream of the throat is 1.5 times the throat radius, as on this
+contour (about 0.991 when it is the throat radius, about 0.998 when it is three times). In both runs this state differs from that
+CEA state by at most 0.8 % in pressure and 0.33 % in Mach number at the five stations away from the throat. The mass-flow-weighted
+averages differ more because they average a non-uniform cross-section. At the subsonic station the mass flux along the velocity
+exceeds the axial one by 10 % (mass-flow-weighted cosine of the flow angle 0.91), which raises the averaged Mach number by 12 %,
+and the change across the section adds 1.6 %. In the divergent part the flow angle and the change of pressure across the section
+raise the averaged pressure by 6.5 % to 13.5 % and lower the averaged Mach number by 0.6 % to 2.9 %. The discharge coefficient
+lowers the Mach number by 0.5 % at the subsonic station and the pressure by 0.5 % to 0.7 % in the divergent part, where it raises
+the Mach number by 0.1 % to 0.2 %; the discretisation error, the digits that CEA prints and, at the exit, the half cell between
+the centre of the last cells and the exit plane make up the rest of the differences listed above (at most 0.8 % each). At the
+geometric throat the sonic line is curved and the cross-section holds subsonic and supersonic flow. Temperature, ratio of specific
+heats and molar mass depend on pressure along the isentrope and differ less from CEA (at fixed composition,
+$dT/T = ((\gamma - 1)/\gamma)\, dp/p$). `verify.py` does not compute these parts of the differences: they come from an analysis of
+the solutions of the frozen and equilibrium runs.
 
 <figure>
   {% include "vv/images/Merlin-XY.svg" %}
