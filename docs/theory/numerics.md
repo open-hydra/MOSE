@@ -3,7 +3,9 @@
 MOSE uses a cell-centred finite volume method (FVM) on structured
 multi-block grids.  This page describes the discretization framework,
 the MUSCL reconstruction that provides second-order accuracy, the
-slope limiters that ensure monotonicity, and the shock-detection
+slope limiters that keep each reconstructed face value between the values
+of the two cells of the face on any mesh (van Albada excepted: see
+[Flux Limiters](#flux-limiters)), and the shock-detection
 sensor that adaptively reduces the order near discontinuities.
 
 ---
@@ -148,7 +150,34 @@ $$
 
    where $\phi$ is the chosen limiter function (see below).
 
-3. Reconstruct interface values:
+3. Bound the limited slopes so that the value of each cell at both its faces
+   lies between the value of the cell and that of the neighbour across the
+   face, on a line of cells of any lengths: the change over half the cell is at
+   most the jump to each neighbour [15],
+
+$$
+|\bar{s}_L|\,\delta l_L \le \min\bigl(|P_{i+1}-P_i|,\ |P_i-P_{i-1}|\bigr),\qquad
+|\bar{s}_R|\,\delta l_R \le \min\bigl(|P_{i+2}-P_{i+1}|,\ |P_{i+1}-P_i|\bigr)
+$$
+
+   With $\phi(a,b) = \varphi(r)\,a$, $r = b/a$, the limiter takes, for $r > 0$,
+   $\varphi \le \Delta l_a/\delta l$ and $\varphi \le r\,\Delta l_b/\delta l$,
+   where $\Delta l_a$ and $\Delta l_b$ are the spacings of the slopes $a$ and $b$
+   and $\delta l$ is the distance from the centre of the cell to the face: for
+   the cell of length $h_i$ before the face, $\varphi \le (h_i + h_{i+1})/h_i$
+   and $\varphi \le r\,(h_{i-1} + h_i)/h_i$. On a line of equal cells the bounds
+   are $\varphi \le 2$ and $\varphi \le 2r$, the edges of the TVD region of Sweby's
+   diagram [16], and the slope is the limiter's own; for
+   data linear along the line $r = 1$, where no bound acts. The two faces of a
+   cell take the same slope, except at the boundary faces below, which take a
+   slope of their own. Minmod never exceeds the bounds and does not take them.
+   The faces of symmetry planes and walls, whose ghost cell is the mirror
+   image of the cell, and of the supersonic inflow of `405` and `420`, whose
+   ghost cell holds the inflow state and whose slopes are differences of index,
+   take the bounds of a line of equal cells, 2 and 2: the limiter's own slope,
+   which keeps their face value between the cell and the ghost cell.
+
+4. Reconstruct interface values:
 
 $$
 P_L = P_i     + \beta\,\bar{s}_L\,\delta l_L,\qquad
@@ -221,7 +250,10 @@ $$
 \phi(a,b) = \frac{r^2 + r}{1 + r^2}\;a
 $$
 
-Smooth, less dissipative than van Leer near local extrema.
+Smooth, less dissipative than van Leer near local extrema. Unlike the others
+it is not zero where the two slopes have opposite signs ($r < 0$): there the
+bounds of step 3 do not apply, and the face value can lie outside the values
+of the two cells of the face, on any mesh.
 
 **MC (Monotonized Central)**
 
@@ -247,7 +279,11 @@ introduce mild staircase artefacts.
 
 ### TVD Diagram
 
-All non-trivial limiters fall within Sweby's TVD region in the $(r,\,\phi)$ diagram:
+On a line of equal cells van Leer, MC, superbee and minmod lie in Sweby's TVD
+region in the $(r,\,\phi)$ diagram; on other lines the bounds of the
+reconstruction (step 3) keep them in the region that Zeng gives for lines of
+cells of any lengths [16], and the forward Euler step of one-dimensional
+advection is then TVD for Courant numbers up to 1/2 [15]:
 
 | Limiter | Dissipation | Smoothness |
 |---------|:-----------:|:----------:|
@@ -1039,3 +1075,13 @@ of the records or of the threads.
     London, 1996, Eq. (3.1), (3.12) and (3.32).
 14. D. J. Mavriplis, "Revisiting the Least-squares Procedure for Gradient
     Reconstruction on Unstructured Meshes," NASA/CR-2003-212683, 2003, p. 14.
+15. M. Berger, M. J. Aftosmis, S. M. Murman, "Analysis of slope limiters on
+    irregular grids," AIAA Paper 2005-0490, 43rd AIAA Aerospace Sciences
+    Meeting, Reno, 2005, §III.A, Eq. (13)–(19): the TVD condition on the limited
+    slope of a cell of a non-uniform grid, at most
+    $\min\{2(u_{i+1}-u_i)/h_i,\ 2(u_i-u_{i-1})/h_i\}$ for monotone increasing data
+    (Eq. 19, a maximum value as p. 8 reads it), with the forward Euler step of
+    the upwind scheme for Courant numbers up to 1/2 (Eq. 17).
+16. X. Zeng, "A general approach to enhance slope limiters on non-uniform
+    rectilinear grids," arXiv:1301.0967v2, 2014, Eq. (2.13), (3.11) and
+    §3.3 (Sweby's diagram on non-uniform grids).

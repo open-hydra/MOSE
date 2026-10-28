@@ -981,7 +981,13 @@ prints no such line:
 
 In a steady run the count covers the whole run: the start, and the fronts of $k$ that the fluxes
 push below zero where $k$ is about zero, which can last to the last iteration; it is a total, which
-convergence does not bring back to zero. The residuals of `residual-history.dat` are the change of
+convergence does not bring back to zero. The transport keeps the turbulence variables non-negative,
+with every limiter but van Albada, when at every stage the Courant number of the flow leaving each
+cell is at most 1/2 ([Time Integration](time-integration.md#local-time-step)); a front can go below
+zero with a larger step (a `cfl` above 0.5, such as the 0.8 suggested with RK3, or the faster waves at captured shocks),
+through the sources, in the first cell next to a wall, whose bound is lower, and next to faces whose
+ghost cells extrapolate the cells (types `408` and `502`), and with `irs-variables = all`, whose smoothing mixes the
+updates of neighbouring cells. The residuals of `residual-history.dat` are the change of
 each variable over a step ([Stopping criteria](../user/using.md#stopping-criteria)): a variable
 that the floor holds at its value in a cell from one step to the next adds nothing there to its
 residual, so these fronts do not show in the residual history, and the count is their trace.

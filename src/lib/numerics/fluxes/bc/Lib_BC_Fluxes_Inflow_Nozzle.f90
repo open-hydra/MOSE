@@ -153,8 +153,10 @@ contains
     ! The state at the interface from the interior side is reconstructed: (ro,u,p)
     Diff32 = Prim3 - Prim2
     Diff21 = Prim2 - Prim1
+    ! Differences of index, as on a line of equal cells: the bounds of the limited slope are 2 and 2, and the face value stays
+    ! between the cell and the ghost cell, with the limiter's own slope
     do s = 1, nprim
-      Slope(s) = rlimiter ( Diff32(s), Diff21(s) )
+      Slope(s) = rlimiter ( Diff32(s), Diff21(s), 2d0, 2d0 )
     end do
     
     ! Extrapolation at the interface from the boundary cell
