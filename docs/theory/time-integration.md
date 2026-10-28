@@ -635,8 +635,9 @@ the current level at the iteration after that re-read.
 Every field write of a coarse level also prolongates its solution to the
 finest level and writes it (`field-prolongated`, `wall-prolongated`). On a
 large mesh that write costs more than the coarse iterations between two
-writes; `prolongated-diter` (re-read at runtime) spaces it to at least that
-many iterations of the level. The end of a level always writes it, so the one
+writes; `prolongated-diter`, a key taken at every reading of `input.ini` (column
+During the run of the [Parameter Registry](../user/registry.md)), spaces it to at
+least that many iterations of the level. The end of a level always writes it, so the one
 written at the end of level 2 is the exact start of level 1.
 
 ### Restriction (fine → coarse)

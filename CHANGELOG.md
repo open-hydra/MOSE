@@ -165,6 +165,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   during a steady run made the residual grow until the run stopped on a negative pressure nine iterations later). The keys that
   the file leaves out keep their values: the set-up no longer writes the names of its summary into the values of
   `integration-variables`, `riemann-solver` and `flux-limiter`, and the summary prints the same names as before.
+- A reading of `input.ini` during the run treats each key by its class, which a new column of the registry page, During the
+  run, gives: *taken* (such as `cfl`, `vnn`, the intervals of the outputs, `omega`), *fixed* for the run (the keys from which
+  the set-up makes a choice once: equations, models, schemes, integration variables, outputs, probes, the tolerances of the
+  chemistry), or *start only* (`newrun`, `ic-format`, `decomposition-map`). A value of a fixed key other than the one the start
+  read, a value of `levels` that is not an integer or is not the one the start read, or more probes than at the start, is an
+  error of the reading, as a change of the model of the rotating frame is: with `ini-error = warn` the reading is not taken,
+  with `stop` the run stops. Such values were taken in part, or not
+  at all, without a word, while the rest of the reading was taken: a new `turbulence`, `riemann-solver` or `time-scheme` left
+  the run as it was; `time-accurate` switched on in a steady run advanced the time from -1 s, and its solutions, at negative
+  times, read as steady ones at a restart; a new `k-energy-coupling` gave the turbulence sources of one variant with the
+  stress of the other; a new `sol-format` changed the format of the wall and diagnostic outputs and of the field outputs in
+  part (the vtk or Tecplot writer, not their ascii or binary form); a probe or a grid level added was not read. A reading
+  leaves the keys of the start only as they were: `newrun = false`, written during the run to prepare a restart, made the
+  first row of `OUTPUT/torque.dat` written after the reading go to the end of the file of an earlier run. The descriptions of
+  `iter-threshold`, `level<n>-iter` and `prolongated-diter` no longer say that they are read again: the column says it for
+  every key. A run whose `input.ini` does not change while it runs gives the same bits.
 - A key of `input.ini` whose value does not read as the type of its parameter stops the run at set-up, with exit code 1 and a
   message that gives the file, the section, the key and the value as written, and read again during the run it is an error of
   the reading (see Added): a
