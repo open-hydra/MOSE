@@ -130,6 +130,7 @@ nav:
     - Planar Nozzle on Grid Families: vv/2D-planar-nozzle-grids.md
     - Laminar Flat Plate: vv/2D-flat-plate-laminar.md
     - Turbulent Flat Plate: vv/2D-flat-plate-turbulent.md
+    - Turbulent Flat Plate of the NASA TMR: vv/2D-flat-plate-turbulent-tmr.md
     - Shock Boundary Layer Interaction: vv/2D-swbli.md
     - Ablating Wall: vv/2D-ablating-wall.md
     - HyShot II Scramjet Combustor: vv/3D-hyshotII.md

@@ -42,7 +42,7 @@ nightly/local tier.
 | Riemann solvers | 15 | 13: 11 in `RiemannSmoke` (no NaN, ρ, p > 0), HLLC+Chen and HLLC-PC in `Connections`/`ConnectionFlux` | LMRoe only in the Gresho vortex, outside CTest; MiczekRoe in no test |
 | Low-Mach (Mco) | floor | HLLC+Chen and HLLC-PC in `Connections`/`ConnectionFlux` (two blocks against one, conservation); the Gresho vortex is outside CTest | no CTest check of low-Mach accuracy |
 | IRS / multigrid / CFL-ramp | yes | implicit only | no dedicated check |
-| Turbulence | SA(+R/RC/comp), SST, Wilcox2006 | SA, SA-RC, SST, SST-RC and Wilcox2006 in checks of sources, right-hand sides and invariants (`TimeIntegration`/`TurbulenceSources`, `MMSResiduals`, `PointImplicitSteady`, `PlanarNozzleGrids`); the turbulent flat plate is outside CTest | no CTest check against a reference solution; SA-R untested; SAcomp refused at set-up |
+| Turbulence | SA(+R/RC/comp), SST, Wilcox2006 | SA, SA-RC, SST, SST-RC and Wilcox2006 in checks of sources, right-hand sides and invariants (`TimeIntegration`/`TurbulenceSources`, `MMSResiduals`, `PointImplicitSteady`, `PlanarNozzleGrids`); SA, SST and Wilcox2006 on the flat plate of the NASA TMR: the steady state on the 35x25 grid against the converged solution of the V&V page (`FlatPlateTMR`), the limit of three grids against CFL3D (`FlatPlateTMRFull`, on request); the turbulent flat plate with its own boundary conditions is outside CTest | the limit of the grids only in the full form, out of the PR CI; SA-R untested; SAcomp refused at set-up |
 | Chemistry | frozen, finite-rate, equilibrium | finite-rate and equilibrium runs that must end, stop at set-up or keep the bits of a run without chemistry (`ExitCodes`; with MPI, equilibrium in `MPIVertexStencil`); the reactive cases are outside CTest | no CTest check of reactive results against a reference |
 | Multi-block | core feature | faces between blocks: one block against two and records sorted against reversed, bit for bit (`Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder`; with MPI `MPIConnectionFlux`, `MPIConnectionOrder`) | 3-D faces with permuted index directions, connections with multigrid and with RANS untested |
 | Ablative wall BCs (503/504/505) | melting, pyrolysis, surface reactions | 503/504 vs closed form (`AblatingWall`) | 505 needs a CO/CO2 thermo table |
@@ -70,6 +70,7 @@ against its criterion, *runs* where it has none (the run ends with exit status 0
 | `2D/viscous/mms/skewed` | `2D-mms-skewed.md` | `MMSViscousSkewed` | manufactured solutions | `verify.py` (N2) | CTest |
 | `3D/viscous/mms` | `3D-mms.md` | `MMSViscous3D`, `MMSViscous3DFull` | manufactured solutions | `verify.py` (N2) | CTest |
 | `2D/viscous/planar-nozzle` | `2D-planar-nozzle-grids.md` | `PlanarNozzleGrids` | mirror symmetry of O and H grids | `verify.py` (N8) | CTest |
+| `2D/viscous/flat-plate-turbulent-tmr` | `2D-flat-plate-turbulent-tmr.md` | `FlatPlateTMR`, `FlatPlateTMRFull` | c_f of CFL3D and FUN3D on the five grids of the TMR (`reference/tmr/`); the converged MOSE solutions of the 35x25 grid (`reference/`) | `verify.py` | CTest |
 | `2D/viscous/ablating-wall` | `2D-ablating-wall.md` | `AblatingWall` | closed form of the wall state | `run.sh` (P1) | CTest |
 | `1D/Fer14` | `1D-fer14.md` | outside | digitized velocity and temperature profiles (`reference/*.csv`) | none: `verify.py` plots | runs |
 | `1D/diff1` | `1D-diffusion.md` | outside | Cantera (`reference/reference_unity_lewis.py`); MOSE fields in `reference/` | none: no verifier in the folder | runs |
@@ -158,7 +159,16 @@ against its criterion, *runs* where it has none (the run ends with exit status 0
 - ☑ **Turbulent flat plate, SA / SST / Wilcox2006** — one case per model under
   `test/2D/viscous/flat-plate-turbulent/{SA,SST,Wilcox2006}/`, each vs NASA CFL3D/FUN3D
   reference Cf, outside CTest (200 000 iterations with SA, 100 000 with SST and
-  Wilcox 2006; see §2). *No further turbulent flat-plate cases needed.*
+  Wilcox 2006; see §2).
+- ☑ **Turbulent flat plate of the NASA TMR, SA / SST / Wilcox2006** — the
+  verification case of the TMR, with its boundary conditions, on three grids of its
+  family (35x25, 69x49, 137x97): `test/2D/viscous/flat-plate-turbulent-tmr`. The short
+  form (`FlatPlateTMR`, validation tier) restarts each model for 5000 iterations from
+  its converged 35x25 solution: c_f at x = 0.970084071 and 1.90334 and C_D within 1e-5 (relative)
+  of the converged values, and the criteria of the V&V page on the stored results of
+  the full form. The full form (`FlatPlateTMRFull`, label `verification`) runs the nine
+  cases to 300 000 iterations: the 137x97 grid against CFL3D and FUN3D on the same grid, and
+  the limit of the three grids against CFL3D on the 545x385 grid.
 - ☐ **P3 — Couette / Poiseuille** (2D viscous, analytic): clean fast laminar-NS check
   independent of Blasius subtleties.
 - ◐ **P4 — 3D Euler verification**: 3D isentropic vortex or manufactured case. *Covered
@@ -372,6 +382,15 @@ the Prandtl number of air and with 0.9, 2000 steps at the recommended vnn (RK3 0
 ([`2D/viscous/planar-nozzle`](2D/viscous/planar-nozzle)), the short forms of N2 on general
 grids and of N8, take ~76 s, ~20 s and ~72 s of CPU time at one thread: they are in the
 **validation** tier, with a TIMEOUT of 900 s as `MMSViscous`.
+
+`FlatPlateTMR` ([`2D/viscous/flat-plate-turbulent-tmr`](2D/viscous/flat-plate-turbulent-tmr)),
+the short form of the flat plate of the NASA TMR, restarts each of its three models for
+5000 iterations from the converged 35x25 solution: 70.5 and 70.6 s of CPU time at one
+thread in two measurements (gfortran 13 `TESTING`, a machine with 192 logical CPUs at a
+load average of 50-53), so it is in the **validation** tier, with a TIMEOUT of 300 s.
+Its full form, `FlatPlateTMRFull` (label `verification`), runs the nine cases of the
+V&V page to 300 000 iterations: about 24.5 h at one thread, an estimate from the solver
+time per iteration of a chain of 500 iterations, with a TIMEOUT of 49 h.
 
 ---
 
