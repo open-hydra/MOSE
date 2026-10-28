@@ -4,7 +4,7 @@ module MOSE_Assign_Setup
   
   implicit none
   private
-  public :: Assign_Setup
+  public :: Assign_Setup, IRS_On
 
 contains
 
@@ -68,7 +68,7 @@ contains
       obj_time_scheme%n_rk = 1
     end if
     ! Implicit residual smoothing
-    if (obj_irs%beta>0d0) obj_irs%enabled = .true.
+    obj_irs%enabled  = IRS_On()
     obj_irs%at_setup = obj_irs%enabled
     ! Preconditioning
     if ( trim(obj_time_scheme%integration_variables) == 'prec' ) then
@@ -161,5 +161,17 @@ contains
         'time-accurate runs: the turbulence sources are explicit, and the time step includes their stiffness.'
 
   end subroutine Assign_Setup
+
+
+  !> Implicit residual smoothing is on with irs = true or irs-beta > 0: at set-up (Assign_Setup), and from the values of
+  !> every reading of input.ini during the run that the run takes (Read_Inifile_Runtime), so that a file read again
+  !> unchanged leaves it as it was
+  logical function IRS_On()
+    use MOSE_Config_Types_m, only: obj_irs
+    implicit none
+
+    IRS_On = obj_irs%requested .or. obj_irs%beta > 0d0
+
+  end function IRS_On
 
 end module MOSE_Assign_Setup

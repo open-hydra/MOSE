@@ -7,8 +7,9 @@
 #  reading (a value out of its rule or that does not read, a file that cannot
 #  be read, another value of a key fixed for the run, of levels or more
 #  probes, a change of the model or of the stationary faces of the rotating
-#  frame, a value of its axis that is not finite or does not read) does what
-#  ini-error says: with stop the run stops with the message, as at setup;
+#  frame, a value of its axis that is not finite or does not read, residual
+#  smoothing switched on in a run started without it) does what ini-error
+#  says: with stop the run stops with the message, as at setup;
 #  with warn, the default, the reading is not taken: a warning gives the
 #  error, and the run goes on with every value it had before the reading.
 #  A steady viscous run on a 2x2-block box (the case of VtkNames,
@@ -121,6 +122,22 @@
 #     g. time-accurate = true written during the steady run, ini-error
 #        left out (warn): the reading is not taken (a run that took it
 #        would advance its time from -1 s), as in b.
+#  7. implicit residual smoothing (IRS), on with irs = true or irs-beta > 0
+#     at the start and at every reading, on the box of part 6:
+#     a. irs-beta = 0.5 written during a run started without IRS, with
+#        ini-error = stop: its arrays exist only when it is on at the
+#        start, so the run must stop at the reading of iteration 20 with
+#        the message that it cannot be switched on during the run;
+#     b. irs = false and irs-beta = 0.5 written together in the input.ini
+#        of the start, on the box of part 3, read again unchanged every 5
+#        iterations: IRS stays on, and the run writes the residual history
+#        of the same run without readings, byte for byte;
+#     c. irs-beta = 0 written alone during a run started with
+#        irs-beta = 0.5 (irs left out): IRS is off from the reading of
+#        iteration 20, so from iteration 21 the run must go on as one that
+#        restarts from its solution of iteration 20 with irs-beta = 0:
+#        residual-history.dat and the solutions of iterations 21, 28 and
+#        30, byte for byte.
 #===============================================================================
 set -uo pipefail
 
@@ -649,6 +666,56 @@ to_accurate() { rewrite "$1" 's/^time-accurate         = false$/time-accurate   
 reread runs/fixed-accurate "" to_accurate
 not_taken runs/fixed-accurate "g. time-accurate = true" \
   'input.ini, [MOSE-Numerics] time-accurate = true: the run has time-accurate = false from its set-up, and time-accurate cannot change during the run'
+
+echo "-- 7. implicit residual smoothing: on with irs = true or irs-beta > 0, at the start and at every reading --"
+irs_start() { rewrite "$1" 's/^riemann-solver        = HLLC$/riemann-solver        = HLLC\nirs-beta              = 0.5/'; }
+irs_on()    { irs_start "$1"; }
+irs_off()   { rewrite "$1" 's/^irs-beta              = 0.5$/irs-beta              = 0/'; }
+reread runs/irs-on stop irs_on
+stopped runs/irs-on "a. irs-beta = 0.5 in a run started without IRS, ini-error = stop" \
+  'input.ini, [MOSE-Numerics] irs-beta = 0.5: the run started without implicit residual smoothing, which cannot be switched on during the run'
+# b. irs = false and irs-beta = 0.5 together at the start, read again unchanged every 5 iterations
+d=runs/irs-both-once
+prepare "$d"; write_short "$d" "" 'irs = false' 'irs-beta = 0.5'
+( cd "$d" && "$SOLVER" > solve.log 2>&1 )
+d=runs/irs-both
+prepare "$d"; write_short "$d" 5 'irs = false' 'irs-beta = 0.5'
+( cd "$d" && "$SOLVER" > solve.log 2>&1 )
+rc=$?
+last=$(awk 'NF {n = $1} END {print n}' "$d/OUTPUT/residual-history.dat" 2>/dev/null)
+if [[ $rc -eq 0 && $last == 10 ]] && cmp -s runs/irs-both-once/OUTPUT/residual-history.dat "$d/OUTPUT/residual-history.dat" \
+   && ! command grep -a -q -F 'is not taken' "$d/solve.log"; then
+  echo "  ok — b. irs = false with irs-beta = 0.5, read again unchanged: IRS stays on, the residual history of the run without readings"
+else
+  echo "  FAIL — b. irs = false with irs-beta = 0.5, read again unchanged: exit code $rc, last iteration ${last:-none}," \
+       "residual history of the run without readings: $(cmp -s runs/irs-both-once/OUTPUT/residual-history.dat \
+       "$d/OUTPUT/residual-history.dat" && echo yes || echo no) (see $d/solve.log)"; status=1
+fi
+# c. irs-beta = 0 written alone in a run started with irs-beta = 0.5: from the reading of iteration 20 the run of the restart
+#    from iteration 20 without IRS
+reread runs/irs-off "" irs_off irs_start
+d=runs/irs-restart
+prepare_frame "$d"; write_ini "$d" 0.5 "" 7 20; irs_start "$d"
+( cd "$d" && "$SOLVER" > solve1.log 2>&1 )
+write_ini "$d" 0.5 "" 7 10; irs_start "$d"; irs_off "$d"
+rewrite "$d" 's/^newrun         = true$/newrun         = false/'
+( cd "$d" && "$SOLVER" > solve2.log 2>&1 )
+same=yes
+for f in residual-history.dat field3.vtm field4.vtm field.vtm vtk/field3Block1.vts vtk/field4Block2.vts \
+         vtk/fieldBlock1.vts vtk/fieldBlock2.vts vtk/fieldBlock3.vts vtk/fieldBlock4.vts; do
+  if ! cmp -s "runs/irs-off/OUTPUT/$f" "$d/OUTPUT/$f"; then
+    same=no
+    echo "  differs: $f"
+  fi
+done
+if [[ $first != yes || $late == yes ]]; then
+  echo "  FAIL — c. irs-beta = 0: the change did not come between iterations 7 and 20 (host too slow to poll)"; status=1
+elif [[ $rc -eq 0 && $last == 30 && $same == yes ]] && ! command grep -a -q -F 'is not taken' runs/irs-off/solve.log; then
+  echo "  ok — c. irs-beta = 0 read again at iteration 20: IRS off, the run goes on as the restart without IRS, byte for byte"
+else
+  echo "  FAIL — c. irs-beta = 0 read again: exit code $rc, last iteration ${last:-none}, the files of the restart without" \
+       "IRS: $same (see runs/irs-off/solve.log)"; status=1
+fi
 
 if [[ $status -eq 0 ]]; then
   echo "RuntimeInput: all checks passed"

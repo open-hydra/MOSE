@@ -55,7 +55,7 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 | cfl-rise-threshold | 0 | >= 0 |  no | taken | CFL rise threshold |
 | time-accurate | .false. | logical | yes | fixed | Time accurate switch |
 | integration-variables | cons | cons, prim, prec |  no | fixed | Integration variables (cons/prim/prec) |
-| irs | .false. | logical |  no | taken | Implicit Residual Smoothing (steady runs only; switched on only at setup) |
+| irs | .false. | logical |  no | taken | Implicit Residual Smoothing (steady runs only; a run started without it cannot switch it on) |
 | irs-beta | 0.0 | >= 0 |  no | taken | IRS beta parameter (> 0 also enables IRS; steady runs only) |
 | irs-variables | flow | flow, all |  no | taken | Residuals smoothed by IRS: flow (species, momentum, energy) or all (also the RANS, soot and passive-scalar equations; for Spalart-Allmaras: the k-omega models diverge with all) |
 | preconditioning-Uref | 0.0 | >= 0 |  no | taken | Reference velocity for preconditioning |

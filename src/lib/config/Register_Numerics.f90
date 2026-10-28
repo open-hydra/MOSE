@@ -48,8 +48,8 @@ contains
     obj_irs%description     = 'none'
     obj_irs%warning_message = 'none'
     obj_irs%error_message   = 'none'
-    call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', &
-          'Implicit Residual Smoothing (steady runs only; switched on only at setup)', 'logical', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'irs', obj_irs%requested, '.false.', &
+          'Implicit Residual Smoothing (steady runs only; a run started without it cannot switch it on)', 'logical', .false., KEY_TAKEN )
     call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
           'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false., KEY_TAKEN )
     call reg%add( trim(section), 'irs-variables', obj_irs%variables, 'flow', &

@@ -180,7 +180,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   leaves the keys of the start only as they were: `newrun = false`, written during the run to prepare a restart, made the
   first row of `OUTPUT/torque.dat` written after the reading go to the end of the file of an earlier run. The descriptions of
   `iter-threshold`, `level<n>-iter` and `prolongated-diter` no longer say that they are read again: the column says it for
-  every key. A run whose `input.ini` does not change while it runs gives the same bits.
+  every key. A run whose `input.ini` does not change while it runs gives the same bits, but with `irs = false` and
+  `irs-beta > 0` in the file (below).
+- Implicit residual smoothing is on with `irs = true` or `irs-beta > 0` at every reading of `input.ini` during the run, as at
+  set-up: an `input.ini` with `irs = false` and `irs-beta > 0` switched IRS off at its first reading, also when it did not
+  change. `irs = false` no longer switches IRS off while `irs-beta > 0`, and `irs-beta = 0` switches it off unless
+  `irs = true` is in force; IRS on with `irs-beta = 0` smoothed nothing.
 - A key of `input.ini` whose value does not read as the type of its parameter stops the run at set-up, with exit code 1 and a
   message that gives the file, the section, the key and the value as written, and read again during the run it is an error of
   the reading (see Added): a
@@ -313,8 +318,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `level<n>-iter`, and `iter-threshold` without multigrid, take effect when `input.ini` is read again during the run: the
   iterations of each level were copied once at set-up, so a changed value did nothing. Lowering one below the iterations
   already done ends that level at the iteration after that reading.
-- `irs = true`, or `irs-beta` above 0, added to `input.ini` during a run started without IRS is ignored with a warning: the
-  arrays of IRS exist only when it is on at set-up, and the run used them unallocated.
+- `irs = true`, or `irs-beta` above 0, added to `input.ini` during a run started without IRS is an error of the reading
+  (with `ini-error = warn` the reading is not taken, with `stop` the run stops): the arrays of IRS exist only when it is on at
+  set-up, and the run used them unallocated.
 - With MPI the tangential neighbours of the source cell of a block connection, which on the edge of a face can be ghost cells
   filled from another rank, are taken after the ghost exchange: they were one stage old, and MPI runs drifted from the serial run
   at block edges and junctions.

@@ -17,7 +17,7 @@ module MOSE_Input_Registry
   integer, parameter, public :: KEY_START = 4      ! For the start of the run only: a reading leaves it as it was
 
   public :: registry_t, Validate_Registry, Save_Values, Restore_Values, Key_Is_Set
-  public :: Save_Start_Values, Fixed_Key_Changed, Keep_Fixed_Values
+  public :: Save_Start_Values, Fixed_Key_Changed, Keep_Fixed_Values, Key_Text
 
   !--------------------------------------------------------
   ! Value container (typed pointers)
@@ -727,6 +727,28 @@ contains
   end do
 
   end function Key_Is_Set
+
+
+  !> The key name of the section section of input.ini, as the messages of Validate_Registry give it (Key_And_Value), for
+  !> the errors of a reading that its caller finds: the file, the section, the key and the value as written, when the file
+  !> holds one
+  function Key_Text(section, name) result(out)
+
+  implicit none
+
+  character(len=*), intent(in) :: section, name
+  character(len=:), allocatable :: out
+  integer :: i
+
+  out = "input.ini, ["//trim(section)//"] "//trim(name)//" ="
+  do i = 1, reg%size
+    if (reg%params(i)%section == section .and. reg%params(i)%name == name) then
+      out = Key_And_Value(i)
+      return
+    end if
+  end do
+
+  end function Key_Text
 
 
   !> The key i of input.ini, as the messages of Validate_Registry give it: the file, the section, the key and the value as

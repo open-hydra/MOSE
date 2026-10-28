@@ -397,7 +397,9 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # ini-error = stop; with warn, the default, the reading is not taken and the
 # run goes on with the values before it, byte for byte; read again unchanged,
 # with keys left out or written, it gives the run without readings; newrun, a
-# key of the start only, written during the run is left as it was.
+# key of the start only, written during the run is left as it was; implicit
+# residual smoothing is on with irs = true or irs-beta > 0 at every reading,
+# and switched on in a run started without it is an error of the reading.
 mose_add_parts_script(InputChecks fast/input-checks
     PARTS limiter-defaults irs-time-accurate decomposition-map
     LABELS fast implementation numerics 1D 2D)

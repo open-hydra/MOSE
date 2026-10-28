@@ -97,12 +97,14 @@ contains
   !> its model and its stationary faces and takes its omega, axis and origin together (Reload_RotatingFrame). An error of
   !> the reading (a file that cannot be read, a value that does not read as its type, is out of its rule or is not finite,
   !> another value of a key fixed for the run, of levels, or more probes, a change of the model or of the stationary
-  !> faces of the rotating frame, an axis or origin that is not finite or does not read, an axis of zero length) stops
+  !> faces of the rotating frame, an axis or origin that is not finite or does not read, an axis of zero length, implicit
+  !> residual smoothing switched on in a run started without it, whose arrays exist only when it is on at set-up) stops
   !> the run with ini-error = stop, as at set-up. With ini-error = warn, the default, the reading is not taken: a warning
   !> gives the iteration and the error (Write_Not_Taken), and the run goes on with every value it had before the reading,
   !> those of the keys of the same reading that were right too (Save_Values before Load_Ini, Restore_Values on the
   !> error). A reading that is taken puts back the values of the keys fixed for the run and of the start only as they
-  !> were before it (Keep_Fixed_Values), so that no code reads a value of the reading in them. The value of ini-error in
+  !> were before it (Keep_Fixed_Values), so that no code reads a value of the reading in them, and switches implicit
+  !> residual smoothing on or off from the values read as the set-up does (IRS_On). The value of ini-error in
   !> force when the reading starts decides, also when the file read again writes another one: Load_Ini writes the value
   !> of the file in its variable before the checks. Every rank checks the text that rank 0 read and passed to it
   !> (Load_Input_File), so every rank finds the same values; the ranks take each decision together (the largest of a
@@ -112,8 +114,10 @@ contains
     use Finer,               only: file_ini
     use MOSE_Backend_INI,    only: Load_Ini, Count_Stationary_Faces, Lists_Changed
     use MOSE_Lib_RotatingFrame, only: Reload_RotatingFrame
+    use MOSE_Assign_Setup,   only: IRS_On
     use MOSE_Input_Registry
-    use MOSE_Config_Types_m, only: obj_io
+    use MOSE_Parameters_m,   only: codename
+    use MOSE_Config_Types_m, only: obj_io, obj_irs
     use MOSE_Mod_MPI,        only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8, mpi_stop_all
     use iso_fortran_env,     only: R8 => real64
     implicit none
@@ -143,6 +147,12 @@ contains
     out = Validate_Registry()
     if (index(out,'ERROR') == 0) out = Fixed_Key_Changed()
     if (index(out,'ERROR') == 0) out = Lists_Changed(fini)
+    ! Implicit residual smoothing switched on by the values read (irs = true or irs-beta > 0, as at set-up) in a run that
+    ! started without it: its arrays exist only when it is on at set-up (Allocate_Block), and a reading cannot make them
+    if (index(out,'ERROR') == 0 .and. IRS_On() .and. .not. obj_irs%at_setup) &
+      out = '[ERROR] '//Key_Text(trim(codename)//'-Numerics', merge('irs     ', 'irs-beta', obj_irs%requested))// &
+            ': the run started without implicit residual smoothing, which cannot be switched on during the run '// &
+            '(its arrays exist only when it is on at set-up)'
     flag = 0.0_R8
     if (index(out,'ERROR') > 0) flag = 1.0_R8
     call mpi_allreduce_max_r8(flag, flag_all)
@@ -171,8 +181,10 @@ contains
       return
     end if
 
-    ! The reading is taken: the keys fixed for the run and those of the start only hold again what they held before it
+    ! The reading is taken: the keys fixed for the run and those of the start only hold again what they held before it, and
+    ! implicit residual smoothing is on or off as the set-up would make it from the values read
     call Keep_Fixed_Values()
+    obj_irs%enabled = IRS_On()
 
   end subroutine Read_Inifile_Runtime
 
