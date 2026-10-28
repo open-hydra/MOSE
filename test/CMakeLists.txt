@@ -399,14 +399,17 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # with keys left out or written, it gives the run without readings; newrun, a
 # key of the start only, written during the run is left as it was; implicit
 # residual smoothing is on with irs = true or irs-beta > 0 at every reading,
-# and switched on in a run started without it is an error of the reading.
+# and switched on in a run started without it is an error of the reading; the
+# checks of the set-up between keys (riemann-options-Mco with a low-Mach
+# Riemann solver, schmidt with more than one species and no diffusion table)
+# are made again on the values read.
 mose_add_parts_script(InputChecks fast/input-checks
     PARTS limiter-defaults irs-time-accurate decomposition-map
     LABELS fast implementation numerics 1D 2D)
 mose_add_parts_script(ExitCodes fast/input-checks
     PARTS exit-codes LABELS validation implementation numerics 1D 2D)
 mose_add_parts_script(RuntimeInput fast/input-checks
-    PARTS runtime-input LABELS validation implementation numerics 2D)
+    PARTS runtime-input LABELS validation implementation numerics 1D 2D)
 
 # Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).
 # Spalart-Allmaras with variable density: the right-hand side of the equation

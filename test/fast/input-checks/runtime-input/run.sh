@@ -8,8 +8,9 @@
 #  be read, another value of a key fixed for the run, of levels or more
 #  probes, a change of the model or of the stationary faces of the rotating
 #  frame, a value of its axis that is not finite or does not read, residual
-#  smoothing switched on in a run started without it) does what ini-error
-#  says: with stop the run stops with the message, as at setup;
+#  smoothing switched on in a run started without it, values that a check of
+#  the set-up between keys refuses) does what ini-error says: with stop the
+#  run stops with the message, as at setup;
 #  with warn, the default, the reading is not taken: a warning gives the
 #  error, and the run goes on with every value it had before the reading.
 #  A steady viscous run on a 2x2-block box (the case of VtkNames,
@@ -138,6 +139,20 @@
 #        restarts from its solution of iteration 20 with irs-beta = 0:
 #        residual-history.dat and the solutions of iterations 21, 28 and
 #        30, byte for byte.
+#  8. the checks of the set-up between keys, made again on the values read,
+#     with ini-error = stop: the run must stop at the reading of iteration
+#     20 with the key, its value and the reason of the set-up:
+#     a. riemann-solver = AUSM+M, a low-Mach solver, with
+#        riemann-options-Mco = 0.1 at the start (the box of part 6), and
+#        riemann-options-Mco = 0 written during the run;
+#     b. the gas of four species of test/1D/diff1, without
+#        INPUT/diffusion.dat, in its time-accurate tube of 200 cells, with
+#        schmidt = 1.0 at the start and schmidt = 0, multicomponent
+#        diffusion, which needs that table, written once the run has
+#        written the row of iteration 7 of its residual history; an
+#        iteration takes about a millisecond (gfortran TESTING build, one
+#        thread), so input.ini is read again at iteration 1000, of 1010,
+#        where the run must stop.
 #===============================================================================
 set -uo pipefail
 
@@ -715,6 +730,73 @@ elif [[ $rc -eq 0 && $last == 30 && $same == yes ]] && ! command grep -a -q -F '
 else
   echo "  FAIL — c. irs-beta = 0 read again: exit code $rc, last iteration ${last:-none}, the files of the restart without" \
        "IRS: $same (see runs/irs-off/solve.log)"; status=1
+fi
+
+echo "-- 8. the checks of the set-up between keys, made again on the values read --"
+mco_start() { rewrite "$1" 's/^riemann-solver        = HLLC$/riemann-solver        = AUSM+M\nriemann-options-Mco   = 0.1/'; }
+mco_zero()  { rewrite "$1" 's/^riemann-options-Mco   = 0.1$/riemann-options-Mco   = 0/'; }
+reread runs/check-mco stop mco_zero mco_start
+stopped runs/check-mco "a. riemann-options-Mco = 0 with AUSM+M, ini-error = stop" \
+  'input.ini, [MOSE-Numerics] riemann-options-Mco = 0: the run has riemann-options-Mco = 0.1, and the set-up refuses the value read: Low-Mach Riemann solver selected. Mco (riemann-options-Mco) must be defined in input.'
+# b. schmidt = 0 written during a run of a gas of four species without INPUT/diffusion.dat
+write_tube() {  # <directory> <schmidt>: input.ini of the tube of test/1D/diff1 (time-accurate), written whole, then moved in place
+  cat > "$1/input.ini.new" <<TUBE
+[MOSE-Parameters]
+iter-threshold = 1010
+newrun         = true
+
+[MOSE-Physics]
+equations = navier-stokes
+schmidt   = $2
+prandtl   = 1.0
+
+[MOSE-Numerics]
+cfl                   = 0.95
+vnn                   = 0.95
+time-accurate         = true
+time-scheme           = RK2
+integration-variables = cons
+space-reconstruction  = MUSCL
+flux-limiter          = vanleer
+riemann-solver        = HLLC
+
+[MOSE-IO]
+sol-format    = vtk raw
+ini-diter     = 1000
+ini-error     = stop
+shell-diter   = 1000000000
+TUBE
+  mv "$1/input.ini.new" "$1/input.ini"
+}
+d=runs/check-schmidt
+rm -rf "$d"; mkdir -p "$d/INPUT" "$d/OUTPUT"
+for f in phase.txt thermo.dat transport.dat composition.txt ic.tec bc.txt; do
+  ln -s "../../../../../../1D/diff1/INPUT/$f" "$d/INPUT/$f"
+done
+write_tube "$d" 1.0
+( cd "$d" && exec "$SOLVER" > solve.log 2>&1 ) &
+pid=$!
+for ((n = 0; n < 6000; n++)); do
+  [[ $(awk 'NF {n = $1} END {print n + 0}' "$d/OUTPUT/residual-history.dat" 2>/dev/null) -ge 7 ]] && break
+  kill -0 "$pid" 2>/dev/null || break
+  sleep 0.05
+done
+first=no; late=no
+[[ $(awk 'NF {n = $1} END {print n + 0}' "$d/OUTPUT/residual-history.dat" 2>/dev/null) -ge 7 ]] && first=yes
+write_tube "$d" 0
+[[ $(awk 'NF {n = $1} END {print n + 0}' "$d/OUTPUT/residual-history.dat" 2>/dev/null) -ge 1000 ]] && late=yes
+wait "$pid"
+rc=$?
+last=$(awk 'NF {n = $1} END {print n}' "$d/OUTPUT/residual-history.dat" 2>/dev/null)
+err='input.ini, [MOSE-Physics] schmidt = 0: the run has schmidt = 1.0, and the set-up refuses the value read: Sc<=0 (multicomponent diffusion) requires a binary diffusion table (INPUT/diffusion.dat)'
+if [[ $first != yes || $late == yes ]]; then
+  echo "  FAIL — b. schmidt = 0: the change did not come between iterations 7 and 1000 (host too slow to poll)"; status=1
+elif [[ $rc -ne 0 && $last == 1000 ]] && command grep -a -q -F "$err" "$d/solve.log" \
+     && command grep -a -q -E '(ABORT|STOP): ' "$d/solve.log"; then
+  echo "  ok — b. schmidt = 0 with four species and no diffusion table, ini-error = stop: the run stopped at iteration 1000: $err"
+else
+  echo "  FAIL — b. schmidt = 0 with four species and no diffusion table: exit code $rc, last iteration ${last:-none}" \
+       "(required 1000), error \"$err\" (see $d/solve.log)"; status=1
 fi
 
 if [[ $status -eq 0 ]]; then

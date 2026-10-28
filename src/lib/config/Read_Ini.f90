@@ -98,7 +98,9 @@ contains
   !> the reading (a file that cannot be read, a value that does not read as its type, is out of its rule or is not finite,
   !> another value of a key fixed for the run, of levels, or more probes, a change of the model or of the stationary
   !> faces of the rotating frame, an axis or origin that is not finite or does not read, an axis of zero length, implicit
-  !> residual smoothing switched on in a run started without it, whose arrays exist only when it is on at set-up) stops
+  !> residual smoothing switched on in a run started without it, whose arrays exist only when it is on at set-up, values
+  !> that a check of the set-up between keys refuses, riemann-solver with riemann-options-Mco and schmidt with the table of
+  !> the binary diffusion coefficients) stops
   !> the run with ini-error = stop, as at set-up. With ini-error = warn, the default, the reading is not taken: a warning
   !> gives the iteration and the error (Write_Not_Taken), and the run goes on with every value it had before the reading,
   !> those of the keys of the same reading that were right too (Save_Values before Load_Ini, Restore_Values on the
@@ -114,7 +116,7 @@ contains
     use Finer,               only: file_ini
     use MOSE_Backend_INI,    only: Load_Ini, Count_Stationary_Faces, Lists_Changed
     use MOSE_Lib_RotatingFrame, only: Reload_RotatingFrame
-    use MOSE_Assign_Setup,   only: IRS_On
+    use MOSE_Assign_Setup,   only: IRS_On, Riemann_Mco_Error, Schmidt_Error
     use MOSE_Input_Registry
     use MOSE_Parameters_m,   only: codename
     use MOSE_Config_Types_m, only: obj_io, obj_irs
@@ -153,6 +155,10 @@ contains
       out = '[ERROR] '//Key_Text(trim(codename)//'-Numerics', merge('irs     ', 'irs-beta', obj_irs%requested))// &
             ': the run started without implicit residual smoothing, which cannot be switched on during the run '// &
             '(its arrays exist only when it is on at set-up)'
+    ! The checks of the set-up between keys that name a key a reading takes, on the values read: a reading never gives the
+    ! run values that its set-up refuses
+    if (index(out,'ERROR') == 0) out = Refused_Value(trim(codename)//'-Numerics', 'riemann-options-Mco', Riemann_Mco_Error())
+    if (index(out,'ERROR') == 0) out = Refused_Value(trim(codename)//'-Physics', 'schmidt', Schmidt_Error())
     flag = 0.0_R8
     if (index(out,'ERROR') > 0) flag = 1.0_R8
     call mpi_allreduce_max_r8(flag, flag_all)

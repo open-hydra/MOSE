@@ -186,6 +186,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   set-up: an `input.ini` with `irs = false` and `irs-beta > 0` switched IRS off at its first reading, also when it did not
   change. `irs = false` no longer switches IRS off while `irs-beta > 0`, and `irs-beta = 0` switches it off unless
   `irs = true` is in force; IRS on with `irs-beta = 0` smoothed nothing.
+- The checks of the set-up between keys that name a key a reading takes are made again at every reading of `input.ini` during
+  the run, on the values read, as errors of the reading: `riemann-options-Mco = 0` with a low-Mach Riemann solver (AUSM+M, the
+  HLLC+ of Chen, Low-Mach Roe), and `schmidt` = 0 with more than one species in a viscous run without `INPUT/diffusion.dat`.
+  A reading took them: the low-Mach cutoff of these solvers went away in silence, and with `schmidt = 0` the next step read
+  the table of the binary diffusion coefficients that is not there (a run of the four species of `test/1D/diff1` stopped on an
+  index out of bounds in a build with bounds checks).
 - A key of `input.ini` whose value does not read as the type of its parameter stops the run at set-up, with exit code 1 and a
   message that gives the file, the section, the key and the value as written, and read again during the run it is an error of
   the reading (see Added): a

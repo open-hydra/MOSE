@@ -17,7 +17,7 @@ module MOSE_Input_Registry
   integer, parameter, public :: KEY_START = 4      ! For the start of the run only: a reading leaves it as it was
 
   public :: registry_t, Validate_Registry, Save_Values, Restore_Values, Key_Is_Set
-  public :: Save_Start_Values, Fixed_Key_Changed, Keep_Fixed_Values, Key_Text
+  public :: Save_Start_Values, Fixed_Key_Changed, Keep_Fixed_Values, Key_Text, Refused_Value
 
   !--------------------------------------------------------
   ! Value container (typed pointers)
@@ -749,6 +749,42 @@ contains
   end do
 
   end function Key_Text
+
+
+  !> The error of a reading of input.ini during the run whose values fail a check of the set-up between keys, reason (as
+  !> the set-up gives it; an empty string when the check holds, and then the result is empty too): the key name of the
+  !> section section, which the reading takes, with the value written and the value of the run, which it had before the
+  !> reading (the copy of Save_Values: as a file wrote it, or its value), and the reason of the set-up
+  function Refused_Value(section, name, reason) result(out)
+
+  implicit none
+
+  character(len=*), intent(in) :: section, name, reason
+  character(len=:), allocatable :: out, why
+  character(len=32) :: buf
+  integer :: i
+
+  out = ""
+  if (len_trim(reason) == 0) return
+  why = trim(adjustl(reason))
+  if (index(why, "[ERROR] ") == 1) why = why(9:)
+  out = "[ERROR] input.ini, ["//trim(section)//"] "//trim(name)//": "//why
+  if (.not. allocated(saved)) return
+  do i = 1, min(reg%size, size(saved))
+    if (reg%params(i)%section /= section .or. reg%params(i)%name /= name) cycle
+    if (saved(i)%has_text) then
+      buf = trim(adjustl(saved(i)%text))
+    else if (associated(reg%params(i)%value%r)) then
+      write(buf,'(G0)') saved(i)%r
+    else
+      buf = reg%params(i)%default_str
+    end if
+    out = "[ERROR] "//Key_And_Value(i)//": the run has "//trim(name)//" = "//trim(adjustl(buf))// &
+          ", and the set-up refuses the value read: "//why
+    return
+  end do
+
+  end function Refused_Value
 
 
   !> The key i of input.ini, as the messages of Validate_Registry give it: the file, the section, the key and the value as
