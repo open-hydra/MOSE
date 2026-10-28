@@ -647,6 +647,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
   iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z
   moves onto a face of a block, and stops with a message, exit status 1, when a block has no such face or more than one.
+- The verification script of the finite-rate rocket nozzle (`test/2D/euler/rocket-nozzle/finite-rate/verify.py`) takes p, u, v,
+  T and γ by their names in the solution files, and the mixture density as the sum of every species density. It took them at the
+  positions they have in a file with 13 species, and the case writes 19: at the throat it compared four species densities and the
+  sum of 12 of the 19 instead of p, ρ, u, v and γ, and two of those densities lie below the absolute tolerance of the comparison,
+  1e-8, so that any value of them up to it passed; its figures read the stored solution `reference/field.tec` instead of the run,
+  at wrong positions too. The case passes the check: at the throat p, ρ, u, v and γ of the run are within a relative 1e-3 of
+  `reference/field.tec`.
 - The tests that check the number of OpenMP threads of their runs pass in a MOSE built without OpenMP (`USE_OPENMP=OFF`, the
   default of the configuration), which writes `Serial execution` where it writes the number of threads with OpenMP; they failed
   there on that line. `BoundaryConditions` skips the part of `Extrapolation400` that compares 1 and 4 threads, `MPIBitIdentity`

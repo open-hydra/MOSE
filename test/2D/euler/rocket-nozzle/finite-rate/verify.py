@@ -42,27 +42,21 @@ parser.add_argument('--plot', action='store_true', help='Plot pressure contours 
 args = parser.parse_args()
 
 
-[x_, y_, z_, var_, vnames] = read_TEC("OUTPUT/field.tec")
-fields_data = {
-    'x': x_[0],
-    'y': y_[0],
-    'p': var_[0][16],
-    'rho': sum(var_[0][0:12]),
-    'u': var_[0][13],
-    'v': var_[0][14],
-    'g': var_[0][18],
-}
+def read_field(path):
+    """Grid and fields of a solution file, each field taken by its name in the VARIABLES list of the
+    file: the mixture density (the sum of every species density rho(1), rho(2), ...), u, v, p, T and
+    the ratio of specific heats g."""
+    x_, y_, z_, var_, vnames = read_TEC(path)
+    var = dict(zip(vnames[3:], var_[0]))  # x, y and z come first in vnames, not in var_[0]
+    missing = [name for name in ('u', 'v', 'p', 'T', 'g') if name not in var]
+    if missing:
+        sys.exit(f"verify.py: {path} has no variable {', '.join(missing)}")
+    return {'x': x_[0], 'y': y_[0], 'rho': sum(var[name] for name in var if name.startswith("rho(")),
+            'u': var['u'], 'v': var['v'], 'p': var['p'], 'T': var['T'], 'g': var['g']}
 
-[x_, y_, z_, var_, vnames] = read_TEC("reference/field.tec")
-ref_fields_data = {
-    'x': x_[0],
-    'y': y_[0],
-    'p': var_[0][16],
-    'rho': sum(var_[0][0:12]),
-    'u': var_[0][13],
-    'v': var_[0][14],
-    'g': var_[0][18],
-}
+
+fields_data = read_field("OUTPUT/field.tec")
+ref_fields_data = read_field("reference/field.tec")
 
 # Check that the reference and simulation grids match
 for key in ['x', 'y']:
@@ -113,13 +107,13 @@ def area_avg_1d(q2d):
 # Cell-centre x coordinate
 x_c = 0.5 * (xn[:120, 0] + xn[1:, 0])   # shape (120,)
 
-# 2D field slices (k=0)
-rho2d = sum(var_[0][k][:, :, 0] for k in range(13))  # all 13 species
-p2d   = var_[0][16][:, :, 0]
-T2d   = var_[0][17][:, :, 0]
-g2d   = var_[0][18][:, :, 0]
-u2d   = var_[0][13][:, :, 0]
-v2d   = var_[0][14][:, :, 0]
+# 2D field slices (k=0) of the run
+rho2d = d['rho'][:, :, 0]   # every species
+p2d   = d['p'][:, :, 0]
+T2d   = d['T'][:, :, 0]
+g2d   = d['g'][:, :, 0]
+u2d   = d['u'][:, :, 0]
+v2d   = d['v'][:, :, 0]
 a2d   = np.sqrt(g2d * p2d / rho2d)
 M2d   = np.sqrt(u2d**2 + v2d**2) / a2d
 
