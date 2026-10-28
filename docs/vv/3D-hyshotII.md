@@ -212,13 +212,14 @@ Everything the case needs is committed **except the initial condition**. At 4.6 
 | `INPUT/bc.txt`, `bc2.txt`, `bc3.txt` - boundary conditions and chimera connectivity, one file per multigrid level | |
 | `input.ini` - the solver setup documented above | |
 
-So the first step is to build the initial condition with the ATLAS pre-processor, from the shipped mesh and phase data. ICB looks for the mesh and the phase files **in the working directory** (`mesh.tec`, then `mesh.p3d`, then `mesh.szplt`), and writes into `fromATLAStoSolver/`:
+So the first step is to build the initial condition with the ATLAS pre-processor, from the shipped mesh and phase data. ICB looks for the mesh (`mesh.tec`, then `mesh.p3d`, then `mesh.szplt`), the phase file and its thermodynamic table **in the working directory**, and writes into `fromATLAStoSolver/`:
 
 ```bash
 cd test/3D/hyshotII
 ln -s MESH/mesh.szplt .          # ICB searches the cwd, not MESH/
 ln -s INPUT/phase.txt .          # and needs the phase file beside it
-ulimit -s unlimited              # see the warning below
+ln -s INPUT/thermo.dat .         # and its thermodynamic table
+ulimit -s unlimited
 ATLAS ICB                        # -> fromATLAStoSolver/ic.szplt
 mv fromATLAStoSolver/ic.szplt INPUT/
 ```
@@ -232,7 +233,7 @@ Then solve:
 
 The boundary-condition files are committed, so ATLAS BCB does not need to run. They already encode everything in the [boundary conditions](#boundary-conditions) table - the profiled supersonic inlet, the sonic hydrogen porthole, the 300 K isothermal walls and the chimera overlap - which is why the physical settings are documented on this page rather than being readable from `input.ini`.
 
-The wall-pressure figure is rebuilt from the solver's `OUTPUT/wall.tec`:
+The wall-pressure figure is drawn from `reference/wall.tec`, a MOSE wall solution of this case, which `wall_pressure.py` reads in its own folder:
 
 ```bash
 cd test/3D/hyshotII/reference
