@@ -18,7 +18,10 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # A named Ubuntu release, not ubuntu-latest, which GitHub moves to newer
+    # releases: the release of the jobs changes only with this line and the
+    # one of the job test-mpi.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -85,7 +88,7 @@ jobs:
   test-mpi:
     # gfortran with the MPI library of Ubuntu (Open MPI): the build with
     # USE_MPI=ON and the needs-mpi tier, which the job above does not register.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
