@@ -6,6 +6,28 @@ The validation metric is the **wall pressure along the between-injector line**, 
 
 **References**: Karl, *Numerical Investigation of a Generic Scramjet Configuration*, PhD thesis, TU Dresden (2011) - the experiment with error bars and the TAU S-A solution; Chapuis et al., *A computational study of the HyShot II combustor performance*, Proc. Combust. Inst. **34** (2013) 2101-2109 - the same measurements in the paper's coordinates, used here only to audit the unit conversion.
 
+!!! warning "The case as committed stops on its coarsest grid level"
+    Started from the [initial condition](#initial-condition) that ATLAS ICB builds from the `[ICB-*]` sections of
+    `input.ini`, with the committed `input.ini` and boundary-condition files, the run stops on the coarsest grid level
+    (level 3), where the multigrid sequence starts, in iteration 858 of its 100,000. Three cells of block 10 (the
+    downstream part of the O-grid ring around the porthole), with centres 0.14 mm above the bottom wall and 0.1 to
+    0.2 mm outside the edge of the porthole on its downstream side, hold hydrogen of the jet. They empty towards vacuum:
+    two adjacent ones go from 17 and 14 kPa after 800 iterations to 284 and 368 Pa after 857 (6.3 and 9.8 K), the third
+    from 24 kPa to 358 Pa (6.8 K), while the cells next to them hold 2 to 52 kPa. The update of iteration 858 gives the
+    first of them a negative pressure: MOSE prints `Integration failed at b, i, j, k:` with block 10 and cell (3, 2, 5)
+    of level 3, the primitive variables of that cell and `NaN, infinity or p<0 detected`, and exits with status 1.
+
+    The collapse comes from the MUSCL reconstruction together with the
+    [implicit residual smoothing](../theory/time-integration.md#implicit-residual-smoothing-irs): from the same start,
+    the run with `irs-beta = 0` and the run with `space-reconstruction = first-order` pass iteration 2000 of level 3,
+    the lowest temperature of the level after 857 iterations being 132.5 K and 162.5 K, while the run without
+    chemistry (`exclude-blocks` with the eleven blocks) stops in the same iteration and cell, without the two
+    `MATRIX IS REPEATEDLY SINGULAR` messages of the chemistry integrator that come before the stop of the case. All
+    these runs use MOSE built with GNU Fortran 12 in `RELEASE` mode, with 4 MPI ranks of 5 OpenMP threads (the case
+    as committed stops in the same iteration and cell also without MPI, with 8 threads), and the time stepping of
+    `input.ini`: local time steps, RK2, CFL 0.8 and VNN 0.5 ramped linearly over the first 5000 iterations
+    (`cfl-rise-threshold`), so 0.137 and 0.086 in iteration 858.
+
 <figure>
   <img src="../images/HyShot-field.png" alt="HyShot II combustor: temperature, pressure and hydrogen mass fraction">
   Reacting flow in the computed domain: static pressure, static temperature, and hydrogen mass fraction.
@@ -66,16 +88,28 @@ $\phi$ follows from the two boundary conditions and the stoichiometric H$_2$/air
 
 ### Boundary conditions
 
-| Boundary | Condition |
-|---|---|
-| Inlet ($x = 360$ mm) | supersonic inflow, profiled $M(z)$, $p(z)$, $T(z)$ |
-| Injector pipe inlet | mass-flux inlet, $T_0 = 300$ K, pure H$_2$ |
-| Bottom wall, ceiling, pipe walls | isothermal no-slip, $T_w = 300$ K |
-| $y = 0$ and $y = W$ | symmetry |
-| Outlet ($x = 760$ mm) | supersonic extrapolation |
-| Block-to-block | conformal connection and chimera overlap |
+| Boundary | `bc.txt` | Condition |
+|---|---|---|
+| Inlet ($x = 360$ mm) | `405` | supersonic inflow along the face normal, profiled $M(z)$, $p(z)$, $T(z)$ |
+| Injector pipe inlet ($z = -2$ mm) | `403` | mass-flux inlet, $g = 297.134$ kg/(m$^2$ s), $T_0 = 300$ K, pure H$_2$ |
+| Bottom wall and ceiling | `302` | isothermal no-slip, $T_w = 300$ K |
+| Pipe wall, below the wall plane | `301` | adiabatic no-slip, heat flux $q_w = 0$ |
+| $y = 0$ and $y = W$ | `300` | symmetry |
+| Outlet ($x = 760$ mm) | `406` | outlet with `p_back` = 0 and `rel_fac` = 1: where the gas leaves, the face takes the state of its boundary cell at any Mach number; where the gas of that cell moves into the domain, the face is a slip wall |
+| Block-to-block | `101`, `102` | conformal connection and chimera overlap |
 
 The pipe wall upstream of the wall plane is adiabatic and the part above it is a connection, switched by a range-based composite patch.
+
+### Initial condition
+
+ATLAS ICB builds the initial field, `INPUT/ic.szplt`, from the `[ICB-*]` sections of `input.ini` (see [What ships, and what you build](#what-ships-and-what-you-build)). Every block takes the state of `[ICB-Block*]`, except blocks 6 to 9, the four blocks of the porthole that run down the pipe: their own sections split them along $z$ at the wall plane, and a cell whose centre lies below it takes the state of `[hydroIC]`, any other cell the state of `[airIC]`, equal to that of `[ICB-Block*]`.
+
+| Region | Gas | Velocity | $p$ | $T$ | $\tilde\nu$ |
+|---|---|---|---|---|---|
+| Every cell above the wall plane | air, $Y_{\mathrm{N_2}} = 0.7686$, $Y_{\mathrm{O_2}} = 0.2314$ | $M = 2.49$ along $x$ | 130.2 kPa | 1377 K | $10^{-6}$ m$^2$/s |
+| The pipe, below the wall plane | pure H$_2$ | $w = 1204.2$ m/s, into the duct | 252.8 kPa | 248.4 K | $10^{-6}$ m$^2$/s |
+
+The hydrogen moves at its speed of sound with the mass flux of the `403` inflow of the pipe: with the tables of the case, 1204.2 m/s is the speed of sound of hydrogen at 248.4 K and $\rho w = 297.15$ kg/(m$^2$ s) is the mass flux $g = 297.134$ kg/(m$^2$ s) of that inflow, each to within 0.01 %, and the stagnation temperature of this state is 299.5 K, against $T_0 = 300$ K of the inflow. The air is uniform: it does not follow the profile of the inlet, and next to the 300 K walls it starts at 1377 K and $M = 2.49$ too.
 
 ---
 
