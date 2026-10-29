@@ -299,9 +299,15 @@ let no gas out. A duct at rest therefore starts from a `401`, `402` or `407` fac
 
 **Choked nozzle (`420`).** The face is the exit of a nozzle fed from the reservoir at `T0` and `p0`, and the pressure
 `p` of the boundary cell selects its state: with `p_sub` ≤ `p` < `p0` the inflow at the total conditions `T0` and `p0`;
-with `p_sup` ≤ `p` < `p_sub` the inflow with the mass flux `g` and the total temperature `T0`; with `p` < `p_sup` the
-supersonic design exit state, the isentropic state of the reservoir with the mass flux `g`, computed once at set-up on
-the tables of the gas, and the flux of the Riemann solver between that state and the cell. `p_sub` and `p_sup` are
+with $p_\text{shock}$ ≤ `p` < `p_sub` the inflow with the mass flux `g`, the total temperature `T0` and the invariant
+that reaches the face from inside (a normal shock stands in the divergent part, the exit is subsonic); with `p` below
+both, the supersonic design exit state, the isentropic state of the reservoir with the mass flux `g`, and the flux of
+the Riemann solver between that state and the cell, as at the exit of a real nozzle whose back pressure is below
+$p_\text{shock}$ (over-expanded down to `p_sup`, under-expanded below it). $p_\text{shock}$ is the pressure behind a
+normal shock standing at the exit of the design flow: the pressure of the state of the mass flux `g`, the total
+enthalpy of the reservoir and the impulse $p + g\,u$ of the design exit state, on the subsonic side. MOSE computes
+the design exit state and $p_\text{shock}$ once at set-up from `T0`, `p0`, `g` and the gas, on the tables of the gas,
+so `p_sup` selects no branch: it is checked with `p_sub` and `p0`. `p_sub` and `p_sup` are
 required and must satisfy `0 < p_sup <= p_sub < p0`; `g` must not be above the choked mass flux `G*` of the reservoir
 on the tables of the gas, the `g` that ATLAS writes for an exit at the throat (`Ae_At = 1`), by more than 1e-9 of it.
 A record that does not satisfy these conditions stops the run at set-up, and so does a record whose critical or design

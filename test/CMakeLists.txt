@@ -263,9 +263,13 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # flux or a normal velocity (403, 404, 408, and 420 on face 2): g and un
 # positive into the domain on every face, a negative value on face 2 as its
 # magnitude.
-# Choked nozzle: below p_sup the face of a nozzle 420 takes the supersonic
-# design exit state of its record (air at exit Mach numbers 2.5, 3 and 4, the
-# gas of the frozen rocket nozzle at 4.46, and the sonic state at the throat).
+# Choked nozzle: below p_shock, the pressure behind a normal shock at the exit,
+# and below p_sub, the face of a nozzle 420 takes the supersonic design exit
+# state of its record (air at exit Mach numbers 2.5, 3 and 4, the gas of the
+# frozen rocket nozzle at 4.46, the sonic state at the throat, and air at an
+# exit Mach number of 2.94 with the gas of the tube between p_sup and 1e-6
+# below p_shock), and from p_shock up to p_sub the state of mass flux g (that
+# air 1e-6 above p_shock and at 1.02 p_shock).
 # Boundary input: the property lines of bc.txt are read as written or refused
 # (the inlet 402 table under any file name; a missing or decreasing table stops
 # the run; an inlet on face 1 with g or un negative (404, 408, 420) or zero
@@ -392,18 +396,25 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # stop it at setup with the fault named; a map without the key is not read.
 # input.ini read again during a run (ini-diter): an error of the reading (a
 # value out of the rules of the registry, that does not read or that is not
-# finite, a file that cannot be read, a change of the model or of the
+# finite, a file that cannot be read, another value of a key fixed for the run,
+# of levels or more probes than at the start, a change of the model or of the
 # stationary faces of the rotating frame) stops the run with its message with
 # ini-error = stop; with warn, the default, the reading is not taken and the
 # run goes on with the values before it, byte for byte; read again unchanged,
-# with keys left out or written, it gives the run without readings.
+# with keys left out or written, it gives the run without readings; newrun, a
+# key of the start only, written during the run is left as it was; implicit
+# residual smoothing is on with irs = true or irs-beta > 0 at every reading,
+# and switched on in a run started without it is an error of the reading; the
+# checks of the set-up between keys (riemann-options-Mco with a low-Mach
+# Riemann solver, schmidt with more than one species and no diffusion table)
+# are made again on the values read.
 mose_add_parts_script(InputChecks fast/input-checks
     PARTS limiter-defaults irs-time-accurate decomposition-map
     LABELS fast implementation numerics 1D 2D)
 mose_add_parts_script(ExitCodes fast/input-checks
     PARTS exit-codes LABELS validation implementation numerics 1D 2D)
 mose_add_parts_script(RuntimeInput fast/input-checks
-    PARTS runtime-input LABELS validation implementation numerics 2D)
+    PARTS runtime-input LABELS validation implementation numerics 1D 2D)
 
 # Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).
 # Spalart-Allmaras with variable density: the right-hand side of the equation
@@ -528,6 +539,22 @@ add_fortran_executable(remote_blocks_check unit/remote_blocks_check.f90)
 add_test(NAME RemoteBlocks COMMAND remote_blocks_check)
 set_tests_properties(RemoteBlocks PROPERTIES LABELS "fast;implementation;unit" TIMEOUT 60)
 
+# Face values of the MUSCL reconstruction (MusclFaceBounds): a unit check of
+# Reconstruction with each limiter on lines of cells of any lengths. Every face
+# value lies between the values of the two cells of its face, within 8 ulp
+# (van Albada where the ratio of the slopes is positive); a cell of length 1
+# next to cells of length 0.01 stays non-negative after a forward Euler step at
+# Courant number 1/2; the bounds only reduce the slope, the two faces of a cell
+# take the same slope, and on lines of equal cells and for linear data the slope
+# is the limiter's own; the call with the bounds 2 and 2, which symmetry
+# planes, walls and the inlets 405 and 420 make, gives the formulas of the
+# limiters, asserted when the build keeps the order of evaluation of the source
+# (the three numbers of VolatileOrder; with -ffast-math the differences are
+# printed).
+add_fortran_executable(muscl_face_bounds_check unit/muscl_face_bounds_check.f90)
+add_test(NAME MusclFaceBounds COMMAND muscl_face_bounds_check 1 18014398509481984 3)
+set_tests_properties(MusclFaceBounds PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
+
 # ===========================================================================
 #  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
 #  Each test generates its own small multi-block case and launches the solver
@@ -633,10 +660,10 @@ if(USE_MPI)
     # its text. sol-diter = 7 written in the input.ini of rank 0 alone (each
     # rank in its own folder, an MPMD launch) gives every rank the solutions of
     # iterations 21, 28 and 35; sol-diter, res-diter, ini-diter and cfl written
-    # in the input.ini of rank 1 alone change nothing, and cfl = -1 in the
-    # input.ini of rank 0 is not taken on any rank (ini-error left out): exit
-    # code 0 within 60 s and the files of the run without the change, byte for
-    # byte. A run whose
+    # in the input.ini of rank 1 alone change nothing, and cfl = -1, or
+    # time-scheme = RK2 (a key fixed for the run), in the input.ini of rank 0
+    # is not taken on any rank (ini-error left out): exit code 0 within 60 s
+    # and the files of the run without the change, byte for byte. A run whose
     # ranks took different values would hang in its collectives: the test stops
     # at the first case that fails, and its own TIMEOUT stops it in 120 s.
     mose_add_mpi_script(MPIRuntimeInput mpi/runtime-input "needs-mpi;implementation;2D")

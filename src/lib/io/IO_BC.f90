@@ -520,7 +520,7 @@ contains
             call Need_R ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
             call Need_R ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
             call Need_Inward ( i, bc(i)%type, nline, bc(i)%f, bc(i)%mdot, 'g' )
-            ! The thresholds of the record and the supersonic design exit state of its nozzle
+            ! The thresholds of the record, the supersonic design exit state of its nozzle and p_shock
             call Nozzle_States ( i, nline, bc, last420 )
             last420 = i
           end if
@@ -1079,14 +1079,16 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
-  ! Nozzle_States: the thresholds of the choked nozzle of record n (type 420, line nline of the file) and the
-  !   supersonic design exit state that its face takes below p_sup (Nozzle_Design_State). The run stops when the
-  !   thresholds do not satisfy 0 < p_sup <= p_sub < p0, the order of the three branches of the face; when g is above
+  ! Nozzle_States: the thresholds of the choked nozzle of record n (type 420, line nline of the file), its supersonic
+  !   design exit state and the pressure p_shock behind a normal shock at that exit, below which, and below p_sub, its
+  !   face takes the design state (Nozzle_Design_State). The run stops when the thresholds do not satisfy
+  !   0 < p_sup <= p_sub < p0, the order of the exit pressures of the nozzle; when g is above
   !   the choked mass flux G* of the reservoir by more than 1e-9 of it (no exit of the reservoir has that mass flux;
   !   the boundary-condition builder of ATLAS writes G* for an exit at the throat); and, with a message that asks to
   !   extend the tables of the gas, when the critical state or the design state is at or below their lowest temperature
   !   above 0 K, or T0 above Tmax - 1, one kelvin below their last row, where their interpolation ends. A record with
-  !   the T0, p0, g and mass fractions of the previous record of type 420, prev (0: none), takes its design state.
+  !   the T0, p0, g and mass fractions of the previous record of type 420, prev (0: none), takes its design state and
+  !   its p_shock.
   subroutine Nozzle_States ( n, nline, bc, prev )
     use MOSE_Advanced_Types_m,            only: MOSE_bc_type
     use MOSE_Global_m,                    only: nsc, nrans
@@ -1118,12 +1120,13 @@ contains
            all ( bc(prev)%ci(nrans+1:nrans+nsc) == bc(n)%ci(nrans+1:nrans+nsc) ) ) then
         bc(n)%p_design = bc(prev)%p_design
         bc(n)%rho_design = bc(prev)%rho_design
+        bc(n)%p_shock = bc(prev)%p_shock
         return
       end if
     end if
 
     call Nozzle_Design_State ( bc(n)%T0, bc(n)%p0, g, bc(n)%ci(nrans+1:nrans+nsc), Gstar, bc(n)%p_design, &
-                               bc(n)%rho_design, status )
+                               bc(n)%rho_design, bc(n)%p_shock, status )
     if ( status <= 1 ) return
     write(txt(1),'(ES23.16)') bc(n)%T0
     write(txt(2),'(ES23.16)') bc(n)%p0
