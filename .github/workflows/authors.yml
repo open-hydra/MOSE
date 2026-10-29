@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # generate-authors.py reads the whole history via `git shortlog --all`.
           fetch-depth: 0
@@ -33,7 +33,7 @@ jobs:
           token: ${{ secrets.AUTHORS_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
 

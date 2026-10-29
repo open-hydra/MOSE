@@ -141,8 +141,9 @@ module MOSE_Config_Types_m
     ! USER-DRFINED INPUTS
     real(R8)  :: beta
     character(len=llen) :: variables   ! flow (species, momentum, energy) or all (also RANS, soot, passive scalars)
+    logical   :: requested = .false.           ! The key irs: IRS asked for by name (irs-beta > 0 switches it on too)
     ! Useful variables
-    logical   :: enabled
+    logical   :: enabled = .false.             ! IRS on: irs, or irs-beta > 0 (IRS_On), at set-up and at every reading taken
     logical   :: at_setup = .false.            ! IRS on at setup: only then are its arrays allocated
   end type irs_t
   !! ------------------------------------------------------
