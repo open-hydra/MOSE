@@ -731,6 +731,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
   iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z
   moves onto a face of a block, and stops with a message, exit status 1, when a block has no such face or more than one.
+- The script of the ramp channel (`test/2D/euler/ramp-channel/verify.py`) finds the ORION Python package in `lib/ORION/src/python`
+  of the repository, as the other `verify.py` scripts of the tests do: it imported ORION from the Python path alone, and stopped
+  with `No module named 'ORION'` unless ORION was installed or on `PYTHONPATH`.
 - The verification script of the finite-rate rocket nozzle (`test/2D/euler/rocket-nozzle/finite-rate/verify.py`) takes p, u, v,
   T and γ by their names in the solution files, and the mixture density as the sum of every species density. It took them at the
   positions they have in a file with 13 species, and the case writes 19: at the throat it compared four species densities and the
