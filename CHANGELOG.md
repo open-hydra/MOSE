@@ -748,6 +748,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
   iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z
   moves onto a face of a block, and stops with a message, exit status 1, when a block has no such face or more than one.
+- The script of the ramp channel (`test/2D/euler/ramp-channel/verify.py`) finds the ORION Python package in `lib/ORION/src/python`
+  of the repository, as the other `verify.py` scripts of the tests do: it imported ORION from the Python path alone, and stopped
+  with `No module named 'ORION'` unless ORION was installed or on `PYTHONPATH`.
 - The verification script of the finite-rate rocket nozzle (`test/2D/euler/rocket-nozzle/finite-rate/verify.py`) takes p, u, v,
   T and γ by their names in the solution files, and the mixture density as the sum of every species density. It took them at the
   positions they have in a file with 13 species, and the case writes 19: at the throat it compared four species densities and the
@@ -755,6 +758,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   1e-8, so that any value of them up to it passed; its figures read the stored solution `reference/field.tec` instead of the run,
   at wrong positions too. The case passes the check: at the throat p, ρ, u, v and γ of the run are within a relative 1e-3 of
   `reference/field.tec`.
+- The Grid-Convergence Index of the Shu–Osher study (`test/1D/Shu-Osher/convergence.py`) is that of Roache: the safety factor
+  1.25 times the Richardson estimate of the error of the finest grid, which is the normalised L1 error of that grid against the
+  extrapolant. The script divided that estimate by r^p − 1 once more (1.02 for the grids of the case). The Shu–Osher page gives
+  0.90 % (it gave 0.88 %). The criteria of the test, the observed order and the decrease of the errors, do not change.
 - The tests that check the number of OpenMP threads of their runs pass in a MOSE built without OpenMP (`USE_OPENMP=OFF`, the
   default of the configuration), which writes `Serial execution` where it writes the number of threads with OpenMP; they failed
   there on that line. `BoundaryConditions` skips the part of `Extrapolation400` that compares 1 and 4 threads, `MPIBitIdentity`
