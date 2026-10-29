@@ -26,7 +26,15 @@
 #  above one kelvin below the last row of the tables of the gas, where their
 #  interpolation ends (T0 = 10000 K, the last row of test/common/Air), with
 #  T0 and that temperature, 9999 K (make_case.py
-#  nozzle). An SRM grain boundary (502) with the
+#  nozzle). A record of type 409 (a forced outlet), 501 (a manifold) or
+#  506 (surface reactions and pyrolysis), which MOSE does not apply, must
+#  stop the run at set-up with exit code 1, no solution and a message with
+#  the line of bc.txt, the record and the type, and not on the count of
+#  the records: the outlet of the duct (record 2) of type 409, without a
+#  property line, or 501, and the outlet of the duct of the grain with
+#  Spalart-Allmaras of type 506, the 501 and the 506 written as the
+#  boundary-condition builder of ATLAS writes them (make_case.py
+#  unapplied). An SRM grain boundary (502) with the
 #  Spalart-Allmaras model runs (40 steps), and so with SST, its ghost cells
 #  hold the wall value nu~ = 0 and it is a wall for the wall distance: one
 #  explicit step at rest from a uniform rho nu~ changes it in the cell next to
@@ -199,6 +207,25 @@ nozzle psup-zero "$order"
 nozzle choked "bc.txt line 2 \\(record 1, type 420\\): g = $val is above the choked mass flux G\\* = $val of T0, p0 and the gas: no nozzle exit has that mass flux"
 nozzle t0-above "bc.txt line 2 \\(record 1, type 420\\): T0 = $val is above 9999 K, one kelvin below the last row of the tables of the gas, where their interpolation ends: extend the tables to higher temperatures"
 
+echo "-- records of a type that MOSE does not apply: the outlet of the duct of type 409 and 501 --"
+unapplied() {   # unapplied <type> <message>: the run must stop at set-up with exit code 1, the message, no solution, and not
+                # on the count of the records, which keeps the property line of the types 501 and 506
+  python3 -B make_case.py unapplied "$1" || exit 1
+  rm -f OUTPUT/field.tec
+  timeout 60 "$LOCAL" > "OUTPUT/unapplied-$1.log" 2>&1
+  local rc=$?
+  if [[ $rc -eq 1 && ! -f OUTPUT/field.tec ]] && grep -a -q -F -- "$2" "OUTPUT/unapplied-$1.log" && \
+     ! grep -a -q 'Boundary conditions number' "OUTPUT/unapplied-$1.log"; then
+    echo "  [ok  ] $1: stopped at set-up, exit code 1"
+  else
+    echo "  [FAIL] $1: exit code $rc, the record was not refused as it should (see OUTPUT/unapplied-$1.log)"
+    fail=1
+  fi
+}
+none='the face would get no flux'
+unapplied 409 "bc.txt line 3 (record 2, type 409): MOSE does not apply type 409 (a forced outlet): $none; give the face an outlet type (406, or 400)"
+unapplied 501 "bc.txt line 3 (record 2, type 501): MOSE does not apply type 501 (a manifold): $none; join faces that match cell by cell with a block connection (101), or give the face an inlet or outlet type"
+
 echo "-- an SRM grain boundary (502) with a RANS model --"
 python3 -B make_case.py srm || exit 1
 rm -f INPUT/phase.txt INPUT/thermo.dat INPUT/transport.dat
@@ -215,6 +242,8 @@ else
   echo "  [FAIL] srm-rans: exit code $rc, the run with the grain and Spalart-Allmaras did not complete (see OUTPUT/srm-rans.log)"
   fail=1
 fi
+echo "-- a record of a type that MOSE does not apply: the outlet of the duct of the grain of type 506 --"
+unapplied 506 "bc.txt line 3 (record 2, type 506): MOSE does not apply type 506 (surface reactions and pyrolysis): $none; give the face type 504 (pyrolysis) or 505 (surface reactions)"
 python3 -B make_case.py srm sst || exit 1
 sed -e 's/^turbulence = SA$/turbulence = SST/' input.ini > input-sst.ini
 mv input.ini input-sa.ini && mv input-sst.ini input.ini

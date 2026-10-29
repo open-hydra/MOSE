@@ -33,6 +33,12 @@
 #  code 1, the message and the STOP line of both ranks: every rank reads the
 #  file and holds the nodes of every block.
 #
+#  A record of a type that MOSE does not apply must stop every rank: the
+#  Sod tube with its record 2 (face 2 of its block) of type 409, a forced
+#  outlet, must end within 60 s with exit code 1, the message with the line
+#  of bc.txt, the record and the type, and the STOP line of both ranks:
+#  every rank reads every record of bc.txt.
+#
 #  A value out of its rule written during the run must stop every rank when
 #  input.ini is read again with ini-error = stop: two ranks launched as two
 #  programs (MPMD), each
@@ -208,6 +214,17 @@ EOI
 run2 mpi-q2d-nodes "Q2D file q2d-side.dat, zone 1 (line 2): node I=1, J=1 of the zone, a corner of the face of record 205" \
   "[ERROR] Q2D file q2d-side.dat, zone 1 (line 2): node I=1, J=1 of the zone, a corner of the face of record 205"
 rm -f q2d-ends.dat q2d-jfaces.dat q2d-side.dat
+python3 -B ../../fast/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
+
+echo "-- a record of a type that MOSE does not apply stops every rank (2 ranks) --"
+sed -e '2s/ 400$/ 409/' INPUT/bc.txt > INPUT/bc-409.txt && mv INPUT/bc-409.txt INPUT/bc.txt
+if [[ $(sed -n 2p INPUT/bc.txt) == *" 409" ]]; then
+  run2 mpi-unapplied "bc.txt line 2 (record 2, type 409): MOSE does not apply type 409 (a forced outlet)" \
+    "[ERROR] bc.txt line 2 (record 2, type 409): MOSE does not apply type 409 (a forced outlet)"
+else
+  echo "  [FAIL] mpi-unapplied, case generation: record 2 of the Sod tube is not of type 409"
+  fail=1
+fi
 python3 -B ../../fast/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
 
 echo "-- a value out of its rule written in the input.ini of rank 0 stops every rank when it is read again with ini-error = stop" \

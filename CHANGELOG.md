@@ -107,6 +107,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   exit at the throat, refuses thresholds out of that order, and from `Ae_At` these states too. `p_sub` and `p_sup` are
   required: a record without them, which made the face an inlet at the total conditions `T0` and `p0` at every pressure of the
   cell below `p0`, stops the run at set-up; an inlet at total conditions is a `401`.
+- A record of type `409`, `501` or `506` in `bc.txt` stops the run at set-up, on every rank, with exit code 1 and a message with
+  the line of the file, the record and its type: MOSE does not apply these types. The run went on with no flux through such a
+  face, not even that of the pressure, and ended with exit code 0. The boundary-condition builder of ATLAS writes `501` for a
+  `manifold` section and `506` for a `gsi` section with `pyrolysis-model`, `surface-reactions` and `qrad`.
 - The interior faces of the viscous fluxes no longer take by default the mean of the two metrics, which divided the difference
   across a face by the mean of 1/h instead of the distance between the cell centres: it overstated the face-normal gradient, and
   with it the viscous, conductive and diffusive fluxes, by (1 + r)²/(4r) at a cell-size ratio r (4.2 % at r = 1.5, 8.9 % at
