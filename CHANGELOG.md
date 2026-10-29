@@ -47,6 +47,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   build on one core of a shared cluster node; TIMEOUT three days). The PR CI leaves the label out, and
   `ctest -L verification` runs it on request: a plain `ctest` now runs it too, so the whole suite without it is
   `ctest -LE verification`.
+- The turbulent flat plate of the NASA Turbulence Modeling Resource as a verification case, `test/2D/viscous/flat-plate-turbulent-tmr`,
+  with its V&V page: Spalart–Allmaras, SST and Wilcox 2006 on the 35 × 25, 69 × 49 and 137 × 97 grids of the TMR, with the
+  inflow at the total conditions of the TMR and its free-stream turbulence. `FlatPlateTMR` (validation tier, about 71 s of
+  CPU at one thread) restarts each model for 5000 iterations from its converged 35 × 25 solution: the skin friction at
+  x = 0.970084071 and 1.90334 and the drag must stay within 1e-5 (relative) of the converged values, and the criteria of the page, computed
+  again from the stored results of the full form, must hold. `FlatPlateTMRFull` (label `verification`, about 24.5 h at one
+  thread, an estimate) runs the nine cases to 300 000 iterations and checks the 137 × 97 grid against CFL3D and FUN3D on that
+  grid and the limit of the three grids against CFL3D on the 545 × 385 grid.
 - The key `decomposition-map` of `[MOSE-IO]` names a file of `INPUT/` that gives the MPI rank of every block (with the phase
   prefix of `bc.txt` in multi-phase runs), in the format of the decomposition map that the ATLAS mesh decomposer (MDB) writes
   next to the split mesh; with `none`, the default, MOSE assigns the blocks itself and reads no map. A map that does not fit the
@@ -643,6 +651,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `506` was missing.
 - The guide names the boundary files of the multigrid levels as MOSE reads them, `bc.txt`, `bc2.txt`, `bc3.txt`, … (it said
   `bc_x1.txt`, `bc_x2.txt`, …).
+- The text of the key `sst-production`, the turbulence guide and the SWBLI page describe the `compressible` production as MOSE
+  computes it: the exact production with the dilatation terms arranged as in OpenFOAM's `kOmegaSST`, with the limiter on its
+  deviatoric part only and -2/3 gamma rho omega div(u) in the omega equation. They named it NASA TMR's SST-2003e (SST-2003 with
+  `k-energy-coupling`), which limits the whole production and takes gamma/nu_t times it in the omega equation. The guide also
+  writes the Boussinesq stress with its -1/3 div(u) delta_ij part, and says that its -2/3 rho k delta_ij term enters the momentum
+  and energy equations only with `k-energy-coupling = true` (it said that the two-equation models include it), that `SA` is the
+  model without the f_t2 term (SA-noft2 in TMR naming), with the limiter of S~ of Note 1(c) of the TMR page and the cap r <= 10
+  that the code applies (the guide gave neither), and that with `compressible` the rotation/curvature factor of SST-RC multiplies
+  only the deviatoric part of the production. The SWBLI page gives the whole variant of its two models, and the models of the
+  Wind-US and SU2 solutions as their sources give them: SPALART and SST, without variant, in the NPARC Alliance archive, and SA-neg
+  and SST-2003m in the SU2 validation study of the case. No run changes.
 - The comparison of the rocket nozzle with CEA (`test/2D/euler/rocket-nozzle/verify.py`, page `docs/vv/2D-nozzle.md`) reads the
   solutions of the runs of the three configurations, `OUTPUT/field.tec`, and stops with a message, exit status 1, when one is
   missing; it drew the stored solutions `reference/field.tec`. The mixture density is the sum of every species density: it summed
