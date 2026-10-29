@@ -140,8 +140,8 @@ MOSE prints diagnostic information to the console during loading and iteration. 
     with a code of its own (255 with the `mpiexec` of Intel MPI 2021.12). Some errors that one rank finds alone, at
     set-up in the mesh of its blocks (such as a degenerate or folded cell, an axis at r = 0 or a wall on a face of zero
     area) or in its probes (a probe file that cannot be opened, an unknown probe variable) and on rank 0 in the
-    diagnostic output, and two errors of `bc.txt` that every rank finds (chimera entries whose donor fractions sum to
-    less than one half, a manifold `501` whose donor block is on another rank) stop the run through `MPI_ABORT`: the rank
+    diagnostic output, and one error of `bc.txt` that every rank finds (chimera entries whose donor fractions sum to
+    less than one half) stop the run through `MPI_ABORT`: the rank
     writes out its output first, but `MPI_ABORT` makes only a best attempt to stop the processes, and what the other
     ranks hold for their output may not reach the log. A divergence is caught on any value that is not finite or on a
     negative pressure, in RELEASE builds with fast math too; a value of the initial condition that is not finite stops

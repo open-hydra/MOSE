@@ -122,6 +122,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   state of the cell, with less total pressure and thrust: in air at an exit Mach number of 2.94, 0.90 times the momentum
   flux of the design state with the cell at 2 `p_sup` and 0.87 midway between the sonic pressure of that mass flux and
   p_shock. From p_shock up to `p_sub` the face takes that state as before. `bc.txt` does not change.
+- A record of type `409`, `501` or `506` in `bc.txt` stops the run at set-up, on every rank, with exit code 1 and a message with
+  the line of the file, the record and its type: MOSE does not apply these types. The run went on with no flux through such a
+  face, not even that of the pressure, and ended with exit code 0. The boundary-condition builder of ATLAS writes `501` for a
+  `manifold` section and `506` for a `gsi` section with `pyrolysis-model`, `surface-reactions` and `qrad`.
 - The interior faces of the viscous fluxes no longer take by default the mean of the two metrics, which divided the difference
   across a face by the mean of 1/h instead of the distance between the cell centres: it overstated the face-normal gradient, and
   with it the viscous, conductive and diffusive fluxes, by (1 + r)²/(4r) at a cell-size ratio r (4.2 % at r = 1.5, 8.9 % at

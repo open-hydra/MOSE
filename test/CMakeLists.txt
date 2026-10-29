@@ -275,7 +275,8 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # the run; an inlet on face 1 with g or un negative (404, 408, 420) or zero
 # (403, 404, 408, 420) stops the run; so does a 420 without p_sub, with its
 # thresholds out of order, with g above the choked mass flux or with T0 above
-# the tables of the gas).
+# the tables of the gas, and a record of type 409, 501 or 506, which MOSE does
+# not apply).
 # Rotating frame: stationary-face-1, -2, ... of [MOSE-Rotating-Frame] are read
 # and listed, and the run ends (the count stops at the first key missing); a
 # stationary face may be a wall in part and a block connection in part.
@@ -647,8 +648,9 @@ if(USE_MPI)
     # both ranks with exit code 1 with ini-error = stop.
     # A value of the initial condition that is not finite stops both ranks with exit
     # code 1, also when rank 1 alone holds it; so does an initial condition that
-    # rank 1 alone cannot read (two folders), and a file of faces 410 whose zones
-    # give the nodes of another block (a block on each rank).
+    # rank 1 alone cannot read (two folders), a file of faces 410 whose zones
+    # give the nodes of another block (a block on each rank), and a record of
+    # type 409, which MOSE does not apply, in the Sod tube.
     # A rank that stops every rank with MPI_ABORT writes out its output first: one
     # process without the launcher, its output on a file, keeps in its log the
     # message (a probe of an unknown variable), the set-up summary before it and a

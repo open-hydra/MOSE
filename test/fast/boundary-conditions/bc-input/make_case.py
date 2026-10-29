@@ -28,6 +28,14 @@ set-up. The case of p0.dat with its inlet (face 1, record 1) the nozzle of area 
 (G* = 2 g of that nozzle). Fed from the last row of the tables, T_TOP, the same nozzle has the same thresholds and its g
 times sqrt(T0/T_TOP), as G* of a calorically perfect gas.
 
+Types that MOSE does not apply. A record of type 409 (a forced outlet), 501 (a manifold) or 506 (surface reactions and
+pyrolysis) must stop the run at set-up, with the line of bc.txt, the record and its type: MOSE does not apply these types,
+and the face would get no flux. The case of p0.dat with its outlet (record 2, face 2, line 3 of bc.txt) of type 409 or 501,
+and the duct of the grain (srm, below) with its outlet of type 506: 409 without a property line, as the reader counts it
+(the boundary-condition builder of ATLAS does not write 409); 501 and 506 as that builder writes them, 501 with the source
+block and face as two integers, 506 with the pyrolysis and surface-reaction ids as integers, then q_rad, eps_wall and the
+mass fraction of the single species.
+
 Usage (from the test directory):
   python3 -B make_case.py case NAME      INPUT/ic.tec, INPUT/bc.txt naming the table NAME, and the table under that name
   python3 -B make_case.py same A B       exit status 0 when the fields A and B hold the same values (cell data, bit for bit)
@@ -37,6 +45,8 @@ Usage (from the test directory):
                                          NOZZLE[KIND] says
   python3 -B make_case.py srm [rest] [sst]   the duct with a viscous gas and nu~, its inlet an SRM grain boundary (502);
                                          rest: the gas at rest at T0 and PB; sst: k and omega instead of nu~
+  python3 -B make_case.py unapplied TYPE the case of p0.dat (TYPE 409 or 501) or the duct of the grain (506) with its outlet
+                                         (record 2) of TYPE
   python3 -B make_case.py srmcheck DIAG   exit status 0 when the change of rho nu~ over one step is that of the wall value
                                          nu~ = 0 in the cell next to the grain, and that of the distance to the grain in
                                          the other cells (below)
@@ -255,6 +265,34 @@ def write_srm(rest=False, sst=False):
         f.write("".join(bc))
 
 
+UNAPPLIED = ("409", "501", "506")                    # types that MOSE does not apply
+
+
+def write_unapplied(kind):
+    """The case of p0.dat (409, 501) or the duct of the grain (506, write_srm) with record 2, the outlet on face 2 at line
+    3 of INPUT/bc.txt, of type kind: 409 without a property line, as the reader counts it (the boundary-condition builder
+    of ATLAS does not write 409); 501 and 506 as that builder writes them: 501 with the source block and face, 1 and 1, as
+    two integers; 506 with the pyrolysis and surface-reaction ids as integers, then q_rad, eps_wall and the mass fraction of
+    the single species, each value followed by a comma."""
+    if kind not in UNAPPLIED:
+        sys.exit(f"unknown type {kind}")
+    if kind == "506":
+        write_srm()
+    else:
+        write_case("p0.dat")
+    with open("INPUT/bc.txt") as f:
+        lines = f.readlines()
+    lines[2] = f"       1     {N:3d}       1       1       2     {kind}\n"
+    if kind == "409":
+        del lines[3]
+    elif kind == "501":
+        lines[3] = "       1,       1,\n"
+    else:
+        lines[3] = f"       1,       1,{1.0e6:24.16E},{0.9:24.16E},{1.0:24.16E},\n"
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(lines))
+
+
 def read_zone(path):
     """Cell values of a one-zone MOSE ASCII file (BLOCK packing), by variable name."""
     with open(path) as f:
@@ -310,6 +348,8 @@ def main():
         write_nozzle(sys.argv[2])
     elif what == "srm":
         write_srm("rest" in sys.argv[2:], "sst" in sys.argv[2:])
+    elif what == "unapplied":
+        write_unapplied(sys.argv[2])
     elif what == "srmcheck":
         srm_check(sys.argv[2])
     elif what == "same":

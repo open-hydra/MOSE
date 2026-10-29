@@ -210,8 +210,9 @@ The two records of a connection face (`101`, `201`) must point at each other (ea
 | `410` | Assigned state (time-varying file) | `filename  [periodic]` |
 | `420` | Choked nozzle | `T0,  p0,  p_sub,  p_sup,  g,  rel_fac,  [massf],  [turb]` |
 
-Type `409` (a forced outlet named in the reader of the boundary file) is not implemented: a record of type `409`, or of any
-type not listed on this page, gets no flux, and MOSE does not stop on it. Type `410` reads its data on the finest
+MOSE does not apply type `409` (a forced outlet named in the reader of the boundary file): a record of type `409` stops the
+run at set-up, with the line of `bc.txt`, the record and its type. A record of a type not listed on this page gets no flux,
+and MOSE does not stop on it. Type `410` reads its data on the finest
 grid level only: do not use it with a sequence of grid levels. Its file is a Tecplot ASCII file, in the form that the
 boundary-condition builder of ATLAS writes, with one zone per block and time: a `VARIABLES` line with the coordinates
 `x`, `y`, `z` first, then `p`, `u`, `v`, `w` and at least one `rho(N)`; zone headers with `I=` and `J=` in upper case
@@ -370,8 +371,8 @@ absorbs, conducted and radiated, the other walls the heat they conduct into the 
 |:----:|------|-----------|
 | `501` | Manifold connection | `bs  fs` |
 
-Type `501` is not applied: MOSE computes the mean state of the connected face and does not use it, so the face
-gets no flux. Do not use it.
+MOSE does not apply type `501`: a record of type `501` stops the run at set-up, with the line of `bc.txt`, the record and
+its type.
 
 ### Gas–Surface Interaction
 
@@ -385,8 +386,8 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 | `505` | Surface reactions  | `reac_id, q_rad`                                                           |
 | `506` | Surface reactions and pyrolysis | `pyro_id, reac_id, q_rad, eps_wall, [massf_1 … massf_ns]`     |
 
-Type `506` is read and not applied: the face gets no flux. Do not use it; `504` and `505` are the pyrolysis and
-the surface reactions alone.
+MOSE does not apply type `506`: a record of type `506` stops the run at set-up, with the line of `bc.txt`, the record and
+its type; `504` and `505` are the pyrolysis and the surface reactions alone.
 
 
 | Field       | Description                                                                                       |
