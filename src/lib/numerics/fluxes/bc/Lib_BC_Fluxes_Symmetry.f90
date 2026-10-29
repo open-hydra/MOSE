@@ -86,9 +86,11 @@ contains
     Slope32 = ( Prim3 - Bound_Prim ) / Dist23
     Slope21 = ( Bound_Prim - Prim1 ) / Dist12
 
+    ! The bounds of the limited slope are those of a line of equal cells, 2 and 2: the ghost cell is the mirror image of the
+    ! boundary cell, so the face value stays between the cell and the ghost cell, with the limiter's own slope
     Slope = 0d0
     do s = 1, np
-      Slope(s) = rlimiter ( Slope32(s), Slope21(s) )
+      Slope(s) = rlimiter ( Slope32(s), Slope21(s), 2d0, 2d0 )
     end do
 
     ! extrapolation at the boundary face

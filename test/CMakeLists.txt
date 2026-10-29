@@ -538,6 +538,22 @@ add_fortran_executable(remote_blocks_check unit/remote_blocks_check.f90)
 add_test(NAME RemoteBlocks COMMAND remote_blocks_check)
 set_tests_properties(RemoteBlocks PROPERTIES LABELS "fast;implementation;unit" TIMEOUT 60)
 
+# Face values of the MUSCL reconstruction (MusclFaceBounds): a unit check of
+# Reconstruction with each limiter on lines of cells of any lengths. Every face
+# value lies between the values of the two cells of its face, within 8 ulp
+# (van Albada where the ratio of the slopes is positive); a cell of length 1
+# next to cells of length 0.01 stays non-negative after a forward Euler step at
+# Courant number 1/2; the bounds only reduce the slope, the two faces of a cell
+# take the same slope, and on lines of equal cells and for linear data the slope
+# is the limiter's own; the call with the bounds 2 and 2, which symmetry
+# planes, walls and the inlets 405 and 420 make, gives the formulas of the
+# limiters, asserted when the build keeps the order of evaluation of the source
+# (the three numbers of VolatileOrder; with -ffast-math the differences are
+# printed).
+add_fortran_executable(muscl_face_bounds_check unit/muscl_face_bounds_check.f90)
+add_test(NAME MusclFaceBounds COMMAND muscl_face_bounds_check 1 18014398509481984 3)
+set_tests_properties(MusclFaceBounds PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
+
 # ===========================================================================
 #  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
 #  Each test generates its own small multi-block case and launches the solver
