@@ -14,16 +14,17 @@ DT / DX, plus what the interior face takes away.
 
 The face of an inlet 403 or 404 carries the mass flux of its record, |g|; that of an inlet 408 carries rho3 |un|, with
 rho3 = p / (R T) at the pressure p of the cell and the T of the record (here the temperature of the cell); that of a nozzle
-420 whose cell pressure lies between p_sup and p_sub carries |g| too: within 1e-9 of rho a, the rounding of the step. The
-nozzle is fed from T0 = T and p0 = P0_420 = 2 p, and p_sub and p_sup are those of the nozzle that this reservoir chokes
-at g (nozzle_thresholds below), so that the cell pressure p lies between them.
+420 whose cell pressure lies between p_shock and p_sub carries |g| too: within 1e-9 of rho a, the rounding of the step.
+The nozzle is fed from T0 = T and p0 = P0_420 = 2 p, and p_sub and p_sup are those of the nozzle that this reservoir
+chokes at g (nozzle_thresholds below), so that the cell pressure p lies between them, and above p_shock, the pressure
+behind a normal shock at the exit of that nozzle (0.61 p).
 
 Cases (CASES below), g = 0.3 rho a and un = 0.1 a:
   imax403, imax404, imax408           the inlet on face 2 (i = NX), the value positive
   imaxneg403, imaxneg404, imaxneg408  the same with the value negative: the same field as the positive one, bit for bit
                                       (run.sh)
   imin403, imin404, imin408           the inlet on face 1 (i = 1), the value positive
-  imax420                             a nozzle 420 on face 2 with g positive, the cell in the band of g (p_sup <= p < p_sub)
+  imax420                             a nozzle 420 on face 2 with g positive, the cell in the band of g (p_shock <= p < p_sub)
 
 Usage (from the test directory):
   python3 -B inward_flux.py case NAME          INPUT/ic.tec and INPUT/bc.txt of case NAME

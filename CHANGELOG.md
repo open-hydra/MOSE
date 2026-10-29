@@ -107,6 +107,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   exit at the throat, refuses thresholds out of that order, and from `Ae_At` these states too. `p_sub` and `p_sup` are
   required: a record without them, which made the face an inlet at the total conditions `T0` and `p0` at every pressure of the
   cell below `p0`, stops the run at set-up; an inlet at total conditions is a `401`.
+- The face of a choked nozzle (`420`) takes the supersonic design exit state of its record below both `p_sub` and p_shock, the
+  pressure behind a normal shock standing at the exit of the design flow, which MOSE computes at set-up from `T0`, `p0`, `g`
+  and the gas, and no longer only below `p_sup`, which selects no branch: it is read and checked with `p_sub` and `p0` as
+  before. Between `p_sup` and p_shock, where the exit of a nozzle is over-expanded and keeps its design state, the face took
+  the state of mass flux `g` and total temperature `T0` that the invariant of the boundary cell reaches, which for a cell of
+  the gas of the record moving along the normal of the face, in a state of that mass flux and total temperature, is the
+  state of the cell, with less total pressure and thrust: in air at an exit Mach number of 2.94, 0.90 times the momentum
+  flux of the design state with the cell at 2 `p_sup` and 0.87 midway between the sonic pressure of that mass flux and
+  p_shock. From p_shock up to `p_sub` the face takes that state as before. `bc.txt` does not change.
 - The interior faces of the viscous fluxes no longer take by default the mean of the two metrics, which divided the difference
   across a face by the mean of 1/h instead of the distance between the cell centres: it overstated the face-normal gradient, and
   with it the viscous, conductive and diffusive fluxes, by (1 + r)²/(4r) at a cell-size ratio r (4.2 % at r = 1.5, 8.9 % at
