@@ -17,6 +17,12 @@ Usage (from test/fast/input-checks/exit-codes):
       carbon dioxide by mass, at rest, at 1e5 Pa and 1500 K in the left half and 1e4 Pa and 1200 K in the right
       half. It is far from chemical equilibrium (the equilibrium burns the hydrogen), so chemistry = equilibrium
       changes it.
+  python3 -B make_case.py fer14 SOD_INPUT_DIR PHASE
+      the same, the tube holding instead the gas of the phase file PHASE (the nine H-O-Ar species of
+      test/1D/Fer14): the unburnt mixture of the reactive shock tube of test/1D/Fer14/input.ini (mass fractions
+      0.0127 of hydrogen, 0.1013 of oxygen and 0.8861 of argon, divided by their sum), at rest, with the pressure
+      and temperature of the two states of test/1D/Fer14/input.ini: 7173 Pa and 378.656 K in the left half, 35594
+      Pa and 748.472 K in the right half (that tube moves; this one is at rest).
   python3 -B make_case.py mixture SOD_IC OUT
       writes OUT: the 100-cell Sod tube of SOD_IC (one species, rho1) as a
       mixture of the four species of test/1D/diff1 (order of its
@@ -74,6 +80,8 @@ INF_NODE = (20, 1, 1)                                          # (i, j, k) from 
 RU = 8314.46261815324                                          # J/(kmol K), universal gas constant of FLINT
 STEAM = {"H2O": 0.98, "H2": 0.002, "O2": 0.016, "CO2": 0.002}   # mass fractions
 LEFT, RIGHT = (1e5, 1500.0), (1e4, 1200.0)                     # (p [Pa], T [K]) of the two halves
+FER14 = {"H2": 0.0127, "O2": 0.1013, "AR": 0.8861}             # mass fractions of test/1D/Fer14/input.ini, divided by their sum below
+FER14_LEFT, FER14_RIGHT = (7173.0, 378.656), (35594.0, 748.472)  # (p [Pa], T [K]) of its two states
 
 
 def read_tube(src):
@@ -122,14 +130,15 @@ def inf(sod_dir):
             f.write(' %s\n' % v)
 
 
-def steam(sod_dir, phase):
+def two_states(sod_dir, phase, mass, left, right):
     """INPUT/ic.tec: the mesh of the Sod tube (its nodal coordinates, as written), the partial densities of the
-    species of PHASE, the velocity (zero) and the pressure of the steam."""
+    species of PHASE with the mass fractions MASS (0 for a species it leaves out), the velocity (zero) and the
+    pressure of the state LEFT in the left half and RIGHT in the right half, each (p [Pa], T [K])."""
     sod(sod_dir)
     rows = [line.split() for line in open(phase).read().splitlines()[1:] if line.strip()]
     species = [row[0] for row in rows]
     weight = {row[0]: float(row[1]) for row in rows}
-    unknown = sorted(set(STEAM) - set(species))
+    unknown = sorted(set(mass) - set(species))
     if unknown:
         sys.exit("make_case.py: species not in %s: %s" % (phase, " ".join(unknown)))
     head, zone, body = open(os.path.join(sod_dir, "ic_x1.tec")).read().split("\n", 2)
@@ -137,8 +146,8 @@ def steam(sod_dir, phase):
     nodes = ni * nj * nk
     cells = (ni - 1) * max(nj - 1, 1) * max(nk - 1, 1)
     coords = body.split()[:3 * nodes]
-    rgas = RU * sum(y / weight[s] for s, y in STEAM.items())
-    state = [LEFT if c < cells // 2 else RIGHT for c in range(cells)]
+    rgas = RU * sum(y / weight[s] for s, y in mass.items())
+    state = [left if c < cells // 2 else right for c in range(cells)]
     rho = [p / (rgas * t) for p, t in state]
     nvar = 3 + len(species) + 4
     names = " ".join('"rho%d"' % (s + 1) for s in range(len(species)))
@@ -148,10 +157,22 @@ def steam(sod_dir, phase):
         out.write(zone + "\n")
         out.write("\n".join(" " + v for v in coords) + "\n")
         for s in species:
-            out.write("".join(" %.15E\n" % (STEAM.get(s, 0.0) * r) for r in rho))
+            out.write("".join(" %.15E\n" % (mass.get(s, 0.0) * r) for r in rho))
         for _ in range(3):
             out.write("".join(" %.15E\n" % 0.0 for _ in range(cells)))
         out.write("".join(" %.15E\n" % p for p, _ in state))
+
+
+def steam(sod_dir, phase):
+    """The tube of two_states holding the steam (STEAM, LEFT, RIGHT)."""
+    two_states(sod_dir, phase, STEAM, LEFT, RIGHT)
+
+
+def fer14(sod_dir, phase):
+    """The tube of two_states holding the unburnt mixture of test/1D/Fer14 (FER14 divided by its sum), at rest, with the
+    pressure and temperature of its two states (FER14_LEFT, FER14_RIGHT)."""
+    total = sum(FER14.values())
+    two_states(sod_dir, phase, {s: y / total for s, y in FER14.items()}, FER14_LEFT, FER14_RIGHT)
 
 
 def mixture(src, out):
@@ -371,6 +392,8 @@ if __name__ == '__main__':
         inf(sys.argv[2])
     elif len(sys.argv) == 4 and sys.argv[1] == 'steam':
         steam(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) == 4 and sys.argv[1] == 'fer14':
+        fer14(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 4 and sys.argv[1] == 'mixture':
         mixture(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 6 and sys.argv[1] == 'soot':

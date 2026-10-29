@@ -61,11 +61,25 @@
 #  ranks decide together on the error of the read. The processes left
 #  behind are handled as above.
 #
+#  A failed integration of the finite-rate chemistry on one rank must stop
+#  every rank: the Sod tube holding the gas of test/1D/Fer14 with its
+#  reaction mechanism (../../fast/input-checks/exit-codes/make_case.py fer14)
+#  and a relative tolerance of the species of 1e-30, which the default
+#  integrator, H-radau5, refuses at every call, its one block on rank 1 (a
+#  decomposition map: rank 0 holds no block and idles), on 2 ranks with 2
+#  threads each, must end within 60 s with exit code 1, the line of the
+#  failure written once, by rank 1, and the STOP line of both ranks: the
+#  ranks decide together at the end of the chemistry step, the reduction made
+#  by the primary thread of each rank inside the parallel region, and stop
+#  together after it. A rank that stopped alone would leave the other waiting
+#  in its next exchange, and the run would hang until the time limit.
+#
 #  A rank that stops every rank with MPI_ABORT (an error that it finds
 #  alone, here a probe of an unknown variable) writes out what it holds for
-#  its output and its error output first: the Sod tube in air with
-#  chemistry = finite-rate, whose set-up writes a warning of FLINT on the
-#  error output, and a probe with the variables "p foo", run as one process
+#  its output and its error output first: the Sod tube holding the gas of
+#  test/1D/Fer14 with chemistry = finite-rate and its mechanism, whose name,
+#  gas, FLINT does not know, so that its set-up writes a warning of FLINT on
+#  the error output, and a probe with the variables "p foo", run as one process
 #  without the launcher with its output on a file (as CTest runs the fast
 #  tests in an MPI build), must end within 60 s with exit code 1 to 128 and
 #  keep in its log the message, the line "Boundary conditions OK" of the
@@ -83,6 +97,7 @@ MASTER=../../../bin/MOSE
 LOCAL=./bin/MOSE
 SOD=../../1D/Sod79/INPUT
 COMMON=../../common/Air
+FER=../../1D/Fer14/INPUT
 MPIEXEC=${MOSE_MPIEXEC:-mpiexec}
 NPFLAG=${MOSE_MPIEXEC_NUMPROC_FLAG:--n}
 
@@ -370,8 +385,64 @@ if [[ -n $left ]]; then
   fail=1
 fi
 
+echo "-- a failed integration of the finite-rate chemistry in the block of rank 1 stops every rank (2 ranks, 2 threads each) --"
+rm -f INPUT/phase.txt INPUT/thermo.dat
+ln -sf "../$FER/phase.txt" INPUT/phase.txt; ln -sf "../$FER/thermo.dat" INPUT/thermo.dat
+ln -sf "../$FER/chemistry-info.txt" INPUT/chemistry-info.txt
+ln -sf "../$FER/chemistry-Arrhenius.dat" INPUT/chemistry-Arrhenius.dat
+python3 -B ../../fast/input-checks/exit-codes/make_case.py fer14 "$SOD" INPUT/phase.txt || exit 1
+cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 3
+newrun = true
+
+[MOSE-Physics]
+equations = euler
+chemistry = finite-rate
+
+[MOSE-Numerics]
+cfl = 0.9
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+
+[MOSE-Chemistry]
+ode-relative-tol-species = 1e-30
+
+[MOSE-IO]
+decomposition-map = decomposition.map
+EOI
+python3 -B ../write_map.py --layout 1x1 --cells 100 1 --owners list:1 > /dev/null || exit 1
+prefix="[ERROR] Chemistry: the integrator H-radau5 failed (return code -1: input is not consistent) in block 1, cell i, j, k = 1, 1, 1,"
+threads_before=$OMP_NUM_THREADS
+export OMP_NUM_THREADS=2
+# run2 reads its message as a regular expression: the line without its "[ERROR]", which would be a bracket expression
+run2 mpi-chem-integrator "${prefix#\[ERROR\] }" "chemistry integration error (see above)"
+export OMP_NUM_THREADS=$threads_before
+n=$(grep -a -c -F -- "$prefix" OUTPUT/mpi-chem-integrator.log)
+rank=missing
+grep -a -F -- "$prefix" OUTPUT/mpi-chem-integrator.log | grep -a -q -F -- "(rank 1)" && rank=found
+# a MOSE built without OpenMP writes "Serial execution" in place of the number of threads: each rank has one thread only
+threads=missing
+if grep -a -q "Number of threads --> *2\$" OUTPUT/mpi-chem-integrator.log; then
+  threads="2 threads per rank"
+elif grep -a -q "^ Serial execution\$" OUTPUT/mpi-chem-integrator.log; then
+  threads="one thread per rank (MOSE built without OpenMP)"
+fi
+if [[ $n -eq 1 && $rank == found && $threads != missing ]]; then
+  echo "  [ok  ] mpi-chem-integrator, $threads: the line of the failure written once, by rank 1"
+else
+  echo "  [FAIL] mpi-chem-integrator: the line of the failure written $n times (required once), by rank 1 $rank, threads $threads" \
+       "(see OUTPUT/mpi-chem-integrator.log)"
+  fail=1
+fi
+rm -f INPUT/decomposition.map
+
 echo "-- a rank that stops every rank with MPI_ABORT writes out its output first (one process without the launcher) --"
-python3 -B ../../fast/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
+python3 -B ../../fast/input-checks/exit-codes/make_case.py fer14 "$SOD" INPUT/phase.txt || exit 1
 cat > input.ini <<EOI
 [MOSE-Parameters]
 iter-threshold = 2
