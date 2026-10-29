@@ -17,14 +17,16 @@ All eddy-viscosity models assume that the Reynolds stress tensor is
 proportional to the mean strain rate:
 
 $$
-\tau_{ij}^R = 2\,\mu_t\,S_{ij} - \tfrac{2}{3}\,\rho\,k\,\delta_{ij}
+\tau_{ij}^R = 2\,\mu_t\bigl(S_{ij} - \tfrac{1}{3}\,\nabla\!\cdot\!\mathbf{v}\,\delta_{ij}\bigr) - \tfrac{2}{3}\,\rho\,k\,\delta_{ij}
 $$
 
 where $S_{ij} = \tfrac{1}{2}(\partial v_i / \partial x_j + \partial v_j / \partial x_i)$
 is the mean strain-rate tensor, $\mu_t$ is the eddy (turbulent) viscosity,
 and $k$ is the turbulence kinetic energy.  The isotropic term
-$-\tfrac{2}{3}\rho k\,\delta_{ij}$ is included for two-equation models
-and omitted for SA.
+$-\tfrac{2}{3}\rho k\,\delta_{ij}$ is left out of the stress of the momentum
+and energy equations unless `k-energy-coupling = true`, with which the
+two-equation models (SST, Wilcox 2006) include it (see
+[Energy coupling](#energy-coupling-k-energy-coupling)); SA has no $k$.
 
 ---
 
@@ -33,7 +35,11 @@ and omitted for SA.
 ### Transport equation
 
 The SA model solves a single transport equation for the modified
-turbulent viscosity $\tilde\nu$:
+turbulent viscosity $\tilde\nu$. MOSE takes the model without the $f_{t2}$
+term, SA-noft2 in the naming of the NASA Turbulence Modeling Resource, whose
+standard SA has it, with $c_{t3} = 1.2$; `SA-R` and `SA-RC` apply their
+corrections to this model (SA-noft2-R and SA-noft2-RC in that naming). The
+equation is
 
 $$
 \frac{\partial(\rho\tilde\nu)}{\partial t}
@@ -82,17 +88,25 @@ $$
 Modified vorticity:
 
 $$
-\tilde{S} = \Omega + \frac{\tilde\nu}{\kappa^2 y^2}\,f_{v2}(\chi)
+\tilde{S} =
+\begin{cases}
+\Omega + \bar S, & \bar S \ge -c_2\,\Omega,\\[1ex]
+\Omega + \dfrac{\Omega\,(c_2^2\,\Omega + c_3\,\bar S)}{(c_3 - 2c_2)\,\Omega - \bar S}, & \bar S < -c_2\,\Omega,
+\end{cases}
+\qquad
+\bar S = \frac{\tilde\nu}{\kappa^2 y^2}\,f_{v2}(\chi), \quad c_2 = 0.7, \quad c_3 = 0.9,
 $$
 
 where $\Omega = \sqrt{2\,W_{ij}\,W_{ij}}$ is the vorticity magnitude, with the rotation tensor
 $W_{ij} = \tfrac{1}{2}\left(\partial u_i/\partial x_j - \partial u_j/\partial x_i\right)$ (NASA Turbulence
-Modeling Resource, Spalart–Allmaras page), and $y$ is the distance to the nearest wall.
+Modeling Resource, Spalart–Allmaras page), and $y$ is the distance to the nearest wall.  This is
+Note 1(c) of that page (from ICCFD7-1902), which replaces $\Omega + \bar S$ where $\bar S < -c_2\,\Omega$:
+with it $\tilde S > 0.1\,\Omega$ wherever $\Omega > 0$, without clipping $\tilde S$.
 
 Destruction function:
 
 $$
-r = \frac{\tilde\nu}{\kappa^2 y^2 \tilde{S}}, \qquad
+r = \min\!\left(\frac{\tilde\nu}{\kappa^2 y^2 \tilde{S}},\ 10\right), \qquad
 g = r + c_{w2}(r^6 - r), \qquad
 f_w = g\!\left(\frac{1 + c_{w3}^6}{g^6 + c_{w3}^6}\right)^{\!1/6}
 $$
@@ -284,12 +298,12 @@ Langtry [3]; the original model is Menter 1994 [2]) as specified by the NASA
 Turbulence Modeling Resource [8]: eddy viscosity built from the strain
 invariant $S$, production limiter $10\,\beta^\ast\rho\,\omega k$ in both
 equations, and the 2003 constants.  Two options select the remaining
-details, and together they span TMR's naming of the variants:
+details; the last two columns give the TMR name of each variant:
 
 | `sst-production` | Production $P$ | `k-energy-coupling = false` (default) | `k-energy-coupling = true` |
 |---|---|---|---|
 | `incompressible` (default) | $\mu_t S^2$ | SST-2003m | SST-2003s |
-| `compressible` | $\tau_{ij}\,\partial u_i/\partial x_j$ (exact) | SST-2003e | SST-2003 |
+| `compressible` | $\tau_{ij}\,\partial u_i/\partial x_j$ (exact), arranged as in OpenFOAM's `kOmegaSST` | none | none |
 
 The suffix records the approximations [8]: without the
 [energy coupling](#energy-coupling-k-energy-coupling) the
@@ -297,10 +311,13 @@ $-\tfrac23\rho k\,\delta_{ij}$ part of $\tau_{ij}$ is left out of the
 momentum and energy equations ("m", "e"); "m" and "s" approximate the production
 by $\mu_t S^2$, which TMR describes as exact for incompressible flow and
 "typically considered a very good approximation, except perhaps for very high
-Mach number flows".  (With `compressible`, the limiter acts on the deviatoric
-part of $P$ only, as in OpenFOAM, where TMR's SST-2003 limits all of it; see
-[below](#compressible-production-sst-production).)  `turbulence = SST-RC` adds
-the [rotation/curvature correction](#rotationcurvature-correction-sst-rc).
+Mach number flows"; SST-2003e and SST-2003 take the exact production and limit
+all of it.  With `compressible` the limiter acts on the deviatoric part of $P$
+only, and the $\omega$ equation takes the dilatation term
+$-\tfrac23\gamma\rho\omega\,\nabla\!\cdot\!\mathbf{v}$, as in OpenFOAM: these two
+variants have no TMR name (see [below](#compressible-production-sst-production)).
+`turbulence = SST-RC` adds the
+[rotation/curvature correction](#rotationcurvature-correction-sst-rc).
 
 ### Transport equations
 
@@ -364,13 +381,21 @@ P_\omega = \frac{\gamma\,\rho}{\mu_t}\,\min\!\Bigl(\mu_t\bigl[S^2 - \tfrac23(\na
       - \tfrac23\,\gamma\,\rho\,\omega\,\nabla\!\cdot\!\mathbf{v}.
 $$
 
-This is the exact SST-2003 production (TMR's SST-2003e, since the
-$-\tfrac23\rho k$ term still stays out of the momentum and energy equations), with
-the dilatation terms arranged as in OpenFOAM's `kOmegaSST` [9]: the deviatoric
+This is the exact production, with the dilatation terms arranged as in
+OpenFOAM's `kOmegaSST` [9]: the deviatoric
 part, $\mu_t[S^2 - \tfrac23(\nabla\!\cdot\!\mathbf{v})^2] = 2\mu_t S^{d}_{ij}S^{d}_{ij} \ge 0$,
-stays under the limiter, and the dilatation terms are added outside it (TMR's
-SST-2003 limits the whole of $P$).  In attached, nearly incompressible boundary
-layers the two forms coincide; through a compression ($\nabla\!\cdot\!\mathbf{v}<0$:
+stays under the limiter, and $-\tfrac23\rho k\,\nabla\!\cdot\!\mathbf{v}$ ($k$ equation) and
+$-\tfrac23\gamma\rho\omega\,\nabla\!\cdot\!\mathbf{v}$ ($\omega$ equation) are added outside it.  TMR's
+SST-2003e and SST-2003 limit the whole of $P$ and take $\gamma/\nu_t$ times the
+limited value as the production of $\omega$, whose term in $\rho k\,\nabla\!\cdot\!\mathbf{v}$, below the
+limiter, is $-\tfrac23\gamma\rho(k/\nu_t)\,\nabla\!\cdot\!\mathbf{v}$.  The two
+arrangements coincide where $\nabla\!\cdot\!\mathbf{v} = 0$, and elsewhere where the
+production of neither reaches the limiter and $a_1\omega \ge S F_2$, so that
+$k/\nu_t = \omega$.  With the default `k-energy-coupling = false` the
+$-\tfrac23\rho k\,\delta_{ij}$ part of $\tau_{ij}$ enters the production but not the
+momentum and energy equations, as in TMR's "e" variants.  In attached, nearly
+incompressible boundary layers the compressible and the incompressible productions
+coincide; through a compression ($\nabla\!\cdot\!\mathbf{v}<0$:
 shock feet, reattachment) the dilatation terms amplify $k$ more than $\omega$
 ($\gamma<1$), so $\mu_t$ grows.  In the Mach-5
 [shock/boundary-layer interaction](../vv/2D-swbli.md) the incompressible form gives
@@ -380,7 +405,7 @@ a separation bubble about 16% longer and a slower recovery of $C_f$.
 
 `turbulence = SST-RC` sensitizes the model to streamline curvature and system
 rotation with the Spalart–Shur correction as adapted to SST by Smirnov and
-Menter [10] (TMR SST-RC [8]; on SST-2003, SST-2003RC).  The production $P$ of
+Menter [10] (TMR SST-RC [8], here on the SST-2003 variants of the table above).  The production $P$ of
 both equations is multiplied by
 
 $$
@@ -398,7 +423,9 @@ $$
 with $c_{r1} = 1$, $c_{r2} = 2$, $c_{r3} = 1$, $S = \sqrt{2S_{ij}S_{ij}}$,
 $\Omega = \sqrt{2\Omega_{ij}\Omega_{ij}}$.  $f_{r1}$ multiplies $P$ before the
 production limiter, so it reaches the $\omega$ equation through the limited
-$P$.  In simple shear $r^\ast = 1$ and $\tilde r = 0$, so $f_{r1} = 1$ and the
+$P$; with `sst-production = compressible` it multiplies the deviatoric part of
+$P$, and the dilatation terms, added after the limiter, are not multiplied.  In
+simple shear $r^\ast = 1$ and $\tilde r = 0$, so $f_{r1} = 1$ and the
 model reduces to SST.
 
 Implementation notes: $r^\ast$ and the numerator of $\tilde r$ are shared with

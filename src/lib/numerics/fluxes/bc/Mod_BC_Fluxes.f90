@@ -213,7 +213,7 @@ contains
             case(420) ! choked nozzle
               call BC_Inflow_Nozzle( Im, Jm, Km, Fm, domain % blk(Bm), &
                                      domain % bc(i) % T0, domain % bc(i) % p0, domain % bc(i) % rel_fac, &
-                                     domain % bc(i) % psub, domain % bc(i) % psup, domain % bc(i) % mdot, &
+                                     domain % bc(i) % psub, domain % bc(i) % p_shock, domain % bc(i) % mdot, &
                                      domain % bc(i) % p_design, domain % bc(i) % rho_design, &
                                      domain % bc(i) % ci(nrans+1:nrans+nsc), domain % bc(i) % ci(1:nrans), error )
               if (error == 1) then

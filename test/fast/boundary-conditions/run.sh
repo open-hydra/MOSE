@@ -10,7 +10,8 @@
 #  the head of its run.sh; each part runs in its folder, as CTest runs a
 #  test:
 #    Inlets (inlets): inlet boundary conditions
-#    Nozzle (nozzle): the face of a choked nozzle (420) below p_sup
+#    Nozzle (nozzle): the face of a choked nozzle (420) below and above
+#      p_shock
 #    BCInput (bc-input): property lines of bc.txt
 #    RotatingFrame (rotating-frame): stationary walls of a rotating frame
 #    WallHeatSign (wall-heat-sign): sign of the wall heat flux and wall

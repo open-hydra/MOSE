@@ -88,6 +88,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The CI jobs that build and test MOSE run on Ubuntu 24.04 (`runs-on: ubuntu-24.04`) instead of `ubuntu-latest`, which
+  GitHub moves to Ubuntu 26.04, an image with other versions of gfortran and CMake: the Ubuntu release of these jobs
+  changes only with a change of `.github/workflows/ctest.yml`.
 - The mass flux `g` of the inlets `403`, `404` and `420` and the velocity `un` of the inlet `408` are positive into the domain
   on every face, the sign of the examples of ATLAS and the only one that ATLAS writes for `420`. They were the components along
   the face normal of the solver, toward growing index: on the faces 2, 4 and 6 a positive value made the gas leave through the
@@ -107,6 +110,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   exit at the throat, refuses thresholds out of that order, and from `Ae_At` these states too. `p_sub` and `p_sup` are
   required: a record without them, which made the face an inlet at the total conditions `T0` and `p0` at every pressure of the
   cell below `p0`, stops the run at set-up; an inlet at total conditions is a `401`.
+- The face of a choked nozzle (`420`) takes the supersonic design exit state of its record below both `p_sub` and p_shock, the
+  pressure behind a normal shock standing at the exit of the design flow, which MOSE computes at set-up from `T0`, `p0`, `g`
+  and the gas, and no longer only below `p_sup`, which selects no branch: it is read and checked with `p_sub` and `p0` as
+  before. Between `p_sup` and p_shock, where the exit of a nozzle is over-expanded and keeps its design state, the face took
+  the state of mass flux `g` and total temperature `T0` that the invariant of the boundary cell reaches, which for a cell of
+  the gas of the record moving along the normal of the face, in a state of that mass flux and total temperature, is the
+  state of the cell, with less total pressure and thrust: in air at an exit Mach number of 2.94, 0.90 times the momentum
+  flux of the design state with the cell at 2 `p_sup` and 0.87 midway between the sonic pressure of that mass flux and
+  p_shock. From p_shock up to `p_sub` the face takes that state as before. `bc.txt` does not change.
 - The interior faces of the viscous fluxes no longer take by default the mean of the two metrics, which divided the difference
   across a face by the mean of 1/h instead of the distance between the cell centres: it overstated the face-normal gradient, and
   with it the viscous, conductive and diffusive fluxes, by (1 + r)²/(4r) at a cell-size ratio r (4.2 % at r = 1.5, 8.9 % at
@@ -165,6 +177,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   during a steady run made the residual grow until the run stopped on a negative pressure nine iterations later). The keys that
   the file leaves out keep their values: the set-up no longer writes the names of its summary into the values of
   `integration-variables`, `riemann-solver` and `flux-limiter`, and the summary prints the same names as before.
+- A reading of `input.ini` during the run treats each key by its class, which a new column of the registry page, During the
+  run, gives: *taken* (such as `cfl`, `vnn`, the intervals of the outputs, `omega`), *fixed* for the run (the keys from which
+  the set-up makes a choice once: equations, models, schemes, integration variables, outputs, probes, the tolerances of the
+  chemistry), or *start only* (`newrun`, `ic-format`, `decomposition-map`). A value of a fixed key other than the one the start
+  read, a value of `levels` that is not an integer or is not the one the start read, or more probes than at the start, is an
+  error of the reading, as a change of the model of the rotating frame is: with `ini-error = warn` the reading is not taken,
+  with `stop` the run stops. Such values were taken in part, or not
+  at all, without a word, while the rest of the reading was taken: a new `turbulence`, `riemann-solver` or `time-scheme` left
+  the run as it was; `time-accurate` switched on in a steady run advanced the time from -1 s, and its solutions, at negative
+  times, read as steady ones at a restart; a new `k-energy-coupling` gave the turbulence sources of one variant with the
+  stress of the other; a new `sol-format` changed the format of the wall and diagnostic outputs and of the field outputs in
+  part (the vtk or Tecplot writer, not their ascii or binary form); a probe or a grid level added was not read. A reading
+  leaves the keys of the start only as they were: `newrun = false`, written during the run to prepare a restart, made the
+  first row of `OUTPUT/torque.dat` written after the reading go to the end of the file of an earlier run. The descriptions of
+  `iter-threshold`, `level<n>-iter` and `prolongated-diter` no longer say that they are read again: the column says it for
+  every key. A run whose `input.ini` does not change while it runs gives the same bits, but with `irs = false` and
+  `irs-beta > 0` in the file (below).
+- Implicit residual smoothing is on with `irs = true` or `irs-beta > 0` at every reading of `input.ini` during the run, as at
+  set-up: an `input.ini` with `irs = false` and `irs-beta > 0` switched IRS off at its first reading, also when it did not
+  change. `irs = false` no longer switches IRS off while `irs-beta > 0`, and `irs-beta = 0` switches it off unless
+  `irs = true` is in force; IRS on with `irs-beta = 0` smoothed nothing.
+- The checks of the set-up between keys that name a key a reading takes are made again at every reading of `input.ini` during
+  the run, on the values read, as errors of the reading: `riemann-options-Mco = 0` with a low-Mach Riemann solver (AUSM+M, the
+  HLLC+ of Chen, Low-Mach Roe), and `schmidt` = 0 with more than one species in a viscous run without `INPUT/diffusion.dat`.
+  A reading took them: the low-Mach cutoff of these solvers went away in silence, and with `schmidt = 0` the next step read
+  the table of the binary diffusion coefficients that is not there (a run of the four species of `test/1D/diff1` stopped on an
+  index out of bounds in a build with bounds checks).
 - A key of `input.ini` whose value does not read as the type of its parameter stops the run at set-up, with exit code 1 and a
   message that gives the file, the section, the key and the value as written, and read again during the run it is an error of
   the reading (see Added): a
@@ -259,6 +298,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   coordinates, and the values of such a zone went to the face without a word. The files that the boundary-condition builder
   of ATLAS writes give the nodes of the faces; a file written by hand must give them, with the digits that the tolerance
   needs.
+- The CI checks out the submodules of MOSE without recursion and, of the submodules of FLINT, only OSLO: these are the ones
+  its builds use (FLINT's own ORION is not built, as MOSE builds its ORION, and Cantera and SUNDIALS are built only with
+  `USE_CANTERA=ON` or `USE_SUNDIALS=ON`). The recursive checkout also cloned Eigen, a submodule of Cantera, from gitlab.com,
+  and every job stopped before the build when that server did not answer.
 
 ### Removed
 
@@ -314,8 +357,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `level<n>-iter`, and `iter-threshold` without multigrid, take effect when `input.ini` is read again during the run: the
   iterations of each level were copied once at set-up, so a changed value did nothing. Lowering one below the iterations
   already done ends that level at the iteration after that reading.
-- `irs = true`, or `irs-beta` above 0, added to `input.ini` during a run started without IRS is ignored with a warning: the
-  arrays of IRS exist only when it is on at set-up, and the run used them unallocated.
+- `irs = true`, or `irs-beta` above 0, added to `input.ini` during a run started without IRS is an error of the reading
+  (with `ini-error = warn` the reading is not taken, with `stop` the run stops): the arrays of IRS exist only when it is on at
+  set-up, and the run used them unallocated.
 - With MPI the tangential neighbours of the source cell of a block connection, which on the edge of a face can be ghost cells
   filled from another rank, are taken after the ghost exchange: they were one stage old, and MPI runs drifted from the serial run
   at block edges and junctions.
@@ -668,6 +712,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `506` was missing.
 - The guide names the boundary files of the multigrid levels as MOSE reads them, `bc.txt`, `bc2.txt`, `bc3.txt`, … (it said
   `bc_x1.txt`, `bc_x2.txt`, …).
+- The text of the key `sst-production`, the turbulence guide and the SWBLI page describe the `compressible` production as MOSE
+  computes it: the exact production with the dilatation terms arranged as in OpenFOAM's `kOmegaSST`, with the limiter on its
+  deviatoric part only and -2/3 gamma rho omega div(u) in the omega equation. They named it NASA TMR's SST-2003e (SST-2003 with
+  `k-energy-coupling`), which limits the whole production and takes gamma/nu_t times it in the omega equation. The guide also
+  writes the Boussinesq stress with its -1/3 div(u) delta_ij part, and says that its -2/3 rho k delta_ij term enters the momentum
+  and energy equations only with `k-energy-coupling = true` (it said that the two-equation models include it), that `SA` is the
+  model without the f_t2 term (SA-noft2 in TMR naming), with the limiter of S~ of Note 1(c) of the TMR page and the cap r <= 10
+  that the code applies (the guide gave neither), and that with `compressible` the rotation/curvature factor of SST-RC multiplies
+  only the deviatoric part of the production. The SWBLI page gives the whole variant of its two models, and the models of the
+  Wind-US and SU2 solutions as their sources give them: SPALART and SST, without variant, in the NPARC Alliance archive, and SA-neg
+  and SST-2003m in the SU2 validation study of the case. No run changes.
+- The comparison of the rocket nozzle with CEA (`test/2D/euler/rocket-nozzle/verify.py`, page `docs/vv/2D-nozzle.md`) reads the
+  solutions of the runs of the three configurations, `OUTPUT/field.tec`, and stops with a message, exit status 1, when one is
+  missing; it drew the stored solutions `reference/field.tec`. The mixture density is the sum of every species density: it summed
+  12 of the 13 species of the frozen and equilibrium configurations and 18 of the 19 of the finite-rate one, so that the Mach
+  number of the frozen run was 0.39 % low. The script prints the averages at the CEA stations and their differences from CEA; the
+  page calls the averages weighted by the mass flow (it called them area-weighted) and names the run of the Mach contours,
+  finite-rate, and the panels of the comparison.
+- The comparison of the rocket nozzle with CEA (`test/2D/euler/rocket-nozzle/verify.py`, page `docs/vv/2D-nozzle.md`) takes
+  the Mach number of the CEA equilibrium stations with the frozen speed of sound, as for the runs of MOSE and the CEA frozen
+  stations, and the averages of the runs at the area ratios of the stations, interpolated linearly in x between two columns of
+  cells, with the areas relative to the narrowest section of the grid. It divided the velocity of the equilibrium stations by
+  the equilibrium speed of sound of CEA, so that one state had Mach number 1 for CEA and 0.974 in the definition of the curves
+  of MOSE, and it took the column of cells nearest to each area ratio, relative to the middle of the narrowest column, 0.16 %
+  wider than the narrowest section: at the subsonic station the column had an area ratio of 1.883 instead of 2. With the runs
+  of the case, the Mach number of the equilibrium run at the subsonic station is 13.3 % above CEA instead of 16.7 %, and its
+  pressure in the diverging part 5.8 % to 11.9 % above CEA instead of 7.0 % to 16.4 %.
+- The comparison of the rocket nozzle with CEA (`test/2D/euler/rocket-nozzle/verify.py`) takes u, v, p, T, γ and R by their
+  names in the solution files, and stops with a message, exit status 1, when one is missing. It took them at fixed places after
+  the species densities, those of the files that the case writes: a file with the variables of another model between p and T
+  (soot, passive scalars, turbulence), or one written with `sol-variables = transport`, which writes `mil` and `kl` where
+  `thermo` writes `g` and `R`, gave it other quantities, with no message.
 - The figure of the grids of the 3-D manufactured-solution page (`docs/vv/images/mms3d-grids.svg`, drawn by `verify.py` of
   `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
   iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z

@@ -11,26 +11,27 @@ module MOSE_Lib_BC_Fluxes_Inflow_Nozzle
 
 contains
 
-  subroutine BC_Inflow_Nozzle ( Im, Jm, Km, Fm, Blk, BC_T0, BC_p0, BC_rel_fac, BC_sub, BC_sup, BC_g, &
+  subroutine BC_Inflow_Nozzle ( Im, Jm, Km, Fm, Blk, BC_T0, BC_p0, BC_rel_fac, BC_sub, BC_shock, BC_g, &
                                 BC_p_design, BC_rho_design, BC_ci, BC_RANS, error )
     use FLINT_Lib_Thermodynamic
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout) :: Blk
-    real(R8), intent(in) :: BC_T0, BC_p0, BC_rel_fac, BC_sub, BC_sup, BC_g, BC_ci(nsc), BC_RANS(1:)
+    real(R8), intent(in) :: BC_T0, BC_p0, BC_rel_fac, BC_sub, BC_g, BC_ci(nsc), BC_RANS(1:)
+    real(R8), intent(in) :: BC_shock                     ! p_shock of the record (Nozzle_Design_State)
     real(R8), intent(in) :: BC_p_design, BC_rho_design   ! supersonic design exit state of the record (Nozzle_Design_State)
     integer, intent(inout) :: error
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k, Dir, Face_i, Face_j, Face_k
     real(R8) :: Bound_Prim(nprim), Int_Prim(nprim), Normal(3), Area, t_Vec(3), t_Mod, BC_Sign, Un
     real(R8) :: Bound_rho, Bound_Rgas, Bound_Sound, Bound_Gamma, Riem, Inflow_Outflow, Flux(nprim)
-    real(R8) :: pSub, pSup, g, alpha_app, beta_app
+    real(R8) :: pSub, pShock, g, alpha_app, beta_app
 
     
     error = 0
 
     pSub = BC_sub
-    pSup = BC_sup
+    pShock = BC_shock
     alpha_app = 0.d0
     beta_app = 0.d0
 
@@ -85,6 +86,10 @@ contains
     ! check for inflow/outflow. Inflow_Outflow>=0: outflow. Inflow_Outflow<0: inflow
     Inflow_Outflow = BC_Sign * Un
 
+    ! The pressure p of the boundary cell selects the branch: p_sub <= p < p0 the inflow at T0 and p0;
+    ! p_shock <= p < p_sub the mass flux g with the total temperature T0 (a normal shock stands in the divergent
+    ! part, the exit is subsonic); p below both the supersonic design exit state, as at the exit of a nozzle whose
+    ! back pressure is below p_shock, the pressure behind a normal shock at its exit (Nozzle_Design_State)
     if ( Inflow_Outflow >= 0d0 .or. Bound_Prim(np) >= BC_P0) then
         ! Force inflow. When the flow is directed outwards, a symmetry BC is employe
         error = 1
@@ -92,10 +97,10 @@ contains
       elseif (( Bound_Prim(np) < BC_p0 ) .and. ( Bound_Prim(np) >= pSub )) then
         call BC_Nozzle_Subsonic ( Bound_Prim, Un, Bound_Sound, Bound_Gamma, Riem, alpha_app, beta_app, &
                                   0d0, BC_ci, BC_RANS, BC_T0, BC_p0, BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux )
-      elseif (( Bound_Prim(np) < pSub) .and. (Bound_Prim(np) >= pSup)) then
+      elseif (( Bound_Prim(np) < pSub) .and. (Bound_Prim(np) >= pShock)) then
         call BC_Nozzle_Subsonic ( Bound_Prim, Un, Bound_Sound, Bound_Gamma, Riem, alpha_app, beta_app, &
                                  -10.d0, BC_ci, BC_RANS, BC_T0, g, BC_rel_fac, BC_Sign, t_Vec, Normal, Area, Flux )
-      elseif ( Bound_Prim(np) < pSup ) then
+      elseif ( Bound_Prim(np) < pShock ) then
         call BC_Nozzle_Supersonic ( Bound_Prim, Int_Prim, modfm, modfm1, modfm2, g, BC_p_design, &
                                     BC_rho_design, BC_ci, BC_RANS, alpha_app, beta_app, Normal, Area, Flux )
     endif
@@ -493,11 +498,12 @@ contains
 
 
   !> The states of a choked-nozzle record (420) that depend on the record alone, computed once at set-up (IO_BC): the
-  !> choked mass flux Gstar of the reservoir (T0, p0, mass fractions BC_ci) at its critical temperature Tstar, and the
-  !> supersonic design exit state of the mass flux g > 0, pressure p_design and density rho_design, on the tables of
-  !> the gas with the arithmetic of the face (f_tabT; the isentrope p(T) = p0/exp(int_T^T0 cp/(R T') dT') by
-  !> Trapezoidal; rho = p/(R T)). Along the isentrope the mass flux G(T) = rho(T) sqrt(2 (h0 - h(T))) is zero at T0
-  !> and grows as T falls, up to its maximum at the sonic throat.
+  !> choked mass flux Gstar of the reservoir (T0, p0, mass fractions BC_ci) at its critical temperature Tstar, the
+  !> supersonic design exit state of the mass flux g > 0, pressure p_design and density rho_design, and the pressure
+  !> p_shock behind a normal shock standing at that exit, on the tables of the gas with the arithmetic of the face
+  !> (f_tabT; the isentrope p(T) = p0/exp(int_T^T0 cp/(R T') dT') by Trapezoidal; rho = p/(R T)). Along the isentrope
+  !> the mass flux G(T) = rho(T) sqrt(2 (h0 - h(T))) is zero at T0 and grows as T falls, up to its maximum at the
+  !> sonic throat.
   !>   Gstar: the maximum of G on [Tlo, T0], Tlo = max(Tmin, 1) the coldest state of the tables, by a scan of 65
   !>   points and a golden-section search down to 1e-10 T0 (at most 41 steps), the algorithm and the arithmetic with
   !>   which the boundary-condition builder of ATLAS computes the g it writes for an exit at the throat.
@@ -508,28 +514,42 @@ contains
   !>   place of T > 1 K it takes at most 66 halvings: 2178 steps at most. With g up to 1e-9 above Gstar the state is
   !>   the sonic one, at Tstar; with g at Gstar to the rounding it is Tstar, or the root that the stop test of the face
   !>   allows, within 1e-5 Tstar in air, when phi(Tstar) rounds below zero.
+  !>   p_shock: a normal shock keeps the mass flux g, the total enthalpy h0 and the impulse I = p + g u. The states of
+  !>   g and h0 lie on the line u(T) = sqrt(2 (h0 - h(T))), p(T) = g R T/u(T), whose impulse I(T) = p(T) + g u(T)
+  !>   falls with T on its supersonic side and grows on its subsonic side, from its minimum at the sonic state; the
+  !>   state behind the shock is the state of the subsonic side with the impulse I_e = p_design + g u_e of the design
+  !>   state (u_e = g/rho_design). Its T is the root on [Tstar, T0] of f(T) = g R T + g u(T)**2 - I_e u(T), that is
+  !>   u(T) (I(T) - I_e), which is g R T0 > 0 at T0 (u = 0) and below zero at Tstar for a supersonic design state,
+  !>   whose impulse is above the minimum: a bisection from there down to 4 units in the last place of T (at most 64
+  !>   halvings from T0 < 2**14 K, 69 from T0 < 2**19 K; bound 70), and p_shock = g R T/u(T) at the end of the
+  !>   bracket where f < 0, where u > 0. With f(Tstar) >= 0 no shock stands: p_shock = p_design. A design state at
+  !>   the sonic one (an exit at the throat) has u_e >= u(Tstar), the sonic speed, so that
+  !>   f(Tstar) = rho_design (u_e - u(Tstar)) (R Tstar - u_e u(Tstar)) <= 0 up to the rounding: the bisection ends
+  !>   next to Tstar, with p_shock >= p_design, since p(T) grows with T and p(Tstar) = g R Tstar/u(Tstar) >= p_design.
   !> status: 0 the design state; 1 the sonic state; 2 T0 not above Tlo, or the maximum of G at an end of [Tlo, T0] (the
   !> tables do not hold the sonic state); 3 g above (1 + 1e-9) Gstar; 4 phi(Tlo) <= 0 (the design state lies below the
   !> tables); 5 a loop did not end within its bound (not reached with a valid bracket); 6 T0 above Tmax - 1, where the
   !> interpolation of the tables ends (f_tabT holds their values above it).
-  subroutine Nozzle_Design_State ( BC_T0, BC_p0, g, BC_ci, Gstar, p_design, rho_design, status )
+  subroutine Nozzle_Design_State ( BC_T0, BC_p0, g, BC_ci, Gstar, p_design, rho_design, p_shock, status )
     use FLINT_Lib_Thermodynamic
     implicit none
     real(R8), intent(in)  :: BC_T0, BC_p0, g, BC_ci(nsc)
-    real(R8), intent(out) :: Gstar, p_design, rho_design
+    real(R8), intent(out) :: Gstar, p_design, rho_design, p_shock
     integer, intent(out)  :: status
     ! Local
-    integer,  parameter :: nscan = 64, max_golden = 60, max_newton = 32, max_steps = 2300
+    integer,  parameter :: nscan = 64, max_golden = 60, max_newton = 32, max_steps = 2300, max_shock = 70
     real(R8), parameter :: gr = 0.6180339887498949_R8           ! golden ratio conjugate
     real(R8), parameter :: band = 1.0e-9_R8                     ! g accepted up to (1 + band) Gstar
     integer  :: s, k, kmax, it, run
     real(R8) :: h0_, Rgas, Tlo, Ta, Tb, Tc, Td, Gc, Gd, Gmax, Tstar, fun_T
     real(R8) :: a, b, x, c, phi, dphi, diff, T_e
+    real(R8) :: I_e, f_s, u_s, T_s
 
     status = 5
     Gstar = 0d0
     p_design = 0d0
     rho_design = 0d0
+    p_shock = 0d0
     h0_ = 0d0
     Rgas = 0d0
     do s = 1, nsc
@@ -646,6 +666,40 @@ contains
     p_design = BC_P0 / exp (fun_T)
     rho_design = p_design / ( Rgas * T_e )
 
+    ! The pressure behind a normal shock standing at the design exit: the state of mass flux g, total enthalpy h0 and
+    ! impulse I_e on the subsonic side of their line, by bisection of f on [Tstar, T0]
+    I_e = p_design + g * ( g / rho_design )
+    call Shock_Residual ( Tstar, f_s, u_s )
+    if (f_s >= 0d0) then
+      p_shock = p_design
+    else
+      a = Tstar
+      b = BC_T0
+      T_s = 0d0
+      do it = 1, max_shock
+        if (b - a <= 4d0 * spacing(b)) then
+          T_s = a
+          exit
+        endif
+        x = 0.5d0 * (a + b)
+        call Shock_Residual ( x, f_s, u_s )
+        if (f_s < 0d0) then
+          a = x
+        else if (f_s > 0d0) then
+          b = x
+        else
+          T_s = x
+          exit
+        endif
+      enddo
+      if (.not. (T_s > 0d0)) then
+        status = 5
+        return
+      endif
+      call Shock_Residual ( T_s, f_s, u_s )
+      p_shock = g * Rgas * T_s / u_s
+    endif
+
   contains
 
     !> The mass flux G(T) of the isentropic expansion from (T0, p0)
@@ -691,6 +745,23 @@ contains
       phi = Sup_h0_ - h0_
 
     end subroutine Design_Residual
+
+    !> f(T) = g R T + g u(T)**2 - I_e u(T) = u(T) (I(T) - I_e) and u(T) = sqrt(2 (h0 - h(T))) on the line of the
+    !> mass flux g and the total enthalpy h0, whose state at T has the impulse I(T) = g R T/u(T) + g u(T)
+    subroutine Shock_Residual ( T, f, u )
+      real(R8), intent(in)  :: T
+      real(R8), intent(out) :: f, u
+      integer  :: s
+      real(R8) :: h
+
+      h = 0d0
+      do s = 1, nsc
+        h = h + BC_ci(s) * f_tabT( T,s,h_tab )
+      enddo
+      u = sqrt ( max ( 2d0 * (h0_ - h), 0d0 ) )
+      f = g * Rgas * T + g * u**2 - I_e * u
+
+    end subroutine Shock_Residual
 
   end subroutine Nozzle_Design_State
 

@@ -38,7 +38,7 @@ where $\tau_w$ is the streamwise wall shear stress, and $\rho_\infty$, $U_\infty
 | Prandtl numbers | $Pr = 0.69$, $Pr_t = 0.85$ |
 | Wall | Isothermal, 300 K |
 | Wall resolution | $y^+ \approx 0.3$ (wall-resolved, no wall functions) |
-| Turbulence model | Spalart-Allmaras (SA); Shear Stress Transport (SST) with `sst-production = compressible` |
+| Turbulence model | Spalart-Allmaras without the $f_{t2}$ term (SA-noft2 in NASA TMR naming); Shear Stress Transport in its 2003 version (Menter, Kuntz and Langtry) with `sst-production = compressible` (the exact production, with the dilatation terms arranged as in OpenFOAM's `kOmegaSST`), `omega-wall-bc = asymptotic` and `k-energy-coupling = false` ($k$ out of the total energy, and $-\tfrac23\rho k\,\delta_{ij}$ out of the stress of the momentum and energy equations); no compressibility correction |
 | Turbulence freestream | SA: $\tilde\nu_\infty = 4.90\times10^{-6}$ m²/s; SST: NASA TMR, $k_\infty = 9\times10^{-9}a_\infty^2$, $\omega_\infty = 10^{-6}a_\infty^2/\nu_\infty$ |
 
 The viscosity follows Sutherland's law, so that the unit Reynolds number is $36.7\times10^6$ /m - the value of the NASA NPARC/Wind-US reference case (total conditions $p_0 = 307.48$ psia, $T_0 = 738\,^\circ$R). Across the interaction the temperature ranges from 68 K at the boundary-layer edge to 300 K at the wall, over which $\mu$ varies by a factor of four; a constant viscosity would run the case at 39% of the reference Reynolds number and is not used.
@@ -192,7 +192,7 @@ For SA the four codes agree within 5.3-7.4 mm. For SST, MOSE and OpenFOAM solvin
 
 ## Validation: against experiment, Wind-US and SU2
 
-With the numerics verified, the solution is compared with the reference data. MOSE and OpenFOAM are shown in the verification configuration (SST: compressible production, asymptotic $\omega$ wall condition on the wall face).
+With the numerics verified, the solution is compared with the reference data. MOSE and OpenFOAM are shown in the verification configuration (SST: compressible production, asymptotic $\omega$ wall condition on the wall face). The [NPARC Alliance archive](https://www.grc.nasa.gov/www/wind/valid/m5swbli/m5swbli.html) of this case gives the Wind-US models as SPALART and SST, without their variants. The SU2 curves are the SA-neg and SST-2003m solutions of the [SU2 validation study](https://su2code.github.io/vandv/swbli/) of this case, whose mesh script is `test/2D/viscous/swbli/SST/reference/su2mesh.geo`; the SU2 files hold only $x$ and $C_f$.
 
 <figure>
   {% include "vv/images/SWBLI-cf-sst-validation.svg" %}
@@ -231,7 +231,7 @@ On this resolved mesh the asymptotic form is the theoretically correct condition
 MOSE carries two forms of the SST production term through the `sst-production` input option ([Compressible production](../theory/turbulence.md#compressible-production-sst-production)):
 
 - **Incompressible** (default), $P_k = \mu_t S^2$ - NASA TMR's SST-2003m, which drops the dilatation terms.
-- **Compressible**, $P_k = \tau_{ij}\,\partial u_i/\partial x_j$ - NASA TMR's SST-2003e: keeps $-\tfrac23\mu_t(\nabla\!\cdot\!\mathbf{v})^2$ and $-\tfrac23\rho k\,\nabla\!\cdot\!\mathbf{v}$, and $-\tfrac23\gamma\rho\omega\,\nabla\!\cdot\!\mathbf{v}$ in the $\omega$ equation, as OpenFOAM's `kOmegaSST` does.
+- **Compressible**, $P_k = \tau_{ij}\,\partial u_i/\partial x_j$ - the exact production, which keeps $-\tfrac23\mu_t(\nabla\!\cdot\!\mathbf{v})^2$ and $-\tfrac23\rho k\,\nabla\!\cdot\!\mathbf{v}$, with the dilatation terms arranged as in OpenFOAM's `kOmegaSST`: the limiter $10\,\beta^\ast\rho\,\omega k$ acts on the deviatoric part $\mu_t[S^2 - \tfrac23(\nabla\!\cdot\!\mathbf{v})^2]$ only, and $-\tfrac23\rho k\,\nabla\!\cdot\!\mathbf{v}$ ($k$ equation) and $-\tfrac23\gamma\rho\omega\,\nabla\!\cdot\!\mathbf{v}$ ($\omega$ equation) are added outside it. NASA TMR's SST-2003e limits the whole production and takes $\gamma/\nu_t$ times the limited value as the production of $\omega$, whose term in $\rho k\,\nabla\!\cdot\!\mathbf{v}$, below the limiter, is $-\tfrac23\gamma\rho(k/\nu_t)\,\nabla\!\cdot\!\mathbf{v}$. MOSE's compressible form and TMR's SST-2003e coincide where $\nabla\!\cdot\!\mathbf{v} = 0$, and elsewhere where the production of neither reaches the limiter and $\mu_t = \rho k/\omega$ ($a_1\omega \ge S F_2$).
 
 <figure>
   {% include "vv/images/SWBLI-cf-sst-production-mose.svg" %}
