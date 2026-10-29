@@ -576,10 +576,14 @@ and Wilcox 2006 flat plates of the tests at IRS 0.5).
 Smoothing changes the path to the steady state, not the steady state
 itself (a zero residual stays zero).
 
-IRS is switched on only at setup (`irs = true` or `irs-beta > 0`), where its
-arrays are allocated; on a run started with IRS `irs-beta` and `irs-variables`
-can change at runtime and `irs = false` switches it off; `irs = true`, or
-`irs-beta` above 0, added to a run started without IRS is ignored with a warning.
+IRS is on with `irs = true` or `irs-beta > 0`, at the start and at every
+reading of `input.ini` during the run. Its arrays are allocated at the start
+only: a reading that switches it on in a run started without it is an error of
+the reading, which `ini-error` decides ([Input](../user/input.md)). On a run
+started with IRS, `irs-beta` and `irs-variables` can change during the run, and
+IRS goes off when the values in force give neither `irs = true` nor
+`irs-beta > 0`: `irs-beta = 0` switches it off unless `irs = true` is in force,
+and `irs = false` leaves it on while `irs-beta > 0`.
 
 ---
 
@@ -635,8 +639,9 @@ the current level at the iteration after that re-read.
 Every field write of a coarse level also prolongates its solution to the
 finest level and writes it (`field-prolongated`, `wall-prolongated`). On a
 large mesh that write costs more than the coarse iterations between two
-writes; `prolongated-diter` (re-read at runtime) spaces it to at least that
-many iterations of the level. The end of a level always writes it, so the one
+writes; `prolongated-diter`, a key taken at every reading of `input.ini` (column
+During the run of the [Parameter Registry](../user/registry.md)), spaces it to at
+least that many iterations of the level. The end of a level always writes it, so the one
 written at the end of level 2 is the exact start of level 1.
 
 ### Restriction (fine → coarse)
