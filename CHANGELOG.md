@@ -738,6 +738,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   1e-8, so that any value of them up to it passed; its figures read the stored solution `reference/field.tec` instead of the run,
   at wrong positions too. The case passes the check: at the throat p, ρ, u, v and γ of the run are within a relative 1e-3 of
   `reference/field.tec`.
+- The Grid-Convergence Index of the Shu–Osher study (`test/1D/Shu-Osher/convergence.py`) is that of Roache: the safety factor
+  1.25 times the Richardson estimate of the error of the finest grid, which is the normalised L1 error of that grid against the
+  extrapolant. The script divided that estimate by r^p − 1 once more (1.02 for the grids of the case). The Shu–Osher page gives
+  0.90 % (it gave 0.88 %). The criteria of the test, the observed order and the decrease of the errors, do not change.
 - The tests that check the number of OpenMP threads of their runs pass in a MOSE built without OpenMP (`USE_OPENMP=OFF`, the
   default of the configuration), which writes `Serial execution` where it writes the number of threads with OpenMP; they failed
   there on that line. `BoundaryConditions` skips the part of `Extrapolation400` that compares 1 and 4 threads, `MPIBitIdentity`
