@@ -409,12 +409,21 @@ smaller than it needs to be.
 These limits are linear (von Neumann, smooth solutions). With the limiter, positivity (a maximum principle:
 in more than one dimension a second-order scheme is not TVD, Goodman et al. 1985 as cited in [9], p. 15 of the
 report) is guaranteed only for smaller steps, for the
-scalar advection of each direction with the limited flux: the van Leer slope of MOSE is the flux limiter $\psi(\theta) =
-\theta/(1+\theta)$, which satisfies $0 \le \psi \le 1$ and $0 \le \psi/\theta \le \mu$ with $\mu = 1$, and with
-Heun and RK3 (SSP coefficient 1) positivity holds for $(1+\mu)\,\nu \le 1$, that is
-$\sum_d \nu_d \le 1/2$; central diffusion is positive for $\text{VNN} \le 1/2$; with the additive rule
-both hold for CFL ≤ 1/2 and VNN ≤ 1/2 ([8], §5.2, §6.2 and §6.4; experiments reported there give
-positive results up to $\nu = 1$ in 1D and about $2/3$ in 2D). With moving shocks and Heun keep `cfl` at
+advection of a scalar with the limited flux: on a line of equal cells the van Leer slope of MOSE is the flux limiter
+$\psi(\theta) = \theta/(1+\theta)$, and with the bounds of the reconstruction
+([Spatial Discretization](numerics.md#muscl-reconstruction), step 3) the limited flux of every limiter but van Albada
+satisfies $0 \le \psi \le 1$ and $0 \le \psi/\theta \le \mu$ with $\mu = 1$ on a line of cells of any lengths. With
+Heun and RK3 (SSP coefficient 1) positivity then holds for $(1+\mu)\,\nu \le 1$: on any mesh, when at every stage the
+Courant number of the flow leaving each cell (the step times the volume flow out of the cell through its faces, over
+its volume) is at most 1/2; central diffusion is positive for $\text{VNN} \le 1/2$; with the additive rule
+both hold for CFL ≤ 1/2 and VNN ≤ 1/2 in smooth flow, where the flow leaving a cell through its faces is about the
+convective rate of the rule (at captured shocks see below) ([8], §5.2, §6.2 and §6.4; experiments reported there give
+positive results up to $\nu = 1$ in 1D and about $2/3$ in 2D). The bound is lower in the first cell next to a wall of a
+RANS run, whose ghost cell holds $-k_1\rho_G$ (and $-\tilde\nu_1\rho_G$; the wall value of $k$, and of $\tilde\nu$ on
+a smooth wall, is zero), $\rho_G$ the density of the ghost cell: there it is $1/(2 + \rho_G/\rho_1)$, and in smooth
+flow CFL ≤ 1/2 keeps it while the Mach number of the flow normal to the wall is below $2\rho_1/\rho_G$. Next to faces whose ghost
+cells extrapolate the cells, $3q_1 - 3q_2 + q_3$ (type `408`, and the flow and soot variables of type `502`),
+positivity is not guaranteed. With moving shocks and Heun keep `cfl` at
 0.5–0.7. With preconditioning,
 $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$ is replaced by the preconditioned eigenvalue
 $\bigl(u_n (1-\alpha) + c^\ast\bigr)|\nabla\xi_d|$.

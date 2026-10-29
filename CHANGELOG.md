@@ -320,6 +320,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The MUSCL reconstruction keeps the value of a cell at each of its faces between the value of the cell and that of the
+  neighbour across the face on lines of cells of any lengths, with every limiter (van Albada excepted where the two slopes
+  have opposite signs): the limited slope is bounded so that its change over half the cell is at most the jump to each
+  neighbour, the condition of Berger, Aftosmis and Murman (AIAA 2005-0490, eq. 19). Where a cell was longer than its
+  neighbour across a face, van Leer, MC and superbee could take the face value beyond that neighbour, by up to
+  2c/(1 + c) - 1 of the jump for a cell c times longer: a variable about zero there, such as k at the edge of a boundary
+  layer, became negative at the face, the cell could go below zero after a stage and be set to the realizability floor, and
+  the positivity of the transport that the guide gave for `cfl = 0.5` held only on lines of equal cells. On lines of equal
+  cells the slopes do not change, bit for bit in builds without fast math: there the bounds are 2 and 2r, which no limiter
+  exceeds. Elsewhere a slope changes only where a bound acts, where the ratio of the two slopes is away from 1 by an amount
+  that the ratio of the lengths sets, so data linear along the line keep their slopes; minmod and first order do not
+  change. In a `RELEASE` build, compiled with `-ffast-math`, the compiler is free to evaluate the changed code in another
+  order, and face values differ in their last digits also where no bound acts (measured with ifx 2024.1 on lines of equal
+  cells: at most 4 units in the last place of the values of the two cells of the face). The
+  guide gives the condition of positivity of the transport, a Courant number of the flow leaving each cell of at most 1/2,
+  with a lower bound in the first cell next to a wall and none next to faces whose ghost cells extrapolate the cells
+  (`408`, `502`).
 - The testing guide and the test plan say what the tests take and give: the fast tier holds parts of about 10 s of CPU time or
   less at one thread each, the rule of a row of the plan (the guide said "a few seconds each"); `MMSViscous3DFull` takes 18 h
   at one thread with a RELEASE build on one core of a shared cluster node and about 1 h 10 min with 18 or 32 threads (the
