@@ -175,17 +175,43 @@
 #  restart (newrun = false).
 #
 #  And a valid run must end with exit code 0: with finite-rate chemistry and
-#  exclude-blocks = 1 the same tube must run, its set-up summary listing
-#  block 1 under "Inactive blocks" (a set-up that deallocates that list before
-#  it is allocated ends with exit code 153 with ifx, "allocatable array or
-#  pointer is not allocated"). The air has no reaction (no mechanism file): the
-#  chemistry leaves the state as it is.
+#  exclude-blocks = 1 the tube holding the gas of test/1D/Fer14 with its
+#  reaction mechanism (its INPUT/chemistry-info.txt and
+#  INPUT/chemistry-Arrhenius.dat; make_case.py fer14) must run, its set-up
+#  summary listing block 1 under "Inactive blocks" (a set-up that deallocates
+#  that list before it is allocated ends with exit code 153 with ifx,
+#  "allocatable array or pointer is not allocated"); the excluded block takes
+#  no chemistry.
 #  exclude-blocks with a word that is not a block number (x 1, 1 x) or with a
 #  block beyond the mesh (1000) must stop the run at set-up with exit code 1
 #  and a message that names the key, the value and the word or the block,
-#  and write no solution: the words after one that does not read are not read
-#  (a read beyond the list would be a run-time error with bounds checks), and a
-#  block beyond the mesh names no block.
+#  and write no solution: the same tube with its mechanism; the words after
+#  one that does not read are not read (a read beyond the list would be a
+#  run-time error with bounds checks), and a block beyond the mesh names no
+#  block.
+#  chemistry = finite-rate needs the reaction mechanism: the tube holding the
+#  gas of test/1D/Fer14 without its INPUT/chemistry-info.txt must stop at
+#  set-up with exit code 1, the message that names the file and the STOP line
+#  of the set-up, before any iteration, without the warning that FLINT writes
+#  for a mechanism it does not know, and write no solution. Without the stop
+#  the run would go on with no rate table: FLINT answers every call of the
+#  source terms with its bail-out value, -1 in every component, which the
+#  integrators of OSLO other than cvode take as a rate of -1 for every
+#  density and for the temperature: the run goes on with its composition and
+#  its temperature changed, in silence.
+#  A failed integration of the finite-rate chemistry stops the run: the same
+#  tube with the mechanism of test/1D/Fer14 and a relative tolerance of the
+#  species of 1e-30, which the default integrator, H-radau5, refuses at every
+#  call (RADAU5 takes a relative tolerance above 10 times its rounding unit,
+#  1.1e-19, and returns -1, input not consistent, without integrating), must
+#  end at its first step with exit code 1, one line that gives the
+#  integrator, its return code and what it means, the block, the cell (every
+#  cell fails: the line gives the failure of the smallest block, k, j, i, cell
+#  1, 1, 1) and the state of the cell, the STOP line, and no solution; with 4
+#  threads the line is the same as with one, and on two multigrid levels
+#  (steady, with the INPUT/bc2.txt of the steam case below) the line names the
+#  coarse level, where the run starts. Without the stop no cell would take its
+#  chemistry and the run would end with exit code 0.
 #  exclude-blocks holds for chemistry = equilibrium too, on every multigrid
 #  level: the tube filled with steam far from equilibrium (0.2 % of hydrogen
 #  and 1.6 % of oxygen, at 1500 and 1200 K; the 13 C-H-O species of
@@ -206,6 +232,7 @@ MIX=../../../1D/diff1/INPUT
 COMMON=../../../common/Air
 VISC=../../../common/Air-viscous
 CHO=../../../2D/euler/rocket-nozzle/equilibrium/INPUT
+FER=../../../1D/Fer14/INPUT
 ERR='Sc<=0 (multicomponent diffusion) requires a binary diffusion table'
 
 ulimit -s unlimited 2>/dev/null || true
@@ -426,6 +453,22 @@ flux-limiter = vanleer
 riemann-solver = HLLC
 $extra
 EOI
+}
+
+# write_fer14 <mechanism> <tag> <physics lines> [other sections]: the tube of write_case holding the gas of test/1D/Fer14
+# (make_case.py fer14); with mechanism = yes, also its reaction mechanism, INPUT/chemistry-info.txt and
+# INPUT/chemistry-Arrhenius.dat
+write_fer14() {
+  local mechanism="$1"
+  shift
+  write_case "$@"
+  rm -f INPUT/phase.txt INPUT/thermo.dat
+  ln -sf "../$FER/phase.txt" INPUT/phase.txt; ln -sf "../$FER/thermo.dat" INPUT/thermo.dat
+  if [[ $mechanism == yes ]]; then
+    ln -sf "../$FER/chemistry-info.txt" INPUT/chemistry-info.txt
+    ln -sf "../$FER/chemistry-Arrhenius.dat" INPUT/chemistry-Arrhenius.dat
+  fi
+  python3 -B make_case.py fer14 "$SOD" INPUT/phase.txt || exit 1
 }
 
 # run_case <tag> <message expected in the log> <physics lines> [other sections]
@@ -861,7 +904,7 @@ run_restart restart-counter 's/^DATASETAUXDATA MOSE_LAST_OUTPUT_TIME = .*$/DATAS
   "[ERROR] OUTPUT/field.tec: MOSE_LAST_OUTPUT_TIME is not finite (NaN or infinity)"
 
 echo "-- a valid run ends with exit code 0 --"
-write_case chem-excl "equations = euler
+write_fer14 yes chem-excl "equations = euler
 chemistry = finite-rate" "
 [MOSE-Chemistry]
 exclude-blocks = 1
@@ -878,7 +921,7 @@ fi
 echo "-- exclude-blocks with a word that is not a block number, or a block beyond the mesh, stops at set-up --"
 for value in "x 1" "1 x" "1000"; do
   tag="chem-excl-$(printf '%s' "$value" | tr ' ' '_')"
-  write_case "$tag" "equations = euler
+  write_fer14 yes "$tag" "equations = euler
 chemistry = finite-rate" "
 [MOSE-Chemistry]
 exclude-blocks = $value
@@ -899,12 +942,116 @@ ode-solver = sdirk4b"
   fi
 done
 
+echo "-- chemistry = finite-rate without its reaction mechanism stops at set-up --"
+write_fer14 no chem-no-mechanism "equations = euler
+chemistry = finite-rate"
+message="[ERROR] chemistry = finite-rate needs the reaction mechanism, INPUT/chemistry-info.txt: the file cannot be opened"
+rm -f OUTPUT/field.tec
+"$LOCAL" > OUTPUT/chem-no-mechanism.log 2>&1
+rc=$?
+found=missing; stop=missing; iter=none; warning=none; solution=none
+grep -a -q -F -- "$message" OUTPUT/chem-no-mechanism.log && found=found
+grep -a -q -F -- "STOP: setup error (see above)" OUTPUT/chem-no-mechanism.log && stop=found
+grep -a -q -F -- "MOSE | Iter" OUTPUT/chem-no-mechanism.log && iter=written
+grep -a -q -F -- "Explicit procedure for" OUTPUT/chem-no-mechanism.log && warning=written
+[[ -f OUTPUT/field.tec ]] && solution=written
+if [[ $rc -eq 1 && $found == found && $stop == found && $iter == none && $warning == none && $solution == none ]]; then
+  echo "  [ok  ] chem-no-mechanism: exit code 1, \"$message\""
+else
+  echo "  [FAIL] chem-no-mechanism: exit code $rc (required 1), message \"$message\" $found, STOP line $stop, iteration lines" \
+       "$iter (required none), warning of FLINT $warning (required none), solution $solution (see OUTPUT/chem-no-mechanism.log)"
+  fail=1
+fi
+
+echo "-- a failed integration of the finite-rate chemistry stops the run (1 and 4 threads) --"
+# chem_fail <threads>: the tube of write_fer14 with its mechanism and ode-relative-tol-species = 1e-30, which the default
+# integrator, H-radau5, refuses at every call, run for at most 3 iterations with <threads> threads; writes
+# OUTPUT/chem-integrator-<threads>.{log,rc} and OUTPUT/chem-integrator-<threads>.solution (written or none)
+chem_fail() {
+  local nt="$1" solution=none
+  write_fer14 yes "chem-integrator-$nt" "equations = euler
+chemistry = finite-rate" "
+[MOSE-Chemistry]
+ode-relative-tol-species = 1e-30"
+  sed -i 's/^iter-threshold = 50$/iter-threshold = 3/' input.ini
+  rm -f OUTPUT/field.tec
+  OMP_NUM_THREADS=$nt "$LOCAL" > "OUTPUT/chem-integrator-$nt.log" 2>&1
+  echo $? > "OUTPUT/chem-integrator-$nt.rc"
+  [[ -f OUTPUT/field.tec ]] && solution=written
+  echo $solution > "OUTPUT/chem-integrator-$nt.solution"
+  rm -f OUTPUT/field.tec
+}
+prefix="[ERROR] Chemistry: the integrator H-radau5 failed (return code -1: input is not consistent) in block 1, cell i, j, k = 1, 1, 1, over a chemistry step of"
+skip=0
+for nt in 1 4; do
+  [[ $nt -eq 4 && $skip -eq 1 ]] && break
+  chem_fail $nt
+  log="OUTPUT/chem-integrator-$nt.log"
+  rc=$(cat "OUTPUT/chem-integrator-$nt.rc")
+  n=$(grep -a -c -F -- "$prefix" "$log")
+  stop=missing; threads=used
+  grep -a -q -F -- "STOP: chemistry integration error (see above)" "$log" && stop=found
+  [[ $nt -eq 4 ]] && ! grep -a -q "Number of threads --> *4\$" "$log" && threads="not used (see the line Number of threads)"
+  if [[ $rc -eq 1 && $n -eq 1 && $stop == found && $(cat "OUTPUT/chem-integrator-$nt.solution") == none && $threads == used ]]; then
+    echo "  [ok  ] chem-integrator, $nt thread(s): exit code 1, the line of the failure once, \"$prefix ...\""
+  else
+    echo "  [FAIL] chem-integrator, $nt thread(s): exit code $rc (required 1), the line \"$prefix ...\" written $n times (required" \
+         "once), STOP line $stop, solution $(cat "OUTPUT/chem-integrator-$nt.solution") (required none), $nt threads $threads (see $log)"
+    fail=1
+  fi
+  # a MOSE built without OpenMP writes "Serial execution" in place of the number of threads: it has one thread only
+  if [[ $nt -eq 1 ]] && grep -a -q "^ Serial execution\$" "$log"; then
+    skip=1
+  fi
+done
+if [[ $skip -eq 1 ]]; then
+  echo "  [skip] chem-integrator, 4 threads: MOSE built without OpenMP (OUTPUT/chem-integrator-1.log: Serial execution)"
+elif [[ "$(grep -a -F -- "$prefix" OUTPUT/chem-integrator-1.log)" == "$(grep -a -F -- "$prefix" OUTPUT/chem-integrator-4.log)" ]] && \
+     [[ -n "$(grep -a -F -- "$prefix" OUTPUT/chem-integrator-1.log)" ]]; then
+  echo "  [ok  ] chem-integrator: the line of the failure with 4 threads is the one with 1 thread"
+else
+  echo "  [FAIL] chem-integrator: the line of the failure with 4 threads is not the one with 1 thread (see OUTPUT/chem-integrator-1.log" \
+       "and OUTPUT/chem-integrator-4.log)"
+  fail=1
+fi
+# the same failure on the coarse level of two multigrid levels (steady, INPUT/bc2.txt of 50 cells as for the steam below), where
+# the run starts: the line names the grid level
+write_fer14 yes chem-integrator-mg "equations = euler
+chemistry = finite-rate" "
+[MOSE-Chemistry]
+ode-relative-tol-species = 1e-30
+
+[MOSE-Multigrid]
+levels = 2
+level2-iter = 2
+level1-iter = 2"
+awk '{ if ($5 == 2) $2 = 50; if ($5 >= 3 && $2 > 50) next; print }' INPUT/bc.txt > INPUT/bc2.txt
+sed -i -e 's/^cfl = 0.9$/cfl = 0.5/' -e 's/^time-accurate = true$/time-accurate = false/' input.ini
+rm -f OUTPUT/field.tec OUTPUT/field-level2.tec
+"$LOCAL" > OUTPUT/chem-integrator-mg.log 2>&1
+rc=$?
+prefix="[ERROR] Chemistry: the integrator H-radau5 failed (return code -1: input is not consistent) in block 1 of grid level 2, cell i, j, k = 1, 1, 1, over a chemistry step of"
+n=$(grep -a -c -F -- "$prefix" OUTPUT/chem-integrator-mg.log)
+stop=missing; solution=none
+grep -a -q -F -- "STOP: chemistry integration error (see above)" OUTPUT/chem-integrator-mg.log && stop=found
+[[ -f OUTPUT/field.tec || -f OUTPUT/field-level2.tec ]] && solution=written
+if [[ $rc -eq 1 && $n -eq 1 && $stop == found && $solution == none ]]; then
+  echo "  [ok  ] chem-integrator-mg, two multigrid levels: exit code 1, the line of the failure once, \"$prefix ...\""
+else
+  echo "  [FAIL] chem-integrator-mg, two multigrid levels: exit code $rc (required 1), the line \"$prefix ...\" written $n times" \
+       "(required once), STOP line $stop, solution $solution (required none) (see OUTPUT/chem-integrator-mg.log)"
+  fail=1
+fi
+rm -f OUTPUT/field.tec OUTPUT/field-level2.tec INPUT/bc2.txt
+
 echo "-- exclude-blocks with chemistry = equilibrium: the excluded block keeps the bits of the run without chemistry --"
 # write_steam <chemistry line> <numerics lines> [other sections]: the tube of write_case holding steam far
-# from equilibrium (make_case.py steam), with INPUT/bc2.txt for a coarse multigrid level of 50 cells
+# from equilibrium (make_case.py steam), with INPUT/bc2.txt for a coarse multigrid level of 50 cells; the files of the
+# finite-rate mechanism that the cases above link in INPUT/ are taken out
 write_steam() {
   local chemistry="$1" numerics="$2" extra="${3:-}"
   rm -f INPUT/composition.txt INPUT/phase.txt INPUT/thermo.dat INPUT/transport.dat INPUT/bc2.txt
+  rm -f INPUT/chemistry-info.txt INPUT/chemistry-Arrhenius.dat
   ln -sf "../$CHO/phase.txt" INPUT/phase.txt; ln -sf "../$CHO/thermo.dat" INPUT/thermo.dat
   ln -sf "../$CHO/composition.txt" INPUT/composition.txt
   python3 -B make_case.py steam "$SOD" INPUT/phase.txt || exit 1

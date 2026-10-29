@@ -278,6 +278,7 @@ module MOSE_Config_Types_m
     integer, allocatable  :: no_chem_list(:)
     ! Useful variables
     character(llen) :: mechanism_name
+    logical         :: info_found = .false. !> INPUT/<prefix>chemistry-info.txt opened by read_chemistry (Load_Chemistry)
     logical         :: use_strang
     integer         :: imodel         !> 0 no chemistry; 1 finite-rate; 2 equilibrium
     integer         :: N_strang       !> 1 w/o strang;   2 w strang  

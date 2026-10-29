@@ -277,6 +277,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A failed integration of the finite-rate chemistry stops the run with exit code 1 and a message that gives the integrator,
+  its return code and what the code means, the block (with the grid level in a multigrid run), the cell, the chemistry step
+  and the temperature, pressure and density of the cell; every thread, and with MPI every rank, stops at the end of the
+  chemistry of that step, before any flux reads the cell, and no solution of that step is written. MOSE did not read the
+  return code of the integrator: the cell took the state where the integrator had stopped, or kept the one where it had
+  started, and the run went on to its end with exit code 0 (with `H-radau5`, the default, only the line of RADAU5 told it).
+  The message is written once, by the rank that holds the smallest block with a failed cell, for its cell of smallest k,
+  j, i, so that it is the same with any number of threads and ranks. Runs whose integrations succeed give the same bits;
+  the chemistry of each finite-rate step ends with two barriers of the threads and, with MPI, a reduction of one number
+  over the ranks.
+- With `chemistry = finite-rate` and no `INPUT/chemistry-info.txt`, the reaction mechanism, the run stops at set-up with a
+  message that names the file, before the initial condition is read, on every rank. The run went on: without the file no
+  rate table is read, and FLINT answers every evaluation of the source terms with its bail-out value, -1 in every
+  component, which every integrator of OSLO but `cvode` takes as a rate, so that each chemistry step changed the partial
+  densities and the pressure of every cell, with no message after the set-up, where the warning of FLINT and the set-up
+  summary gave an empty mechanism name. Runs with `frozen`
+  or `equilibrium` chemistry, which need no mechanism, and finite-rate runs with the file do not change. The tests of the
+  finite-rate chemistry in `ExitCodes` and `MPIExitCodes` take the gas and the mechanism of `test/1D/Fer14`.
 - The testing guide and the test plan say what the tests take and give: the fast tier holds parts of about 10 s of CPU time or
   less at one thread each, the rule of a row of the plan (the guide said "a few seconds each"); `MMSViscous3DFull` takes 18 h
   at one thread with a RELEASE build on one core of a shared cluster node and about 1 h 10 min with 18 or 32 threads (the
