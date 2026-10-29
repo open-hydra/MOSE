@@ -61,7 +61,7 @@ contains
     end select
 
     ! SST production term.
-    ! 'incompressible' -> P = mu_t*S^2 (SST-2003).
+    ! 'incompressible' -> P = mu_t*S^2 (TMR SST-2003m, or SST-2003s with k-energy-coupling).
     ! 'compressible'   -> P = tau_ij*du_i/dx_j with tau_ij = mu_t*(2 S_ij - 2/3 divU delta_ij)
     !                     - 2/3 rho k delta_ij: the dilatation terms matter across shocks.
     select case ( trim(obj_rans%sst_production) )
