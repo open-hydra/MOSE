@@ -107,6 +107,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   exit at the throat, refuses thresholds out of that order, and from `Ae_At` these states too. `p_sub` and `p_sup` are
   required: a record without them, which made the face an inlet at the total conditions `T0` and `p0` at every pressure of the
   cell below `p0`, stops the run at set-up; an inlet at total conditions is a `401`.
+- The face of a choked nozzle (`420`) takes the supersonic design exit state of its record below both `p_sub` and p_shock, the
+  pressure behind a normal shock standing at the exit of the design flow, which MOSE computes at set-up from `T0`, `p0`, `g`
+  and the gas, and no longer only below `p_sup`, which selects no branch: it is read and checked with `p_sub` and `p0` as
+  before. Between `p_sup` and p_shock, where the exit of a nozzle is over-expanded and keeps its design state, the face took
+  the state of mass flux `g` and total temperature `T0` that the invariant of the boundary cell reaches, which for a cell of
+  the gas of the record moving along the normal of the face, in a state of that mass flux and total temperature, is the
+  state of the cell, with less total pressure and thrust: in air at an exit Mach number of 2.94, 0.90 times the momentum
+  flux of the design state with the cell at 2 `p_sup` and 0.87 midway between the sonic pressure of that mass flux and
+  p_shock. From p_shock up to `p_sub` the face takes that state as before. `bc.txt` does not change.
 - The interior faces of the viscous fluxes no longer take by default the mean of the two metrics, which divided the difference
   across a face by the mean of 1/h instead of the distance between the cell centres: it overstated the face-normal gradient, and
   with it the viscous, conductive and diffusive fluxes, by (1 + r)²/(4r) at a cell-size ratio r (4.2 % at r = 1.5, 8.9 % at
@@ -679,6 +688,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `506` was missing.
 - The guide names the boundary files of the multigrid levels as MOSE reads them, `bc.txt`, `bc2.txt`, `bc3.txt`, … (it said
   `bc_x1.txt`, `bc_x2.txt`, …).
+- The text of the key `sst-production`, the turbulence guide and the SWBLI page describe the `compressible` production as MOSE
+  computes it: the exact production with the dilatation terms arranged as in OpenFOAM's `kOmegaSST`, with the limiter on its
+  deviatoric part only and -2/3 gamma rho omega div(u) in the omega equation. They named it NASA TMR's SST-2003e (SST-2003 with
+  `k-energy-coupling`), which limits the whole production and takes gamma/nu_t times it in the omega equation. The guide also
+  writes the Boussinesq stress with its -1/3 div(u) delta_ij part, and says that its -2/3 rho k delta_ij term enters the momentum
+  and energy equations only with `k-energy-coupling = true` (it said that the two-equation models include it), that `SA` is the
+  model without the f_t2 term (SA-noft2 in TMR naming), with the limiter of S~ of Note 1(c) of the TMR page and the cap r <= 10
+  that the code applies (the guide gave neither), and that with `compressible` the rotation/curvature factor of SST-RC multiplies
+  only the deviatoric part of the production. The SWBLI page gives the whole variant of its two models, and the models of the
+  Wind-US and SU2 solutions as their sources give them: SPALART and SST, without variant, in the NPARC Alliance archive, and SA-neg
+  and SST-2003m in the SU2 validation study of the case. No run changes.
+- The comparison of the rocket nozzle with CEA (`test/2D/euler/rocket-nozzle/verify.py`, page `docs/vv/2D-nozzle.md`) reads the
+  solutions of the runs of the three configurations, `OUTPUT/field.tec`, and stops with a message, exit status 1, when one is
+  missing; it drew the stored solutions `reference/field.tec`. The mixture density is the sum of every species density: it summed
+  12 of the 13 species of the frozen and equilibrium configurations and 18 of the 19 of the finite-rate one, so that the Mach
+  number of the frozen run was 0.39 % low. The script prints the averages at the CEA stations and their differences from CEA; the
+  page calls the averages weighted by the mass flow (it called them area-weighted) and names the run of the Mach contours,
+  finite-rate, and the panels of the comparison.
+- The comparison of the rocket nozzle with CEA (`test/2D/euler/rocket-nozzle/verify.py`, page `docs/vv/2D-nozzle.md`) takes
+  the Mach number of the CEA equilibrium stations with the frozen speed of sound, as for the runs of MOSE and the CEA frozen
+  stations, and the averages of the runs at the area ratios of the stations, interpolated linearly in x between two columns of
+  cells, with the areas relative to the narrowest section of the grid. It divided the velocity of the equilibrium stations by
+  the equilibrium speed of sound of CEA, so that one state had Mach number 1 for CEA and 0.974 in the definition of the curves
+  of MOSE, and it took the column of cells nearest to each area ratio, relative to the middle of the narrowest column, 0.16 %
+  wider than the narrowest section: at the subsonic station the column had an area ratio of 1.883 instead of 2. With the runs
+  of the case, the Mach number of the equilibrium run at the subsonic station is 13.3 % above CEA instead of 16.7 %, and its
+  pressure in the diverging part 5.8 % to 11.9 % above CEA instead of 7.0 % to 16.4 %.
+- The comparison of the rocket nozzle with CEA (`test/2D/euler/rocket-nozzle/verify.py`) takes u, v, p, T, γ and R by their
+  names in the solution files, and stops with a message, exit status 1, when one is missing. It took them at fixed places after
+  the species densities, those of the files that the case writes: a file with the variables of another model between p and T
+  (soot, passive scalars, turbulence), or one written with `sol-variables = transport`, which writes `mil` and `kl` where
+  `thermo` writes `g` and `R`, gave it other quantities, with no message.
 - The figure of the grids of the 3-D manufactured-solution page (`docs/vv/images/mms3d-grids.svg`, drawn by `verify.py` of
   `test/3D/viscous/mms`) shows the iface grid, whose panel was empty: `verify.py` drew the block faces on the plane z = 0, and the
   iface grids, kinked in z too, have none. It draws the bottom face of each block, the face that the period of the grid in z
