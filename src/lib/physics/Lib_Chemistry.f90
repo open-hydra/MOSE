@@ -16,7 +16,8 @@ module MOSE_Lib_Chemistry
 
   ! A failed integration of the chemistry on this rank: among the cells of the step whose integration failed, the one of the
   ! smallest block, k, j, i, so that the record does not depend on the number of threads nor on the order in which the
-  ! dynamic schedule gives them the cells; with the state of the cell before the chemistry step and the step
+  ! dynamic schedule gives them the cells; with the state of the cell before the chemistry step and the step. The record is
+  ! never reset: a failure ends the run in the step that records it (Explicit_Step)
   type :: chemistry_failure_t
     logical  :: found = .false.
     integer  :: b = 0, i = 0, j = 0, k = 0, code = 0

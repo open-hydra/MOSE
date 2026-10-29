@@ -212,6 +212,20 @@
 #  (steady, with the INPUT/bc2.txt of the steam case below) the line names the
 #  coarse level, where the run starts. Without the stop no cell would take its
 #  chemistry and the run would end with exit code 0.
+#  An integration that needs more steps than ode-max-steps in some cells
+#  stops the run, and the line gives the failed cell of the smallest block,
+#  k, j, i: the box of make_case.py ignition, two blocks of 5 x 4 x 4 cells
+#  holding the unburnt mixture of test/1D/Fer14 at 101325 Pa, at 2000 K
+#  beyond an oblique plane, where the gas ignites within the time step, and
+#  at 300 K elsewhere, with ode-max-steps = 10, must end at its first step
+#  with exit code 1, one line of return code -2 for block 1, cell 5, 3, 3,
+#  the same with 4 threads as with one, the STOP line, and no solution.
+#  RADAU5 takes 3 steps in a cold cell and more than 30 in a hot one, so the
+#  integration fails in the 17 hot cells of block 1 and in the 50 of block 2
+#  alone; cell 5, 3, 3 of block 1 is the smallest of them in the order block,
+#  k, j, i, any other order of these four keys gives another cell, and so
+#  does a record that keeps the last failure. Without the stop the run would
+#  end with exit code 0.
 #  exclude-blocks holds for chemistry = equilibrium too, on every multigrid
 #  level: the tube filled with steam far from equilibrium (0.2 % of hydrogen
 #  and 1.6 % of oxygen, at 1500 and 1200 K; the 13 C-H-O species of
@@ -1043,6 +1057,63 @@ else
   fail=1
 fi
 rm -f OUTPUT/field.tec OUTPUT/field-level2.tec INPUT/bc2.txt
+
+echo "-- integrations of the finite-rate chemistry that need more steps than ode-max-steps in some cells of two blocks stop the run" \
+     "(1 and 4 threads) --"
+# chem_steps <threads>: the box of make_case.py ignition (two blocks, the gas of write_fer14 with its mechanism, hot beyond an
+# oblique plane) with ode-max-steps = 10, run for at most 3 iterations with <threads> threads; writes
+# OUTPUT/chem-steps-<threads>.{log,rc} and OUTPUT/chem-steps-<threads>.solution (written or none)
+chem_steps() {
+  local nt="$1" solution=none
+  write_fer14 yes "chem-steps-$nt" "equations = euler
+chemistry = finite-rate" "
+[MOSE-Chemistry]
+ode-max-steps = 10"
+  python3 -B make_case.py ignition INPUT/phase.txt || exit 1
+  sed -i 's/^iter-threshold = 50$/iter-threshold = 3/' input.ini
+  rm -f OUTPUT/field.tec
+  OMP_NUM_THREADS=$nt "$LOCAL" > "OUTPUT/chem-steps-$nt.log" 2>&1
+  echo $? > "OUTPUT/chem-steps-$nt.rc"
+  [[ -f OUTPUT/field.tec ]] && solution=written
+  echo $solution > "OUTPUT/chem-steps-$nt.solution"
+  rm -f OUTPUT/field.tec
+}
+prefix="[ERROR] Chemistry: the integrator H-radau5 failed (return code -2: more steps are needed than ode-max-steps) in block 1, cell i, j, k = 5, 3, 3, over a chemistry step of"
+skip=0
+for nt in 1 4; do
+  [[ $nt -eq 4 && $skip -eq 1 ]] && break
+  chem_steps $nt
+  log="OUTPUT/chem-steps-$nt.log"
+  rc=$(cat "OUTPUT/chem-steps-$nt.rc")
+  n=$(grep -a -c -F -- "$prefix" "$log")
+  lines=$(grep -a -c -F -- "[ERROR] Chemistry:" "$log")
+  stop=missing; threads=used
+  grep -a -q -F -- "STOP: chemistry integration error (see above)" "$log" && stop=found
+  [[ $nt -eq 4 ]] && ! grep -a -q "Number of threads --> *4\$" "$log" && threads="not used (see the line Number of threads)"
+  if [[ $rc -eq 1 && $n -eq 1 && $lines -eq 1 && $stop == found && $(cat "OUTPUT/chem-steps-$nt.solution") == none && \
+        $threads == used ]]; then
+    echo "  [ok  ] chem-steps, $nt thread(s): exit code 1, the line of the failure once, \"$prefix ...\""
+  else
+    echo "  [FAIL] chem-steps, $nt thread(s): exit code $rc (required 1), the line \"$prefix ...\" written $n times (required" \
+         "once; lines of a failure of the chemistry $lines), STOP line $stop, solution $(cat "OUTPUT/chem-steps-$nt.solution")" \
+         "(required none), $nt threads $threads (see $log)"
+    fail=1
+  fi
+  # a MOSE built without OpenMP writes "Serial execution" in place of the number of threads: it has one thread only
+  if [[ $nt -eq 1 ]] && grep -a -q "^ Serial execution\$" "$log"; then
+    skip=1
+  fi
+done
+if [[ $skip -eq 1 ]]; then
+  echo "  [skip] chem-steps, 4 threads: MOSE built without OpenMP (OUTPUT/chem-steps-1.log: Serial execution)"
+elif [[ "$(grep -a -F -- "$prefix" OUTPUT/chem-steps-1.log)" == "$(grep -a -F -- "$prefix" OUTPUT/chem-steps-4.log)" ]] && \
+     [[ -n "$(grep -a -F -- "$prefix" OUTPUT/chem-steps-1.log)" ]]; then
+  echo "  [ok  ] chem-steps: the line of the failure with 4 threads is the one with 1 thread"
+else
+  echo "  [FAIL] chem-steps: the line of the failure with 4 threads is not the one with 1 thread (see OUTPUT/chem-steps-1.log and" \
+       "OUTPUT/chem-steps-4.log)"
+  fail=1
+fi
 
 echo "-- exclude-blocks with chemistry = equilibrium: the excluded block keeps the bits of the run without chemistry --"
 # write_steam <chemistry line> <numerics lines> [other sections]: the tube of write_case holding steam far

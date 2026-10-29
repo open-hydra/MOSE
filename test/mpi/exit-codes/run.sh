@@ -73,6 +73,14 @@
 #  by the primary thread of each rank inside the parallel region, and stop
 #  together after it. A rank that stopped alone would leave the other waiting
 #  in its next exchange, and the run would hang until the time limit.
+#  Failed integrations on both ranks give one line, from the rank that holds
+#  the smallest block with a failed cell: the box of
+#  ../../fast/input-checks/exit-codes/make_case.py ignition, whose hot cells
+#  need more steps than ode-max-steps = 10 in both of its blocks, block 1 on
+#  rank 1 and block 2 on rank 0 (a decomposition map), on 2 ranks with 2
+#  threads each, must end within 60 s with exit code 1, the line of return
+#  code -2 for block 1, cell 5, 3, 3 written once, by rank 1, and the STOP
+#  line of both ranks.
 #
 #  A rank that stops every rank with MPI_ABORT (an error that it finds
 #  alone, here a probe of an unknown variable) writes out what it holds for
@@ -437,6 +445,53 @@ if [[ $n -eq 1 && $rank == found && $threads != missing ]]; then
 else
   echo "  [FAIL] mpi-chem-integrator: the line of the failure written $n times (required once), by rank 1 $rank, threads $threads" \
        "(see OUTPUT/mpi-chem-integrator.log)"
+  fail=1
+fi
+rm -f INPUT/decomposition.map
+
+echo "-- integrations of the finite-rate chemistry that need more steps than ode-max-steps on both ranks: one line, from the rank" \
+     "of the smallest block (2 ranks, 2 threads each) --"
+python3 -B ../../fast/input-checks/exit-codes/make_case.py ignition INPUT/phase.txt || exit 1
+cat > input.ini <<EOI
+[MOSE-Parameters]
+iter-threshold = 3
+newrun = true
+
+[MOSE-Physics]
+equations = euler
+chemistry = finite-rate
+
+[MOSE-Numerics]
+cfl = 0.9
+time-accurate = true
+time-scheme = RK3
+integration-variables = cons
+space-reconstruction = MUSCL
+flux-limiter = vanleer
+riemann-solver = HLLC
+
+[MOSE-Chemistry]
+ode-max-steps = 10
+
+[MOSE-IO]
+decomposition-map = decomposition.map
+EOI
+python3 -B ../write_map.py --layout 2x1 --cells 5 4 4 --owners list:1,0 > /dev/null || exit 1
+prefix="[ERROR] Chemistry: the integrator H-radau5 failed (return code -2: more steps are needed than ode-max-steps) in block 1, cell i, j, k = 5, 3, 3,"
+threads_before=$OMP_NUM_THREADS
+export OMP_NUM_THREADS=2
+# run2 reads its message as a regular expression: the line without its "[ERROR]", which would be a bracket expression
+run2 mpi-chem-steps "${prefix#\[ERROR\] }" "chemistry integration error (see above)"
+export OMP_NUM_THREADS=$threads_before
+n=$(grep -a -c -F -- "$prefix" OUTPUT/mpi-chem-steps.log)
+lines=$(grep -a -c -F -- "[ERROR] Chemistry:" OUTPUT/mpi-chem-steps.log)
+rank=missing
+grep -a -F -- "$prefix" OUTPUT/mpi-chem-steps.log | grep -a -q -F -- "(rank 1)" && rank=found
+if [[ $n -eq 1 && $lines -eq 1 && $rank == found ]]; then
+  echo "  [ok  ] mpi-chem-steps: the line of the failure written once, by rank 1, which holds block 1"
+else
+  echo "  [FAIL] mpi-chem-steps: the line of the failure written $n times (required once; lines of a failure of the chemistry" \
+       "$lines), by rank 1 $rank (see OUTPUT/mpi-chem-steps.log)"
   fail=1
 fi
 rm -f INPUT/decomposition.map
