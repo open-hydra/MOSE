@@ -7,19 +7,35 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# The jobs read the repository and write nothing to GitHub: a read-only
+# token.
+permissions:
+  contents: read
+
 env:
   # The verifier scripts import pyplot unconditionally; keep them headless.
   MPLBACKEND: Agg
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # A named Ubuntu release, not ubuntu-latest, which GitHub moves to newer
+    # releases: the release of the jobs changes only with this line and the
+    # one of the job test-mpi.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          submodules: recursive
+          # The submodules of MOSE, without recursion. Of the submodules of
+          # FLINT the build uses only OSLO, fetched by the next step: FLINT's
+          # own ORION is not built, as MOSE builds its ORION, and Cantera
+          # (whose submodule Eigen is hosted on gitlab.com) and SUNDIALS are
+          # built only with USE_CANTERA=ON or USE_SUNDIALS=ON.
+          submodules: true
+
+      - name: Fetch OSLO, the submodule of FLINT that the build uses
+        run: git -C lib/FLINT submodule update --init --depth 1 lib/OSLO
 
       - name: Install system dependencies
         run: |
@@ -27,7 +43,7 @@ jobs:
           sudo apt-get install -y gfortran
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -72,13 +88,17 @@ jobs:
   test-mpi:
     # gfortran with the MPI library of Ubuntu (Open MPI): the build with
     # USE_MPI=ON and the needs-mpi tier, which the job above does not register.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          submodules: recursive
+          # The submodules that the build uses, as in the job above.
+          submodules: true
+
+      - name: Fetch OSLO, the submodule of FLINT that the build uses
+        run: git -C lib/FLINT submodule update --init --depth 1 lib/OSLO
 
       - name: Install system dependencies
         run: |
@@ -86,7 +106,7 @@ jobs:
           sudo apt-get install -y gfortran libopenmpi-dev openmpi-bin
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
