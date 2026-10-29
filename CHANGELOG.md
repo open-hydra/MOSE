@@ -309,6 +309,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   its builds use (FLINT's own ORION is not built, as MOSE builds its ORION, and Cantera and SUNDIALS are built only with
   `USE_CANTERA=ON` or `USE_SUNDIALS=ON`). The recursive checkout also cloned Eigen, a submodule of Cantera, from gitlab.com,
   and every job stopped before the build when that server did not answer.
+- The theory guide names the loss of order next to the axis of a wedge and on grids whose cells are skewed the other way
+  of their neighbours, with the orders measured. Next to the axis, with the exact solution given by its cell means, the
+  truncation error of the first rows does not converge, while the error of the solution converges: in a one-dimensional
+  model at first order in the first row and at second order in L1, and in MOSE with SST the same for k and omega, the
+  supraconvergence that Wendroff and White describe; the guide gives the orders of the other variables of those runs. On
+  the zigzag grids of the manufactured solutions on skewed grids, where the face centres lie off the chords between the
+  cell centres on alternate sides, the MUSCL reconstruction is of first order, its truncation error does not converge and
+  the solution converges at first order. The paragraph on the axis led with the centroid of the cell volume, which read as
+  the point where the value of a cell belongs; MOSE takes that value at the mean of the eight nodes, as cell-centred
+  schemes typically do. No run changes.
 
 ### Removed
 
