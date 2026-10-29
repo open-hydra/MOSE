@@ -88,6 +88,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The CI jobs that build and test MOSE run on Ubuntu 24.04 (`runs-on: ubuntu-24.04`) instead of `ubuntu-latest`, which
+  GitHub moves to Ubuntu 26.04, an image with other versions of gfortran and CMake: the Ubuntu release of these jobs
+  changes only with a change of `.github/workflows/ctest.yml`.
 - The mass flux `g` of the inlets `403`, `404` and `420` and the velocity `un` of the inlet `408` are positive into the domain
   on every face, the sign of the examples of ATLAS and the only one that ATLAS writes for `420`. They were the components along
   the face normal of the solver, toward growing index: on the faces 2, 4 and 6 a positive value made the gas leave through the
@@ -295,6 +298,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   coordinates, and the values of such a zone went to the face without a word. The files that the boundary-condition builder
   of ATLAS writes give the nodes of the faces; a file written by hand must give them, with the digits that the tolerance
   needs.
+- The CI checks out the submodules of MOSE without recursion and, of the submodules of FLINT, only OSLO: these are the ones
+  its builds use (FLINT's own ORION is not built, as MOSE builds its ORION, and Cantera and SUNDIALS are built only with
+  `USE_CANTERA=ON` or `USE_SUNDIALS=ON`). The recursive checkout also cloned Eigen, a submodule of Cantera, from gitlab.com,
+  and every job stopped before the build when that server did not answer.
 
 ### Removed
 
