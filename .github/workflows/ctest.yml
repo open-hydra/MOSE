@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # A merge queue for main waits for the required checks on each merge
+  # group, and GitHub Actions starts a workflow for a merge group only on
+  # this event.
+  merge_group:
+    types: [checks_requested]
+    branches: [main]
   workflow_dispatch:
 
 # The jobs read the repository and write nothing to GitHub: a read-only

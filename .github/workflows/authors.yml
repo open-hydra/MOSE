@@ -6,6 +6,9 @@ on:
       # main is protected: AUTHORS.md reaches it through a pull request, having
       # already been regenerated and committed on the contributor's branch.
       - main
+      # The branches on which a merge queue builds its merge groups: AUTHORS.md
+      # reaches them from the branches of the pull requests.
+      - 'gh-readonly-queue/**'
   workflow_dispatch:
 
 permissions:
