@@ -12,7 +12,8 @@ its metric takes the same differences of the cell centres as of the field: the
     The convective fluxes take the MUSCL reconstruction along the grid lines,
     which is not exact for linear fields where every cell is skewed the other way
     of its neighbours: on such grids the observed order of the whole scheme drops
-    to about one, whatever the viscous metric.
+    to about one, whatever the viscous metric, while the truncation error does
+    not converge ([MUSCL Reconstruction](../theory/numerics.md#muscl-reconstruction)).
 
 ## Grids and cases
 
