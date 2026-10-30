@@ -372,7 +372,9 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # chemistry = finite-rate without its mechanism (chemistry-info.txt), an
 # integration of the finite-rate chemistry that its integrator refuses (with 1
 # and 4 threads, the same line of the failure; on a coarse multigrid level, the
-# line names it),
+# line names it), an integration that needs more steps than ode-max-steps in
+# some cells of two blocks (the line gives the failed cell of the smallest
+# block, k, j, i; with 1 and 4 threads, the same line),
 # a value outside the rule of the registry (an interval, a list of reals, a list
 # of integers), an input.ini that cannot be read (missing, empty, of comment
 # lines only), a key of input.ini whose value does not read as its type, a
@@ -628,6 +630,9 @@ if(USE_MPI)
     # give the nodes of another block (a block on each rank), and an integration
     # of the finite-rate chemistry that fails in the block of rank 1 alone (2
     # threads per rank): the line of the failure written once, by rank 1.
+    # Integrations that need more steps than ode-max-steps in some cells of two
+    # blocks, a block on each rank, give one line, written once by the rank that
+    # holds the smallest block with a failed cell.
     # A rank that stops every rank with MPI_ABORT writes out its output first: one
     # process without the launcher, its output on a file, keeps in its log the
     # message (a probe of an unknown variable), the set-up summary before it and a
