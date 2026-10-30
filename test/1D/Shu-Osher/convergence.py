@@ -104,8 +104,10 @@ f_ext = f_h + (f_h - f_2h) / (R ** p - 1.0)
 denom = np.sum(np.abs(f_ext))
 errs = np.array([np.sum(np.abs(f[N] - f_ext)) / denom for N in Ns.astype(int)])
 
-# Grid-Convergence Index on the finest solved grid (Roache, Fs = 1.25)
-gci_fine = 1.25 * errs[-1] / (R ** p - 1.0)
+# Grid-Convergence Index of the finest grid (Roache, Fs = 1.25): Fs |E1|, where
+# E1 = (f_2h - f_h) / (1 - r^p) = f_ext - f_h is the Richardson estimate of the
+# error of f_h, whose normalised L1 norm is errs[-1]
+gci_fine = 1.25 * errs[-1]
 
 print(f"Shu-Osher Richardson grid convergence (r={R:.0f})")
 for N, e in zip(Ns.astype(int), errs):

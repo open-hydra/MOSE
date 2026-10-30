@@ -409,12 +409,21 @@ smaller than it needs to be.
 These limits are linear (von Neumann, smooth solutions). With the limiter, positivity (a maximum principle:
 in more than one dimension a second-order scheme is not TVD, Goodman et al. 1985 as cited in [9], p. 15 of the
 report) is guaranteed only for smaller steps, for the
-scalar advection of each direction with the limited flux: the van Leer slope of MOSE is the flux limiter $\psi(\theta) =
-\theta/(1+\theta)$, which satisfies $0 \le \psi \le 1$ and $0 \le \psi/\theta \le \mu$ with $\mu = 1$, and with
-Heun and RK3 (SSP coefficient 1) positivity holds for $(1+\mu)\,\nu \le 1$, that is
-$\sum_d \nu_d \le 1/2$; central diffusion is positive for $\text{VNN} \le 1/2$; with the additive rule
-both hold for CFL ≤ 1/2 and VNN ≤ 1/2 ([8], §5.2, §6.2 and §6.4; experiments reported there give
-positive results up to $\nu = 1$ in 1D and about $2/3$ in 2D). With moving shocks and Heun keep `cfl` at
+advection of a scalar with the limited flux: on a line of equal cells the van Leer slope of MOSE is the flux limiter
+$\psi(\theta) = \theta/(1+\theta)$, and with the bounds of the reconstruction
+([Spatial Discretization](numerics.md#muscl-reconstruction), step 3) the limited flux of every limiter but van Albada
+satisfies $0 \le \psi \le 1$ and $0 \le \psi/\theta \le \mu$ with $\mu = 1$ on a line of cells of any lengths. With
+Heun and RK3 (SSP coefficient 1) positivity then holds for $(1+\mu)\,\nu \le 1$: on any mesh, when at every stage the
+Courant number of the flow leaving each cell (the step times the volume flow out of the cell through its faces, over
+its volume) is at most 1/2; central diffusion is positive for $\text{VNN} \le 1/2$; with the additive rule
+both hold for CFL ≤ 1/2 and VNN ≤ 1/2 in smooth flow, where the flow leaving a cell through its faces is about the
+convective rate of the rule (at captured shocks see below) ([8], §5.2, §6.2 and §6.4; experiments reported there give
+positive results up to $\nu = 1$ in 1D and about $2/3$ in 2D). The bound is lower in the first cell next to a wall of a
+RANS run, whose ghost cell holds $-k_1\rho_G$ (and $-\tilde\nu_1\rho_G$; the wall value of $k$, and of $\tilde\nu$ on
+a smooth wall, is zero), $\rho_G$ the density of the ghost cell: there it is $1/(2 + \rho_G/\rho_1)$, and in smooth
+flow CFL ≤ 1/2 keeps it while the Mach number of the flow normal to the wall is below $2\rho_1/\rho_G$. Next to faces whose ghost
+cells extrapolate the cells, $3q_1 - 3q_2 + q_3$ (type `408`, and the flow and soot variables of type `502`),
+positivity is not guaranteed. With moving shocks and Heun keep `cfl` at
 0.5–0.7. With preconditioning,
 $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$ is replaced by the preconditioned eigenvalue
 $\bigl(u_n (1-\alpha) + c^\ast\bigr)|\nabla\xi_d|$.
@@ -576,10 +585,14 @@ and Wilcox 2006 flat plates of the tests at IRS 0.5).
 Smoothing changes the path to the steady state, not the steady state
 itself (a zero residual stays zero).
 
-IRS is switched on only at setup (`irs = true` or `irs-beta > 0`), where its
-arrays are allocated; on a run started with IRS `irs-beta` and `irs-variables`
-can change at runtime and `irs = false` switches it off; `irs = true`, or
-`irs-beta` above 0, added to a run started without IRS is ignored with a warning.
+IRS is on with `irs = true` or `irs-beta > 0`, at the start and at every
+reading of `input.ini` during the run. Its arrays are allocated at the start
+only: a reading that switches it on in a run started without it is an error of
+the reading, which `ini-error` decides ([Input](../user/input.md)). On a run
+started with IRS, `irs-beta` and `irs-variables` can change during the run, and
+IRS goes off when the values in force give neither `irs = true` nor
+`irs-beta > 0`: `irs-beta = 0` switches it off unless `irs = true` is in force,
+and `irs = false` leaves it on while `irs-beta > 0`.
 
 ---
 
@@ -635,8 +648,9 @@ the current level at the iteration after that re-read.
 Every field write of a coarse level also prolongates its solution to the
 finest level and writes it (`field-prolongated`, `wall-prolongated`). On a
 large mesh that write costs more than the coarse iterations between two
-writes; `prolongated-diter` (re-read at runtime) spaces it to at least that
-many iterations of the level. The end of a level always writes it, so the one
+writes; `prolongated-diter`, a key taken at every reading of `input.ini` (column
+During the run of the [Parameter Registry](../user/registry.md)), spaces it to at
+least that many iterations of the level. The end of a level always writes it, so the one
 written at the end of level 2 is the exact start of level 1.
 
 ### Restriction (fine → coarse)

@@ -38,6 +38,10 @@ contains
     ! Registry is built, now load the values from the ini file
     call Load_Ini(fini)
 
+    ! The values of this reading, before the set-up makes its choices: those that a reading during the run checks the keys
+    ! fixed for the run against
+    call Save_Start_Values()
+
     ! The keys of input.ini that the reader does not give
     call Warn_Unread_Keys(fini)
 
@@ -84,26 +88,38 @@ contains
   end subroutine Warn_Unread_Keys
 
 
-  !> input.ini read again during the run, every ini-diter iterations (MOSE_postprocess, at iteration iter). The values
-  !> read again keep to the rules of the registry, as at set-up (Check_Input in Wrap_Setup), and the rotating frame takes
-  !> its omega, axis and origin together (Reload_RotatingFrame). An error of the reading (a file that cannot be read, a
-  !> value that does not read as its type, is out of its rule or is not finite, a change of the model or of the stationary
-  !> faces of the rotating frame, an axis or origin that is not finite or does not read, an axis of zero length) stops
+  !> input.ini read again during the run, every ini-diter iterations (MOSE_postprocess, at iteration iter). Each key is
+  !> treated by its class in the registry (reg%add): a key taken (KEY_TAKEN) takes the value read again; a key fixed for
+  !> the run (KEY_FIXED, KEY_FIXED_OWN) keeps the value that the set-up read, and another value is an error of the
+  !> reading; a key of the start only (KEY_START) is left as it was. The values read again keep to the rules of the
+  !> registry, as at set-up (Check_Input in Wrap_Setup); the keys fixed for the run keep their values (Fixed_Key_Changed),
+  !> and so do the numbered lists of the set-up, the grid levels and the probes (Lists_Changed); the rotating frame checks
+  !> its model and its stationary faces and takes its omega, axis and origin together (Reload_RotatingFrame). An error of
+  !> the reading (a file that cannot be read, a value that does not read as its type, is out of its rule or is not finite,
+  !> another value of a key fixed for the run, of levels, or more probes, a change of the model or of the stationary
+  !> faces of the rotating frame, an axis or origin that is not finite or does not read, an axis of zero length, implicit
+  !> residual smoothing switched on in a run started without it, whose arrays exist only when it is on at set-up, values
+  !> that a check of the set-up between keys refuses, riemann-solver with riemann-options-Mco and schmidt with the table of
+  !> the binary diffusion coefficients) stops
   !> the run with ini-error = stop, as at set-up. With ini-error = warn, the default, the reading is not taken: a warning
   !> gives the iteration and the error (Write_Not_Taken), and the run goes on with every value it had before the reading,
   !> those of the keys of the same reading that were right too (Save_Values before Load_Ini, Restore_Values on the
-  !> error). The value of ini-error in force when the reading starts decides, also when the file read again writes
-  !> another one: Load_Ini writes the value of the file in its variable before the checks. Every rank checks the text
-  !> that rank 0 read and passed to it (Load_Input_File), so every rank finds the same values; the ranks take each
-  !> decision together (the largest of a flag), so that every rank stops, or every rank goes on with the same values (a
-  !> rank that stopped alone would wait for the others in mpi_stop_all, and ranks with other values would call their
-  !> collectives in other orders).
+  !> error). A reading that is taken puts back the values of the keys fixed for the run and of the start only as they
+  !> were before it (Keep_Fixed_Values), so that no code reads a value of the reading in them, and switches implicit
+  !> residual smoothing on or off from the values read as the set-up does (IRS_On). The value of ini-error in
+  !> force when the reading starts decides, also when the file read again writes another one: Load_Ini writes the value
+  !> of the file in its variable before the checks. Every rank checks the text that rank 0 read and passed to it
+  !> (Load_Input_File), so every rank finds the same values; the ranks take each decision together (the largest of a
+  !> flag), so that every rank stops, or every rank goes on with the same values (a rank that stopped alone would wait
+  !> for the others in mpi_stop_all, and ranks with other values would call their collectives in other orders).
   subroutine Read_Inifile_Runtime(iter)
     use Finer,               only: file_ini
-    use MOSE_Backend_INI,    only: Load_Ini, Count_Stationary_Faces
+    use MOSE_Backend_INI,    only: Load_Ini, Count_Stationary_Faces, Lists_Changed
     use MOSE_Lib_RotatingFrame, only: Reload_RotatingFrame
+    use MOSE_Assign_Setup,   only: IRS_On, Riemann_Mco_Error, Schmidt_Error
     use MOSE_Input_Registry
-    use MOSE_Config_Types_m, only: obj_io
+    use MOSE_Parameters_m,   only: codename
+    use MOSE_Config_Types_m, only: obj_io, obj_irs
     use MOSE_Mod_MPI,        only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8, mpi_stop_all
     use iso_fortran_env,     only: R8 => real64
     implicit none
@@ -126,9 +142,23 @@ contains
     call Save_Values()
     call Load_Ini(fini)
 
-    ! Validate registry: the values read again keep to the rules of the registry, as at setup. The rule broken is
-    ! written once, by the first rank that found it (rank 0: every rank checks the same text)
+    ! Validate registry: the values read again keep to the rules of the registry, as at setup. Then the keys fixed for the
+    ! run, and the numbered lists of the set-up (the grid levels, the probes): another value is an error of the reading,
+    ! checked before the rotating frame takes the values read again, so that a reading that is not taken leaves the frame as
+    ! it was. The error is written once, by the first rank that found it (rank 0: every rank checks the same text)
     out = Validate_Registry()
+    if (index(out,'ERROR') == 0) out = Fixed_Key_Changed()
+    if (index(out,'ERROR') == 0) out = Lists_Changed(fini)
+    ! Implicit residual smoothing switched on by the values read (irs = true or irs-beta > 0, as at set-up) in a run that
+    ! started without it: its arrays exist only when it is on at set-up (Allocate_Block), and a reading cannot make them
+    if (index(out,'ERROR') == 0 .and. IRS_On() .and. .not. obj_irs%at_setup) &
+      out = '[ERROR] '//Key_Text(trim(codename)//'-Numerics', merge('irs     ', 'irs-beta', obj_irs%requested))// &
+            ': the run started without implicit residual smoothing, which cannot be switched on during the run '// &
+            '(its arrays exist only when it is on at set-up)'
+    ! The checks of the set-up between keys that name a key a reading takes, on the values read: a reading never gives the
+    ! run values that its set-up refuses
+    if (index(out,'ERROR') == 0) out = Refused_Value(trim(codename)//'-Numerics', 'riemann-options-Mco', Riemann_Mco_Error())
+    if (index(out,'ERROR') == 0) out = Refused_Value(trim(codename)//'-Physics', 'schmidt', Schmidt_Error())
     flag = 0.0_R8
     if (index(out,'ERROR') > 0) flag = 1.0_R8
     call mpi_allreduce_max_r8(flag, flag_all)
@@ -154,7 +184,13 @@ contains
       call mpi_allreduce_min_r8(merge(real(mpi_rank_, R8), huge(1.0_R8), len_trim(reason) > 0), first)
       if (len_trim(reason) > 0 .and. nint(first) == mpi_rank_) call Write_Not_Taken('Input file, read again', iter, reason)
       call Restore_Values()
+      return
     end if
+
+    ! The reading is taken: the keys fixed for the run and those of the start only hold again what they held before it, and
+    ! implicit residual smoothing is on or off as the set-up would make it from the values read
+    call Keep_Fixed_Values()
+    obj_irs%enabled = IRS_On()
 
   end subroutine Read_Inifile_Runtime
 

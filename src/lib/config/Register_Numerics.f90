@@ -27,46 +27,46 @@ contains
     obj_time_scheme%description     = 'none'
 
     ! Solver-type
-    call reg%add( trim(section), 'time-scheme', obj_time_scheme%solver_type, 'euler', 'Time integration solver', 'euler, RK2, RK3', .true. )
+    call reg%add( trim(section), 'time-scheme', obj_time_scheme%solver_type, 'euler', 'Time integration solver', 'euler, RK2, RK3', .true., KEY_FIXED )
 
     ! Stability coefficients and related options
     call reg%add( trim(section), 'cfl', obj_time_scheme%cfl, '0.5', &
-                  'CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17)', '> 0', .true. )
+                  'CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17)', '> 0', .true., KEY_TAKEN )
     call reg%add( trim(section), 'vnn', obj_time_scheme%vnn, '0.3', &
                   'Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62)', &
-                  '> 0', .false. )
-    call reg%add( trim(section), 'cfl-rise-threshold', obj_time_scheme%rampa_cfl_iter, '0', 'CFL rise threshold', '>= 0', .false. )
+                  '> 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'cfl-rise-threshold', obj_time_scheme%rampa_cfl_iter, '0', 'CFL rise threshold', '>= 0', .false., KEY_TAKEN )
 
     ! Time-accurate switch
-    call reg%add( trim(section), 'time-accurate', obj_time_scheme%time_accurate, '.false.', 'Time accurate switch', 'logical', .true. )
+    call reg%add( trim(section), 'time-accurate', obj_time_scheme%time_accurate, '.false.', 'Time accurate switch', 'logical', .true., KEY_FIXED )
 
     ! New state
-    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'cons', 'Integration variables (cons/prim/prec)', 'cons, prim, prec', .false. )
+    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'cons', 'Integration variables (cons/prim/prec)', 'cons, prim, prec', .false., KEY_FIXED )
 
 
     ! Implicit residual smoothing --------------------------
     obj_irs%description     = 'none'
     obj_irs%warning_message = 'none'
     obj_irs%error_message   = 'none'
-    call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', &
-          'Implicit Residual Smoothing (steady runs only; switched on only at setup)', 'logical', .false. )
+    call reg%add( trim(section), 'irs', obj_irs%requested, '.false.', &
+          'Implicit Residual Smoothing (steady runs only; a run started without it cannot switch it on)', 'logical', .false., KEY_TAKEN )
     call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
-          'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false. )
+          'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false., KEY_TAKEN )
     call reg%add( trim(section), 'irs-variables', obj_irs%variables, 'flow', &
           'Residuals smoothed by IRS: flow (species, momentum, energy) or all (also the RANS, '// &
-          'soot and passive-scalar equations; for Spalart-Allmaras: the k-omega models diverge with all)', 'flow, all', .false. )
+          'soot and passive-scalar equations; for Spalart-Allmaras: the k-omega models diverge with all)', 'flow, all', .false., KEY_TAKEN )
 
     ! Preconditioning controls (used when integration-variables = prec)
     obj_prec%description     = 'none'
     obj_prec%warning_message = 'none'
     obj_prec%error_message   = 'none'
     obj_prec%enabled         = .false.
-    call reg%add( trim(section), 'preconditioning-Uref', obj_prec%Ur_ref, '0.0', 'Reference velocity for preconditioning', '>= 0', .false. )
-    call reg%add( trim(section), 'preconditioning-Mach', obj_prec%Mach_target, '0.0', 'Mach target for preconditioning', '>= 0', .false. )
-    call reg%add( trim(section), 'preconditioning-eps-min', obj_prec%eps_min, '0.05', 'Low-Mach cutoff for Ur', 'in (0, 1)', .false. )
-    call reg%add( trim(section), 'preconditioning-Ur-min', obj_prec%Ur_min, '0.0', 'Floor on Ur [m/s]', '>= 0', .false. )
-    call reg%add( trim(section), 'preconditioning-Ur-factor', obj_prec%Ur_factor, '1.0', 'Weiss-Smith multiplicative factor', '> 0', .false. )
-    call reg%add( trim(section), 'preconditioning-Ur-smooth', obj_prec%n_smooth_Ur, '0', 'Ur max-smoothing passes', '>= 0', .false. )
+    call reg%add( trim(section), 'preconditioning-Uref', obj_prec%Ur_ref, '0.0', 'Reference velocity for preconditioning', '>= 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-Mach', obj_prec%Mach_target, '0.0', 'Mach target for preconditioning', '>= 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-eps-min', obj_prec%eps_min, '0.05', 'Low-Mach cutoff for Ur', 'in (0, 1)', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-Ur-min', obj_prec%Ur_min, '0.0', 'Floor on Ur [m/s]', '>= 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-Ur-factor', obj_prec%Ur_factor, '1.0', 'Weiss-Smith multiplicative factor', '> 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-Ur-smooth', obj_prec%n_smooth_Ur, '0', 'Ur max-smoothing passes', '>= 0', .false., KEY_TAKEN )
 
     !! ------------------------------------------------------
     !! ------------------------------------------------------
@@ -80,10 +80,10 @@ contains
     obj_space_scheme%description     = 'none'
     obj_space_scheme%warning_message = 'none'
     obj_space_scheme%error_message   = 'none'
-    call reg%add( trim(section), 'space-reconstruction', obj_space_scheme%space_reconstruction, '', 'Space reconstruction method', 'MUSCL, first-order', .true. )
+    call reg%add( trim(section), 'space-reconstruction', obj_space_scheme%space_reconstruction, '', 'Space reconstruction method', 'MUSCL, first-order', .true., KEY_FIXED )
     call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, '', &
           'Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order)', &
-          'vanalbada, minmod, superbee, vanleer, mc', .false. )
+          'vanalbada, minmod, superbee, vanleer, mc', .false., KEY_FIXED )
     call reg%add( trim(section), 'diffusive-metric', obj_space_scheme%diffusive_metric, 'stencil', &
                   'Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of '// &
                   'the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the '// &
@@ -93,20 +93,20 @@ contains
                   'metric of the cell; mean takes the mean of the two metrics (the faces between blocks and of type 200 the '// &
                   'inverse of the mean of the inverse metrics), overstates the gradient by (1+r)^2/(4r) at a cell-size ratio '// &
                   'r and does not converge next to a symmetry plane (300) that bounds a sector of a polar mesh', &
-                  'stencil, mean', .false. )
+                  'stencil, mean', .false., KEY_FIXED )
 
     ! Shock Detector ---------------------------------------
     obj_shock_detector%warning_message = 'none'
     obj_shock_detector%error_message   = 'none'
-    call reg%add( trim(section), 'shock-detector', obj_shock_detector%description, '', 'Shock detector method', 'Tramel, Chen', .false. )
+    call reg%add( trim(section), 'shock-detector', obj_shock_detector%description, '', 'Shock detector method', 'Tramel, Chen', .false., KEY_FIXED )
 
     ! Riemann solver ---------------------------------------
     obj_riemann%description     = 'none'
     obj_riemann%warning_message = 'none'
     obj_riemann%error_message   = 'none'
     call reg%add( trim(section), 'riemann-solver', obj_riemann%description, 'HLLC', &
-          'Riemann solver', 'HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact', .false. )
-    call reg%add( trim(section), 'riemann-options-Mco', obj_riemann%Mco, '0.0', 'Low-Mach acoustic-dissipation cutoff Mach (floor)', '>= 0', .false. )
+          'Riemann solver', 'HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact', .false., KEY_FIXED )
+    call reg%add( trim(section), 'riemann-options-Mco', obj_riemann%Mco, '0.0', 'Low-Mach acoustic-dissipation cutoff Mach (floor)', '>= 0', .false., KEY_TAKEN )
 
 
     ! Multigrid levels --------------------------------------
@@ -136,17 +136,17 @@ contains
     if (.not. obj_sim_param%HYDRA_MG) then 
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
-        call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
+        call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m)), '>= 0', .false., KEY_TAKEN )
       enddo
       call reg%add( trim(codename)//'-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
-        'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write; re-read at runtime)', '>= 0', .false. )
+        'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write)', '>= 0', .false., KEY_TAKEN )
     else
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
-        call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
+        call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m)), '>= 0', .false., KEY_TAKEN )
       enddo
       call reg%add( 'HYDRA-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
-        'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write; re-read at runtime)', '>= 0', .false. )
+        'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write)', '>= 0', .false., KEY_TAKEN )
     endif
 
   end subroutine Register_Multigrid_Levels  

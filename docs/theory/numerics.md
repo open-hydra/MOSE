@@ -3,7 +3,9 @@
 MOSE uses a cell-centred finite volume method (FVM) on structured
 multi-block grids.  This page describes the discretization framework,
 the MUSCL reconstruction that provides second-order accuracy, the
-slope limiters that ensure monotonicity, and the shock-detection
+slope limiters that keep each reconstructed face value between the values
+of the two cells of the face on any mesh (van Albada excepted: see
+[Flux Limiters](#flux-limiters)), and the shock-detection
 sensor that adaptively reduces the order near discontinuities.
 
 ---
@@ -148,15 +150,44 @@ $$
 
    where $\phi$ is the chosen limiter function (see below).
 
-3. Reconstruct interface values:
+3. Bound the limited slopes so that the value of each cell at both its faces
+   lies between the value of the cell and that of the neighbour across the
+   face, on a line of cells of any lengths: the change over half the cell is at
+   most the jump to each neighbour [15],
+
+$$
+|\bar{s}_L|\,\delta l_L \le \min\bigl(|P_{i+1}-P_i|,\ |P_i-P_{i-1}|\bigr),\qquad
+|\bar{s}_R|\,\delta l_R \le \min\bigl(|P_{i+2}-P_{i+1}|,\ |P_{i+1}-P_i|\bigr)
+$$
+
+   With $\phi(a,b) = \varphi(r)\,a$, $r = b/a$, the limiter takes, for $r > 0$,
+   $\varphi \le \Delta l_a/\delta l$ and $\varphi \le r\,\Delta l_b/\delta l$,
+   where $\Delta l_a$ and $\Delta l_b$ are the spacings of the slopes $a$ and $b$
+   and $\delta l$ is the distance from the centre of the cell to the face: for
+   the cell of length $h_i$ before the face, $\varphi \le (h_i + h_{i+1})/h_i$
+   and $\varphi \le r\,(h_{i-1} + h_i)/h_i$. On a line of equal cells the bounds
+   are $\varphi \le 2$ and $\varphi \le 2r$, the edges of the TVD region of Sweby's
+   diagram [16], and the slope is the limiter's own; for
+   data linear along the line $r = 1$, where no bound acts. The two faces of a
+   cell take the same slope, except at the boundary faces below, which take a
+   slope of their own. Minmod never exceeds the bounds and does not take them.
+   The faces of symmetry planes and walls, whose ghost cell is the mirror
+   image of the cell, and of the supersonic inflow of `405` and `420`, whose
+   ghost cell holds the inflow state and whose slopes are differences of index,
+   take the bounds of a line of equal cells, 2 and 2: the limiter's own slope,
+   which keeps their face value between the cell and the ghost cell.
+
+4. Reconstruct interface values:
 
 $$
 P_L = P_i     + \beta\,\bar{s}_L\,\delta l_L,\qquad
 P_R = P_{i+1} - \beta\,\bar{s}_R\,\delta l_R
 $$
 
-   where $\delta l_L,\,\delta l_R$ are the distances from the cell
-   centres to the interface and $\beta$ is a blending parameter
+   where $\delta l_L,\,\delta l_R$ are half the lengths of cells $i$ and $i{+}1$
+   along the line (the length of a cell along a direction is that of its mean
+   edge in that direction), the spacings $\Delta l$ are the means of the lengths
+   of two consecutive cells, and $\beta$ is a blending parameter
    controlled by the shock detector.
 
 !!! note "Role of β"
@@ -165,6 +196,28 @@ $$
     $\beta = 0$ reduces reconstruction to first order (donor-cell),
     which is used in the immediate vicinity of shocks.
     The shock-detection sensor (see below) sets $\beta$.
+
+The reconstruction is one-dimensional along the grid lines: it treats the cell
+centres of a line and the faces between them as points of a straight line,
+spaced by the cell lengths. Where the centre of a face lies off the chord
+between the two cell centres by a fraction of the cell size that refinement
+does not reduce, the offset alone makes the face value of a linear field wrong
+by that fraction of the cell size times the gradient across the chord: there
+the reconstruction is of first order. On grids whose cells are skewed the other
+way of their neighbours the face centres lie off the chords on alternate sides,
+the errors of the two faces of a cell add up, and the truncation error of the
+cell does not converge. The error of the solution converges nonetheless: on
+the zigzag grids of the
+[manufactured solutions on skewed grids](../vv/2D-mms-skewed.md), whose face
+centres lie up to 0.3 cell sizes off the chords at every refinement, the
+observed $L_2$ orders on the finest pair are 0.97 to 1.10. Diskin and Thomas
+report the same behaviour for node-centred schemes on perturbed mixed-element
+grids, where their edge-based flux integration is of first order: truncation
+errors that do not converge, discretization errors that converge at first
+order [18, Sec. VII.C]. On the same grids five of their six cell-centred
+schemes, which reconstruct the face values from the value and the gradient of
+each cell and take the flux at the face centre, keep the second order
+[18, Sec. III, VII.C and X].
 
 At the first interior face the slope behind the first cell, $s_0$ or $s_2$,
 takes the ghost cell of the boundary face. Behind a zero-gradient face (`0`,
@@ -221,7 +274,10 @@ $$
 \phi(a,b) = \frac{r^2 + r}{1 + r^2}\;a
 $$
 
-Smooth, less dissipative than van Leer near local extrema.
+Smooth, less dissipative than van Leer near local extrema. Unlike the others
+it is not zero where the two slopes have opposite signs ($r < 0$): there the
+bounds of step 3 do not apply, and the face value can lie outside the values
+of the two cells of the face, on any mesh.
 
 **MC (Monotonized Central)**
 
@@ -247,7 +303,11 @@ introduce mild staircase artefacts.
 
 ### TVD Diagram
 
-All non-trivial limiters fall within Sweby's TVD region in the $(r,\,\phi)$ diagram:
+On a line of equal cells van Leer, MC, superbee and minmod lie in Sweby's TVD
+region in the $(r,\,\phi)$ diagram; on other lines the bounds of the
+reconstruction (step 3) keep them in the region that Zeng gives for lines of
+cells of any lengths [16], and the forward Euler step of one-dimensional
+advection is then TVD for Courant numbers up to 1/2 [15]:
 
 | Limiter | Dissipation | Smoothness |
 |---------|:-----------:|:----------:|
@@ -843,23 +903,52 @@ radius (test `MMSResiduals`). The stop stays with every metric, a declared
 limit: the axis at $r = 0$ is not treated completely (ghost cells beyond the
 axis, not copies).
 
-The value of a cell is the mean of the solution over the cell, and the mean of
-a linear field over a cell is its value at the centroid of the cell volume
-[13, Eq. (3.1) and (3.12)]. MOSE places the value at the cell centre, the mean
-of the eight nodes. The two points coincide on a parallelepiped, but not next
-to the axis of a wedge: in the first row of cells, whose inner nodes are on the
-axis or at a small radius, the centroid lies at two thirds of the height of the
-cell from the axis and the cell centre at one half, at every refinement. There
-the operators that take the cell centres are not exact for a linear field given
-by its cell means: with uniform radial spacing and `stencil`, the radial
-gradient at the faces between the first and the second row is $1/9$ too small
-($1/45$ between the second and the third), the cell gradient of the turbulence
-sources of the first row is off by $1/9$, and the term $u_r/r$ of the hoop
-stress is $1/3$ too large in the first row ($1/27$ in the second). These errors
-do not decrease as the mesh is refined. In a one-dimensional model of the
+The value of a cell is the mean of the solution over the cell. To compute a
+flux it is convenient to read this mean as the value of the solution at some
+average point of the cell [8, p. 18]: MOSE takes the cell centre, the mean of
+the eight nodes, as cell-centred schemes typically do [9, Sec. III]. The mean
+of a linear field over a cell is its value at the centroid of the cell volume
+[13, Eq. (3.1) and (3.12)]. Vinokur, for whom a finite-volume method needs the
+location of this point only in the output of the solution, notes that the
+centroid "is strictly valid only if all the components of U vary linearly
+throughout the cell" and that, "since the distribution of U is not known, the
+centroid has no particular advantage over the cell center, defined as the
+vectorial average of the cell vertices" [8, p. 18]. The two points coincide
+on a parallelepiped, but not next to the axis of a wedge: in the first row of
+cells, whose inner nodes are on the axis or at a small radius, the centroid
+lies at two thirds of the height of the cell from the axis and the cell centre
+at one half, at every refinement. There the operators that take the cell
+centres are not exact for a linear field given by its cell means: with uniform
+radial spacing and `stencil`, the radial gradient at the faces between the
+first and the second row is $1/9$ too small ($1/45$ between the second and the
+third), the cell gradient of the turbulence sources of the first row is off by
+$1/9$, and the term $u_r/r$ of the hoop stress is $1/3$ too large in the first
+row ($1/27$ in the second).
+
+These errors do not decrease as the mesh is refined: with the exact solution
+given by its cell means, the truncation error of the first rows does not
+converge (in the one-dimensional model below it grows as $1/\Delta r$). The
+error of the solution converges nonetheless. In a one-dimensional model of the
 viscous terms of the radial momentum next to the axis, with these positions,
-the error of the solution decreases at first order in the first row and at
-second order in its mean weighted by the volume.
+the error against the cell means decreases at first order in the first row and
+at second order in its mean weighted by the volume (the $L_1$ norm); against
+the exact values at the cell centres, where MOSE reads the value of a cell, its
+largest error decreases at second order. In MOSE, with a manufactured solution
+on wedges of $1^\circ$ and $0.5^\circ$ with SST, uniform radial spacing and 32,
+64 and 128 cells across the radius (the manufactured-solution driver with the
+SST sources of the wedge added, which the repository does not contain), the
+error of $k$ and $\omega$ in the first row decreases at orders 0.95 to 1.02
+against either value, and their $L_1$ error at 1.8 to 2.1: the first row loses
+one order of accuracy, a local loss. The $L_1$ errors of the density, the
+pressure and the axial and radial velocities of the same runs decrease at
+orders 0.02 to 1.67 between 64 and 128 cells; at 128 cells those of the
+density, the pressure and the axial velocity are 3.6 to 3.9 times smaller on
+the $0.5^\circ$ wedge than on the $1^\circ$ one. On irregular grids the error of
+the solution can keep the order of the scheme where the truncation error
+converges at a lower order or does not converge at all [9, Sec. V.A]; a global
+error better behaved than the local truncation error would indicate is the
+property called supraconvergence [17, Sec. 1], here that of the $L_1$ error of
+the model and of $k$ and $\omega$.
 
 Next to the axis the hoop stress also stiffens the explicit step. In the radial
 momentum of the first row of cells, at $r \approx \Delta r/2$, it is a damping
@@ -1014,7 +1103,9 @@ of the records or of the threads.
    area vector of a face of a hexahedron as half the cross product of its
    diagonals; the shape of each face "precisely defined and consistently used
    by the two neighboring cells" so that the volumes sum to the total volume;
-   the doubly ruled face); p. 26, Eq. (101) ("the two
+   the doubly ruled face); p. 18 (the value of a cell taken as the value at
+   some average point of the cell to compute a flux; the centroid and the
+   vectorial average of the vertices); p. 26, Eq. (101) ("the two
    difference approximations must be the same"); p. 23, Eq. (90)–(91) (the
    transport terms on an auxiliary cell, with means of four cells along the
    face); p. 40, Eq. (153) (the difference across a wall). Journal version:
@@ -1022,7 +1113,7 @@ of the records or of the threads.
 9. B. Diskin, J. L. Thomas, E. J. Nielsen, H. Nishikawa, J. A. White,
    "Comparison of Node-Centered and Cell-Centered Unstructured Finite-Volume
    Discretizations: Viscous Fluxes," *AIAA J.*, 48(7), 1326–1338, 2010,
-   doi:10.2514/1.44940, Sec. III.A.
+   doi:10.2514/1.44940, Sec. III, III.A and V.A.
 10. H. Nishikawa, "Beyond Interface Gradient: A General Principle for
     Constructing Diffusion Schemes," AIAA Paper 2010-5093, 2010, App. C.
 11. Y. Coudière, J.-P. Vila, P. Villedieu, "Convergence rate of a finite volume
@@ -1039,3 +1130,20 @@ of the records or of the threads.
     London, 1996, Eq. (3.1), (3.12) and (3.32).
 14. D. J. Mavriplis, "Revisiting the Least-squares Procedure for Gradient
     Reconstruction on Unstructured Meshes," NASA/CR-2003-212683, 2003, p. 14.
+15. M. Berger, M. J. Aftosmis, S. M. Murman, "Analysis of slope limiters on
+    irregular grids," AIAA Paper 2005-0490, 43rd AIAA Aerospace Sciences
+    Meeting, Reno, 2005, §III.A, Eq. (13)–(19): the TVD condition on the limited
+    slope of a cell of a non-uniform grid, at most
+    $\min\{2(u_{i+1}-u_i)/h_i,\ 2(u_i-u_{i-1})/h_i\}$ for monotone increasing data
+    (Eq. 19, a maximum value as p. 8 reads it), with the forward Euler step of
+    the upwind scheme for Courant numbers up to 1/2 (Eq. 17).
+16. X. Zeng, "A general approach to enhance slope limiters on non-uniform
+    rectilinear grids," arXiv:1301.0967v2, 2014, Eq. (2.13), (3.11) and
+    §3.3 (Sweby's diagram on non-uniform grids).
+17. B. Wendroff, A. B. White, Jr., "Some supraconvergent schemes for
+    hyperbolic equations on irregular grids," Los Alamos National Laboratory,
+    LA-UR-88-1384, 1988 (2nd International Conference on Hyperbolic Problems,
+    Aachen, 1988).
+18. B. Diskin, J. L. Thomas, "Comparison of node-centered and cell-centered
+    unstructured finite-volume discretizations: inviscid fluxes," 48th AIAA
+    Aerospace Sciences Meeting, Orlando, FL, 2010 (NASA NTRS 20100003409).

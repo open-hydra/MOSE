@@ -1,8 +1,17 @@
 import argparse
 import math
 import sys
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
+
+# ORION Python package of the repository (lib/ORION/src/python)
+root = Path(__file__).resolve().parent
+for parent in [root, *root.parents]:
+    candidate = parent / "lib" / "ORION" / "src" / "python"
+    if candidate.exists():
+        sys.path.insert(0, str(candidate))
+        break
 from ORION import read_TEC
 import warnings
 warnings.filterwarnings("ignore")

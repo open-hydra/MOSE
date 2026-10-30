@@ -20,31 +20,31 @@ contains
     obj_io%error_message   = 'none'
     obj_io%description     = 'none'
     
-    call reg%add( section, 'ic-format', obj_io%ini_format, 'tecplot ascii', 'Initial condition (INPUT/ic.*) format', 'tecplot ascii, tecplot binary, vtk ascii, vtk raw', .false. )
-    call reg%add( section, 'sol-format', obj_io%sol_format, 'tecplot ascii', 'Solution (OUTPUT/field.*) format', 'tecplot ascii, tecplot binary, vtk ascii, vtk raw', .false. )
+    call reg%add( section, 'ic-format', obj_io%ini_format, 'tecplot ascii', 'Initial condition (INPUT/ic.*) format', 'tecplot ascii, tecplot binary, vtk ascii, vtk raw', .false., KEY_START )
+    call reg%add( section, 'sol-format', obj_io%sol_format, 'tecplot ascii', 'Solution (OUTPUT/field.*) format', 'tecplot ascii, tecplot binary, vtk ascii, vtk raw', .false., KEY_FIXED )
     call reg%add( section, 'decomposition-map', obj_io%decomposition_map, 'none', &
-                  'Block-to-rank map in INPUT/ (none: MOSE assigns the blocks)', '', .false. )
+                  'Block-to-rank map in INPUT/ (none: MOSE assigns the blocks)', '', .false., KEY_START )
 
-    call reg%add( section, 'sol-diter', obj_io%sol_diter, '1000000000', 'Solution output iter frequency', '> 0', .false. )
-    call reg%add( section, 'sol-dtime', obj_io%sol_dtime, '1e30', 'Solution output time frequency', '> 0', .false. )
-    call reg%add( section, 'sol-overwrite', obj_io%sol_overwrite, 'true', 'Overwrite solution files', 'true, false', .false. )
+    call reg%add( section, 'sol-diter', obj_io%sol_diter, '1000000000', 'Solution output iter frequency', '> 0', .false., KEY_TAKEN )
+    call reg%add( section, 'sol-dtime', obj_io%sol_dtime, '1e30', 'Solution output time frequency', '> 0', .false., KEY_TAKEN )
+    call reg%add( section, 'sol-overwrite', obj_io%sol_overwrite, 'true', 'Overwrite solution files', 'true, false', .false., KEY_TAKEN )
     
     ! Define variables to write
-    call reg%add( section, 'sol-variables', obj_io%sol_variables, 'thermo', 'Solution variables to write', '', .false. )
-    call reg%add( section, 'wall-variables', obj_io%wall_variables, 'mech thermal', 'Wall variables to write', '', .false. )
+    call reg%add( section, 'sol-variables', obj_io%sol_variables, 'thermo', 'Solution variables to write', '', .false., KEY_FIXED )
+    call reg%add( section, 'wall-variables', obj_io%wall_variables, 'mech thermal', 'Wall variables to write', '', .false., KEY_FIXED )
     
     ! Residual history file
-    call reg%add( section, 'res-diter', obj_io%res_diter, '1', 'Residual history iter frequency', '> 0', .false. )
+    call reg%add( section, 'res-diter', obj_io%res_diter, '1', 'Residual history iter frequency', '> 0', .false., KEY_TAKEN )
 
     ! Shell options
-    call reg%add( section, 'shell-diter', obj_io%shell_diter, '1', 'Shell update iter frequency', '> 0', .false. )
-    call reg%add( section, 'ini-diter', obj_io%ini_diter, '10000', 'input.ini update iter frequency', '> 0', .false. )
+    call reg%add( section, 'shell-diter', obj_io%shell_diter, '1', 'Shell update iter frequency', '> 0', .false., KEY_TAKEN )
+    call reg%add( section, 'ini-diter', obj_io%ini_diter, '10000', 'input.ini update iter frequency', '> 0', .false., KEY_TAKEN )
     call reg%add( section, 'ini-error', obj_io%ini_error, 'warn', &
                   'input.ini read again with an error: warn and keep the values held before the reading, or stop '// &
-                  '(at set-up every error stops)', 'warn, stop', .false. )
+                  '(at set-up every error stops)', 'warn, stop', .false., KEY_TAKEN )
 
     ! Wall-clock timing report
-    call reg%add( section, 'timer-diter', obj_io%timer_diter, '0', 'Wall-clock timing report iter frequency (0 = off)', '>= 0', .false. )
+    call reg%add( section, 'timer-diter', obj_io%timer_diter, '0', 'Wall-clock timing report iter frequency (0 = off)', '>= 0', .false., KEY_TAKEN )
 
   end subroutine Register_IO_Fields
 
@@ -59,7 +59,7 @@ contains
 
     allocate(obj_io_probes(n))
     do p = 1, n
-      call reg%add( trim(codename)//'-Probes', 'probe'//trim(str(.true.,p)), obj_io_probes(p)%file, 'probe-placeholder', 'Probe file name', '', .false. )
+      call reg%add( trim(codename)//'-Probes', 'probe'//trim(str(.true.,p)), obj_io_probes(p)%file, 'probe-placeholder', 'Probe file name', '', .false., KEY_FIXED )
       call Register_One_Probe(p, probes_name(p))
     end do
 
@@ -78,15 +78,15 @@ contains
     obj_io_probes(p)%description     = 'none'
 
     ! Vars name
-    call reg%add( trim(probe_name), 'variables', obj_io_probes(p)%varnames, 'none', 'Probe variables to write', '', .false. )
+    call reg%add( trim(probe_name), 'variables', obj_io_probes(p)%varnames, 'none', 'Probe variables to write', '', .false., KEY_FIXED )
 
     ! Frequency
-    call reg%add( trim(probe_name), 'dtime', obj_io_probes(p)%dtime, '1e30', 'Probe output time frequency', '> 0', .false. )
-    call reg%add( trim(probe_name), 'diter', obj_io_probes(p)%diter, '1000000000', 'Probe output iter frequency', '> 0', .false. )
+    call reg%add( trim(probe_name), 'dtime', obj_io_probes(p)%dtime, '1e30', 'Probe output time frequency', '> 0', .false., KEY_FIXED )
+    call reg%add( trim(probe_name), 'diter', obj_io_probes(p)%diter, '1000000000', 'Probe output iter frequency', '> 0', .false., KEY_FIXED )
 
     ! Location
-    call reg%add( trim(probe_name), 'index-position', obj_io_probes(p)%iloc, '0 0 0 0', 'Probe location by index', '>= 0', .false. )
-    call reg%add( trim(probe_name), 'position', obj_io_probes(p)%loc, '0.0 0.0 0.0', 'Probe location by coordinates', '', .false. )
+    call reg%add( trim(probe_name), 'index-position', obj_io_probes(p)%iloc, '0 0 0 0', 'Probe location by index', '>= 0', .false., KEY_FIXED )
+    call reg%add( trim(probe_name), 'position', obj_io_probes(p)%loc, '0.0 0.0 0.0', 'Probe location by coordinates', '', .false., KEY_FIXED )
 
   end subroutine Register_One_Probe
 
