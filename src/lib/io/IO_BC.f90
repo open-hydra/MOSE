@@ -132,6 +132,9 @@ contains
       ! This list must stay in step with the property lines actually consumed by
       ! Read_BC below: if a type reads one there but is missing here, the scan
       ! mistakes its property line for a record and the whole file is rejected.
+      ! 501 and 506 keep their property line in this list, as the boundary-condition builder of ATLAS writes it, although
+      ! Read_BCfile stops on their record before reading it (Unapplied_Type): a file of that builder reaches that stop, not
+      ! the error of the count.
       ! IDs with ONE property line:
       !   101/103 = connection | 201 = periodic | 301,302 = wall | 401-410,420 = inlet/outlet
       !   501 = manifold | 502 = srm | 503-506 = gas-surface interaction
@@ -174,7 +177,7 @@ contains
     integer, intent(in)                             :: level
     integer, dimension(1:,1:), intent(inout)        :: n_bf
     ! Local
-    integer :: cc, i, s, nnozzle, nmanifold
+    integer :: cc, i, s, nnozzle
     integer :: unitfile, ios, cios, ip
     integer :: nline                         ! lines of the file read so far (Next_Line)
     integer :: last420                       ! the last record of type 420 read (Nozzle_States), 0 before the first
@@ -215,7 +218,6 @@ contains
       nchimera = 0
       nnozzle  = 0
       ncoupled = 0
-      nmanifold = 0
       next     = 0
       nKaffs   = 0
       nstate     = 0
@@ -518,19 +520,18 @@ contains
             call Need_R ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
             call Need_R ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
             call Need_Inward ( i, bc(i)%type, nline, bc(i)%f, bc(i)%mdot, 'g' )
-            ! The thresholds of the record and the supersonic design exit state of its nozzle
+            ! The thresholds of the record, the supersonic design exit state of its nozzle and p_shock
             call Nozzle_States ( i, nline, bc, last420 )
             last420 = i
           end if
 
         ! ─────────────────────────────────────────────────────────────────────
-        ! Manifold
-        case(501)
-          if (level == 1) nmanifold = nmanifold + 1
-          bc(i)%bs = IEMPTY ; bc(i)%fs = IEMPTY
-          call Next_Line ( unitfile, pline, ios, nline )
-          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%bs, bc(i)%fs
-          if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, [ bc(i)%bs, bc(i)%fs ], 'bs fs' )
+        ! Types that MOSE does not apply: 409 (a forced outlet), 501 (a manifold) and 506 (surface reactions and
+        ! pyrolysis). No branch of the boundary fluxes applies them, so the face would get no flux: the run stops
+        ! here, at the line of the record, before its property line (Unapplied_Type). Check_BC counts the property
+        ! line of 501 and 506, as the boundary-condition builder of ATLAS writes them, so such a file reaches this stop.
+        case(409, 501, 506)
+          call Unapplied_Type ( i, bc(i)%type, nline )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! SRM grain boundary
@@ -597,22 +598,6 @@ contains
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%GSI_surf_reac_id, bc(i)%qrad
           if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
-
-        ! ─────────────────────────────────────────────────────────────────────
-        ! GSI - Surface reactions + pyrolysis
-        ! Second line: pyrolysis model id, surface reaction id, radiative flux
-        case(506)
-          if (level == 1) nwall  = nwall  + 1
-          if (level == 1) ngsi   = ngsi   + 1
-          allocate( bc(i) % ci(1 : nsc) )
-          obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
-          bc(i)%qrad = EMPTY ; bc(i)%ci = EMPTY
-          call Next_Line ( unitfile, pline, ios, nline )
-          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%GSI_pyro_model_id, bc(i)%GSI_surf_reac_id, bc(i)%qrad, bc(i)%eps_wall, (bc(i)%ci(s), s = 1, nsc)
-          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%qrad, bc(i)%eps_wall, bc(i)%ci ], &
-                                             'q_rad eps_wall massf' )
-          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
-          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Coupled multi-solver wall
@@ -1094,14 +1079,16 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
-  ! Nozzle_States: the thresholds of the choked nozzle of record n (type 420, line nline of the file) and the
-  !   supersonic design exit state that its face takes below p_sup (Nozzle_Design_State). The run stops when the
-  !   thresholds do not satisfy 0 < p_sup <= p_sub < p0, the order of the three branches of the face; when g is above
+  ! Nozzle_States: the thresholds of the choked nozzle of record n (type 420, line nline of the file), its supersonic
+  !   design exit state and the pressure p_shock behind a normal shock at that exit, below which, and below p_sub, its
+  !   face takes the design state (Nozzle_Design_State). The run stops when the thresholds do not satisfy
+  !   0 < p_sup <= p_sub < p0, the order of the exit pressures of the nozzle; when g is above
   !   the choked mass flux G* of the reservoir by more than 1e-9 of it (no exit of the reservoir has that mass flux;
   !   the boundary-condition builder of ATLAS writes G* for an exit at the throat); and, with a message that asks to
   !   extend the tables of the gas, when the critical state or the design state is at or below their lowest temperature
   !   above 0 K, or T0 above Tmax - 1, one kelvin below their last row, where their interpolation ends. A record with
-  !   the T0, p0, g and mass fractions of the previous record of type 420, prev (0: none), takes its design state.
+  !   the T0, p0, g and mass fractions of the previous record of type 420, prev (0: none), takes its design state and
+  !   its p_shock.
   subroutine Nozzle_States ( n, nline, bc, prev )
     use MOSE_Advanced_Types_m,            only: MOSE_bc_type
     use MOSE_Global_m,                    only: nsc, nrans
@@ -1133,12 +1120,13 @@ contains
            all ( bc(prev)%ci(nrans+1:nrans+nsc) == bc(n)%ci(nrans+1:nrans+nsc) ) ) then
         bc(n)%p_design = bc(prev)%p_design
         bc(n)%rho_design = bc(prev)%rho_design
+        bc(n)%p_shock = bc(prev)%p_shock
         return
       end if
     end if
 
     call Nozzle_Design_State ( bc(n)%T0, bc(n)%p0, g, bc(n)%ci(nrans+1:nrans+nsc), Gstar, bc(n)%p_design, &
-                               bc(n)%rho_design, status )
+                               bc(n)%rho_design, bc(n)%p_shock, status )
     if ( status <= 1 ) return
     write(txt(1),'(ES23.16)') bc(n)%T0
     write(txt(2),'(ES23.16)') bc(n)%p0
@@ -1214,6 +1202,41 @@ contains
     call mpi_stop_all ( trim(msg) )
 
   end subroutine Empty_Field
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Unapplied_Type: stop the run on record n, of type btype, whose record line is line nline of the boundary file: a type
+  !   that MOSE does not apply, 409 (a forced outlet), 501 (a manifold) or 506 (surface reactions and pyrolysis), whose
+  !   face would get no flux (for another btype the message names no model). Every rank reads every record of the file, so
+  !   every rank stops on the same record (mpi_stop_all).
+  subroutine Unapplied_Type ( n, btype, nline )
+    use MOSE_Mod_MPI, only: mpi_stop_all
+    implicit none
+    integer, intent(in) :: n, btype, nline
+    ! Local
+    character(len=400) :: msg
+    character(len=40)  :: what
+    character(len=120) :: advice
+
+    select case ( btype )
+    case ( 409 )
+      what   = 'a forced outlet'
+      advice = 'give the face an outlet type (406, or 400)'
+    case ( 501 )
+      what   = 'a manifold'
+      advice = 'join faces that match cell by cell with a block connection (101), or give the face an inlet or outlet type'
+    case ( 506 )
+      what   = 'surface reactions and pyrolysis'
+      advice = 'give the face type 504 (pyrolysis) or 505 (surface reactions)'
+    case default
+      what   = 'a type with no boundary flux'
+      advice = 'give the face a type of the user guide (docs/user/boundary-conditions.md)'
+    end select
+    write(msg,'(3A,I0,A,I0,A,I0,A,I0,4A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type ', btype, &
+      '): MOSE does not apply type ', btype, ' (', trim(what), '): the face would get no flux; ', trim(advice)
+    call mpi_stop_all ( trim(msg) )
+
+  end subroutine Unapplied_Type
 
 
   !─────────────────────────────────────────────────────────────────────────────

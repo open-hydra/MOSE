@@ -6,7 +6,18 @@ module MOSE_Input_Registry
 
   integer, parameter :: TYPE_INT=1, TYPE_REAL=2, TYPE_LOG=3, TYPE_STR=4
 
+  ! What a reading of input.ini during the run does with a key: the class that every reg%add gives (its argument during_run,
+  ! the column During the run of docs/user/registry.md)
+  integer, parameter, public :: KEY_TAKEN = 1      ! Every reading takes the value written
+  integer, parameter, public :: KEY_FIXED = 2      ! Fixed for the run: the set-up makes from it a choice that a reading cannot
+                                                   ! make again; a value written other than the one the set-up read is an error
+                                                   ! of the reading (Fixed_Key_Changed)
+  integer, parameter, public :: KEY_FIXED_OWN = 3  ! Fixed for the run, and checked by its model, which compares the value read
+                                                   ! again by its meaning and names the error (the rotating frame)
+  integer, parameter, public :: KEY_START = 4      ! For the start of the run only: a reading leaves it as it was
+
   public :: registry_t, Validate_Registry, Save_Values, Restore_Values, Key_Is_Set
+  public :: Save_Start_Values, Fixed_Key_Changed, Keep_Fixed_Values, Key_Text, Refused_Value
 
   !--------------------------------------------------------
   ! Value container (typed pointers)
@@ -38,6 +49,7 @@ module MOSE_Input_Registry
     character(len=:), allocatable :: text       ! The value in input.ini as written, when the key is there (Load_Ini)
 
     integer :: type_id = 0
+    integer :: during_run = 0                   ! KEY_TAKEN, KEY_FIXED, KEY_FIXED_OWN or KEY_START
     type(param_value_t) :: value
   end type
 
@@ -78,7 +90,7 @@ module MOSE_Input_Registry
 
 
   !--------------------------------------------------------
-  ! Copy of the values of the registry (Save_Values, Restore_Values)
+  ! Copy of the values of the registry (Save_Values, Restore_Values; Save_Start_Values)
   !--------------------------------------------------------
   type :: saved_value_t
     integer  :: i = 0
@@ -93,7 +105,8 @@ module MOSE_Input_Registry
     character(len=:), allocatable :: text
   end type
 
-  type(saved_value_t), allocatable :: saved(:)
+  type(saved_value_t), allocatable :: saved(:)   ! Before a reading during the run (Save_Values)
+  type(saved_value_t), allocatable :: start(:)   ! The reading of the set-up (Save_Start_Values)
 
 
 contains
@@ -154,13 +167,14 @@ contains
   ! Add integer parameter
   !========================================================
 
-  subroutine add_int(this,section,name,var,default,desc,allowed,required)
+  subroutine add_int(this,section,name,var,default,desc,allowed,required,during_run)
 
     implicit none
 
     class(registry_t), intent(inout) :: this
     character(*), intent(in) :: section,name,default,desc,allowed
     logical, intent(in) :: required
+    integer, intent(in) :: during_run   ! What a reading during the run does with the key: KEY_TAKEN, KEY_FIXED, ...
     integer, target, intent(inout) :: var
 
     integer :: n
@@ -176,6 +190,7 @@ contains
     this%params(n)%default_str = default
     this%params(n)%allowed = allowed
     this%params(n)%required = required
+    this%params(n)%during_run = during_run
 
     this%params(n)%type_id = TYPE_INT
     this%params(n)%value%i => var
@@ -189,13 +204,14 @@ contains
   ! Add real parameter
   !========================================================
 
-  subroutine add_real(this,section,name,var,default,desc,allowed,required)
+  subroutine add_real(this,section,name,var,default,desc,allowed,required,during_run)
 
     implicit none
 
     class(registry_t), intent(inout) :: this
     character(*), intent(in) :: section,name,default,desc,allowed
     logical, intent(in) :: required
+    integer, intent(in) :: during_run   ! What a reading during the run does with the key: KEY_TAKEN, KEY_FIXED, ...
     real(R8), target, intent(inout) :: var
 
     integer :: n
@@ -211,6 +227,7 @@ contains
     this%params(n)%default_str = default
     this%params(n)%allowed = allowed
     this%params(n)%required = required
+    this%params(n)%during_run = during_run
 
     this%params(n)%type_id = TYPE_REAL
     this%params(n)%value%r => var
@@ -224,13 +241,14 @@ contains
   ! Add logical parameter
   !========================================================
 
-  subroutine add_logical(this,section,name,var,default,desc,allowed,required)
+  subroutine add_logical(this,section,name,var,default,desc,allowed,required,during_run)
 
     implicit none
 
     class(registry_t), intent(inout) :: this
     character(*), intent(in) :: section,name,default,desc,allowed
     logical, intent(in) :: required
+    integer, intent(in) :: during_run   ! What a reading during the run does with the key: KEY_TAKEN, KEY_FIXED, ...
     logical, target, intent(inout) :: var
 
     integer :: n
@@ -246,6 +264,7 @@ contains
     this%params(n)%default_str = default
     this%params(n)%allowed = allowed
     this%params(n)%required = required
+    this%params(n)%during_run = during_run
 
     this%params(n)%type_id = TYPE_LOG
     this%params(n)%value%l => var
@@ -259,13 +278,14 @@ contains
   ! Add string parameter
   !========================================================
 
-  subroutine add_string(this,section,name,var,default,desc,allowed,required)
+  subroutine add_string(this,section,name,var,default,desc,allowed,required,during_run)
 
     implicit none
 
     class(registry_t), intent(inout) :: this
     character(*), intent(in) :: section,name,default,desc,allowed
     logical, intent(in) :: required
+    integer, intent(in) :: during_run   ! What a reading during the run does with the key: KEY_TAKEN, KEY_FIXED, ...
     character(len=*), target, intent(inout) :: var
 
     integer :: n
@@ -281,6 +301,7 @@ contains
     this%params(n)%default_str = default
     this%params(n)%allowed = allowed
     this%params(n)%required = required
+    this%params(n)%during_run = during_run
 
     this%params(n)%type_id = TYPE_STR
     this%params(n)%value%s => var
@@ -294,13 +315,14 @@ contains
   ! Integer array
   !========================================================
 
-  subroutine add_int_array(this,section,name,var,default,desc,allowed,required)
+  subroutine add_int_array(this,section,name,var,default,desc,allowed,required,during_run)
 
     implicit none
 
     class(registry_t), intent(inout) :: this
     character(*), intent(in) :: section,name,default,desc,allowed
     logical, intent(in) :: required
+    integer, intent(in) :: during_run   ! What a reading during the run does with the key: KEY_TAKEN, KEY_FIXED, ...
     integer, target, intent(inout) :: var(:)
 
     integer :: n, defval
@@ -316,6 +338,7 @@ contains
     this%params(n)%default_str = default
     this%params(n)%allowed = allowed
     this%params(n)%required = required
+    this%params(n)%during_run = during_run
 
     this%params(n)%type_id = TYPE_INT
     this%params(n)%value%iarr => var
@@ -330,13 +353,14 @@ contains
   ! Real array
   !========================================================
 
-  subroutine add_real_array(this,section,name,var,default,desc,allowed,required)
+  subroutine add_real_array(this,section,name,var,default,desc,allowed,required,during_run)
 
     implicit none
 
     class(registry_t), intent(inout) :: this
     character(*), intent(in) :: section,name,default,desc,allowed
     logical, intent(in) :: required
+    integer, intent(in) :: during_run   ! What a reading during the run does with the key: KEY_TAKEN, KEY_FIXED, ...
     real(R8), target, intent(inout) :: var(:)
 
     integer :: n
@@ -353,6 +377,7 @@ contains
     this%params(n)%default_str = default
     this%params(n)%allowed = allowed
     this%params(n)%required = required
+    this%params(n)%during_run = during_run
 
     this%params(n)%type_id = TYPE_REAL
     this%params(n)%value%rarr => var
@@ -370,7 +395,8 @@ contains
   !> Every rule of the column Allowed is checked: a bound (> x, >= x, < x, <= x) or an interval (in (a, b), with [ or ]
   !> for an end that belongs to it) for a number, on each value of a list of numbers; a list of names for a string;
   !> logical (or the list true, false) for a logical, which the reader of input.ini takes only as a logical. A rule of
-  !> another form stops the run as well, so that no rule is skipped in silence. So does a real value that is not finite,
+  !> another form stops the run as well, so that no rule is skipped in silence, and so does a key that the registry holds
+  !> with no class for a reading during the run (KEY_TAKEN, KEY_FIXED, KEY_FIXED_OWN, KEY_START). So does a real value that is not finite,
   !> with a rule or without, before the rule is checked: every comparison with a NaN is false, and an infinity passes a
   !> bound such as > 0 (gfortran reads a number too large for a real, such as 1e999, as an infinity). The test reads the
   !> bits (Not_Finite). Before every rule, a key of input.ini whose value does not read as the type of its parameter
@@ -398,6 +424,11 @@ contains
     end if
 
     do i=1,reg%size
+
+      if (reg%params(i)%during_run < KEY_TAKEN .or. reg%params(i)%during_run > KEY_START) then
+        out = "[ERROR] "//trim(reg%params(i)%name)//": the registry gives it no class for a reading during the run"
+        return
+      end if
 
       if (reg%params(i)%unread) then
         out = Unread_Message(i)
@@ -509,16 +540,7 @@ contains
   end if
   if (.not. allocated(saved)) allocate(saved(reg%size))
   do i = 1, reg%size
-    if (associated(reg%params(i)%value%i))    saved(i)%i    = reg%params(i)%value%i
-    if (associated(reg%params(i)%value%r))    saved(i)%r    = reg%params(i)%value%r
-    if (associated(reg%params(i)%value%l))    saved(i)%l    = reg%params(i)%value%l
-    if (associated(reg%params(i)%value%s))    saved(i)%s    = reg%params(i)%value%s
-    if (associated(reg%params(i)%value%iarr)) saved(i)%iarr = reg%params(i)%value%iarr
-    if (associated(reg%params(i)%value%rarr)) saved(i)%rarr = reg%params(i)%value%rarr
-    saved(i)%is_set   = reg%params(i)%is_set
-    saved(i)%unread   = reg%params(i)%unread
-    saved(i)%has_text = allocated(reg%params(i)%text)
-    if (saved(i)%has_text) saved(i)%text = reg%params(i)%text
+    call Copy_Value(i, saved(i))
   end do
 
   end subroutine Save_Values
@@ -534,19 +556,156 @@ contains
 
   if (.not. allocated(saved)) return
   do i = 1, min(reg%size, size(saved))
-    if (associated(reg%params(i)%value%i))    reg%params(i)%value%i    = saved(i)%i
-    if (associated(reg%params(i)%value%r))    reg%params(i)%value%r    = saved(i)%r
-    if (associated(reg%params(i)%value%l))    reg%params(i)%value%l    = saved(i)%l
-    if (associated(reg%params(i)%value%s))    reg%params(i)%value%s    = saved(i)%s
-    if (associated(reg%params(i)%value%iarr)) reg%params(i)%value%iarr = saved(i)%iarr
-    if (associated(reg%params(i)%value%rarr)) reg%params(i)%value%rarr = saved(i)%rarr
-    reg%params(i)%is_set = saved(i)%is_set
-    reg%params(i)%unread = saved(i)%unread
-    if (allocated(reg%params(i)%text)) deallocate(reg%params(i)%text)
-    if (saved(i)%has_text) reg%params(i)%text = saved(i)%text
+    call Put_Back(i)
   end do
 
   end subroutine Restore_Values
+
+
+  !> Keeps a copy of the values that the reading of input.ini at set-up gives every parameter (Read_Inifile, right after
+  !> Load_Ini, before the set-up makes its choices and writes some of them over: the name of a probe file, the shock
+  !> detector that a Riemann solver carries): the values against which a reading during the run checks the keys fixed for
+  !> the run (Fixed_Key_Changed)
+  subroutine Save_Start_Values()
+
+  implicit none
+
+  integer :: i
+
+  if (allocated(start)) deallocate(start)
+  allocate(start(reg%size))
+  do i = 1, reg%size
+    call Copy_Value(i, start(i))
+  end do
+
+  end subroutine Save_Start_Values
+
+
+  !> The error of the first key fixed for the run (KEY_FIXED) whose value in input.ini read again during the run is not
+  !> the one that the reading of the set-up gave it (Save_Start_Values), or an empty string. Only the keys that the file
+  !> holds count (Load_Ini keeps their text): a key that the file leaves out keeps its value, as every key does. The values
+  !> are compared as the type of the key, so that 1e-5 and 1.0e-05 are the same value: integers and logicals for equality,
+  !> reals with two ordered comparisons (Validate_Registry has found them finite), strings without their trailing blanks,
+  !> lists value by value. The error gives the key and the value written, and the value of the set-up: as the file of the
+  !> set-up wrote it, or, for a key that it left out, its default. Called by Read_Inifile_Runtime after Load_Ini and
+  !> Validate_Registry; a key whose model checks it (KEY_FIXED_OWN) is left to the model
+  function Fixed_Key_Changed() result(out)
+
+  implicit none
+
+  character(len=:), allocatable :: out
+  character(len=:), allocatable :: name
+  integer :: i
+
+  out = ""
+  if (.not. allocated(start)) return
+  do i = 1, min(reg%size, size(start))
+    if (reg%params(i)%during_run /= KEY_FIXED) cycle
+    if (.not. allocated(reg%params(i)%text)) cycle
+    if (.not. Value_Differs(i, start(i))) cycle
+    name = trim(reg%params(i)%name)
+    if (start(i)%has_text) then
+      out = "[ERROR] "//Key_And_Value(i)//": the run has "//name//" = "//trim(adjustl(start(i)%text))//" from its set-up"
+    else if (len_trim(reg%params(i)%default_str) > 0) then
+      out = "[ERROR] "//Key_And_Value(i)//": the run started without "//name//" in input.ini (its default: "// &
+            trim(reg%params(i)%default_str)//")"
+    else
+      out = "[ERROR] "//Key_And_Value(i)//": the run started without "//name//" in input.ini"
+    end if
+    out = out//", and "//name//" cannot change during the run"
+    return
+  end do
+
+  end function Fixed_Key_Changed
+
+
+  !> After a reading of input.ini during the run that the run takes (Read_Inifile_Runtime): the variables of the keys fixed
+  !> for the run and of those of the start only hold again what they held before the reading (the copy of Save_Values), so
+  !> that no code reads in them a value of the reading, and the values that the set-up wrote over stay
+  subroutine Keep_Fixed_Values()
+
+  implicit none
+
+  integer :: i
+
+  if (.not. allocated(saved)) return
+  do i = 1, min(reg%size, size(saved))
+    if (reg%params(i)%during_run /= KEY_TAKEN) call Put_Back(i)
+  end do
+
+  end subroutine Keep_Fixed_Values
+
+
+  !> A copy of the value of parameter i, whatever its type, and of the fields that Load_Ini writes (is_set, unread, text)
+  subroutine Copy_Value(i, copy)
+
+  implicit none
+
+  integer, intent(in) :: i
+  type(saved_value_t), intent(inout) :: copy
+
+  if (associated(reg%params(i)%value%i))    copy%i    = reg%params(i)%value%i
+  if (associated(reg%params(i)%value%r))    copy%r    = reg%params(i)%value%r
+  if (associated(reg%params(i)%value%l))    copy%l    = reg%params(i)%value%l
+  if (associated(reg%params(i)%value%s))    copy%s    = reg%params(i)%value%s
+  if (associated(reg%params(i)%value%iarr)) copy%iarr = reg%params(i)%value%iarr
+  if (associated(reg%params(i)%value%rarr)) copy%rarr = reg%params(i)%value%rarr
+  copy%is_set   = reg%params(i)%is_set
+  copy%unread   = reg%params(i)%unread
+  copy%has_text = allocated(reg%params(i)%text)
+  if (copy%has_text) copy%text = reg%params(i)%text
+
+  end subroutine Copy_Value
+
+
+  !> Parameter i, its variable and the fields that Load_Ini writes, as Save_Values kept them
+  subroutine Put_Back(i)
+
+  implicit none
+
+  integer, intent(in) :: i
+
+  if (associated(reg%params(i)%value%i))    reg%params(i)%value%i    = saved(i)%i
+  if (associated(reg%params(i)%value%r))    reg%params(i)%value%r    = saved(i)%r
+  if (associated(reg%params(i)%value%l))    reg%params(i)%value%l    = saved(i)%l
+  if (associated(reg%params(i)%value%s))    reg%params(i)%value%s    = saved(i)%s
+  if (associated(reg%params(i)%value%iarr)) reg%params(i)%value%iarr = saved(i)%iarr
+  if (associated(reg%params(i)%value%rarr)) reg%params(i)%value%rarr = saved(i)%rarr
+  reg%params(i)%is_set = saved(i)%is_set
+  reg%params(i)%unread = saved(i)%unread
+  if (allocated(reg%params(i)%text)) deallocate(reg%params(i)%text)
+  if (saved(i)%has_text) reg%params(i)%text = saved(i)%text
+
+  end subroutine Put_Back
+
+
+  !> Whether the value of parameter i differs from the copy, as the type of the parameter: integers and logicals for
+  !> equality, reals with two ordered comparisons (an exact test, with no warning on real equality), strings without their
+  !> trailing blanks, lists value by value
+  logical function Value_Differs(i, copy)
+
+  implicit none
+
+  integer, intent(in) :: i
+  type(saved_value_t), intent(in) :: copy
+
+  if (associated(reg%params(i)%value%i)) then
+    Value_Differs = reg%params(i)%value%i /= copy%i
+  else if (associated(reg%params(i)%value%r)) then
+    Value_Differs = reg%params(i)%value%r < copy%r .or. reg%params(i)%value%r > copy%r
+  else if (associated(reg%params(i)%value%l)) then
+    Value_Differs = reg%params(i)%value%l .neqv. copy%l
+  else if (associated(reg%params(i)%value%s)) then
+    Value_Differs = trim(reg%params(i)%value%s) /= trim(copy%s)
+  else if (associated(reg%params(i)%value%iarr)) then
+    Value_Differs = any(reg%params(i)%value%iarr /= copy%iarr)
+  else if (associated(reg%params(i)%value%rarr)) then
+    Value_Differs = any(reg%params(i)%value%rarr < copy%rarr .or. reg%params(i)%value%rarr > copy%rarr)
+  else
+    Value_Differs = .false.
+  end if
+
+  end function Value_Differs
 
 
   !> Whether a reading of input.ini taken by the run gave the key name of the section section a value of the type of its
@@ -568,6 +727,64 @@ contains
   end do
 
   end function Key_Is_Set
+
+
+  !> The key name of the section section of input.ini, as the messages of Validate_Registry give it (Key_And_Value), for
+  !> the errors of a reading that its caller finds: the file, the section, the key and the value as written, when the file
+  !> holds one
+  function Key_Text(section, name) result(out)
+
+  implicit none
+
+  character(len=*), intent(in) :: section, name
+  character(len=:), allocatable :: out
+  integer :: i
+
+  out = "input.ini, ["//trim(section)//"] "//trim(name)//" ="
+  do i = 1, reg%size
+    if (reg%params(i)%section == section .and. reg%params(i)%name == name) then
+      out = Key_And_Value(i)
+      return
+    end if
+  end do
+
+  end function Key_Text
+
+
+  !> The error of a reading of input.ini during the run whose values fail a check of the set-up between keys, reason (as
+  !> the set-up gives it; an empty string when the check holds, and then the result is empty too): the key name of the
+  !> section section, which the reading takes, with the value written and the value of the run, which it had before the
+  !> reading (the copy of Save_Values: as a file wrote it, or its value), and the reason of the set-up
+  function Refused_Value(section, name, reason) result(out)
+
+  implicit none
+
+  character(len=*), intent(in) :: section, name, reason
+  character(len=:), allocatable :: out, why
+  character(len=32) :: buf
+  integer :: i
+
+  out = ""
+  if (len_trim(reason) == 0) return
+  why = trim(adjustl(reason))
+  if (index(why, "[ERROR] ") == 1) why = why(9:)
+  out = "[ERROR] input.ini, ["//trim(section)//"] "//trim(name)//": "//why
+  if (.not. allocated(saved)) return
+  do i = 1, min(reg%size, size(saved))
+    if (reg%params(i)%section /= section .or. reg%params(i)%name /= name) cycle
+    if (saved(i)%has_text) then
+      buf = trim(adjustl(saved(i)%text))
+    else if (associated(reg%params(i)%value%r)) then
+      write(buf,'(G0)') saved(i)%r
+    else
+      buf = reg%params(i)%default_str
+    end if
+    out = "[ERROR] "//Key_And_Value(i)//": the run has "//trim(name)//" = "//trim(adjustl(buf))// &
+          ", and the set-up refuses the value read: "//why
+    return
+  end do
+
+  end function Refused_Value
 
 
   !> The key i of input.ini, as the messages of Validate_Registry give it: the file, the section, the key and the value as
@@ -780,6 +997,10 @@ contains
 
     write(unit,'(A)') "# Input Parameters"
     write(unit,'(A)') ""
+    write(unit,'(A)') "MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The column During the run "// &
+      "says what such a reading does with each key: *taken*, the run takes the value written; *fixed*, the run keeps the "// &
+      "value that it read at its start, and another value written is an error of the reading, which `ini-error` decides; "// &
+      "*start only*, the key serves the start of the run, and a reading leaves it as it was."
 
     do i=1,this%size
 
@@ -794,14 +1015,15 @@ contains
         write(unit,'(A)') ""
         write(unit,'(A)') "## "//trim(current_section)
         write(unit,'(A)') ""
-        write(unit,'(A)') "| Parameter | Default | Allowed | Required | Description |"
-        write(unit,'(A)') "|-----------|---------|---------|----------|-------------|"
+        write(unit,'(A)') "| Parameter | Default | Allowed | Required | During the run | Description |"
+        write(unit,'(A)') "|-----------|---------|---------|----------|----------------|-------------|"
       end if
 
       write(unit,'(A)') "| "//trim(this%params(i)%name)// &
           " | "//trim(this%params(i)%default_str)// &
           " | "//trim(this%params(i)%allowed)// &
           " | "//merge("yes"," no",this%params(i)%required)// &
+          " | "//During_Run_Word(this%params(i)%during_run)// &
           " | "//trim(this%params(i)%description)//" |"
 
     end do
@@ -809,6 +1031,28 @@ contains
     close(unit)
 
   end subroutine generate_markdown
+
+
+  !> The word of the column During the run of docs/user/registry.md for a class of key
+  function During_Run_Word(during_run) result(word)
+
+    implicit none
+
+    integer, intent(in) :: during_run
+    character(len=:), allocatable :: word
+
+    select case (during_run)
+    case (KEY_TAKEN)
+      word = "taken"
+    case (KEY_FIXED, KEY_FIXED_OWN)
+      word = "fixed"
+    case (KEY_START)
+      word = "start only"
+    case default
+      word = ""
+    end select
+
+  end function During_Run_Word
 
 
   function lowercase(str) result(out)

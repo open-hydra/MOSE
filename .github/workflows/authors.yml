@@ -6,6 +6,9 @@ on:
       # main is protected: AUTHORS.md reaches it through a pull request, having
       # already been regenerated and committed on the contributor's branch.
       - main
+      # The branches on which a merge queue builds its merge groups: AUTHORS.md
+      # reaches them from the branches of the pull requests.
+      - 'gh-readonly-queue/**'
   workflow_dispatch:
 
 permissions:
@@ -17,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # generate-authors.py reads the whole history via `git shortlog --all`.
           fetch-depth: 0
@@ -33,7 +36,7 @@ jobs:
           token: ${{ secrets.AUTHORS_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
 

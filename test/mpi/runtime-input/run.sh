@@ -35,12 +35,14 @@
 #  iteration 40, and the files in the OUTPUT folder of rank 0 must be those of
 #  the same run with no change, byte for byte (ref). Last, the input.ini of
 #  rank 0 gets
-#    cfl-rank0  cfl = -1 (out of its rule), with ini-error left out (warn);
+#    cfl-rank0    cfl = -1 (out of its rule), with ini-error left out (warn),
+#    fixed-rank0  time-scheme = RK2, a key fixed for the run (RK3 at the
+#                 start), with ini-error left out (warn);
 #  no rank may take the reading: the run must end within 60 s with exit
 #  code 0 at iteration 40, with the warning that the reading of iteration 20
-#  is not taken, and the files in the OUTPUT folder of rank 0 must be those
-#  of ref, byte for byte (a rank that took it, or stopped alone, would change
-#  them or leave the run hanging). The change must be in
+#  is not taken and its error, and the files in the OUTPUT folder of rank 0
+#  must be those of ref, byte for byte (a rank that took it, or stopped
+#  alone, would change them or leave the run hanging). The change must be in
 #  place before the run writes its solution of iteration 20, which comes
 #  before the reading of iteration 20; if it is not (a host too slow to poll),
 #  the test says so and fails. The cases run one after the other and the test
@@ -72,9 +74,10 @@ SOLVER="$(cd bin && pwd -P)/MOSE"
 # write_box_ini <folder> [<key> <value>]: the input.ini of the cfl case of RuntimeInput, with one key changed, written
 # whole, then moved in place
 write_box_ini() {
-  local cfl=0.5 sol=10 ini=20 res=1
+  local cfl=0.5 sol=10 ini=20 res=1 ts=RK3
   case ${2:-} in
     cfl) cfl=$3 ;;
+    time-scheme) ts=$3 ;;
     sol-diter) sol=$3 ;;
     ini-diter) ini=$3 ;;
     res-diter) res=$3 ;;
@@ -92,7 +95,7 @@ schmidt   = 1.0
 [MOSE-Numerics]
 cfl                   = $cfl
 time-accurate         = false
-time-scheme           = RK3
+time-scheme           = $ts
 integration-variables = cons
 space-reconstruction  = MUSCL
 flux-limiter          = vanleer
@@ -228,7 +231,11 @@ run_case() {
       fi
     done < <(cd "$RUNS/ref/A/OUTPUT" && find . -type f | sort)
     if [[ $2 == A ]]; then
-      if ! grep -a -q -F "[WARNING] input.ini read again at iteration 20 is not taken: cfl must be > 0" "runs/$c.log"; then
+      case $3 in
+        cfl) error='cfl must be > 0' ;;
+        *)   error="input.ini, [MOSE-Numerics] $3 = $4: the run has $3 = RK3 from its set-up, and $3 cannot change during the run" ;;
+      esac
+      if ! grep -a -q -F "[WARNING] input.ini read again at iteration 20 is not taken: $error" "runs/$c.log"; then
         echo "  [FAIL] $c, $3 = $4 in the input.ini of rank 0: no warning that the reading of iteration 20 is not taken" \
              "(see runs/$c.log)"
         fail=1
@@ -246,7 +253,7 @@ echo "-- input.ini read again: every rank takes the values of the file of rank 0
 run_case ref
 # One case after the other, up to the first that fails: a run that hangs lasts up to 70 s (its time limit)
 for args in "sol-rank0 A sol-diter 7" "sol B sol-diter 7" "res B res-diter 7" "ini B ini-diter 30" "cfl B cfl -1" \
-            "cfl-rank0 A cfl -1"; do
+            "cfl-rank0 A cfl -1" "fixed-rank0 A time-scheme RK2"; do
   [[ $fail -eq 0 ]] || break
   run_case $args
 done
