@@ -122,7 +122,7 @@ only up to `cfl = 0.5` and `vnn = 0.5`, with Heun and with RK3
 without implicit residual smoothing (`irs`, which mixes the updates of neighbouring cells), when the Courant number of the
 flow leaving each cell is at most 1/2, which `cfl = 0.5` gives in smooth flow; the bound is lower in the first cell next
 to a wall, and positivity is not guaranteed next to faces whose
-ghost cells extrapolate the cells (types `408` and `502`). The `vnn` limits are sharp: a run
+ghost cells extrapolate the cells (types `408` and `502` in its mode 1). The `vnn` limits are sharp: a run
 a little beyond them blows up. Suggested values:
 
 - `RK3`: `cfl = 0.8` (above the guaranteed 0.5) and `vnn = 0.5`;

@@ -43,8 +43,16 @@ Usage (from the test directory):
   python3 -B make_case.py sign KIND      the case of p0.dat with its inlet of the type and value that SIGN[KIND] gives
   python3 -B make_case.py nozzle KIND    the case of p0.dat with its inlet the nozzle of area ratio 2 changed as
                                          NOZZLE[KIND] says
-  python3 -B make_case.py srm [rest] [sst]   the duct with a viscous gas and nu~, its inlet an SRM grain boundary (502);
-                                         rest: the gas at rest at T0 and PB; sst: k and omega instead of nu~
+  python3 -B make_case.py srm [rest] [sst] [inflow]   the duct with a viscous gas and nu~, its inlet an SRM grain
+                                         boundary (502); rest: the gas at rest at T0 and PB; sst: k and omega instead of
+                                         nu~; inflow: the grain in mode 2 (an inflow) instead of mode 1 (a blowing wall)
+  python3 -B make_case.py srmbad KIND    the duct of the grain with the record that SRM_BAD[KIND] gives
+  python3 -B make_case.py srmtwogas      the inviscid duct full of N2 at rest, its inlet a grain blowing in CH4 (mode 1)
+  python3 -B make_case.py srmtwogascheck DIAG   exit status 0 when one step gives the momentum of the blown CH4 with the
+                                         gas constant of CH4 for the wall state, not that of the N2 of the cell
+  python3 -B make_case.py srminflowcheck DIAG DIAGWALL   exit status 0 when one step from rest lets in the mass flux of
+                                         the law through the inflow grain, as through the grain of mode 1 (DIAGWALL), and
+                                         the grain is not a wall for the distance (below)
   python3 -B make_case.py unapplied TYPE the case of p0.dat (TYPE 409 or 501) or the duct of the grain (506) with its outlet
                                          (record 2) of TYPE
   python3 -B make_case.py srmcheck DIAG   exit status 0 when the change of rho nu~ over one step is that of the wall value
@@ -238,11 +246,30 @@ def sa_factor(chi):
     return CB1 * fv2 / KAPPA ** 2 - CW1 * fw
 
 
-def write_srm(rest=False, sst=False):
+# The record of the grain (502): mdot_ref [kg/(m2 s)], n, p_ref [Pa], T_af [K], mode (1 a wall that blows the gas in, 2 an
+# inflow), the mass fraction of the single species, and in mode 2 the turbulence values (specific: nu~, or k and omega).
+SRM_RECORD = dict(mdot_ref=1.0e-5, n=0.4, p_ref=1.0e6, T_af=3.0e3, mode=1)
+NU_IN, K_IN, OMEGA_IN = 1.5e-5, 1.0, 1.0e3                 # the turbulence values of the inflow grain
+# Records that the reader refuses (make_case.py srmbad KIND): the change of each to SRM_RECORD, and short, the inflow
+# grain with Spalart-Allmaras without its turbulence value
+SRM_BAD = {
+    "mode3":   dict(mode=3),
+    "mode15":  dict(mode=1.5),
+    "pref0":   dict(p_ref=0.0),
+    "mdotneg": dict(mdot_ref=-1.0e-5),
+    "inflow0": dict(mode=2, mdot_ref=0.0),
+    "taf0":    dict(T_af=0.0),
+    "tafhigh": dict(T_af=5.0e3),                     # the last row of test/common/Air-viscous: above 4999 K
+    "short":   dict(mode=2),
+}
+
+
+def write_srm(rest=False, sst=False, inflow=False, bad=None):
     """The duct of p0.dat with rho nu~ = 3 MU (mi_tilde) for the Spalart-Allmaras model, and record 1 (the inlet) an SRM
-    grain boundary (502): T_af, a, n, p_ref, rho_grain, SF_geo and the mass fraction of the single species. rest: the gas
-    at rest at T0 and PB, with rho nu~ = MU_GAS (nu~ = nu); sst: k = 1 m2/s2 and omega = 1e3 1/s (kappa = rho k, omega =
-    rho omega) for SST instead."""
+    grain boundary (502): SRM_RECORD, the mass fraction of the single species and, in mode 2, the turbulence values. rest:
+    the gas at rest at T0 and PB, with rho nu~ = MU_GAS (nu~ = nu); sst: k = 1 m2/s2 and omega = 1e3 1/s (kappa = rho k,
+    omega = rho omega) for SST instead; inflow: the grain in mode 2, with NU_IN (or K_IN, OMEGA_IN); bad: the record of
+    SRM_BAD[bad]."""
     rho, u, p = (PB / (RGAS * T0), 0.0, PB) if rest else uniform_state()
     write_case("p0.dat", (rho, u, p))
     with open("INPUT/ic.tec") as f:
@@ -257,12 +284,66 @@ def write_srm(rest=False, sst=False):
         turb = f" {(MU_GAS if rest else 3.0 * MU):.15E}\n" * N
     with open("INPUT/ic.tec", "w") as f:
         f.write("".join(lines) + turb)
+    rec = dict(SRM_RECORD, mode=2 if inflow else 1)
+    if bad is not None:
+        rec.update(SRM_BAD[bad])
+    line = f"{rec['mdot_ref']:.1E}, {rec['n']}, {rec['p_ref']:.1E}, {rec['T_af']:.1E}, {rec['mode']:g}, 1.0"
+    if rec["mode"] == 2 and bad != "short":
+        line += f", {K_IN:.1E}, {OMEGA_IN:.1E}" if sst else f", {NU_IN:.1E}"
     with open("INPUT/bc.txt") as f:
         bc = f.readlines()
     bc[0] = bc[0].replace("     402\n", "     502\n")
-    bc[1] = "3.0E+03, 1.0E-05, 0.4, 1.0E+06, 1.7E+03, 1.0, 1.0\n"
+    bc[1] = line + "\n"
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(bc))
+
+
+# The grain of another gas than that of the duct: the four species of test/1D/diff1 (CH4, H2O, N2, O2), the duct full of N2
+# at rest at T0 and PB, the grain (mode 1, inviscid) blowing in CH4 at T_af with mdot_ref = 1 kg/(m2 s) at p_ref = PB.
+WM_TWOGAS = (16.043, 18.015, 28.014, 31.998)
+TAF_TWOGAS = 3.0e3
+
+
+def write_srm_twogas():
+    """The duct of write_case at rest, N2 at T0 and PB (the other species 1e-20), and record 1 (the inlet) a grain of mode
+    1 that blows in CH4 at TAF_TWOGAS with mdot_ref = 1 kg/(m2 s) at p_ref = PB."""
+    write_case("p0.dat", (PB / (8314.46261815324 / WM_TWOGAS[2] * T0), 0.0, PB))
+    rho_n2 = PB / (8314.46261815324 / WM_TWOGAS[2] * T0)
+    with open("INPUT/ic.tec") as f:
+        lines = f.read().splitlines(True)
+    nodes = lines[2:2 + 3 * 4 * (N + 1)]
+    cells = lines[2 + 3 * 4 * (N + 1):]
+    with open("INPUT/ic.tec", "w") as f:
+        f.write(' VARIABLES ="x" "y" "z"  "rho1" "rho2" "rho3" "rho4" "u" "v" "w" "p"\n')
+        f.write(f" ZONE  T = B1-IG, I={N + 1}, J=2, K=2, DATAPACKING=BLOCK, "
+                "VARLOCATION=([1-3]=NODAL,[4-11]=CELLCENTERED), SOLUTIONTIME=0.0\n")
+        f.write("".join(nodes))
+        for value in (1.0e-20, 1.0e-20, rho_n2, 1.0e-20):
+            f.write(f" {value:.15E}\n" * N)
+        f.write("".join(cells[N:]))                      # u, v, w, p of write_case
+    with open("INPUT/bc.txt") as f:
+        bc = f.readlines()
+    bc[0] = bc[0].replace("     402\n", "     502\n")
+    bc[1] = f"1.0, 0.4, {PB:.6E}, {TAF_TWOGAS:.1E}, 1, 1.0, 0.0, 0.0, 0.0\n"
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(bc))
+
+
+def srm_twogas_check(diag):
+    """One explicit step of the inviscid duct of write_srm_twogas from rest: the pressure of the grain face, p of the cell,
+    and that of the first face between cells cancel, and the cell next to the grain gains the momentum of the blown CH4,
+    mdot u_b = mdot^2 R_w T_af / p per unit area and time (Ablation_Wall_Fluxes), mdot = 1 kg/(m2 s): the gas constant of
+    the wall state, R_w = d(rho u) h p / (dt mdot^2 T_af), is that of the composition the grain imposes, CH4, not that of
+    the gas of the cell, N2 (Wall_Gas_State); the cell gains the mass flux mdot."""
+    d = read_zone(diag)
+    h, mdot = LX / N, 1.0
+    r_w = abs(d["rhou"][0]) / d["dt"][0] * h * PB / (mdot ** 2 * TAF_TWOGAS)
+    r_ch4, r_n2 = 8314.46261815324 / WM_TWOGAS[0], 8314.46261815324 / WM_TWOGAS[2]
+    err = abs(r_w / r_ch4 - 1.0)
+    dm = d["rho"][0] / d["dt"][0] * h
+    print(f"    gas constant of the wall state from the momentum the grain blows in: {r_w:.9f} J/(kg K), CH4 {r_ch4:.9f} "
+          f"(difference {err:.1e}), N2 {r_n2:.9f}; mass flux {dm:.9f} kg/(m2 s)")
+    sys.exit(0 if err < 1e-6 and abs(dm - mdot) < 1e-6 else 1)
 
 
 UNAPPLIED = ("409", "501", "506")                    # types that MOSE does not apply
@@ -329,6 +410,32 @@ def srm_check(diag):
     sys.exit(0 if err < 1e-6 and errd < 1e-9 else 1)
 
 
+def srm_inflow_check(diag, diag_wall):
+    """The grain in mode 2 (an inflow) over one step from rest, as srm_check: the face is not closed by the gas of the
+    cell at rest, the products enter with the mass flux of the law at the pressure of the cell, so the density of the
+    cell next to the grain grows by g dt / h, g = mdot_ref (PB/p_ref)^n (to 1e-8: the grain of mode 1, diag_wall, the
+    same step from the same state, gives 3.7e-9 from it), the change of the grain of mode 1 to 1e-14, and that of the
+    other cells, but the last one, not at all; the grain is not a wall for the wall distance (an inflow is applied as the
+    inlet 404): with no wall in the duct the source of rho nu~ of the other cells is zero (d = 1e8), where the grain of
+    mode 1 gives that of d = (i - 1/2) h."""
+    d = read_zone(diag)
+    w = read_zone(diag_wall)
+    rho, m, h = PB / (RGAS * T0), MU_GAS, LX / N
+    g = SRM_RECORD["mdot_ref"] * (PB / SRM_RECORD["p_ref"]) ** SRM_RECORD["n"]
+    drho = d["rho"]
+    err = abs(drho[0] / d["dt"][0] * h / g - 1.0)
+    errw = abs(drho[0] / d["dt"][0] / (w["rho"][0] / w["dt"][0]) - 1.0)
+    rest = max(abs(x) for x in drho[1:N - 1]) / abs(drho[0])
+    r = [inc / t * SIGMA * rho * h * h / m for inc, t in zip(d["rhoNuTilde"], d["dt"])]
+    src = [SIGMA * m * sa_factor(m / MU_GAS) / (i + 0.5) ** 2 for i in range(N)]
+    rel = max(abs(r[i] / src[i]) for i in range(1, N - 1))
+    print(f"    density next to the grain over the step, times h/dt: {drho[0] / d['dt'][0] * h:.9e} kg/(m2 s) against "
+          f"g = {g:.9e}, difference {err:.1e}, from the grain of mode 1 {errw:.1e}; the other cells, but the last: "
+          f"largest change {rest:.1e} of it")
+    print(f"    rho nu~ of the other cells, against the source with a wall at the grain: largest ratio {rel:.1e}")
+    sys.exit(0 if err < 1e-8 and errw < 1e-14 and rest == 0.0 and rel < 1e-9 else 1)
+
+
 def cell_values(path):
     with open(path) as f:
         lines = f.read().splitlines()
@@ -347,7 +454,15 @@ def main():
     elif what == "nozzle":
         write_nozzle(sys.argv[2])
     elif what == "srm":
-        write_srm("rest" in sys.argv[2:], "sst" in sys.argv[2:])
+        write_srm("rest" in sys.argv[2:], "sst" in sys.argv[2:], "inflow" in sys.argv[2:])
+    elif what == "srmbad":
+        write_srm(bad=sys.argv[2])
+    elif what == "srmtwogas":
+        write_srm_twogas()
+    elif what == "srmtwogascheck":
+        srm_twogas_check(sys.argv[2])
+    elif what == "srminflowcheck":
+        srm_inflow_check(sys.argv[2], sys.argv[3])
     elif what == "unapplied":
         write_unapplied(sys.argv[2])
     elif what == "srmcheck":

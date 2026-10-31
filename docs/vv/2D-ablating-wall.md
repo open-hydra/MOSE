@@ -110,17 +110,23 @@ wall-adjacent one included.
 
 ### Solid propellant grain
 
-The `srm` configuration replaces the ablating wall with a burning propellant grain
+The `srm` configurations replace the ablating wall with a burning propellant grain
 (BC 502).  The rate comes from Saint-Robert's law rather than from an energy
 balance, and the wall is held at the flame temperature, but the blown column is the
-same exact solution.  BC 502 is not a viscous wall, so it writes no `wall.tec`;
-everything is checked on the field, which is the stronger test here.
+same exact solution.  The grain runs in both modes of its record: a wall that blows
+the products in (mode 1: `srm`, `srm-top`) and an inflow, the mass-flux inlet 404 at
+the static temperature $T_{\mathrm{af}}$ (mode 2: `srm-inflow`, `srm-inflow-top`),
+each on the low and on the high end of the column (faces 3 and 4: the two orientations
+of the normal give the same numbers).  The gas starts at rest, which an inflow grain
+must let the products into.  BC 502 is neither a viscous wall nor writes one, so it
+writes no `wall.tec`; everything is checked on the field, which is the stronger test
+here.
 
-| Quantity | Reference | Result |
-|---|---|---|
-| Column temperature | $T_{\mathrm{af}}$ = 1500 K | 4.6 × 10⁻⁴ relative |
-| Mass flux $\rho v$ | $a\,(p/p_{\mathrm{ref}})^n$ = 0.2001 kg/m²s | 4.7 × 10⁻⁴ relative |
-| Blowing speed | $\dot m/\rho$ = 0.8502 m/s | 1.7 × 10⁻³ relative |
+| Quantity | Reference | Mode 1 | Mode 2 |
+|---|---|---|---|
+| Column temperature | $T_{\mathrm{af}}$ = 1500 K | 4.6 × 10⁻⁴ relative | 4.0 × 10⁻⁴ relative |
+| Mass flux $\rho v$ | $a\,(p/p_{\mathrm{ref}})^n$ = 0.2001 kg/m²s | 4.7 × 10⁻⁴ relative | 4.0 × 10⁻⁴ relative |
+| Blowing speed | $\dot m/\rho$ = 0.8502 m/s | 1.6 × 10⁻³ relative | 1.4 × 10⁻³ relative |
 
 The temperature check is what pins the enthalpy of the injected products: if the
 grain injected its combustion products cold, the column would settle near 485 K

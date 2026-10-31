@@ -112,11 +112,13 @@ def verify_inert(cfg, wall, field, dims, wall_face, T_init):
 
 
 def verify_srm(cfg, field, dims, wall_face):
-    """Burning propellant grain (BC 502).
+    """Burning propellant grain (BC 502), in either mode of its record.
 
     The rate is set by the pressure through Saint-Robert's law rather than by an
     energy balance, and the wall is held at the flame temperature, but the blown
-    column is the same exact solution as for the ablative walls.
+    column is the same exact solution as for the ablative walls. Mode 1 blows the
+    products in through a wall; mode 2 lets them in through the mass-flux inlet 404
+    at the static temperature T_af: the same column, the same checks.
 
     BC 502 is not a viscous wall, so it contributes nothing to OUTPUT/wall.tec and
     everything here is read from the field.  That is the stronger check anyway: the
@@ -176,7 +178,8 @@ def main():
     T_init = float(cfg['T_init'])
     inert = bool(int(cfg['inert']))
 
-    print(f'\n== ablating wall: {name} (BC {bc}, face {wall_face}, '
+    mode = f', mode {cfg["srm_mode"]}' if bc == BC_SRM else ''
+    print(f'\n== ablating wall: {name} (BC {bc}{mode}, face {wall_face}, '
           f'qrad = {qrad:g} W/m2) ==')
 
     field, (I, J, K) = read_tec('OUTPUT/field.tec')

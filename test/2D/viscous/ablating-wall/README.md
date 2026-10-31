@@ -1,4 +1,4 @@
-# Ablative wall boundary conditions (BC 503 / 504)
+# Ablative wall boundary conditions (BC 503 / 504) and the SRM grain (BC 502)
 
 Verification case for the gas-surface interaction wall boundary conditions,
 against an analytic solution. No solver-level case exercised these boundary
@@ -46,7 +46,7 @@ than the convergence. Those hold to round-off.
 ## Running
 
 ```sh
-./run.sh                      # all four configurations, as CTest runs it
+./run.sh                      # every configuration, as CTest runs it
 CONFIGS=hdpe ./run.sh         # just one
 
 python3 build_case.py hdpe    # generate mesh / IC / BC by hand
@@ -62,6 +62,8 @@ python3 verify.py
 | `htpb`, `hdpe`, `pp` | 504 | the three pyrolysis models |
 | `melting-top`, `hdpe-top` | 503 / 504 | the same walls on the opposite face, which exercises the other branch of the face-orientation bookkeeping |
 | `melting-inert` | 503 | a surface that *cannot* ablate: no radiation and a gas colder than the wall, so the melting energy balance returns a non-positive mass flux and the boundary condition has to fall back to an impermeable isothermal wall |
+| `srm`, `srm-top` | 502, mode 1 | a burning propellant grain, a wall that blows its products in at the flame temperature with the mass flux of Saint-Robert's law, on both faces |
+| `srm-inflow`, `srm-inflow-top` | 502, mode 2 | the same grain as an inflow, the mass-flux inlet 404 at the static flame temperature, on both faces: from rest, which closes an inlet 404 alone |
 | `default-schmidt` | 503 | the `melting` column with no `schmidt` in `input.ini`, run in `default-schmidt/`: the default, 0, is mixture-averaged multicomponent diffusion, which needs the binary diffusion table `INPUT/diffusion.dat` only with more than one species, so this single-species gas runs without it |
 
 ## Why the whole column is checked, wall cell included

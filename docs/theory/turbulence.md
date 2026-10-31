@@ -123,7 +123,7 @@ $$
 \tilde\nu_\text{wall} = 0
 $$
 
-on the viscous walls and on the grain of a solid rocket motor (types `301`, `302`, `502`,
+on the viscous walls and on the grain of a solid rocket motor (types `301`, `302`, `502` in its mode 1,
 `503`–`505`); the wall distance $y$ is measured from them and from the walls coupled to another
 solver (`103`, `104`). A slip wall (type `300`, which is also the symmetry plane) follows the
 standard model: the ghost cell copies the cell, a zero normal derivative of $\tilde\nu$, and the
@@ -699,9 +699,9 @@ them in the gradients of the wall cells: the $c_{b2}$ term of SA and its term
 $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST, the
 cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of the wall
 cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell that copied the cell
-would give $a/2$. An SRM grain (`502`) takes the
+would give $a/2$. An SRM grain (`502`) of mode 1 takes the
 same rule for its turbulence variables, with the wall values of its flux: those of the blowing wall while
-it burns, of the wall at the flame temperature when it does not.
+it burns, of the wall at the flame temperature when it does not; a grain of mode 2 is an inlet (`404`).
 
 ### Cell gradients of the source terms
 
@@ -762,7 +762,7 @@ $c_{w1} f_w (\tilde\nu/d)^2$ (a factor $\cos^2\theta$: 0.97, 0.88, 0.75,
 $\omega_w = 60\nu/(\beta_1 d_1^2)$ of SST. That distance is exact only on
 meshes orthogonal to the wall, with the cell centres above the face centres.
 
-- Each face of a wall boundary (types 103, 104, 301, 302, 502, 503–505) is the bilinear
+- Each face of a wall boundary (types 103, 104, 301, 302, 502 in its mode 1, 503–505) is the bilinear
   surface through its four nodes, the face of the cells
   ([Cell volume](numerics.md#cell-volume)):
   $\mathbf{x}(s,t) = \mathbf{x}_1 + s\mathbf{a} + t\mathbf{b} + st\mathbf{T}$,

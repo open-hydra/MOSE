@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- The SRM grain (`502`) has two modes, the fifth field of its property line: `1`, a wall that blows the products in, as
+  before; `2`, an inflow, applied as the mass-flux inlet `404` at the static temperature `T_af` along the face normal, with
+  the mass flux of Saint-Robert's law at the pressure of the boundary cell and the turbulence values of the line: the
+  turbulence values, ghost cells and wall distance of an inlet. Unlike an inlet `404` a grain of mode 2 is never closed by
+  the gas of the boundary cell at rest or moving out: the grain burns whatever that gas does, as in a chamber at rest
+  before the ignition.
 - Extrapolation faces (`400`) report the gas that enters the domain through them, which they let in with the state of the
   boundary cell, as they take the flux of the cell state for either direction of the gas. The first time the gas enters
   through the `400` faces of one face of a block (on each grid level), the run prints a line with the iteration, the faces and
@@ -88,6 +94,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The property line of the SRM grain (`502`) is `mdot_ref, n, p_ref, T_af, mode, massf(1:ns)` and, in mode 2, the
+  turbulence values: the mass flux first, `rho_grain` and `SF_geo` no longer written (MOSE read them and used neither),
+  the mode new. The boundary-condition builder of ATLAS writes this line (its key `grain-bc` sets the mode); a file of the
+  former line (`T_af, a, n, p_ref, rho_grain, SF_geo, massf`) is read wrong, and mostly refused by the checks below.
 - The CI jobs that build and test MOSE run on Ubuntu 24.04 (`runs-on: ubuntu-24.04`) instead of `ubuntu-latest`, which
   GitHub moves to Ubuntu 26.04, an image with other versions of gfortran and CMake: the Ubuntu release of these jobs
   changes only with a change of `.github/workflows/ctest.yml`.
@@ -337,6 +347,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The wall state of a burning SRM grain (`502`) takes the gas constant of the composition the grain imposes: it took that
+  of the gas of the boundary cell, so that its density, and with it the blowing velocity, its momentum and kinetic energy,
+  were off by R(cell)/R(products) wherever the cell held another gas (a chamber not yet filled with the products, a
+  multi-species run: 0.80 of the right blowing velocity for products of 371 J/(kg K) blown into N2). The mass flux and the
+  enthalpy of the injected gas do not change; a single-species run gives the same solution, bit for bit.
+- A property line of the SRM grain (`502`) stops the run at set-up when its mode is neither 1 nor 2, its `p_ref` is not
+  positive, its `mdot_ref` is negative (or 0 in mode 2), and when `T_af` is not positive (the boundary-condition builder of
+  ATLAS writes 0 for a grain without `eq-CEA-file`) or does not lie on the tables of the gas, from their lowest temperature
+  above 0 K to one kelvin below their last row: the tables hold the enthalpy of `Tmax - 1` above it, so the gas entered
+  with that enthalpy while the wall stayed at `T_af`, and a `T_af` of 0 made the grain an isothermal wall at 0 K (a slip
+  wall in an inviscid run).
 - The MUSCL reconstruction keeps the value of a cell at each of its faces between the value of the cell and that of the
   neighbour across the face on lines of cells of any lengths, with every limiter (van Albada excepted where the two slopes
   have opposite signs): the limited slope is bounded so that its change over half the cell is at most the jump to each

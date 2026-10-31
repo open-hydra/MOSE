@@ -7,7 +7,9 @@ module MOSE_Lib_BC_Fluxes_GSI_Core
   !<
   !<  1. **wall gas state** -- from the boundary layer assumption
   !<     `p(wall) = p(cell)`, `R(wall) = R(cell)` and `ci(wall) = ci(cell)`, so that
-  !<     only the density changes with the wall temperature (`Wall_Gas_State`);
+  !<     only the density changes with the wall temperature (`Wall_Gas_State`); a
+  !<     surface that imposes its composition (the SRM grain, 502) sets `ci(wall)` and
+  !<     with it `R(wall)`;
   !<  2. **gas-surface interaction** -- a GSI model returns the species source term
   !<     `omega`, the heat absorbed by the surface `q_pyro` and the blown mass flux
   !<     `mdot` (`GSI_Source`);
@@ -155,9 +157,12 @@ contains
     !<
     !< A surface that imposes its own composition on the gas touching it - a burning
     !< propellant grain, whose flame products are what the wall actually sees - passes
-    !< `y_wall` to override the inherited mass fractions. The pressure and the gas
-    !< constant still come from the boundary cell, so only the partial densities and
-    !< the transport properties change.
+    !< `y_wall` to override the inherited mass fractions. The pressure still comes from
+    !< the boundary cell; the gas constant is that of `y_wall`, so that the wall state
+    !< (p, T_wall, y_wall) is one of the gas: with the gas constant of the cell the
+    !< density, and with it the blowing velocity mdot/rho_wall, would be off by
+    !< R(cell)/R(y_wall) wherever the cell holds another gas (a chamber not yet filled
+    !< with the products, a multi-species run).
     implicit none
     type(wall_face_t), intent(in) :: face
     real(R8), intent(in)  :: Prim(nprim)   !< boundary cell primitive variables
@@ -172,10 +177,11 @@ contains
     real(R8), intent(out) :: q_conv        !< conductive heat flux at the wall
     real(R8), intent(in), optional :: y_wall(nsc) !< mass fractions imposed by the surface
 
-    rho_wall = Prim(np) / ( Rgas * T_wall )
     if ( present(y_wall) ) then
+      rho_wall = Prim(np) / ( sum ( y_wall * Ri_tab(1:nsc) ) * T_wall )
       roi_wall = y_wall * rho_wall
     else
+      rho_wall = Prim(np) / ( Rgas * T_wall )
       roi_wall = Prim(1:nsc) * rho_wall / rho
     end if
 

@@ -7,7 +7,7 @@ module MOSE_IO_BC
   public :: Print_BC_Summary
 
   ! BC type counters — populated by Read_BCfile, consumed by Print_BC_Summary
-  integer :: nconnect, nwall, ngsi, nSRM, nio, nsym, nper, nchimera, ncoupled, next, nKaffs, nstate
+  integer :: nconnect, nwall, ngsi, nSRM, nSRMin, nio, nsym, nper, nchimera, ncoupled, next, nKaffs, nstate
   logical :: has_tdep_bc
 
   ! Empty fields of a property line. A null value of list-directed input (two commas with only blanks between) leaves
@@ -184,6 +184,7 @@ contains
     integer :: nzero_chim
     character(len=llen) :: p0file
     character(len=32) :: alpha_tok, beta_tok
+    real(R8) :: srm_head(5)                  ! mdot_ref, n, p_ref, T_af, mode: the head of the line of a 502
     character(len=:), allocatable :: pline   ! a property line, read whole
     character(len=256) :: msg402
     character(len=256) :: q2d_line
@@ -212,6 +213,7 @@ contains
       nwall    = 0
       ngsi     = 0
       nSRM     = 0
+      nSRMin   = 0
       nio      = 0
       nsym     = 0
       nper     = 0
@@ -535,23 +537,49 @@ contains
 
         ! ─────────────────────────────────────────────────────────────────────
         ! SRM grain boundary
-        ! Second line: Taf, a, n, pRef, rhoGrain, SF, massf(1:nsc) [, turb...]
+        ! Second line: mdot_ref, n, p_ref, T_af, mode, massf(1:nsc) [, turb(1:nrans) in mode 2]
+        !   mdot_ref is the mass flux of the propellant gas at p_ref [kg/(m^2 s)]: mdot = mdot_ref (p/p_ref)^n at the
+        !   pressure of the boundary cell (Saint-Robert's law); the products enter at T_af with the composition massf.
+        !   mode 1: a wall that blows the gas in (BC_SRM). mode 2: an inflow, the record applied as the mass-flux inlet
+        !   404 at the static temperature T_af along the face normal, with the mass flux of the law and the turbulence
+        !   values of the line, and never closed by the gas of the boundary cell moving out (BC_Fluxes): from here on
+        !   the record is of type 404, srm_inflow, for the fluxes, the ghost cells and the metrics of an inlet.
+        ! The enthalpy of the injected products is not read: it is evaluated from T_af and the composition against the
+        ! thermodynamic tables, as every state of the gas (it used to come from ATLAS and was left at zero when that
+        ! output dropped it, which silently injected the propellant gas cold). Check_SRM_Head stops the run on a mode other
+        ! than 1 and 2, on p_ref <= 0, on mdot_ref < 0 (0 in mode 2) and on T_af outside the tables of the gas.
         case(502)
-          if (level == 1) nSRM = nSRM + 1
-          allocate( bc(i) % ci(1 : nsc) )
-          ! The enthalpy of the injected products is no longer read here: it used to
-          ! come from ATLAS and was left at zero when that output dropped it, which
-          ! silently injected the propellant gas cold. It is now evaluated from Taf
-          ! and the product composition against the thermodynamic tables, in BC_SRM.
-          bc(i)%Taf = EMPTY ; bc(i)%aCoeff = EMPTY ; bc(i)%n = EMPTY ; bc(i)%pRef = EMPTY ; bc(i)%ci = EMPTY
+          bc(i)%aCoeff = EMPTY ; bc(i)%n = EMPTY ; bc(i)%pRef = EMPTY ; bc(i)%Taf = EMPTY ; srm_head = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )
-          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%Taf, bc(i)%aCoeff, bc(i)%n, bc(i)%pRef, &
-            bc(i)%rhoGrain, bc(i)%SF_geo, (bc(i)%ci(s), s = 1, nsc)
-          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%Taf, bc(i)%aCoeff, bc(i)%n, bc(i)%pRef, &
-                                             bc(i)%rhoGrain, bc(i)%SF_geo, bc(i)%ci ], 'T_af a n p_ref rho_grain SF_geo massf' )
-          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%Taf, bc(i)%aCoeff, bc(i)%n, bc(i)%pRef ], &
-                                        'T_af a n p_ref' )
-          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) srm_head
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, srm_head, 'mdot_ref n p_ref T_af mode' )
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, srm_head, 'mdot_ref n p_ref T_af mode' )
+          if ( ios == 0 ) then
+            bc(i)%aCoeff = srm_head(1) ; bc(i)%n = srm_head(2) ; bc(i)%pRef = srm_head(3) ; bc(i)%Taf = srm_head(4)
+            call Check_SRM_Head ( i, nline, srm_head )
+            if ( srm_head(5) == 1d0 ) then
+              if (level == 1) nSRM = nSRM + 1
+              allocate( bc(i) % ci(1 : nsc) )
+              bc(i)%ci = EMPTY
+              read( pline,*,iostat=ios ) srm_head, (bc(i)%ci(s), s = 1, nsc)
+              if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
+              if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci, 'massf' )
+            else
+              if (level == 1) nSRMin = nSRMin + 1
+              allocate( bc(i) % ci(1 : nsc+nrans) )
+              bc(i)%ci = EMPTY
+              read( pline,*,iostat=ios ) srm_head, (bc(i)%ci(s), s = nrans+1, nrans+nsc), (bc(i)%ci(s), s = 1, nrans)
+              if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
+              if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
+              if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
+              if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
+              if ( ios == 0 ) then
+                bc(i)%type = 404 ; bc(i)%srm_inflow = .true.
+                bc(i)%T0 = bc(i)%Taf ; bc(i)%mdot = bc(i)%aCoeff ; bc(i)%rel_fac = 1d0
+                bc(i)%alpha = huge(1.0_R8) ; bc(i)%beta = huge(1.0_R8)      ! along the face normal (parse_dir_tok)
+              end if
+            end if
+          end if
 
         ! ─────────────────────────────────────────────────────────────────────
         ! GSI - Melting
@@ -923,6 +951,7 @@ contains
     if (nchimera > 0) write(*,'(A,T35,I0)') '   Chimera', nchimera
     if (ncoupled > 0) write(*,'(A,T35,I0)') '   Coupled wall', ncoupled
     if (nSRM > 0) write(*,'(A,T35,I0)') '   SRM wall', nSRM
+    if (nSRMin > 0) write(*,'(A,T35,I0)') '   SRM inflow (as 404)', nSRMin
     !if (nKaffs > 0) write(*,'(A,T35,I0)') '   Coupled 1D-MultiD', nKaffs
     if (nstate > 0) write(*,'(A,T35,I0)') '   Q2D Mapped', nstate
     if (has_tdep_bc) write(*,'(A)') '   Time-dependent BC detected'
@@ -1076,6 +1105,65 @@ contains
     end if
 
   end subroutine Need_Inward
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Check_SRM_Head: the head of the property line of the SRM grain of record n (type 502, line nline of the file),
+  !   mdot_ref, n, p_ref, T_af and mode. The run stops at set-up when the mode is neither 1 (a wall that blows the gas
+  !   in) nor 2 (an inflow); when p_ref is not positive, the reference pressure of the law mdot_ref (p/p_ref)^n; when
+  !   mdot_ref is negative (a grain blows gas into the domain; 0 is a surface that does not burn, a wall at T_af, which
+  !   an inflow cannot be: mode 2 needs mdot_ref > 0); and when T_af does not lie on the tables of the gas, at or above
+  !   their lowest temperature above 0 K and at or below Tmax - 1, one kelvin below their last row, where their
+  !   interpolation ends: above it f_tabT holds the values of Tmax - 1, and the gas would enter with the enthalpy of
+  !   Tmax - 1 while the wall stays at T_af. T_af = 0 is what the boundary-condition builder of ATLAS writes for a grain
+  !   without eq-CEA-file.
+  subroutine Check_SRM_Head ( n, nline, head5 )
+    use MOSE_Mod_MPI,            only: mpi_stop_all
+    use FLINT_Lib_Thermodynamic, only: Tmin, Tmax
+    implicit none
+    integer, intent(in)  :: n, nline
+    real(R8), intent(in) :: head5(5)        ! mdot_ref, n, p_ref, T_af, mode
+    ! Local
+    character(len=120) :: head
+    character(len=24)  :: txt
+    character(len=12)  :: tk
+
+    write(head,'(3A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type 502)'
+    if ( head5(5) /= 1d0 .and. head5(5) /= 2d0 ) then
+      write(txt,'(ES23.16)') head5(5)
+      call mpi_stop_all ( trim(head)//': mode = '//trim(adjustl(txt))//' is neither 1 (a wall that blows the gas in) '// &
+                          'nor 2 (an inflow)' )
+    end if
+    if ( .not. ( head5(3) > 0d0 ) ) then
+      write(txt,'(ES23.16)') head5(3)
+      call mpi_stop_all ( trim(head)//': p_ref = '//trim(adjustl(txt))//' is not positive: the reference pressure of '// &
+                          'the burn rate law mdot_ref (p/p_ref)^n' )
+    end if
+    if ( head5(1) < 0d0 ) then
+      write(txt,'(ES23.16)') head5(1)
+      call mpi_stop_all ( trim(head)//': mdot_ref = '//trim(adjustl(txt))//' is negative: a grain blows gas into the '// &
+                          'domain (mdot_ref > 0; 0 for a surface that does not burn, a wall in mode 1)' )
+    end if
+    if ( head5(5) == 2d0 .and. head5(1) == 0d0 ) then
+      call mpi_stop_all ( trim(head)//': mdot_ref = 0 in mode 2: an inflow needs a mass flux (a surface that does not '// &
+                          'burn is a wall, mode 1)' )
+    end if
+    write(txt,'(ES23.16)') head5(4)
+    if ( .not. ( head5(4) > 0d0 ) ) then
+      call mpi_stop_all ( trim(head)//': T_af = '//trim(adjustl(txt))//' is not positive: no flame temperature (the '// &
+                          'boundary-condition builder of ATLAS writes 0 for a grain without eq-CEA-file)' )
+    else if ( head5(4) < real(max(Tmin, 1), R8) ) then
+      write(tk,'(I0)') max(Tmin, 1)
+      call mpi_stop_all ( trim(head)//': T_af = '//trim(adjustl(txt))//' is below the lowest temperature of the '// &
+                          'tables of the gas above 0 K, '//trim(tk)//' K: extend the tables to lower temperatures' )
+    else if ( head5(4) > real(Tmax - 1, R8) ) then
+      write(tk,'(I0)') Tmax - 1
+      call mpi_stop_all ( trim(head)//': T_af = '//trim(adjustl(txt))//' is above '//trim(tk)//' K, one kelvin below '// &
+                          'the last row of the tables of the gas, where their interpolation ends: extend the tables to '// &
+                          'higher temperatures' )
+    end if
+
+  end subroutine Check_SRM_Head
 
 
   !─────────────────────────────────────────────────────────────────────────────

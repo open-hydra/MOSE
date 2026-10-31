@@ -77,9 +77,8 @@ module MOSE_Advanced_Types_m
     real(R8)                            :: dh_wall  = 0.0_R8                 ! Material heat of fusion           (GSI melting wall 503)
     integer                             :: GSI_surf_reac_id = 0              ! GSI reactions ID                  (GSI 505/506)
     integer                             :: GSI_pyro_model_id = 0             ! GSI pyrolysis model ID            (GSI 504/506)
-    real(R8)                            :: aCoeff, n, pRef, Taf, SF          ! SRM specification             (SRM BC 502)
-    real(R8)                            :: rhoGrain = 0.0_R8                 ! SRM grain density [kg/m3]     (SRM BC 502)
-    real(R8)                            :: SF_geo   = 1.0_R8                 ! SRM geometric scale factor    (SRM BC 502)
+    real(R8)                            :: aCoeff, n, pRef, Taf              ! SRM grain (BC 502): mdot_ref, n, p_ref, T_af
+    logical                             :: srm_inflow = .false.              ! SRM grain of mode 2: applied as 404 (IO_BC)
     real(R8)                            :: psub     = 0.0_R8                 ! Nozzle subsonic  pressure     (nozzle BC 420)
     real(R8)                            :: psup     = 0.0_R8                 ! Nozzle supersonic pressure    (nozzle BC 420)
     real(R8)                            :: p_design   = 0.0_R8               ! Nozzle supersonic design exit pressure, set at set-up (nozzle BC 420)

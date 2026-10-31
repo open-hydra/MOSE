@@ -380,7 +380,7 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 
 |  Type | Name               | Data line                                                                  |
 | :---: | ------------------ | -------------------------------------------------------------------------- |
-| `502` | SRM grain boundary | `T_af, a, n, p_ref, rho_grain, SF_geo, [massf_1 … massf_ns]`               |
+| `502` | SRM grain boundary | `mdot_ref, n, p_ref, T_af, mode, [massf_1 … massf_ns]`, in mode 2 then `[turb_1 … turb_nrans]` |
 | `503` | Melting            | `cp_wall, T_wall, Ti_wall, dh_wall, q_rad, eps_wall, [massf_1 … massf_ns]` |
 | `504` | Pyrolysis          | `pyro_id, q_rad, eps_wall, [massf_1 … massf_ns]`                           |
 | `505` | Surface reactions  | `reac_id, q_rad`                                                           |
@@ -392,12 +392,12 @@ its type; `504` and `505` are the pyrolysis and the surface reactions alone.
 
 | Field       | Description                                                                                       |
 | ----------- | ------------------------------------------------------------------------------------------------- |
-| `T_af`      | Adiabatic flame temperature of the propellant [K]                                                 |
-| `a`         | Propellant burn-rate coefficient in the Saint Robert/Vieille burn-rate law                        |
-| `n`         | Pressure exponent in the burn-rate law, typically \(r_b = a(p/p_\mathrm{ref})^n\)                 |
-| `p_ref`     | Reference pressure used with the burn-rate coefficient `a` [Pa]                                   |
-| `rho_grain` | Propellant grain density [kg/m³]                                                                  |
-| `SF_geo`    | Grain-geometry correction/scaling factor applied to the grain-boundary regression or burning rate |
+| `mdot_ref`  | Mass flux of the propellant gas at `p_ref` [kg/(m²·s)]: the grain injects \(\dot m = \dot m_\mathrm{ref}\,(p/p_\mathrm{ref})^n\) at the pressure \(p\) of the boundary cell (Saint-Robert/Vieille's law in mass-flux form). The boundary-condition builder of ATLAS writes \(a\,\rho_\mathrm{grain}\,SF\,(1-k_\rho)\): the linear burn rate \(a\) at `p_ref` times the grain density and its scale factor, less the share \(k_\rho\) of the dispersed phases the grain injects. 0: a surface that does not burn (mode 1) |
+| `n`         | Pressure exponent of the law                                                                      |
+| `p_ref`     | Reference pressure of the law [Pa], positive                                                      |
+| `T_af`      | Adiabatic flame temperature of the propellant [K]: the products enter at `T_af`, with the enthalpy of the tables of the gas at `T_af` and their composition; it must lie on the tables, from their lowest temperature above 0 K to one kelvin below their last row, where their interpolation ends |
+| `mode`      | `1`: a wall that blows the products in (the blowing wall of 503–505, at `T_af`); `2`: an inflow, the face applied as the mass-flux inlet `404` at the static temperature `T_af` along the face normal, with the mass flux of the law |
+| `turb_k`    | Mode 2: the turbulence values of the injected gas, specific, as on the line of an inlet (\(\tilde\nu\); \(k\), \(\omega\); …) |
 | `cp_wall`   | Specific heat of the solid [J/(kg·K)]                                                             |
 | `T_wall`    | Melting temperature [K] (type `503`: prescribed, not solved)                                      |
 | `Ti_wall`   | Initial temperature of the solid [K]                                                              |
@@ -409,20 +409,37 @@ its type; `504` and `505` are the pyrolysis and the surface reactions alone.
 | `massf_s`   | Composition of the material leaving the surface (one value per species)                           |
 
 !!! note
-    These boundary conditions require a viscous run (`equations = navier-stokes`).
-    Under `equations = euler` the face is applied as a plain slip wall, and no
+    The SRM grain `502` runs under either `equations`: under `euler` its flux carries
+    the mass, the momentum and the enthalpy of the products, without stress and
+    conduction. The types `503`–`505` require a viscous run (`equations = navier-stokes`):
+    under `equations = euler` the face is applied as a plain slip wall, and no
     ablation takes place.  The same fallback — an impermeable wall — is used
     whenever the flow cannot sustain the process; see
     [Inert surfaces](../theory/gsi.md#inert-surfaces).
 
 !!! note
-    With a RANS model (`turbulence` set) the gas a `502` grain injects carries
+    With a RANS model (`turbulence` set) the gas a `502` grain of mode 1 injects carries
     the turbulence values of a smooth wall: $\tilde\nu = 0$ (Spalart–Allmaras),
     $k = 0$ and the wall value of $\omega$ (SST, Wilcox 2006), whose distance is
-    the wall distance of the cell. The grain is a wall for the wall distance of
+    the wall distance of the cell. The grain of mode 1 is a wall for the wall distance of
     the turbulence models, as the walls `301`, `302` and `503`–`505`. The ghost
     cells behind the grain take these wall values, as behind a wall; a grain that
     does not burn is a wall at the flame temperature.
+
+!!! note
+    A grain of mode 2 is an inlet `404` from set-up on: the turbulence values of its line,
+    zero-gradient ghost cells, no wall for the wall distance. Unlike an inlet `404` it is
+    never closed by the gas of the boundary cell at rest or moving out: the grain burns
+    whatever that gas does, as in a chamber at rest before the ignition. The summary of the
+    boundary conditions counts it as `SRM inflow (as 404)`.
+
+!!! note
+    The run stops at set-up, with the line of `bc.txt`, the record and the value, on a
+    property line of a `502` whose `mode` is neither 1 nor 2, whose `p_ref` is not positive,
+    whose `mdot_ref` is negative (or 0 in mode 2: an inflow needs a mass flux), whose `T_af`
+    is not positive (the boundary-condition builder of ATLAS writes 0 for a grain without
+    `eq-CEA-file`) or does not lie on the tables of the gas, and on a line of mode 2 short of
+    its turbulence values.
 
 !!! warning
     Type `505` requires a thermodynamic table containing O₂, CO₂, CO, H₂O, H₂,

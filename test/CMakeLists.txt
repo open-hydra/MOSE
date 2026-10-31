@@ -276,7 +276,13 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # (403, 404, 408, 420) stops the run; so does a 420 without p_sub, with its
 # thresholds out of order, with g above the choked mass flux or with T0 above
 # the tables of the gas, and a record of type 409, 501 or 506, which MOSE does
-# not apply).
+# not apply). The SRM grain (502): a wall for the wall distance in mode 1 (one
+# step at rest), an inflow in mode 2 that lets the products in from rest with
+# the mass flux of its mode-1 twin and is no wall for the distance, runs with
+# Spalart-Allmaras and SST in both modes; a property line with a mode other
+# than 1 and 2, p_ref <= 0, mdot_ref < 0 (0 in mode 2), T_af = 0 or above the
+# tables, or an inflow short of its turbulence value stops the run; the wall
+# state of a grain that blows CH4 into N2 takes the gas constant of CH4.
 # Rotating frame: stationary-face-1, -2, ... of [MOSE-Rotating-Frame] are read
 # and listed, and the run ends (the count stops at the first key missing); a
 # stationary face may be a wall in part and a block connection in part.
@@ -473,9 +479,10 @@ mose_add_parts_script(ViscousPatch fast/viscous-patch
 mose_add_parts_script(ViscousWallPatch fast/viscous-patch
     PARTS viscous-wall-patch LABELS validation numerics 2D 3D)
 
-# Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
-# which is an exact steady solution, checked against its closed form. These
-# boundary conditions have no other coverage in the suite.
+# Ablative wall BCs (503 melting / 504 pyrolysis) and the SRM grain (502, its
+# two modes, a blowing wall and an inflow, on both ends): an isothermal blown
+# column, which is an exact steady solution, checked against its closed form.
+# These boundary conditions have no other coverage in the suite.
 # The melting column also runs without schmidt: the default, 0, needs no
 # diffusion table with a single species.
 mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;physics;2D")
