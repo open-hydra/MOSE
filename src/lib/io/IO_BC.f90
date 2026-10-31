@@ -539,9 +539,10 @@ contains
         ! SRM grain boundary
         ! Second line: mdot_ref, n, p_ref, T_af, mode, massf(1:nsc) [, turb(1:nrans) in mode 2]
         !   mdot_ref is the mass flux of the propellant gas at p_ref [kg/(m^2 s)]: mdot = mdot_ref (p/p_ref)^n at the
-        !   pressure of the boundary cell (Saint-Robert's law); the products enter at T_af with the composition massf.
+        !   pressure of the boundary cell (Saint-Robert's law); the products enter with the total temperature T_af (the
+        !   total enthalpy h(T_af), SRM_Static_Temperature) and the composition massf.
         !   mode 1: a wall that blows the gas in (BC_SRM). mode 2: an inflow, the record applied as the mass-flux inlet
-        !   404 at the static temperature T_af along the face normal, with the mass flux of the law and the turbulence
+        !   404 at the static temperature of total T_af along the face normal, with the mass flux of the law and the turbulence
         !   values of the line, and never closed by the gas of the boundary cell moving out (BC_Fluxes): from here on
         !   the record is of type 404, srm_inflow, for the fluxes, the ghost cells and the metrics of an inlet.
         ! The enthalpy of the injected products is not read: it is evaluated from T_af and the composition against the

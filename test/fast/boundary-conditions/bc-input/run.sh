@@ -42,7 +42,7 @@
 #  the wall value, plus the source terms with the distance to the grain, and
 #  in the other cells by those source terms alone (make_case.py srmcheck).
 #  The same grain in mode 2, an inflow (applied as the mass-flux inlet 404
-#  at T_af along the normal): one step from rest lets the products in with
+#  of total temperature T_af along the normal): one step from rest lets the products in with
 #  the mass flux of the law at the pressure of the cell, the change of the
 #  grain of mode 1 (the face is not closed by the gas at rest), and the
 #  grain is no wall for the wall distance (no source of rho nu~ in the
@@ -56,7 +56,9 @@
 #  (make_case.py srmbad). A grain that blows CH4 into a duct of N2 at rest
 #  (inviscid, the four species of test/1D/diff1): one step gives the cell
 #  the momentum of the blown gas with the gas constant of CH4 for the wall
-#  state, not that of the N2 of the cell (make_case.py srmtwogascheck).
+#  state, not that of the N2 of the cell, at the static temperature whose
+#  total temperature is T_af, and the energy of the total enthalpy h(T_af);
+#  the grain in mode 2 gives the same changes (make_case.py srmtwogascheck).
 #  Gas: test/common/Air (test/common/Air-viscous for the grain).
 #===============================================================================
 set -uo pipefail
@@ -359,9 +361,20 @@ sed -e 's/^iter-threshold = 40$/iter-threshold = 1/' -e 's/^time-accurate = true
 rm -f OUTPUT/diagnostic.tec
 "$LOCAL" > OUTPUT/srm-twogas.log 2>&1
 if [[ -f OUTPUT/diagnostic.tec ]] && python3 -B make_case.py srmtwogascheck OUTPUT/diagnostic.tec; then
-  echo "  [ok  ] srm-twogas: the wall state of the grain takes the gas constant of the gas it blows in, not that of the cell"
+  echo "  [ok  ] srm-twogas: the wall state of the grain takes the gas constant of the gas it blows in, not that of the cell,"
+  echo "         at the static temperature of total T_af, and the gas gets the total enthalpy h(T_af)"
 else
-  echo "  [FAIL] srm-twogas: the wall state of the grain is not that of the gas it blows in (see OUTPUT/srm-twogas.log)"
+  echo "  [FAIL] srm-twogas: the wall state or the energy of the grain is not that of the gas it blows in at total T_af (see OUTPUT/srm-twogas.log)"
+  fail=1
+fi
+[[ -f OUTPUT/diagnostic.tec ]] && cp OUTPUT/diagnostic.tec OUTPUT/diagnostic-twogas-wall.tec
+python3 -B make_case.py srmtwogas inflow || exit 1
+rm -f OUTPUT/diagnostic.tec
+"$LOCAL" > OUTPUT/srm-twogas-inflow.log 2>&1
+if [[ -f OUTPUT/diagnostic.tec ]] && python3 -B make_case.py srmtwogascheck OUTPUT/diagnostic.tec OUTPUT/diagnostic-twogas-wall.tec; then
+  echo "  [ok  ] srm-twogas-inflow: the inflow grain gives the face state and the energy of the grain of mode 1"
+else
+  echo "  [FAIL] srm-twogas-inflow: the inflow grain does not give the face state and energy of mode 1 (see OUTPUT/srm-twogas-inflow.log)"
   fail=1
 fi
 cp input-srm40.ini input.ini

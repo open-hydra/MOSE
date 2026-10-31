@@ -118,7 +118,8 @@ def verify_srm(cfg, field, dims, wall_face):
     energy balance, and the wall is held at the flame temperature, but the blown
     column is the same exact solution as for the ablative walls. Mode 1 blows the
     products in through a wall; mode 2 lets them in through the mass-flux inlet 404
-    at the static temperature T_af: the same column, the same checks.
+    at the total temperature T_af: the same column, the same checks (T_af is the total
+    temperature in both modes: the column is u^2/(2 cp) = 3e-4 K below it).
 
     BC 502 is not a viscous wall, so it contributes nothing to OUTPUT/wall.tec and
     everything here is read from the field.  That is the stronger check anyway: the

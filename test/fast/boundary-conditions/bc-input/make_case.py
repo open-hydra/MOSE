@@ -47,9 +47,11 @@ Usage (from the test directory):
                                          boundary (502); rest: the gas at rest at T0 and PB; sst: k and omega instead of
                                          nu~; inflow: the grain in mode 2 (an inflow) instead of mode 1 (a blowing wall)
   python3 -B make_case.py srmbad KIND    the duct of the grain with the record that SRM_BAD[KIND] gives
-  python3 -B make_case.py srmtwogas      the inviscid duct full of N2 at rest, its inlet a grain blowing in CH4 (mode 1)
-  python3 -B make_case.py srmtwogascheck DIAG   exit status 0 when one step gives the momentum of the blown CH4 with the
-                                         gas constant of CH4 for the wall state, not that of the N2 of the cell
+  python3 -B make_case.py srmtwogas [inflow]   the inviscid duct full of N2 at rest, its inlet a grain blowing in CH4
+                                         (mode 1; inflow: mode 2)
+  python3 -B make_case.py srmtwogascheck DIAG [DIAG1]   exit status 0 when one step gives the momentum of the blown CH4
+                                         with the gas constant of CH4 at the static temperature of total T_af, and the
+                                         energy of the total enthalpy h(T_af); [the changes of the grain of mode 1]
   python3 -B make_case.py srminflowcheck DIAG DIAGWALL   exit status 0 when one step from rest lets in the mass flux of
                                          the law through the inflow grain, as through the grain of mode 1 (DIAGWALL), and
                                          the grain is not a wall for the distance (below)
@@ -304,9 +306,9 @@ WM_TWOGAS = (16.043, 18.015, 28.014, 31.998)
 TAF_TWOGAS = 3.0e3
 
 
-def write_srm_twogas():
+def write_srm_twogas(inflow=False):
     """The duct of write_case at rest, N2 at T0 and PB (the other species 1e-20), and record 1 (the inlet) a grain of mode
-    1 that blows in CH4 at TAF_TWOGAS with mdot_ref = 1 kg/(m2 s) at p_ref = PB."""
+    1 (inflow: mode 2) that blows in CH4 of total temperature TAF_TWOGAS with mdot_ref = 1 kg/(m2 s) at p_ref = PB."""
     write_case("p0.dat", (PB / (8314.46261815324 / WM_TWOGAS[2] * T0), 0.0, PB))
     rho_n2 = PB / (8314.46261815324 / WM_TWOGAS[2] * T0)
     with open("INPUT/ic.tec") as f:
@@ -324,26 +326,71 @@ def write_srm_twogas():
     with open("INPUT/bc.txt") as f:
         bc = f.readlines()
     bc[0] = bc[0].replace("     402\n", "     502\n")
-    bc[1] = f"1.0, 0.4, {PB:.6E}, {TAF_TWOGAS:.1E}, 1, 1.0, 0.0, 0.0, 0.0\n"
+    bc[1] = f"1.0, 0.4, {PB:.6E}, {TAF_TWOGAS:.1E}, {2 if inflow else 1}, 1.0, 0.0, 0.0, 0.0\n"
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(bc))
 
 
-def srm_twogas_check(diag):
-    """One explicit step of the inviscid duct of write_srm_twogas from rest: the pressure of the grain face, p of the cell,
-    and that of the first face between cells cancel, and the cell next to the grain gains the momentum of the blown CH4,
-    mdot u_b = mdot^2 R_w T_af / p per unit area and time (Ablation_Wall_Fluxes), mdot = 1 kg/(m2 s): the gas constant of
-    the wall state, R_w = d(rho u) h p / (dt mdot^2 T_af), is that of the composition the grain imposes, CH4, not that of
-    the gas of the cell, N2 (Wall_Gas_State); the cell gains the mass flux mdot."""
+def ch4_table():
+    """Temperature, cp and h of CH4 from test/1D/diff1/INPUT/thermo.dat (rows T = 1, 2, ... K), as MOSE loads them."""
+    rows, zone = {}, None
+    with open("../../../1D/diff1/INPUT/thermo.dat") as f:
+        for ln in f:
+            if ln.startswith("ZONE"):
+                zone = ln.split('"')[1]
+                continue
+            t = ln.split()
+            if zone == "CH4" and len(t) == 5:
+                rows[int(float(t[0]))] = (float(t[1]), float(t[2]))
+    return rows
+
+
+def h_ch4(rows, T):
+    """h of CH4 at T, linear between the rows of the table (f_tabT)."""
+    i = int(T)
+    return rows[i][1] + (rows[i + 1][1] - rows[i][1]) * (T - i)
+
+
+def srm_twogas_check(diag, diag_mode1=None):
+    """One explicit step of the inviscid duct of write_srm_twogas from rest. The products cross the face at the static
+    temperature T_w of h(T_w) + u^2/2 = h(T_af), u = mdot R T_w / p (T_af the total temperature, mdot = 1 kg/(m2 s), h of
+    the table of CH4 as MOSE interpolates it, solved here by bisection). The pressure of the face, p of the cell, and that
+    of the first face between cells cancel, and the cell next to the grain gains the momentum mdot u = mdot^2 R_w T_w / p
+    per unit area and time: the gas constant of the face state, R_w = d(rho u) h p / (dt mdot^2 T_w), is that of the
+    composition the grain imposes, CH4, not that of the gas of the cell, N2; the energy mdot (h(T_w) + u^2/2) =
+    mdot h(T_af), the total enthalpy, not mdot (h(T_af) + u^2/2); the mass flux mdot. diag_mode1: the grain of mode 1 of
+    the same step, whose changes those of mode 2 (an inflow, the inlet 404) must equal."""
     d = read_zone(diag)
     h, mdot = LX / N, 1.0
-    r_w = abs(d["rhou"][0]) / d["dt"][0] * h * PB / (mdot ** 2 * TAF_TWOGAS)
     r_ch4, r_n2 = 8314.46261815324 / WM_TWOGAS[0], 8314.46261815324 / WM_TWOGAS[2]
+    rows = ch4_table()
+    h0 = h_ch4(rows, TAF_TWOGAS)
+    lo, hi = TAF_TWOGAS - 50.0, TAF_TWOGAS
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if h_ch4(rows, mid) + 0.5 * (mdot * r_ch4 * mid / PB) ** 2 < h0:
+            lo = mid
+        else:
+            hi = mid
+    t_w = 0.5 * (lo + hi)
+    u = mdot * r_ch4 * t_w / PB
+    r_w = abs(d["rhou"][0]) / d["dt"][0] * h * PB / (mdot ** 2 * t_w)
     err = abs(r_w / r_ch4 - 1.0)
+    e_in = d["rhoe"][0] / d["dt"][0] * h
+    erre = abs(e_in / (mdot * h0) - 1.0)
+    static = abs((mdot * (h0 + 0.5 * u * u)) / (mdot * h0) - 1.0)
     dm = d["rho"][0] / d["dt"][0] * h
-    print(f"    gas constant of the wall state from the momentum the grain blows in: {r_w:.9f} J/(kg K), CH4 {r_ch4:.9f} "
-          f"(difference {err:.1e}), N2 {r_n2:.9f}; mass flux {dm:.9f} kg/(m2 s)")
-    sys.exit(0 if err < 1e-6 and abs(dm - mdot) < 1e-6 else 1)
+    print(f"    static temperature of the face {t_w:.9f} K (total {TAF_TWOGAS:g} K, u = {u:.4f} m/s); gas constant of the "
+          f"face state from the momentum: {r_w:.9f} J/(kg K), CH4 {r_ch4:.9f} (difference {err:.1e}), N2 {r_n2:.9f}")
+    print(f"    energy in: {e_in:.9e} W/m2, mdot h(T_af) {mdot * h0:.9e} (difference {erre:.1e}; with T_af static: "
+          f"{static:.1e}); mass flux {dm:.9f} kg/(m2 s)")
+    ok = err < 1e-9 and erre < 1e-9 and abs(dm - mdot) < 1e-6
+    if diag_mode1 is not None:
+        w = read_zone(diag_mode1)
+        dev = max(abs(d[k][0] / d["dt"][0] / (w[k][0] / w["dt"][0]) - 1.0) for k in ("rho", "rhou", "rhoe"))
+        print(f"    the changes of mode 2 against those of mode 1: largest relative difference {dev:.1e}")
+        ok = ok and dev < 1e-12
+    sys.exit(0 if ok else 1)
 
 
 UNAPPLIED = ("409", "501", "506")                    # types that MOSE does not apply
@@ -458,9 +505,9 @@ def main():
     elif what == "srmbad":
         write_srm(bad=sys.argv[2])
     elif what == "srmtwogas":
-        write_srm_twogas()
+        write_srm_twogas("inflow" in sys.argv[2:])
     elif what == "srmtwogascheck":
-        srm_twogas_check(sys.argv[2])
+        srm_twogas_check(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
     elif what == "srminflowcheck":
         srm_inflow_check(sys.argv[2], sys.argv[3])
     elif what == "unapplied":

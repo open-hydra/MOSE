@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - The SRM grain (`502`) has two modes, the fifth field of its property line: `1`, a wall that blows the products in, as
-  before; `2`, an inflow, applied as the mass-flux inlet `404` at the static temperature `T_af` along the face normal, with
+  before; `2`, an inflow, applied as the mass-flux inlet `404` at the total temperature `T_af` along the face normal, with
   the mass flux of Saint-Robert's law at the pressure of the boundary cell and the turbulence values of the line: the
   turbulence values, ghost cells and wall distance of an inlet. Unlike an inlet `404` a grain of mode 2 is never closed by
   the gas of the boundary cell at rest or moving out: the grain burns whatever that gas does, as in a chamber at rest
@@ -94,6 +94,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `T_af` of the SRM grain (`502`) is the total temperature of the products, in both modes: they enter with the total
+  enthalpy h(`T_af`) per unit mass, that of the propellant (the flame temperature of an equilibrium calculation is that of
+  the gas at rest), at the static temperature T of h(T) + u²/2 = h(`T_af`) from the tables, u their velocity through the
+  face. The blowing wall took `T_af` as the static temperature of the blown gas and added its kinetic energy, u²/2 per unit
+  mass more than the propellant holds: T is u²/(2cp) below `T_af`, 2.5e-3 K at 20 kg/(m² s) and 7 MPa for products of
+  371 J/(kg K), 0.12 K at 1 MPa (3e-4 K in the column of `AblatingWall`, which no longer gives the former field bit for bit).
 - The property line of the SRM grain (`502`) is `mdot_ref, n, p_ref, T_af, mode, massf(1:ns)` and, in mode 2, the
   turbulence values: the mass flux first, `rho_grain` and `SF_geo` no longer written (MOSE read them and used neither),
   the mode new. The boundary-condition builder of ATLAS writes this line (its key `grain-bc` sets the mode); a file of the
@@ -351,7 +357,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   of the gas of the boundary cell, so that its density, and with it the blowing velocity, its momentum and kinetic energy,
   were off by R(cell)/R(products) wherever the cell held another gas (a chamber not yet filled with the products, a
   multi-species run: 0.80 of the right blowing velocity for products of 371 J/(kg K) blown into N2). The mass flux and the
-  enthalpy of the injected gas do not change; a single-species run gives the same solution, bit for bit.
+  enthalpy of the injected gas do not change; in a single-species run the gas constant of the cell is that of the
+  products, and this change alone changes nothing.
 - A property line of the SRM grain (`502`) stops the run at set-up when its mode is neither 1 nor 2, its `p_ref` is not
   positive, its `mdot_ref` is negative (or 0 in mode 2), and when `T_af` is not positive (the boundary-condition builder of
   ATLAS writes 0 for a grain without `eq-CEA-file`) or does not lie on the tables of the gas, from their lowest temperature

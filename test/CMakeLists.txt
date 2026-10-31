@@ -282,7 +282,9 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # Spalart-Allmaras and SST in both modes; a property line with a mode other
 # than 1 and 2, p_ref <= 0, mdot_ref < 0 (0 in mode 2), T_af = 0 or above the
 # tables, or an inflow short of its turbulence value stops the run; the wall
-# state of a grain that blows CH4 into N2 takes the gas constant of CH4.
+# state of a grain that blows CH4 into N2 takes the gas constant of CH4, at the
+# static temperature of total T_af, and the gas gets the total enthalpy h(T_af),
+# in both modes.
 # Rotating frame: stationary-face-1, -2, ... of [MOSE-Rotating-Frame] are read
 # and listed, and the run ends (the count stops at the first key missing); a
 # stationary face may be a wall in part and a block connection in part.

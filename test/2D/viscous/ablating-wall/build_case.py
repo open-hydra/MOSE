@@ -42,7 +42,7 @@ BC_MELTING, BC_PYROLYSIS, BC_SRM = 503, 504, 502
 # Solid propellant grain (BC 502): Saint-Robert's law in mass-flux form,
 #   mdot = a * (p/pRef)**n ,  a (the record's mdot_ref) in kg/(m2 s).
 # With pRef at the column pressure the reference mass flux is simply a.
-# mode 1: a wall that blows the products in; mode 2: an inflow (the mass-flux inlet 404 at the static T_af).
+# mode 1: a wall that blows the products in; mode 2: an inflow (the mass-flux inlet 404); T_af the total temperature.
 SRM = dict(Taf=1500.0, a=0.2, n=0.35)
 
 # --- configurations ----------------------------------------------------------
@@ -70,7 +70,7 @@ CONFIGS = {
     # stay at Taf.
     'srm':         dict(bc=BC_SRM, wall_face=3),
     'srm-top':     dict(bc=BC_SRM, wall_face=4),
-    # The same grain in its inflow mode: the face is the mass-flux inlet 404 at the static temperature T_af along
+    # The same grain in its inflow mode: the face is the mass-flux inlet 404 at the total temperature T_af along
     # the normal, with the mass flux of the law. The gas starts at rest, so the inlet must let the products in
     # although the cell does not move them in (an inlet 404 alone closes the face then); on both ends, for the two
     # orientations of the normal.

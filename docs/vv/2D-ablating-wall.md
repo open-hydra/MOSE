@@ -115,7 +115,7 @@ The `srm` configurations replace the ablating wall with a burning propellant gra
 balance, and the wall is held at the flame temperature, but the blown column is the
 same exact solution.  The grain runs in both modes of its record: a wall that blows
 the products in (mode 1: `srm`, `srm-top`) and an inflow, the mass-flux inlet 404 at
-the static temperature $T_{\mathrm{af}}$ (mode 2: `srm-inflow`, `srm-inflow-top`),
+the total temperature $T_{\mathrm{af}}$ (mode 2: `srm-inflow`, `srm-inflow-top`),
 each on the low and on the high end of the column (faces 3 and 4: the two orientations
 of the normal give the same numbers).  The gas starts at rest, which an inflow grain
 must let the products into.  BC 502 is neither a viscous wall nor writes one, so it

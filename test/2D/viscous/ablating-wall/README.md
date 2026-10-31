@@ -63,7 +63,7 @@ python3 verify.py
 | `melting-top`, `hdpe-top` | 503 / 504 | the same walls on the opposite face, which exercises the other branch of the face-orientation bookkeeping |
 | `melting-inert` | 503 | a surface that *cannot* ablate: no radiation and a gas colder than the wall, so the melting energy balance returns a non-positive mass flux and the boundary condition has to fall back to an impermeable isothermal wall |
 | `srm`, `srm-top` | 502, mode 1 | a burning propellant grain, a wall that blows its products in at the flame temperature with the mass flux of Saint-Robert's law, on both faces |
-| `srm-inflow`, `srm-inflow-top` | 502, mode 2 | the same grain as an inflow, the mass-flux inlet 404 at the static flame temperature, on both faces: from rest, which closes an inlet 404 alone |
+| `srm-inflow`, `srm-inflow-top` | 502, mode 2 | the same grain as an inflow, the mass-flux inlet 404 at the total flame temperature, on both faces: from rest, which closes an inlet 404 alone |
 | `default-schmidt` | 503 | the `melting` column with no `schmidt` in `input.ini`, run in `default-schmidt/`: the default, 0, is mixture-averaged multicomponent diffusion, which needs the binary diffusion table `INPUT/diffusion.dat` only with more than one species, so this single-species gas runs without it |
 
 ## Why the whole column is checked, wall cell included
