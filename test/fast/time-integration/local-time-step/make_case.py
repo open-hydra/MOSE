@@ -23,10 +23,10 @@ Small cases, written into INPUT/ (one at a time) by `python3 -B make_case.py CAS
   box3d  closed 3-D box, 12 x 12 x 12 cubic cells of 10 mm, slip walls (300) on the six faces; air at rest with a
          Gaussian pressure pulse (1e-2 p0, radius 30 mm): sound waves cross the cells in the three directions at once.
   species  1-D periodic Navier-Stokes, 40 cells of 1 nm, the four-species gas of test/1D/diff1 (CH4, H2O, N2, O2) as
-         air (N2 and O2) at rest, 300 K, 1 bar, with a wave of amplitude 1e-3 in the O2 mass fraction; run with
+         air (N2 and O2) at rest, 300 K, 1e5 Pa, with a wave of amplitude 1e-3 in the O2 mass fraction; run with
          schmidt = 0.2, so the species diffusivity mu/(rho Sc) = 5 nu is the largest one and sets the step.
   prec   2-D column of 4 x 16 cells of 40 um x 10 um, periodic in x (201 on itself), an adiabatic wall (301) at y = 0
-         and a symmetry plane (300) at the top; air of test/common/Air-viscous at 300 K and 1 bar in simple shear,
+         and a symmetry plane (300) at the top; air of test/common/Air-viscous at 300 K and 1e5 Pa in simple shear,
          u = G y with G = 1e5 1/s, and uniform k = 100 m2/s2, omega = 1e5 1/s. With SST (a_1 omega < S F_2) and with
          Wilcox 2006 (omega < C_lim sqrt(2 S:S/beta*)) the strain rate limits the eddy viscosity of every cell to about
          a third of rho k/omega. Steady runs with integration-variables = prec and HLLC-PC, forward Euler: the

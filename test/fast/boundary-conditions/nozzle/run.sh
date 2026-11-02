@@ -17,11 +17,11 @@
 #  takes, within 1e-9 of each. With the gas of the tube in the design state
 #  at 0.98 of its pressure, the face takes the design state, g, p_e + g u_e
 #  and g h0:
-#    mach25, mach3, mach4  air, T0 = 300 K, p0 = 2 bar, nozzles of exit Mach
+#    mach25, mach3, mach4  air, T0 = 300 K, p0 = 2e5 Pa, nozzles of exit Mach
 #              number 2.5, 3 and 4;
 #    rocket45  the gas of the inlet of the frozen rocket nozzle of
 #              test/2D/euler/rocket-nozzle (13 species, T0 = 3644.12 K,
-#              p0 = 108 bar), a nozzle of area ratio 40, exit Mach number 4.46;
+#              p0 = 1.08e7 Pa), a nozzle of area ratio 40, exit Mach number 4.46;
 #    sonic     the air of mach25 at the throat (area ratio 1) with g 0.5e-9
 #              above the choked mass flux: the sonic state, whose momentum
 #              flux alone is checked (design_state.py).

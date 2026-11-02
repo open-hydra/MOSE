@@ -7,7 +7,7 @@ the domain, a negative value is taken as its magnitude.
 
 A 1-D tube along x: NX cells of DX, one cell of DX in y and in z; slip walls (300) on the j faces, null (0) k faces, the
 inlet at one end and an extrapolation face (400) at the other. Calorically perfect air of test/common/Air (cp = 1004.5
-J/(kg K), molar mass 28.970418) at p = 1 bar and T = 300 K, its gas moving in through the inlet face at 0.1 a (u = 0.1 a
+J/(kg K), molar mass 28.970418) at p = 1e5 Pa and T = 300 K, its gas moving in through the inlet face at 0.1 a (u = 0.1 a
 with the inlet at i = 1, -0.1 a with the inlet at i = NX), so that the inlet lets the gas in. One forward Euler step with
 first-order reconstruction: the change of the density of the boundary cell is the mass flux of its boundary face times
 DT / DX, plus what the interior face takes away.

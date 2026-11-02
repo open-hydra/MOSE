@@ -11,9 +11,9 @@
   python3 -B check.py reached TAG TIME
       the solution time of OUTPUT/<TAG>.tec is >= TIME.
   python3 -B check.py threshold EPS SPLIT
-      OUTPUT/residual-history-{bar,tiny,split-restart}.dat are the steady runs
-      of part 4 with res-threshold = EPS: at 1 bar, at 1 bar x 2^-24, and at
-      1 bar in two parts with the restart after SPLIT iterations. The run at
+      OUTPUT/residual-history-{full,tiny,split-restart}.dat are the steady runs
+      of part 4 with res-threshold = EPS: at 1e5 Pa, at 1e5 Pa x 2^-24, and at
+      1e5 Pa in two parts with the restart after SPLIT iterations. The run at
       low pressure ends after its first iteration with its last density
       residual at most EPS times the first; the runs at the two pressures
       end at the same iteration, after SPLIT; the run in two parts ends at
@@ -100,7 +100,7 @@ def history(path):
 
 def threshold(eps, n_split):
     runs = {}
-    for tag in ("bar", "tiny", "split-restart"):
+    for tag in ("full", "tiny", "split-restart"):
         try:
             runs[tag] = history(f"OUTPUT/residual-history-{tag}.dat")
         except FileNotFoundError:
@@ -111,12 +111,12 @@ def threshold(eps, n_split):
         h = runs[tag]
         print(f"    {tag}: last iteration {h[-1][0]}, first density residual {h[0][1]:.6e}, "
               f"last {h[-1][1]:.6e}, last/first {h[-1][1] / h[0][1]:.3e}")
-    hb, ht, hs = runs["bar"], runs["tiny"], runs["split-restart"]
+    hb, ht, hs = runs["full"], runs["tiny"], runs["split-restart"]
     checks = [
         (ht[-1][0] > 1 and ht[-1][1] <= eps * ht[0][1],
-         f"the run at 1 bar x 2^-24 ends once its residual has fallen by {eps:.0e} from the first iteration"),
-        (hb[-1][0] == ht[-1][0], "the runs at 1 bar and at 1 bar x 2^-24 end at the same iteration"),
-        (hb[-1][0] > n_split, f"the run at 1 bar ends after iteration {n_split}, where the run in two parts restarts"),
+         f"the run at 1e5 Pa x 2^-24 ends once its residual has fallen by {eps:.0e} from the first iteration"),
+        (hb[-1][0] == ht[-1][0], "the runs at 1e5 Pa and at 1e5 Pa x 2^-24 end at the same iteration"),
+        (hb[-1][0] > n_split, f"the run at 1e5 Pa ends after iteration {n_split}, where the run in two parts restarts"),
         (hs[-1][0] == hb[-1][0] and hs[-1][1] / hs[0][1] == hb[-1][1] / hb[0][1],
          "the run in two parts ends where the run in one go ends, with the same last/first residual"),
     ]

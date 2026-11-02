@@ -1,7 +1,7 @@
 """Inputs of the MMSResiduals fast test, and the checks of its outputs.
 
 Part 1. A constructed field for the Spalart-Allmaras equation with variable density. Square of side L = 1 mm, periodic in x and in y
-(connections 201 on itself), N x N cells, null k faces; air of test/common/Air-viscous (mu and k constant) at rest at 1 bar,
+(connections 201 on itself), N x N cells, null k faces; air of test/common/Air-viscous (mu and k constant) at rest at 1e5 Pa,
 with smooth periodic temperature and nu~:
   T   = T0 [1 + 0.3 sin(2 pi x/L) (1 + 0.4 sin(2 pi y/L))],                       T0 = 300 K, rho = p/(R T);
   nu~ = nu0 [1 + 0.5 cos(2 pi x/L + 0.7) (1 + 0.4 cos(2 pi y/L + 0.3))],          nu0 = 1e-4 m2/s.
@@ -19,7 +19,7 @@ divided by the largest value of the right-hand side, must be below 0.02 on N = 6
 
 Part 2. The rotation tensor W_ij = (du_i/dx_j - du_j/dx_i)/2 of a flow is a tensor: SA-RC and SST-RC, whose term r~ uses its
 components, must give the same scalars for a flow and for the same flow turned in space. A cube of NR^3 cells of DXR, one block,
-extrapolation (400) on all faces; the same air at p = 1 bar and T = 300 K, a velocity u = U0 + G x + H(x, x)/2 about the centre
+extrapolation (400) on all faces; the same air at p = 1e5 Pa and T = 300 K, a velocity u = U0 + G x + H(x, x)/2 about the centre
 of the cube, with vorticity along x, y and z and a strain that varies in space, so that the material derivative of the strain,
 and with it r~, is not zero; rho nu~ uniform, 3 mu (SA-RC), or k and omega uniform, KR and OMR (SST-RC: in the interior
 cells f_r1 lies between its bounds 0 and 1.25 and the production of k below its limiter). One explicit step, time-accurate,
@@ -36,7 +36,7 @@ Part 3. The rotation-curvature correction of Spalart-Allmaras (SA-RC) multiplies
 with omega_ij the rotation tensor of the absolute vorticity and Omega' the rotation rate of the frame (NASA Turbulence Modeling
 Resource, SA-RC; c_r1 = 1, c_r2 = 12, c_r3 = 1). A planar block of N3 x N3 cells of DX3 (cubic cells, dyadic sizes),
 extrapolation (400) on the i and j faces, null (0) k faces, no wall (wall distance 1e8: no destruction); the same air at
-p = 1 bar, T = 300 K, rho nu~ uniform, 3 mu. One explicit step, time-accurate, first order:
+p = 1e5 Pa, T = 300 K, rho nu~ uniform, 3 mu. One explicit step, time-accurate, first order:
   shear    a frame turning at OMEGA3 about z (rigid body), and the uniform shear u = GAMMA3 (y - y_c) in it: DS_ij/Dt = 0, so
            that r~ comes from the rotation of the frame alone. With rho and nu~ uniform and no mass flux across the cells, the
            change of rho nu~ in the step is dt rho c_b1 f_r1 S~ nu~ in every cell, with S~ = |omega_abs| (+ nu~ f_v2/(kappa d)^2,

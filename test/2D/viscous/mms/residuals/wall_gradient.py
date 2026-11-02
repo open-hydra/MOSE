@@ -2,7 +2,7 @@
 
 Spalart-Allmaras next to an isothermal wall, fluid at rest. A column of 4 x 16 cells, uniform, dx = dz = 0.1 mm and
 dy = 10 um; periodic in x (connections 201 on itself), isothermal wall at 300 K (302) at y = 0, symmetry (300) at the top,
-null k faces. Air of test/common/Air-viscous (mu and k constant) at rest at 300 K and 1 bar, with nu~ growing linearly from
+null k faces. Air of test/common/Air-viscous (mu and k constant) at rest at 300 K and 1e5 Pa, with nu~ growing linearly from
 the wall:
   nu~ = a y,   a = 6.6e-5 1/s,   so that chi = nu~/nu stays below 1e-3.
 With the fluid at rest S~ = nu~ fv2/(kappa^2 d^2) = a fv2/(kappa^2 y) and r = 1/fv2, and for chi -> 0 (fv2 -> 1, fw -> 1) the

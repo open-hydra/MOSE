@@ -2,7 +2,7 @@
 
 A short tube along x in a rigid-body frame turning at OMEGA about the x axis: NX cells along 0 <= x <= LX, one cell across,
 y from Y0 to Y0 + H and z from -H/2 to H/2. Calorically perfect air of test/common/Air at rest in the absolute frame:
-p = 1 bar, T = 300 K, and in the rotating frame the relative velocity -Omega x r = OMEGA (0, z, -y) of the cell centre.
+p = 1e5 Pa, T = 300 K, and in the rotating frame the relative velocity -Omega x r = OMEGA (0, z, -y) of the cell centre.
 Face 1 (x = 0) is an adiabatic no-slip wall (301) that does not rotate with the frame (stationary-face-1 = 1 1): at rest in
 the absolute frame, like the gas, and moving with -Omega x r in the rotating frame. Its normal is the axis, so the wall and
 the cell next to it move alike, and the shear on it is that of the gas at rest against a wall at rest: none, apart from the

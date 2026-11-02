@@ -689,7 +689,7 @@ contains
       ! The type of the mesh, which Check_Mesh_Type takes from the nodes. delthe exactly zero (no wedge, no sector) is
       ! written as two ordered comparisons, as in the rest of the code: the same result as == 0, also for -0 and NaN,
       ! with no compiler warning on the equality of reals
-      write(angle,'(F16.6)') delthe * 180d0 / acos ( -1d0 )
+      write(angle,'(ES14.7)') delthe
       select case ( ndir )
         case ( 1 )
           write(*,'(A,T35,A)') '   Mesh type', '1-D'
@@ -697,13 +697,13 @@ contains
           if ( delthe >= 0d0 .and. delthe <= 0d0 ) then
             write(*,'(A,T35,A)') '   Mesh type', '2-D, plane'
           else
-            write(*,'(A,T35,A)') '   Mesh type', '2-D, axisymmetric wedge of '//trim(adjustl(angle))//' degrees'
+            write(*,'(A,T35,A)') '   Mesh type', '2-D, axisymmetric wedge of '//trim(adjustl(angle))//' rad'
           end if
         case default
           if ( delthe >= 0d0 .and. delthe <= 0d0 ) then
             write(*,'(A,T35,A)') '   Mesh type', '3-D'
           else
-            write(*,'(A,T35,A)') '   Mesh type', '3-D, sectors of '//trim(adjustl(angle))//' degrees (type 200)'
+            write(*,'(A,T35,A)') '   Mesh type', '3-D, sectors of '//trim(adjustl(angle))//' rad (type 200)'
           end if
       end select
       if ( obj_multigrid%MGL > 1 ) &

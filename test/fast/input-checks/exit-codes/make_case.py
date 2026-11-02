@@ -39,7 +39,7 @@ Usage (from test/fast/input-checks/exit-codes):
       with the names the soot model looks for (C2H2, O2, N2, H2, CO and C(gr),
       Mod_Soot.f90), whose tables are taken from test/1D/premixed-flame (C2H4
       stands for C2H2 and C for C(gr): their properties do not matter here), in
-      a uniform state (1.16 kg/m3, 10 m/s, 1 bar, mass fractions 0.05, 0.233,
+      a uniform state (1.16 kg/m3, 10 m/s, 1e5 Pa, mass fractions 0.05, 0.233,
       0.716999, 0, 0, 1e-6) on the mesh of SOD_IC; with soot or sa the number
       density of the soot (1e14 /m3, the variable rho*Np of the soot model with
       C(gr)), with sa and sa-plain rho nu~ = 3 mu (sa-plain: no soot).
