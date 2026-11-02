@@ -17,6 +17,18 @@ Usage (from test/fast/input-checks/exit-codes):
       carbon dioxide by mass, at rest, at 1e5 Pa and 1500 K in the left half and 1e4 Pa and 1200 K in the right
       half. It is far from chemical equilibrium (the equilibrium burns the hydrogen), so chemistry = equilibrium
       changes it.
+  python3 -B make_case.py fer14 SOD_INPUT_DIR PHASE
+      the same, the tube holding instead the gas of the phase file PHASE (the nine H-O-Ar species of
+      test/1D/Fer14): the unburnt mixture of the reactive shock tube of test/1D/Fer14/input.ini (mass fractions
+      0.0127 of hydrogen, 0.1013 of oxygen and 0.8861 of argon, divided by their sum), at rest, with the pressure
+      and temperature of the two states of test/1D/Fer14/input.ini: 7173 Pa and 378.656 K in the left half, 35594
+      Pa and 748.472 K in the right half (that tube moves; this one is at rest).
+  python3 -B make_case.py ignition PHASE
+      writes INPUT/ic.tec and INPUT/bc.txt: a box of two blocks of 5 x 4 x 4 cubic cells of 0.1 m, block 2 after block 1
+      along x, joined by type 101, with slip walls (type 300) on every other face, holding the gas of the phase file PHASE
+      with the mass fractions of the fer14 mode, at rest at 101325 Pa: at 2000 K in the cells whose centre lies beyond the
+      plane 2x + 3y + 6z = 3 m (17 cells of block 1, 50 of block 2), at 300 K in the others. With the nine H-O-Ar species
+      and the mechanism of test/1D/Fer14 the hot gas ignites within a time step of the box.
   python3 -B make_case.py mixture SOD_IC OUT
       writes OUT: the 100-cell Sod tube of SOD_IC (one species, rho1) as a
       mixture of the four species of test/1D/diff1 (order of its
@@ -74,6 +86,11 @@ INF_NODE = (20, 1, 1)                                          # (i, j, k) from 
 RU = 8314.46261815324                                          # J/(kmol K), universal gas constant of FLINT
 STEAM = {"H2O": 0.98, "H2": 0.002, "O2": 0.016, "CO2": 0.002}   # mass fractions
 LEFT, RIGHT = (1e5, 1500.0), (1e4, 1200.0)                     # (p [Pa], T [K]) of the two halves
+FER14 = {"H2": 0.0127, "O2": 0.1013, "AR": 0.8861}             # mass fractions of test/1D/Fer14/input.ini, divided by their sum below
+FER14_LEFT, FER14_RIGHT = (7173.0, 378.656), (35594.0, 748.472)  # (p [Pa], T [K]) of its two states
+IGN_N, IGN_H = (5, 4, 4), 0.1                                  # cells of a block along x, y, z; edge of the cubic cells [m]
+IGN_P, IGN_COLD, IGN_HOT = 101325.0, 300.0, 2000.0             # pressure [Pa]; temperatures [K] before and beyond the plane
+IGN_PLANE = ((2.0, 3.0, 6.0), 3.0)                             # the plane a . x = d [m], its normal along (2, 3, 6)
 
 
 def read_tube(src):
@@ -122,14 +139,15 @@ def inf(sod_dir):
             f.write(' %s\n' % v)
 
 
-def steam(sod_dir, phase):
+def two_states(sod_dir, phase, mass, left, right):
     """INPUT/ic.tec: the mesh of the Sod tube (its nodal coordinates, as written), the partial densities of the
-    species of PHASE, the velocity (zero) and the pressure of the steam."""
+    species of PHASE with the mass fractions MASS (0 for a species it leaves out), the velocity (zero) and the
+    pressure of the state LEFT in the left half and RIGHT in the right half, each (p [Pa], T [K])."""
     sod(sod_dir)
     rows = [line.split() for line in open(phase).read().splitlines()[1:] if line.strip()]
     species = [row[0] for row in rows]
     weight = {row[0]: float(row[1]) for row in rows}
-    unknown = sorted(set(STEAM) - set(species))
+    unknown = sorted(set(mass) - set(species))
     if unknown:
         sys.exit("make_case.py: species not in %s: %s" % (phase, " ".join(unknown)))
     head, zone, body = open(os.path.join(sod_dir, "ic_x1.tec")).read().split("\n", 2)
@@ -137,8 +155,8 @@ def steam(sod_dir, phase):
     nodes = ni * nj * nk
     cells = (ni - 1) * max(nj - 1, 1) * max(nk - 1, 1)
     coords = body.split()[:3 * nodes]
-    rgas = RU * sum(y / weight[s] for s, y in STEAM.items())
-    state = [LEFT if c < cells // 2 else RIGHT for c in range(cells)]
+    rgas = RU * sum(y / weight[s] for s, y in mass.items())
+    state = [left if c < cells // 2 else right for c in range(cells)]
     rho = [p / (rgas * t) for p, t in state]
     nvar = 3 + len(species) + 4
     names = " ".join('"rho%d"' % (s + 1) for s in range(len(species)))
@@ -148,10 +166,82 @@ def steam(sod_dir, phase):
         out.write(zone + "\n")
         out.write("\n".join(" " + v for v in coords) + "\n")
         for s in species:
-            out.write("".join(" %.15E\n" % (STEAM.get(s, 0.0) * r) for r in rho))
+            out.write("".join(" %.15E\n" % (mass.get(s, 0.0) * r) for r in rho))
         for _ in range(3):
             out.write("".join(" %.15E\n" % 0.0 for _ in range(cells)))
         out.write("".join(" %.15E\n" % p for p, _ in state))
+
+
+def steam(sod_dir, phase):
+    """The tube of two_states holding the steam (STEAM, LEFT, RIGHT)."""
+    two_states(sod_dir, phase, STEAM, LEFT, RIGHT)
+
+
+def fer14(sod_dir, phase):
+    """The tube of two_states holding the unburnt mixture of test/1D/Fer14 (FER14 divided by its sum), at rest, with the
+    pressure and temperature of its two states (FER14_LEFT, FER14_RIGHT)."""
+    total = sum(FER14.values())
+    two_states(sod_dir, phase, {s: y / total for s, y in FER14.items()}, FER14_LEFT, FER14_RIGHT)
+
+
+def ignition(phase):
+    """INPUT/ic.tec and INPUT/bc.txt of the box of two blocks (IGN_N cells of edge IGN_H each, block 2 after block 1 along x)
+    holding the unburnt mixture of test/1D/Fer14 (FER14 divided by its sum) at rest at IGN_P: at IGN_HOT in the cells whose
+    centre lies beyond the plane IGN_PLANE, at IGN_COLD in the others. No centre lies on the plane: a centre gives
+    2x + 3y + 6z = (2 I + 3 j + 6 k - 5.5) IGN_H, with I, j, k its indices (I counted along x over the two blocks), at least
+    0.05 m away from 3 m."""
+    ni, nj, nk = IGN_N
+    rows = [line.split() for line in open(phase).read().splitlines()[1:] if line.strip()]
+    species = [row[0] for row in rows]
+    weight = {row[0]: float(row[1]) for row in rows}
+    total = sum(FER14.values())
+    mass = {s: y / total for s, y in FER14.items()}
+    unknown = sorted(set(mass) - set(species))
+    if unknown:
+        sys.exit("make_case.py: species not in %s: %s" % (phase, " ".join(unknown)))
+    rgas = RU * sum(y / weight[s] for s, y in mass.items())
+    (a, b, c), d = IGN_PLANE
+    for name in ("ic.tec", "bc.txt"):                       # new files, as sod() writes them, never through a link
+        if os.path.lexists(os.path.join("INPUT", name)):
+            os.remove(os.path.join("INPUT", name))
+    nvar = 3 + len(species) + 4
+    names = " ".join('"rho%d"' % (s + 1) for s in range(len(species)))
+    with open(os.path.join("INPUT", "ic.tec"), "w") as out:
+        out.write(' VARIABLES ="x" "y" "z"  %s "u" "v" "w" "p"\n' % names)
+        for blk in (1, 2):
+            out.write(' ZONE  T = B%d-IG, I=%d, J=%d, K=%d, DATAPACKING=BLOCK, VARLOCATION=([1-3]=NODAL,[4-%d]=CELLCENTERED), '
+                      'SOLUTIONTIME=0.0\n' % (blk, ni + 1, nj + 1, nk + 1, nvar))
+            for axis in range(3):
+                for k in range(nk + 1):
+                    for j in range(nj + 1):
+                        for i in range(ni + 1):
+                            out.write(' %.16E\n' % ((ni * (blk - 1) + i) * IGN_H, j * IGN_H, k * IGN_H)[axis])
+            temp = [IGN_HOT if a * (ni * (blk - 1) + i - 0.5) * IGN_H + b * (j - 0.5) * IGN_H + c * (k - 0.5) * IGN_H > d
+                    else IGN_COLD for k in range(1, nk + 1) for j in range(1, nj + 1) for i in range(1, ni + 1)]
+            rho = [IGN_P / (rgas * t) for t in temp]
+            for s in species:
+                out.write("".join(" %.15E\n" % (mass.get(s, 0.0) * r) for r in rho))
+            for _ in range(3):
+                out.write("".join(" %.15E\n" % 0.0 for _ in rho))
+            out.write("".join(" %.15E\n" % IGN_P for _ in rho))
+    rows = []
+    for blk in (1, 2):
+        for face in range(1, 7):
+            if face <= 2:
+                cells = [((1, ni)[face - 1], j, k) for k in range(1, nk + 1) for j in range(1, nj + 1)]
+            elif face <= 4:
+                cells = [(i, (1, nj)[face - 3], k) for k in range(1, nk + 1) for i in range(1, ni + 1)]
+            else:
+                cells = [(i, j, (1, nk)[face - 5]) for j in range(1, nj + 1) for i in range(1, ni + 1)]
+            for i, j, k in cells:
+                head = ''.join('%8d' % v for v in (blk, i, j, k, face))
+                if (blk, face) in ((1, 2), (2, 1)):
+                    other = (2, 1, j, k, 1) if blk == 1 else (1, ni, j, k, 2)
+                    rows.append(head + '%8d\n' % 101 + ''.join('%8d' % v for v in other + (1, 0, 0, 1)) + '\n')
+                else:
+                    rows.append(head + '%8d\n' % 300)
+    with open(os.path.join("INPUT", "bc.txt"), "w") as out:
+        out.write(''.join(rows))
 
 
 def mixture(src, out):
@@ -371,6 +461,10 @@ if __name__ == '__main__':
         inf(sys.argv[2])
     elif len(sys.argv) == 4 and sys.argv[1] == 'steam':
         steam(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) == 4 and sys.argv[1] == 'fer14':
+        fer14(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) == 3 and sys.argv[1] == 'ignition':
+        ignition(sys.argv[2])
     elif len(sys.argv) == 4 and sys.argv[1] == 'mixture':
         mixture(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 6 and sys.argv[1] == 'soot':

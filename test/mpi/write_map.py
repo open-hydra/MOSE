@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Write INPUT/decomposition.map, the block-to-rank assignment, in the format of the ATLAS mesh decomposer (MDB), for the
-cases of make_case.py (PI x PJ blocks of NI x NJ x 1 cells, block b = 1 + p + PI*q).
+cases of make_case.py (PI x PJ blocks of NI x NJ x NK cells, NK = 1 when --cells gives two numbers, block b = 1 + p + PI*q).
 
 MDB writes four comment lines, one line per block with the 13 integers
     new parent i0 i1 j0 j1 k0 k1 ni nj nk cells rank
@@ -19,7 +19,7 @@ which MOSE does not read. Here no block is split: every block is its own parent 
     cells        cells of block 2 one larger;        no-rank     12 integers per line, as MDB writes without ranks;
     real-token   ni of block 2 written as a real, e.g. 8.5 (a list-directed integer read may truncate it to 8).
 
-Usage: write_map.py --layout PIxPJ --cells NI NJ --owners SPEC [--bad KIND] [--out PATH]
+Usage: write_map.py --layout PIxPJ --cells NI NJ [NK] --owners SPEC [--bad KIND] [--out PATH]
 """
 
 import argparse
@@ -29,12 +29,16 @@ import os
 def parse():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--layout', required=True, help='PIxPJ blocks, e.g. 4x1')
-    ap.add_argument('--cells', nargs=2, type=int, required=True, metavar=('NI', 'NJ'), help='cells per block')
+    ap.add_argument('--cells', nargs='+', type=int, required=True, metavar='N',
+                    help='cells per block: NI NJ, or NI NJ NK (NK = 1 when not given)')
     ap.add_argument('--owners', required=True, help='lpt:N, cyclic:N, reverse:N or list:R1,R2,...')
     ap.add_argument('--bad', choices=['missing-row', 'extra-row', 'order', 'dims', 'cells', 'no-rank', 'real-token'])
     ap.add_argument('--out', default=os.path.join('INPUT', 'decomposition.map'))
     a = ap.parse_args()
     a.PI, a.PJ = (int(s) for s in a.layout.lower().split('x'))
+    if len(a.cells) not in (2, 3):
+        ap.error('--cells takes NI NJ or NI NJ NK')
+    a.dims = (a.cells[0], a.cells[1], a.cells[2] if len(a.cells) == 3 else 1)
     return a
 
 
@@ -73,7 +77,7 @@ def block_line(new, parent, dims, rank):
 def main():
     a = parse()
     nb = a.PI * a.PJ
-    dims = [(a.cells[0], a.cells[1], 1)] * nb
+    dims = [a.dims] * nb
     rank = owners(a.owners, [d[0] * d[1] * d[2] for d in dims])
     lines = [block_line(b + 1, b + 1, dims[b], None if a.bad == 'no-rank' else rank[b]) for b in range(nb)]
     if a.bad == 'missing-row':
