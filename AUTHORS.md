@@ -29,3 +29,4 @@ removed from this file; per-release credit is recorded in `CITATION.cff`.
 Automatically sourced from git history.
 
 - AndreaGiacomi
+- GiacomoPassarani
