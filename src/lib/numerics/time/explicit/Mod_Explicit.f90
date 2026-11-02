@@ -27,7 +27,8 @@ contains
     use MOSE_Mod_Newstate,        only: RK_Newstate
     use MOSE_Lib_Preconditioning, only: update_derived_variables
     use MOSE_Lib_SpalartShur,     only: Cell_Velocity_Gradient
-    use MOSE_Lib_Chemistry,       only: Chemistry_Newstate, Chemistry_Equilibrium
+    use MOSE_Lib_Chemistry,       only: Chemistry_Newstate, Chemistry_Equilibrium, Chemistry_Failure_Reduce, &
+                                        Chemistry_Failed, Chemistry_Failure_Stop
     use MOSE_Mod_Diagnostic,      only: Compute_Residual
     use MOSE_Lib_RotatingFrame,   only: RotatingFrame_Source_Terms
     use MOSE_Mod_MPI,             only: is_local_block, mpi_reduce_sum_r8_array, &
@@ -127,13 +128,24 @@ contains
         do b = 1, domain(level) % nb
           if (.not. is_local_block(b)) cycle
           if (domain(level)%blk(b)%no_chem) cycle
-          call Chemistry_Newstate ( domain(level) % blk(b) % P, domain(level) % blk(b) % dtlocal, domain(level) % blk(b) % dim )
+          call Chemistry_Newstate ( domain(level) % blk(b) % P, domain(level) % blk(b) % dtlocal, domain(level) % blk(b) % dim, b )
         enddo
+        ! A failed integration in a cell of any rank ends the step here, on every thread and rank, before the fluxes of the
+        ! second half step read the state of the cell: once every thread has integrated its cells, the primary thread takes
+        ! the decision of all ranks (MPI calls from the primary thread only, MPI_THREAD_FUNNELED, as in Fill_Ghost_Cell), every
+        ! thread reads it after the barrier and all leave the splitting loop together; the run stops after the parallel region
+        !$omp barrier
+        !$omp master
+        call Chemistry_Failure_Reduce ()
+        !$omp end master
+        !$omp barrier
+        if ( Chemistry_Failed () ) exit strang
       endif
 
     enddo strang
     !$omp end parallel
     domain(level) % time = time_new                          ! end of the step
+    if ( Chemistry_Failed () ) call Chemistry_Failure_Stop ( level, obj_multigrid%MGL )
 
     ! Save residuals
     if ( (obj_sim_param%iter_from_call == 1) .or. (mod (domain(level) % iter, obj_io%res_diter) == 0) ) then

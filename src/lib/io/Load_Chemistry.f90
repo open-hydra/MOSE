@@ -16,6 +16,9 @@ contains
     integer :: error
     
     error = read_chemistry(mech_name = obj_chemistry%mechanism_name)
+    ! Code 1: chemistry-info.txt cannot be opened, and no rate table is read. The tables load before input.ini is read, so
+    ! the chemistry model is not known here: Setup_Chemistry stops a finite-rate run without the file
+    obj_chemistry%info_found = (error /= 1)
     if (error/=0) then
       select case (error)
         case (0)

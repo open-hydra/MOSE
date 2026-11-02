@@ -130,11 +130,13 @@ MOSE prints diagnostic information to the console during loading and iteration. 
     If any issue occurs during loading (e.g., missing files, format errors), MOSE will print an error message and exit, so the successful loading message is a good sign that the case is set up correctly.
 
 !!! note "Exit code"
-    A run that MOSE stops on an error, at loading, at set-up or because the solution diverges («Integration failed at
-    b, i, j, k», then «NaN, infinity or p<0 detected»), ends with a non-zero exit code: 1 where MOSE ends with `stop 1`
+    A run that MOSE stops on an error, at loading, at set-up, because the solution diverges («Integration failed at
+    b, i, j, k», then «NaN, infinity or p<0 detected») or because an integration of the finite-rate chemistry fails
+    ([Finite-Rate Kinetics](../theory/kinetics.md#ode-integration)), ends with a non-zero exit code: 1 where MOSE ends with `stop 1`
     or `error stop 1`, otherwise that of `ERROR STOP` (128 with ifx, 1 with gfortran) or the one the MPI launcher gives
     for `MPI_ABORT` with error code 1. With MPI, an initial condition that cannot be read (also when one rank alone finds
-    it), an error that rank 0 finds at set-up or when it reads `input.ini` again, and most errors that every rank finds
+    it), a failed integration of the finite-rate chemistry on any rank, an error that rank 0 finds at set-up or when it
+    reads `input.ini` again, and most errors that every rank finds
     stop every rank together: each rank writes its message, the ranks finalize MPI and end with exit code 1. A `stop`
     outside these collective stops, a divergence for instance, ends its own rank only, and the MPI launcher ends the run
     with a code of its own (255 with the `mpiexec` of Intel MPI 2021.12). Some errors that one rank finds alone, at
