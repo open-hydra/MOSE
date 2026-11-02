@@ -1,7 +1,7 @@
 """Part 1 of Inlets (run.sh): the far-field inlet with the flow direction normal, inputs and a reader of the outputs.
 
 A planar 2-D duct along x: NX x NY cells on 0 <= x <= LX, 0 <= y <= LY, one cell of LZ in z; slip walls (300) on the j and k
-faces. Calorically perfect air of test/common/Air at p = 1 bar and T = 300 K, flowing in along x at u = 50 m/s. Face 1 is an
+faces. Calorically perfect air of test/common/Air at p = 1e5 Pa and T = 300 K, flowing in along x at u = 50 m/s. Face 1 is an
 ambient boundary (407: T0, p0, p_back, alpha, beta, rel_fac, massf) where the gas enters; face 2 an outlet at the back
 pressure (406). The flow direction of the 407 records is given either as the token normal, the face normal, or as the
 angles that it stands for: the normal of face 1 is (1, 0, 0), so alpha = atan(n_y / n_x) = 0 and beta = atan(n_z / n_x) = 0.

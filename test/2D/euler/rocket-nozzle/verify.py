@@ -66,30 +66,30 @@ equilibrium = read_run("equilibrium")
 # Quasi-1D comparison: mass-flow-weighted averages vs CEA
 # ----------------------------------------------------------
 # CEA reference: Merlin 1D, RP-1/LOX O/F=2.35
-# Source: CEA.out (Pin=108 bar, O/F=2.35)
+# Source: CEA.out (Pin=1.08e7 Pa, O/F=2.35)
 # Stations: sub Ae/At=2&1.5, throat, sup Ae/At=2,4,8,16
-P0_cea = 108.00    # BAR (stagnation)
+P0_cea = 108.00e5  # Pa  (stagnation; CEA prints 108.00 bar)
 T0_cea = 3644.12   # K   (stagnation)
 #                     sub2.0    throat   sup2.0   sup4.0    sup8.0   sup16.0
 AeAt_cea  = np.array([ 2.0,        1.0,     2.0,     4.0,      8.0,      16.0])
 M_cea_fz  = np.array([ 0.312,    1.000,   2.066,   2.650,    3.184,     3.715])
 M_cea_eq  = np.array([ 0.314,    1.000,   2.018,    2.549,   3.037,     3.526])
-P_cea_fz  = np.array([101.84,   60.606,  12.676,   4.4664,  1.6840,   0.65259])
-P_cea_eq  = np.array([102.07,   62.026,  13.783,   5.0021,  1.9243,   0.76119])
+P_cea_fz  = 1e5 * np.array([101.84,   60.606,  12.676,   4.4664,  1.6840,   0.65259])   # Pa (CEA prints bar)
+P_cea_eq  = 1e5 * np.array([102.07,   62.026,  13.783,   5.0021,  1.9243,   0.76119])   # Pa (CEA prints bar)
 T_cea_fz  = np.array([3606.55, 3289.48, 2477.34,  2037.39,  1686.54, 1393.69])
 T_cea_eq  = np.array([3621.79, 3428.71, 2862.18,  2472.84,  2113.89,  1797.26])
 mw_cea_fz = np.array([22.468,   22.468,  22.468,   22.468,   22.468,   22.468])
 mw_cea_eq = np.array([22.495,   22.725,  23.252,   23.424,   23.480,   23.492])
-# Cp values from CEA (KJ/(kg·K)) at reference stations
-cp_cea_fz = np.array([2.0970,   2.0768,  2.0043,   1.9430,   1.8757,   1.8023])
+# Cp values from CEA at reference stations, in J/(kg·K) (CEA prints kJ/(kg·K))
+cp_cea_fz = 1e3 * np.array([2.0970,   2.0768,  2.0043,   1.9430,   1.8757,   1.8023])
 # For equilibrium case, use "WITH FROZEN REACTIONS" Cp from CEA (frozen chemistry path)
-cp_cea_eq = np.array([2.0981,   2.0877,  2.0482,   2.0094,   1.9621,   1.9090])
+cp_cea_eq = 1e3 * np.array([2.0981,   2.0877,  2.0482,   2.0094,   1.9621,   1.9090])
 # Compute gamma = cp/cv = cp/(cp - R) where R = Runi/M
 Runi = 8314.51  # J/(kmol·K), the constant of CEA (whose M and Cp these are)
 R_cea_fz = Runi / mw_cea_fz  # J/(kg·K)
 R_cea_eq = Runi / mw_cea_eq  # J/(kg·K)
-g_cea_fz = (cp_cea_fz * 1000) / (cp_cea_fz * 1000 - R_cea_fz)  # convert Cp to J/(kg·K)
-g_cea_eq = (cp_cea_eq * 1000) / (cp_cea_eq * 1000 - R_cea_eq)
+g_cea_fz = cp_cea_fz / (cp_cea_fz - R_cea_fz)
+g_cea_eq = cp_cea_eq / (cp_cea_eq - R_cea_eq)
 # The Mach number of MOSE below is the velocity over sqrt(g p / rho), g the ratio of specific heats of the mixture at fixed
 # composition: the frozen speed of sound, defined for every state of the three configurations. The CEA frozen stations have the
 # same Mach number. CEA gives the equilibrium stations the velocity over the equilibrium speed of sound (SON VEL, from the
@@ -247,13 +247,13 @@ for name, avg in (("Frozen", (M_avg_fz, p_avg_fz, T_avg_fz, g_avg_fz, mv_avg_fz)
                   ("Finite-rate", (M_avg_fr, p_avg_fr, T_avg_fr, g_avg_fr, mv_avg_fr)),
                   ("Equilibrium", (M_avg_eq, p_avg_eq, T_avg_eq, g_avg_eq, mv_avg_eq))):
     print(f"MOSE {name}: value, % from CEA frozen, % from CEA equilibrium")
-    for qname, q, ref_fz, ref_eq, scale in (("Mach", avg[0], M_cea_fz, Mf_cea_eq, 1.0),
-                                            ("p [bar]", avg[1], P_cea_fz, P_cea_eq, 1e-5),
-                                            ("T [K]", avg[2], T_cea_fz, T_cea_eq, 1.0),
-                                            ("gamma", avg[3], g_cea_fz, g_cea_eq, 1.0),
-                                            ("M_w [g/mol]", avg[4], mw_cea_fz, mw_cea_eq, 1.0)):
-        val = at_stations(q) * scale
-        print(f"  {qname:12s}" + "  ".join(f"{v:9.4f}" for v in val))
+    for qname, q, ref_fz, ref_eq, fmt in (("Mach", avg[0], M_cea_fz, Mf_cea_eq, "9.4f"),
+                                          ("p [Pa]", avg[1], P_cea_fz, P_cea_eq, "9.3e"),
+                                          ("T [K]", avg[2], T_cea_fz, T_cea_eq, "9.4f"),
+                                          ("gamma", avg[3], g_cea_fz, g_cea_eq, "9.4f"),
+                                          ("M_w [kg/kmol]", avg[4], mw_cea_fz, mw_cea_eq, "9.4f")):
+        val = at_stations(q)
+        print(f"  {qname:12s}" + "  ".join(f"{v:{fmt}}" for v in val))
         print(f"  {'':12s}" + "  ".join(f"{d:+9.2f}" for d in (val / ref_fz - 1) * 100) + "   (CEA frozen)")
         print(f"  {'':12s}" + "  ".join(f"{d:+9.2f}" for d in (val / ref_eq - 1) * 100) + "   (CEA equilibrium)")
 
@@ -302,7 +302,7 @@ ax.plot(x_c, mv_avg_fr, color='green', label='MOSE Finite-rate', linewidth=2)
 ax.plot(x_c, mv_avg_eq, color='orange', label='MOSE Equilibrium', linewidth=2)
 ax.scatter(x_cea, mw_cea_fz, color='blue', zorder=5, label='CEA Frozen', s=60)
 ax.scatter(x_cea, mw_cea_eq, color='red', zorder=5, label='CEA Equilibrium', s=60)
-ax.set_ylabel('Molecular weight [g/mol]')
+ax.set_ylabel('Molecular weight [kg/kmol]')
 ax.set_xlabel('x  [m]')
 ax.legend()
 ax.grid(True, alpha=0.3)

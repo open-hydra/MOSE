@@ -82,14 +82,14 @@ M = np.sqrt(d['u'][:, :, 0]**2 + d['v'][:, :, 0]**2) / a
 # Quasi-1D comparison: area-weighted averages vs CEA
 # ----------------------------------------------------------
 # CEA reference: frozen, Merlin 1D, RP-1/LOX O/F=2.35
-# Source: CEA.out (Pin=108 bar, O/F=2.35)
+# Source: CEA.out (Pin=1.08e7 Pa, O/F=2.35)
 # Stations: sub Ae/At=2&1.5, throat, sup Ae/At=2,4,8,16
-P0_cea = 108.00    # BAR (stagnation)
+P0_cea = 108.00e5  # Pa  (stagnation; CEA prints 108.00 bar)
 T0_cea = 3644.12   # K   (stagnation)
 #                     sub2.0    throat   sup2.0   sup4.0    sup8.0   sup16.0
 AeAt_cea = np.array([ 2.0,        1.0,     2.0,     4.0,      8.0,     16.0])
 M_cea    = np.array([ 0.312,    1.000,   2.066,   2.650,    3.184,    3.715])
-P_cea    = np.array([101.84,   60.606,  12.676,   4.4664,   1.6840,   0.65259])
+P_cea    = 1e5 * np.array([101.84,   60.606,  12.676,   4.4664,   1.6840,   0.65259])   # Pa (CEA prints bar)
 T_cea    = np.array([3606.55, 3289.48, 2477.34,  2037.39,  1686.54, 1393.69])
 pp0_cea  = P_cea / P0_cea
 TT0_cea  = T_cea / T0_cea

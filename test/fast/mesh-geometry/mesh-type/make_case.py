@@ -69,7 +69,7 @@ round-off, with the digits they are written with, does not change the type: rela
             its sector at the radius ((r_j + r_{j+1})/2) cos(pi/K), and the foot of its normal on that face lies inside
             it. The cells next to the wall are left out, as in the other cases.
 Gas: test/common/Air-viscous (slab, flipwedge, at 300 K and 1 kPa with nu~ = nu) and test/common/Air (mixed, slab3d, folded,
-folded3d, folded-real, at 1 bar and 300 K).
+folded3d, folded-real, at 1e5 Pa and 300 K).
 
 Usage (from the test directory):
   python3 -B make_case.py case NAME          INPUT/ic.tec and INPUT/bc.txt of slab, flipwedge, wedge5, farslab,

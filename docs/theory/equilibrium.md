@@ -56,7 +56,7 @@ where:
 | $x_i = n_i / \sum_k n_k$ | Mole fraction of species $i$ |
 | $a_{ij}$ | Atoms of element $j$ in one molecule of species $i$ |
 | $b_j$ | Total moles of element $j$ (conserved) |
-| $P^{\circ}$ | Standard pressure (1 bar) |
+| $P^{\circ}$ | Standard pressure ($10^5$ Pa) |
 | $N_s$, $N_e$ | Number of species and elements |
 
 ---

@@ -6,7 +6,7 @@ alpha its azimuth and beta its elevation (alpha is 0 on a face whose normal is a
 
 A 1-D tube: NX cells of DX along its axis, one cell of DX across; slip walls (300) on the j faces, null (0) k faces, the 405
 at one end and an extrapolation face (400) at the other. Calorically perfect air of test/common/Air (cp = 1004.5 J/(kg K),
-molar mass 28.970418) at p = 1 bar and T = 300 K, its gas moving in through the inlet face at W = 0.1 a, so that the face
+molar mass 28.970418) at p = 1e5 Pa and T = 300 K, its gas moving in through the inlet face at W = 0.1 a, so that the face
 takes the inflow (a 405 face is a slip wall where the gas of the cell moves out or is at rest). The 405 imposes Mach 2 at the
 T and p of the gas. One forward Euler step with first-order reconstruction and HLLC: the change of the density of the inlet
 cell is (F - RHO W) DT / DX, F the mass flux of the inlet face and RHO W the one that the interior face takes away.

@@ -17,13 +17,13 @@ module MOSE_Series_Data_m
 
 contains
 
-  subroutine initialize(self,file,bar)
+  !> Reads a time table: pairs of time [s] and value, in SI units, taken as written (no conversion)
+  subroutine initialize(self,file)
     use MOSE_Mod_MPI,  only: mpi_stop_all
     use MOSE_Finite_m, only: Not_Finite
     implicit none
     class(time_series_type), intent(inout) :: self
     character(len=*), intent(in)     :: file
-    logical, intent(in)              :: bar
     character(len=256)               :: line
     character(len=512)               :: msg
     integer :: ios, i, col
@@ -74,8 +74,6 @@ contains
     ! update interpolates between consecutive times: they must not decrease (two equal times make a jump)
     if (any(self%time(2:) < self%time(:self%n-1))) &
       call mpi_stop_all('[ERROR] Time table '//trim(file)//': the times decrease')
-    
-    if (bar) self%var = self%var*1d+5
 
   contains
 

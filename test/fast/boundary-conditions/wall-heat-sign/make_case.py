@@ -8,7 +8,7 @@ index direction DIR, one face of each parity. Walls on the faces of
      along y, z, x;
   k  (faces 5 and 6): the same 3-D channel, the indices i, j, k along z, x, y;
 the faces normal to x are slip walls (300), or extrapolation (400) when the gas slides along x, and in 3-D the faces normal
-to z are slip walls. Viscous air (test/common/Air-viscous, Sutherland transport of test/common/Air-sutherland), p = 1 bar
+to z are slip walls. Viscous air (test/common/Air-viscous, Sutherland transport of test/common/Air-sutherland), p = 1e5 Pa
 and T = 300 K. One forward Euler step with first-order reconstruction. The wall output writes the same quantities on every
 face (docs/user/boundary-conditions.md): qw is the heat flux into the gas, like q_wall, and tauX, tauY, tauZ the traction
 of the gas on the wall, tau . n with n the normal into the gas. The two walls, mirror images, must then write the same

@@ -6,7 +6,7 @@ faces are interior faces of the whole annulus, so their viscous flux (stress, he
 of an interior face. x in [0, 0.2] (2 cells), r in [0.5, 1], slip walls (300) on the i and j faces, viscous air of
 test/common/Air-viscous (mu and k constant) at T = 300 K and p = 10 Pa. The pressure does not enter the viscous fluxes the
 test checks, only their round-off: the viscous force is the difference of two residuals that hold the pressure forces of the
-faces, p A/V, about 6e7 times the viscous scale at 1 bar, and their round-off (1e-16 of them) would reach the tolerance; at
+faces, p A/V, about 6e7 times the viscous scale at 1e5 Pa, and their round-off (1e-16 of them) would reach the tolerance; at
 10 Pa they are about 6e3 times the scale, and the round-off stays within 1e-11 of it (as in ViscousLinearPatch). This is
 the only reason for the low pressure: one explicit step, no stability limit involved.
 
@@ -68,7 +68,7 @@ split The rule of type 200: it joins the two k faces of one block. Beyond face 5
       block, in the same column (i, j), turned back by the angle, and beyond face 6 the cell next to face 5 turned forward;
       the record names no other block. So every record of type 200 must lie on face 5 or 6, inside its block, with a record
       of type 200 on the other k face of the block in its column, and any other layout stops at set-up. A sector from
-      -22.5 to 22.5 degrees (x in [0, 0.2], r in [0.5, 1], 2 x 4 x 8 cells, faces i and j of type 300) of air at 1 bar and
+      -22.5 to 22.5 degrees (x in [0, 0.2], r in [0.5, 1], 2 x 4 x 8 cells, faces i and j of type 300) of air at 1e5 Pa and
       300 K at rest with a rotation periodic with the sector, u_theta = W (1 + cos(8 (theta + 22.5 degrees))/2), W = 50 m/s,
       one explicit Euler step:
         split-whole    one block, type 200 on faces 5 and 6;

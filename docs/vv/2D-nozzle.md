@@ -13,7 +13,7 @@ A 2D axisymmetric Euler simulation of a rocket nozzle operating on RP-1/LOX prop
 
 ## Problem setup
 
-Combustion products of RP-1 burned with liquid oxygen at an oxidiser-to-fuel ratio of 2.35 are expanded from a stagnation pressure of 108 bar and a stagnation temperature of 3644 K through the nozzle contour.
+Combustion products of RP-1 burned with liquid oxygen at an oxidiser-to-fuel ratio of 2.35 are expanded from a stagnation pressure of $1.08\times10^7$ Pa and a stagnation temperature of 3644 K through the nozzle contour.
 
 ### Grid structure
 
@@ -21,7 +21,7 @@ A single structured block with 120 axial × 40 radial cells covers the full nozz
 
 Boundary conditions (same for all configurations):
 
-- Inlet (`401`, $T_0 = 3644$ K, $p_0 = 108$ bar): CEA chamber equilibrium state (subsonic inflow) of the RP-1/LOX combustion products, with 13 species (frozen, equilibrium) or 19 (finite-rate: the 17 of the CORIA mechanism, and COOH and HCOOH, which it leaves inert)
+- Inlet (`401`, $T_0 = 3644$ K, $p_0 = 1.08\times10^7$ Pa): CEA chamber equilibrium state (subsonic inflow) of the RP-1/LOX combustion products, with 13 species (frozen, equilibrium) or 19 (finite-rate: the 17 of the CORIA mechanism, and COOH and HCOOH, which it leaves inert)
 - Exit: zero-gradient supersonic extrapolation
 - Axis: symmetry
 - Wall: symmetry (inviscid)

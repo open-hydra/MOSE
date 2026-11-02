@@ -192,7 +192,7 @@ OPEN_SETS = {                              # runs momioN, eneioN: (mesh, N) -> {
     ('box3d', 1): {(0, 1): 401, (0, 3): 402, (0, 4): 403, (0, 5): 404, (0, 6): 405,
                    (1, 2): 406, (1, 3): 407, (1, 4): 408, (1, 5): 408, (1, 6): 420},
 }
-P0_TABLE = 'INPUT/p0-402.dat'              # the table of p0 of the 402 faces (time, p0 in bar)
+P0_TABLE = 'INPUT/p0-402.dat'              # the table of p0 of the 402 faces (time, p0 in Pa)
 GAMMA_AIR = 1.4                            # the 405 faces: the Mach number of the speed of the cell, |u|/sqrt(gamma R T)
 BC_MAPPED = 410                            # assigned state from a file
 RUNS_410 = ('mom410', 'enep410', 'sa410', 'turb410')
@@ -785,7 +785,7 @@ def open_line(mesh, run, X, sgn, face, i, j, k, t):
 
 
 def write_p0_table(blocks, mesh, run, conn):
-    """The table of p0 of the 402 faces (time, p0 in bar, constant): the pressure of the cells (mom: uniform), or just
+    """The table of p0 of the 402 faces (time, p0 in Pa, constant): the pressure of the cells (mom: uniform), or just
     below the lowest pressure of the cells of the 402 faces (eneio: the gas at rest does not enter)."""
     ps = []
     for b, X in enumerate(blocks):
@@ -800,7 +800,7 @@ def write_p0_table(blocks, mesh, run, conn):
         return
     p0 = min(ps) if open_run(run)[0] == 'mom' else min(ps) * (1.0 - 1.0e-6)
     with open(P0_TABLE, 'w') as out:
-        out.write(f'0.0 {p0 / 1.0e5:.17E}\n1.0 {p0 / 1.0e5:.17E}\n')
+        out.write(f'0.0 {p0:.17E}\n1.0 {p0:.17E}\n')
 
 
 def write_case(mesh, run, metric):

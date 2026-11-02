@@ -3,7 +3,7 @@
 Quasi-2D box, one cell in z: NX x NY cells on 0 <= x <= LX, 0 <= y <= LY,
 thickness LZ in z (much smaller than the cell size in x and y, as in a planar
 case meshed with a thin layer). Calorically perfect air of test/common/Air at
-uniform pressure and velocity (p = 1 bar, u = 100 m/s) carrying an entropy wave
+uniform pressure and velocity (p = 1e5 Pa, u = 100 m/s) carrying an entropy wave
 of amplitude A in density (T = 300 K on average); extrapolation (400) on the i
 and j faces. The wave keeps the run unsteady, so that the residual stop does
 not end it after one step, while p, u and v stay uniform to round-off. The k
