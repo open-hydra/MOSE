@@ -520,6 +520,18 @@ add_fortran_executable(cell_volume_check unit/cell_volume_check.f90)
 add_test(NAME CellVolume COMMAND cell_volume_check)
 set_tests_properties(CellVolume PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
 
+# Reflective face pressure (ReflectivePressure): a unit check of the pressure a
+# reflective (symmetry) treatment, BC_Symmetry_Eul, returns on a face whose cell
+# gas moves along the normal, with the exact solver and with HLLC (the default
+# of riemann-solver): below the pressure of the cell when the gas moves away
+# from the face (the blown gas of a grain, 502, or of an ablating wall,
+# 503-505), above it when the gas moves towards the face; the exact solver on
+# the exact solution of the mirror problem. The comment of Ablation_Wall_Fluxes
+# gives it as the reason a blowing face carries the pressure of its cell.
+add_fortran_executable(reflective_pressure_check unit/reflective_pressure_check.f90)
+add_test(NAME ReflectivePressure COMMAND reflective_pressure_check)
+set_tests_properties(ReflectivePressure PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
+
 # Order of rounding (VolatileOrder): a difference stored in a VOLATILE variable
 # and read back is rounded as written, also with -ffast-math, which lets the
 # compiler evaluate (q - c1) - (c2 - c1) as q - c2; Compute_Metric_Tensor takes

@@ -72,9 +72,10 @@ An ablating face carries its complete flux — wall pressure, the momentum and
 enthalpy convected in with the blown mass, and the viscous terms — and no
 reflective wall flux is applied alongside it. A reflective (symmetry) treatment
 imposes `u.n = 0` at a face that is deliberately permeable and returns the
-impermeable-wall pressure, which overshoots the true wall pressure by roughly
-`rho*c*u_blow`: negligible against `p`, but comparable to the pressure
-differences that drive a low-speed blown boundary layer. With it in place the
+impermeable-wall pressure, below the pressure of the cell since the gas moves
+away from the face (by about `rho*c*u_blow` in the exact reflective Riemann
+problem): negligible against `p`, but comparable to the pressure differences
+that drive a low-speed blown boundary layer. With it in place the
 wall-adjacent cell carried a mesh-independent ~36 % mass-flux deficit; the
 continuity check covers every cell precisely because that is now gone.
 

@@ -400,9 +400,10 @@ contains
     ! The boundary face carries the *complete* flux: the pressure the surface exerts
     ! on the gas, the momentum and enthalpy convected in with the blown mass, and the
     ! viscous terms. There is deliberately no separate inviscid wall flux alongside
-    ! this one: a reflective (symmetry) treatment would impose u.n = 0 at the face and
-    ! return the impermeable-wall pressure, which overshoots the true wall pressure by
-    ! roughly rho*c*u_blow -- small against p, but comparable to the pressure
+    ! this one: a reflective (symmetry) treatment would impose u.n = 0 at a permeable
+    ! face and return the impermeable-wall pressure, below the pressure of the cell
+    ! since the gas moves away from the face (by about rho*c*u_blow in the exact
+    ! reflective Riemann problem) -- small against p, but comparable to the pressure
     ! differences that drive a low-speed blown boundary layer.
     !
     ! Under the boundary layer assumption used throughout, p(wall) = p(cell).
