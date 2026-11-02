@@ -9,24 +9,27 @@ The validation metric is the **wall pressure along the between-injector line**, 
 !!! warning "The case as committed stops on its coarsest grid level"
     Started from the [initial condition](#initial-condition) that ATLAS ICB builds from the `[ICB-*]` sections of
     `input.ini`, with the committed `input.ini` and boundary-condition files, the run stops on the coarsest grid level
-    (level 3), where the multigrid sequence starts, in iteration 858 of its 100,000. Three cells of block 10 (the
+    (level 3), where the multigrid sequence starts, in iteration 859 of its 100,000. Two cells of block 10 (the
     downstream part of the O-grid ring around the porthole), with centres 0.14 mm above the bottom wall and 0.1 to
     0.2 mm outside the edge of the porthole on its downstream side, hold hydrogen of the jet. They empty towards vacuum:
-    two adjacent ones go from 17 and 14 kPa after 800 iterations to 284 and 368 Pa after 857 (6.3 and 9.8 K), the third
-    from 24 kPa to 358 Pa (6.8 K), while the cells next to them hold 2 to 52 kPa. The update of iteration 858 gives the
-    first of them a negative pressure: MOSE prints `Integration failed at b, i, j, k:` with block 10 and cell (3, 2, 5)
-    of level 3, the primitive variables of that cell and `NaN, infinity or p<0 detected`, and exits with status 1.
+    they go from 24.2 and 14.2 kPa after 800 iterations to 414 and 463 Pa after 858 (7.9 and 12.2 K), while the cells
+    next to them hold 1.3 to 51 kPa. In the chemistry of iteration 859 the integrator, RADAU5, fails in the first of
+    them, cell (2, 4, 5) of level 3, from 5.8 K and 302 Pa (`MATRIX IS REPEATEDLY SINGULAR`), and MOSE stops at the end
+    of that chemistry, before the fluxes of the second half of the step, with exit status 1 and the line
+    `[ERROR] Chemistry: the integrator H-radau5 failed (return code -4: matrix is repeatedly singular) in block 10 of
+    grid level 3, cell i, j, k = 2, 4, 5, ...`.
 
     The collapse comes from the MUSCL reconstruction together with the
     [implicit residual smoothing](../theory/time-integration.md#implicit-residual-smoothing-irs): from the same start,
     the run with `irs-beta = 0` and the run with `space-reconstruction = first-order` pass iteration 2000 of level 3,
-    the lowest temperature of the level after 857 iterations being 132.5 K and 162.5 K, while the run without
-    chemistry (`exclude-blocks` with the eleven blocks) stops in the same iteration and cell, without the two
-    `MATRIX IS REPEATEDLY SINGULAR` messages of the chemistry integrator that come before the stop of the case. All
-    these runs use MOSE built with GNU Fortran 12 in `RELEASE` mode, with 4 MPI ranks of 5 OpenMP threads (the case
-    as committed stops in the same iteration and cell also without MPI, with 8 threads), and the time stepping of
-    `input.ini`: local time steps, RK2, CFL 0.8 and VNN 0.5 ramped linearly over the first 5000 iterations
-    (`cfl-rise-threshold`), so 0.137 and 0.086 in iteration 858.
+    the lowest temperature of the level after 857 iterations being 132.9 K and 162.5 K, while the run without
+    chemistry (`exclude-blocks` with the eleven blocks) stops in the same iteration on a negative pressure of cell
+    (3, 2, 5) of block 10, next to the second of the two cells: MOSE prints `Integration failed at b, i, j, k:` and
+    `NaN, infinity or p<0 detected` and exits with status 1. All these runs use the code of this repository built with
+    GNU Fortran 12 in `RELEASE` mode, with 4 MPI ranks of 5 OpenMP threads (the case as committed stops in the same
+    iteration and cell also without MPI, with 8 threads), and the time stepping of `input.ini`: local time steps, RK2,
+    CFL 0.8 and VNN 0.5 ramped linearly over the first 5000 iterations (`cfl-rise-threshold`), so 0.137 and 0.086 in
+    iteration 859.
 
 <figure>
   <img src="../images/HyShot-field.png" alt="HyShot II combustor: temperature, pressure and hydrogen mass fraction">
