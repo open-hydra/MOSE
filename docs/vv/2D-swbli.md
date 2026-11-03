@@ -32,7 +32,7 @@ where $\tau_w$ is the streamwise wall shear stress, and $\rho_\infty$, $U_\infty
 |---|---|
 | Mach number | 5.0 |
 | Temperature | 68.3 K |
-| Pressure | 0.04 bar |
+| Pressure | 4000 Pa |
 | Viscosity | Sutherland's law ($A_s = 1.458\times10^{-6}$, $T_s = 110.4$ K) |
 | $\mu_\infty$, unit Reynolds number | $4.61\times10^{-6}$ Pa*s, $\mathrm{Re} = 36.7\times10^{6}$ /m |
 | Prandtl numbers | $Pr = 0.69$, $Pr_t = 0.85$ |

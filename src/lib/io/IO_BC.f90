@@ -391,7 +391,7 @@ contains
           call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%T0, bc(i)%rel_fac ], 'T0 rel_fac' )
           call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci(nrans+1:nrans+nsc), 'massf' )
           call Need_Finite ( i, bc(i)%type, nline, bc(i)%ci(1:nrans), 'turb' )
-          call bc(i)%p0time%initialize(file=trim(p0file), bar=.true.)
+          call bc(i)%p0time%initialize(file=trim(p0file))
           if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
 
         ! ─────────────────────────────────────────────────────────────────────

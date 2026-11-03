@@ -78,8 +78,8 @@ my_case/
     planes parallel for a plane mesh. So does a 2-D block whose node $(0,1)$ (or the node farthest from the axis,
     when that one lies on it) keeps its azimuth while its $k = 1$ node plane is not the $k = 0$ plane translated to
     1 %: $k$ planes that touch or cross, or a $k = 1$ plane scaled radially about the axis. The set-up summary
-    names the type, as `Mesh type`: 1-D, 2-D plane, 2-D axisymmetric wedge with its angle in degrees, 3-D, or 3-D
-    with the angle of its sectors. The periodic images of the wall in the wall distance of the turbulence models
+    names the type, as `Mesh type`: 1-D, 2-D plane, 2-D axisymmetric wedge with its angle in rad, 3-D, or 3-D
+    with the angle of its sectors in rad. The periodic images of the wall in the wall distance of the turbulence models
     follow the same 1 % rule ([Turbulence](../theory/turbulence.md#wall-distance)).
 
 ---

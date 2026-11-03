@@ -1,7 +1,7 @@
 """Part 2 of Inlets (run.sh): inlets at total conditions, inputs and a reader of the outputs.
 
 A 1-D tube along x: NX cells of DX, one cell of DX in y and in z; slip walls (300) on the j faces, null (0) k faces.
-Calorically perfect air of test/common/Air (cp = 1004.5 J/(kg K), molar mass 28.970418) at p = 1 bar and T = 300 K.
+Calorically perfect air of test/common/Air (cp = 1004.5 J/(kg K), molar mass 28.970418) at p = 1e5 Pa and T = 300 K.
 The inlets take their total conditions from a reservoir at T0 = T0RATIO T and p0 = RATIO p, with the flow direction normal to
 the face. One forward Euler step with first-order reconstruction: the change of the density of a boundary cell is then the
 mass flux of its boundary face times DT / DX, plus what the interior face takes away.

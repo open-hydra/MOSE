@@ -144,8 +144,8 @@ for name in slab flipwedge wedge5 farslab; do
   fi
   case $name in
     slab|farslab) want='2-D, plane' ;;
-    flipwedge)    want='2-D, axisymmetric wedge of -?(0\.99|1\.00)[0-9]* degrees' ;;
-    wedge5)       want='2-D, axisymmetric wedge of -?(4\.99|5\.00)[0-9]* degrees' ;;
+    flipwedge)    want='2-D, axisymmetric wedge of -?1\.7[2-6][0-9]*E-02 rad' ;;   # 1 degree, 0.0174533 rad
+    wedge5)       want='2-D, axisymmetric wedge of -?8\.7[0-4][0-9]*E-02 rad' ;;   # 5 degrees, 0.0872665 rad
   esac
   if grep -a -q -E "Mesh type +$want" "OUTPUT/$name.log"; then
     echo "  [ok  ] $name: the set-up summary names the mesh type ($(grep -a -o -E 'Mesh type .*' "OUTPUT/$name.log" | tr -s ' '))"

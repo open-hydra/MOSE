@@ -18,7 +18,7 @@ where a quantity changes by more than a factor two between the first two cells (
 never acts prints no line of the ghost cells:
    Ghost cells of walls and 400 faces, fills with the extrapolation cut: <n>, with the 302 temperature at T_w/2: <m>
 
-Calorically perfect air of test/common/Air (cp = 1004.5 J/(kg K), molar mass 28.970418), p = 1 bar, T = 300 K; the total energy
+Calorically perfect air of test/common/Air (cp = 1004.5 J/(kg K), molar mass 28.970418), p = 1e5 Pa, T = 300 K; the total energy
 per volume is rho E = p/(gamma-1) + rho |q|^2/2 (h = cp T in its table).
 
 Part 1, one step (ONE_STEP): a 1-D tube along x of NX cells of DX, one cell of DX in y and in z, slip walls (300) on the j faces,

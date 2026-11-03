@@ -321,16 +321,16 @@ ghost cells are those of the cell next to the face per unit mass, so the turbule
 is that of the first cell. The cell across the face is taken as wide as the first cell of the block (see
 [Spatial Discretization](../theory/numerics.md#gradient-computation-for-diffusive-fluxes)).
 
-**Time-varying data (`402`, `410`).** The `p0_file` of an inlet `402` is a text file of pairs `time [s]  p0 [bar]`,
+**Time-varying data (`402`, `410`).** The `p0_file` of an inlet `402` is a text file of pairs `time [s]  p0 [Pa]`,
 one per line, in increasing time (two equal times make a jump); a first line holding the word `periodic` makes the
-table repeat. Its pressures are in bar: MOSE multiplies them by $10^5$, while every pressure of a line of `bc.txt`,
-the $p_0$ of `401` and `407` among them, is read as written, in Pa. MOSE does not check the unit: a table written in
-Pa gives a $p_0$ $10^5$ times too large. For example, a $p_0$ that rises from 1 bar to 5 bar over the first 10 ms and
-then stays at 5 bar:
+table repeat. Its pressures are read as written, in Pa, as every pressure of a line of `bc.txt` (the $p_0$ of `401`
+and `407` among them) and the `p0-time-file` that the boundary-condition builder of ATLAS (BCB) names. MOSE does not
+check the unit: a table written in bar gives a $p_0$ $10^5$ times too small. For example, a $p_0$ that rises from
+$10^5$ Pa to $5\times10^5$ Pa over the first 10 ms and then stays there:
 
 ```
-0.00   1.0
-0.01   5.0
+0.00   1.0e5
+0.01   5.0e5
 ```
 
 The file name is taken as written on the line, directories included (for example `INPUT/p0.dat`, relative to

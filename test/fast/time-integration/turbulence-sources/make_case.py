@@ -2,7 +2,7 @@
 
 One geometry: a 2-D channel, periodic in x (4 cells of 1 mm, connection 201 on itself), an adiabatic no-slip wall at
 y = 0 (301) and a symmetry plane at y = H (300), null k faces (0). Air of test/common/Air-viscous (mu and k constant,
-Pr = 0.72), 300 K, 1 bar, flowing along x with u(y) = U tanh(y/delta_u), U = 50 m/s, delta_u = 0.2 mm, and no force
+Pr = 0.72), 300 K, 1e5 Pa, flowing along x with u(y) = U tanh(y/delta_u), U = 50 m/s, delta_u = 0.2 mm, and no force
 that drives it: the wall slows the flow down and the turbulence variables relax. The state depends on y only.
 
 Cases, written into INPUT/ (one at a time) by `python3 -B make_case.py CASE`:
@@ -24,7 +24,7 @@ free-stream values (rho nu~ = rho k = 2e-10, twice the realizability floor; omeg
 stiffness vanish there and nothing diffuses into the thin cells at the symmetry plane.
 
 A second geometry, for the vortex-stretching function f_beta of Wilcox 2006 (case wilcox): a cube of NW^3 cells of DXW (dyadic:
-cubes to the bit), one block, extrapolation (400) on all faces, the same air at 300 K and 1 bar, the velocity u_i = GW_ij x_j
+cubes to the bit), one block, extrapolation (400) on all faces, the same air at 300 K and 1e5 Pa, the velocity u_i = GW_ij x_j
 about the centre of the cube with GW zero on the diagonal (each component varies along the other two coordinates only:
 divergence-free, and the normal velocity of a face is the same on its two sides, so with uniform density and pressure the HLLC
 flux of rho omega through the faces of a cell adds up to zero), uniform k = KW and omega = OMW, above the limiter of omega
@@ -35,7 +35,7 @@ chi_w is that of MOSE and of Wilcox's model, the page prints W_ij W_ij S^_ki), f
 
 A third geometry, for the asymptotic omega wall value of the k-omega models (cases wall-Wilcox2006 and wall-SST,
 omega-wall-bc = asymptotic): the channel above with NJW uniform rows of DYW (dyadic) and square cells, the air at rest at
-300 K and 1 bar, uniform k = KWALL and, everywhere, omega = 6 nu/(beta d^2), the asymptotic wall value of the model (NASA
+300 K and 1e5 Pa, uniform k = KWALL and, everywhere, omega = 6 nu/(beta d^2), the asymptotic wall value of the model (NASA
 Turbulence Modeling Resource: beta_0 = 0.0708 on the Wilcox 2006 page, beta_1 = 0.075 on the SST page), d = DYW/2 the
 distance of the centre of a wall cell from the wall. At rest there is no production, and with omega uniform and equal to its
 wall value no omega diffuses through the wall and the cross-diffusion is zero: one explicit step changes rho omega of the

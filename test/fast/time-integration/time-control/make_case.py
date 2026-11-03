@@ -22,10 +22,10 @@ Usage (from the test directory):
   python3 -B make_case.py uniform              INPUT/ic.tec
   python3 -B make_case.py bc401                INPUT/bc.txt, inlet 401 with p0 = P0
   python3 -B make_case.py bc402 TP EPS [T1]    INPUT/bc.txt, inlet 402 with
-          p0(t) = P0 (1 + EPS sin(2 pi (t - T1) / TP)), tabulated in p0.dat (bar)
+          p0(t) = P0 (1 + EPS sin(2 pi (t - T1) / TP)), tabulated in p0.dat (Pa)
           for T1 <= t <= T1 + 4 TP (T1 = 0 if omitted)
   python3 -B make_case.py dt0 CFL              time step of the uniform state
-  python3 -B make_case.py tube bar|tiny        INPUT/ic.tec and INPUT/bc.txt of the
+  python3 -B make_case.py tube full|tiny       INPUT/ic.tec and INPUT/bc.txt of the
           tube of part 4, at p = PT or PT x 2^-24
 """
 import math
@@ -46,7 +46,7 @@ NT, DXT = 40, 0.01           # tube of part 4: cells along x, cell size [m]
 XT0, WT = 0.1, 0.03          # centre and width of its entropy wave [m]
 TT, PT = 300.0, 1.0e5        # temperature away from the wave [K], pressure [Pa]
 MT = 2.0                     # Mach number of the tube
-TUBE_SCALE = {"bar": 1.0, "tiny": 2.0 ** -24}
+TUBE_SCALE = {"full": 1.0, "tiny": 2.0 ** -24}
 
 
 def uniform_state():
@@ -82,13 +82,13 @@ def write_bc(inlet_type, inlet_line):
 
 
 def write_p0_table(period, eps, t1):
-    # piecewise-linear table read by MOSE: 2000 points per period, values in bar
+    # piecewise-linear table read by MOSE: 2000 points per period, values in Pa
     nstep = 8000
     with open("p0.dat", "w") as f:
         for n in range(nstep + 1):
             t = t1 + 4.0 * period * n / nstep
             p0 = P0 * (1.0 + eps * math.sin(2.0 * math.pi * (t - t1) / period))
-            f.write(f"{t:.15E} {p0 / 1.0e5:.15E}\n")
+            f.write(f"{t:.15E} {p0:.15E}\n")
 
 
 def write_tube(name):

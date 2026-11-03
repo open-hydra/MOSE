@@ -33,11 +33,11 @@ It must be that of the state the face takes, each of mass, momentum and energy w
   - from p_shock up to p_sub, for a gas of the tube on the line, the state of the gas of the tube itself.
 
 Cases (CASES below), the gas linked by run.sh as INPUT/phase.txt and INPUT/thermo.dat:
-  mach25, mach3, mach4  air of test/common/Air, T0 = 300 K, p0 = 2 bar, Ae_At that of the exit Mach number 2.5, 3 or
+  mach25, mach3, mach4  air of test/common/Air, T0 = 300 K, p0 = 2e5 Pa, Ae_At that of the exit Mach number 2.5, 3 or
                         4 of a perfect gas with the gamma of this air; the gas of the tube the design state at 0.98 of
                         its pressure, at its temperature and velocity
   rocket45              the gas of the inlet 401 of test/2D/euler/rocket-nozzle/frozen (13 species, its mass fractions
-                        normalized to sum 1), T0 = 3644.12 K, p0 = 108 bar, Ae_At = 40: an exit Mach number of 4.46; the
+                        normalized to sum 1), T0 = 3644.12 K, p0 = 1.08e7 Pa, Ae_At = 40: an exit Mach number of 4.46; the
                         gas of the tube as for mach25
   sonic                 the air of mach25 with Ae_At = 1 and g = (1 + 0.5e-9) G*, the gas of the tube at 1.2 times the
                         velocity of the face state: the solver accepts g up to 1e-9 above its G* (the G* of ATLAS, to

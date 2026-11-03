@@ -113,7 +113,7 @@ def write_case(name, state=None):
         return
     if os.path.dirname(name):
         os.makedirs(os.path.dirname(name), exist_ok=True)
-    rows = [(1.0e-4 * n, P0 * (1.0 + 0.05 * n / 10) / 1.0e5) for n in range(11)]   # bar: 1.2 bar rising by 5 % in 1 ms
+    rows = [(1.0e-4 * n, P0 * (1.0 + 0.05 * n / 10)) for n in range(11)]   # Pa: P0 rising by 5 % in 1 ms
     if name == "decreasing.dat":
         rows.reverse()
     elif name == "late.dat":

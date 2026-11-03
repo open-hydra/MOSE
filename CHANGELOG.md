@@ -105,6 +105,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the mode new. The boundary-condition builder of ATLAS writes this line (its logical key `grain-wall` sets the mode: `T`
   mode 1, a wall; `F`, the default, mode 2, an inlet); a file of the
   former line (`T_af, a, n, p_ref, rho_grain, SF_geo, massf`) is read wrong, and mostly refused by the checks below.
+- **Breaking:** the `p0_file` table of an inlet `402` is read in Pa, as written, like every other input of MOSE (SI units
+  throughout). It was read in bar and multiplied by $10^5$. An old table written in bar must be multiplied by $10^5$.
 - The CI jobs that build and test MOSE run on Ubuntu 24.04 (`runs-on: ubuntu-24.04`) instead of `ubuntu-latest`, which
   GitHub moves to Ubuntu 26.04, an image with other versions of gfortran and CMake: the Ubuntu release of these jobs
   changes only with a change of `.github/workflows/ctest.yml`.

@@ -28,12 +28,12 @@
 #       by the same factor at fixed velocity and temperature, and with an
 #       even power of 2 the scaling is exact in floating point, the square
 #       roots of the density in the Roe averages included: the same run at
-#       p = 1 bar and at p = 1 bar x 2^-24 takes the same iterations, every
+#       p = 1e5 Pa and at p = 1e5 Pa x 2^-24 takes the same iterations, every
 #       residual scaled. The run at low pressure must not end before its
 #       residual has fallen by 1e-6, and the two runs must end at the same
 #       iteration (a residual compared with res-threshold as it is, in
 #       kg/m3, ends the run at low pressure after its first iteration). The
-#       run at 1 bar in two parts, 60 iterations and a restart from the vtk
+#       run at 1e5 Pa in two parts, 60 iterations and a restart from the vtk
 #       raw solution of the first part, which holds the residual of the
 #       first iteration (MOSE_RES_REFERENCE), must end at the same iteration
 #       as the run in one go, with the same ratio of the last residual to
@@ -137,13 +137,13 @@ solve_steady() {
   "$LOCAL" > "OUTPUT/$1.log" 2>&1 || echo "  ($1: exit code $?, see OUTPUT/$1.log)"
   cp OUTPUT/residual-history.dat "OUTPUT/residual-history-$1.dat" 2>/dev/null || echo "  ($1: no residual-history.dat)"
 }
-for tag in bar tiny; do
+for tag in full tiny; do
   python3 -B make_case.py tube "$tag" || exit 1
   rm -rf OUTPUT/residual-history.dat OUTPUT/field.vtm OUTPUT/vtk
   solve_steady "$tag" 3000 true
 done
-# The run at 1 bar in two parts: the restart reads the final solution of the first part, and no other
-python3 -B make_case.py tube bar || exit 1
+# The run at 1e5 Pa in two parts: the restart reads the final solution of the first part, and no other
+python3 -B make_case.py tube full || exit 1
 rm -rf OUTPUT/residual-history.dat OUTPUT/field.vtm OUTPUT/vtk
 solve_steady split-first "$SPLIT" true
 solve_steady split-restart 3000 false
