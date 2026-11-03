@@ -478,8 +478,8 @@ a bound $\hat d_i$ of their stiffness, the derivative $d_i$ of the destruction t
 the start of the step alone: $1/\Delta t_i$ gains the term $\hat d_i$, so that
 $\Delta t\,d_i \le \Delta t\,\hat d_i \le 1$ and no stage makes $\tilde\nu$, $k$ or $\omega$ negative through their
 destruction
-([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)). The Reynolds-stress model SSG/LRR, which the key
-`turbulence` does not select, has no such bound: its $\hat d_i$ is zero.
+([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)), the Reynolds-stress model SSG/LRR included (its bound
+leaves out the part of the return to isotropy that the production drives).
 
 !!! tip "CFL ramp-up"
 

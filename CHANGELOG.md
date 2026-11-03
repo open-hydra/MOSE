@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- The key `turbulence` of `[MOSE-Physics]` selects the SSG/LRR-ω Reynolds-stress model of the NASA Turbulence Modeling
+  Resource, in four variants: `SSGLRR` (TMR SSGLRR-RSM-w2012), `SSGLRR-SD` (simple diffusion), `SSGLRR-w2019` (with the
+  length-scale correction of Eisfeld and Rumsey) and `SSGLRR-w2019-SD`. `Lib_SSGLRR` held the model, but the registry
+  refused the name, so no run used it. The model exchanges energy with the mean flow as `k-energy-coupling` does; its
+  sources take the point-implicit factor of steady runs (the energy row with them) and, in time-accurate runs, a bound of
+  their stiffness in the time step; a rotating frame adds the Coriolis term to the stress equations; `omega-wall-bc`
+  sets its wall value of omega, blowing walls have their own routine, and omega is kept positive. The boundaries carry the
+  stress tensor: walls take the wall values in the wall stress, symmetry planes of any orientation reflect it, faces of
+  type `200` turn it with the velocity, and inflow, outflow and extrapolation faces carry the Reynolds stress of the
+  boundary cell in the momentum and energy fluxes. Tests: `RSMDecay` (fast tier, the four variants against the closed-form
+  decay of isotropic turbulence on an axisymmetric wedge) and the turbulent flat plate
+  (`test/2D/viscous/flat-plate-turbulent/SSGLRR`, outside CTest; docs/vv/2D-flat-plate-turbulent.md).
+
 - Extrapolation faces (`400`) report the gas that enters the domain through them, which they let in with the state of the
   boundary cell, as they take the flux of the cell state for either direction of the gas. The first time the gas enters
   through the `400` faces of one face of a block (on each grid level), the run prints a line with the iteration, the faces and
@@ -90,6 +103,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Breaking:** the `p0_file` table of an inlet `402` is read in Pa, as written, like every other input of MOSE (SI units
   throughout). It was read in bar and multiplied by $10^5$. An old table written in bar must be multiplied by $10^5$.
+- With `k-energy-coupling = .true.` (SST, Wilcox 2006) the stress of the momentum and energy equations holds
+  -2/3 rho k: the wall faces (`301`, `302`, the gas-surface walls and the grain `502`) now take it with the k of the wall,
+  zero, instead of the k of the boundary cell, and the inflow, outflow and extrapolation faces (`400` to `408`, `410`,
+  `420`), which carry no diffusive flux, carry it with the k of the boundary cell, as they carry the pressure. Without
+  it the pressure of the cells next to an open boundary jumped by 2/3 rho k. Runs without `k-energy-coupling` keep their
+  bits.
 - The CI jobs that build and test MOSE run on Ubuntu 24.04 (`runs-on: ubuntu-24.04`) instead of `ubuntu-latest`, which
   GitHub moves to Ubuntu 26.04, an image with other versions of gfortran and CMake: the Ubuntu release of these jobs
   changes only with a change of `.github/workflows/ctest.yml`.

@@ -72,14 +72,14 @@ MOSE supports two chemistry modes that can be used independently or together:
 
 ### Turbulence
 
-The models that `turbulence` selects at run time are RANS eddy-viscosity closures. The Boussinesq hypothesis links the Reynolds stress tensor to the mean strain rate via the turbulent viscosity $\mu_t$.
+The models that `turbulence` selects at run time are RANS closures. The eddy-viscosity models link the Reynolds stress tensor to the mean strain rate via the turbulent viscosity $\mu_t$ (Boussinesq hypothesis); the Reynolds-stress model transports the stresses themselves.
 
 | Model | Type | Key feature |
 |-------|------|-------------|
 | Spalart–Allmaras (SA) | 1-equation | Rotation correction (`SA-R`) and rotation/curvature correction (`SA-RC`) |
 | Menter SST | 2-equation | $k$–$\omega$ / $k$–$\varepsilon$ blending; robust in adverse pressure gradients |
 | Wilcox k-$\omega$ 2006 | 2-equation | Updated cross-diffusion; improved freestream sensitivity |
-| SSGLRR | Reynolds-stress (7-equation) | Speziale–Sarkar–Gatski / Launder–Reece–Rodi; in the source code, `turbulence` does not accept it |
+| SSG/LRR-$\omega$ | Reynolds-stress (7-equation) | Speziale–Sarkar–Gatski / Launder–Reece–Rodi pressure–strain; resolves the stress anisotropy |
 | QCR2000 | Algebraic correction | Non-linear Boussinesq (Quadratic Constitutive Relation); in the source code, `turbulence` does not accept it |
 
 ### Gas-Surface Interaction (GSI)

@@ -1,6 +1,6 @@
 # 2D Flat Plate – Turbulent Boundary Layer
 
-Turbulent flow over a flat plate at Mach 0.2, a compressible flow at low Mach number. This configuration compares MOSE's turbulent boundary layer modeling with well-established compressible Navier–Stokes solvers from the NASA suite (CFL3D, FUN3D), on grids of the NASA zero-pressure-gradient flat plate case but with its own boundary conditions (see [Differences from the TMR case](#differences-from-the-tmr-case)). Multiple turbulence closure models are tested: Spalart–Allmaras (SA), Shear Stress Transport (SST), and Wilcox (2006) k-ω.
+Turbulent flow over a flat plate at Mach 0.2, a compressible flow at low Mach number. This configuration compares MOSE's turbulent boundary layer modeling with well-established compressible Navier–Stokes solvers from the NASA suite (CFL3D, FUN3D), on grids of the NASA zero-pressure-gradient flat plate case but with its own boundary conditions (see [Differences from the TMR case](#differences-from-the-tmr-case)). Multiple turbulence closure models are tested: Spalart–Allmaras (SA), Shear Stress Transport (SST), Wilcox (2006) k-ω, and the SSG/LRR-ω Reynolds-stress model.
 
 **Reference**: [NASA Turbulence Modeling Resource](https://www.nasa.gov/nasa-turbulence-modeling-resource/)
 
@@ -72,6 +72,7 @@ The reference curves of `verify.py` (`reference/cf.dat`) are TMR data:
 - **SA**: CFL3D on the finest grid (level 1 of 8) of the TMR *2D Finite Flat Plate* numerics case, whose grid extends upstream and downstream of the plate (`all_cf_global.dat`);
 - **SST**: FUN3D with SST-Vm (the name the TMR gives to these results, first reported as SST-V) on the 545 × 385 grid cut into triangles (`cf_plate_fun3d_sstv_tri.dat`);
 - **Wilcox 2006**: CFL3D with Wilcox2006-klim-m on the 545 × 385 grid (`cf_plate_w06.dat`, which also holds FUN3D).
+- **SSG/LRR-ω**: CFL3D and DLR's TAU with SSGLRR-RSM-w2012 on the 545 × 385 grid, from the TMR page of the model's flat plate (`SSGLRR/reference/cf.dat`), and the profile $u^+(y^+)$ of CFL3D at $x = 0.97$ (`SSGLRR/reference/uplus.dat`).
 
 ## Results and verification
 
@@ -102,3 +103,42 @@ On the grids of the case no laminar stretch is seen. From the first cell on the 
    Wilcox k-ω
 </figure>
 
+### SSG/LRR-ω Reynolds-stress model
+
+`turbulence = SSGLRR` (TMR's SSGLRR-RSM-w2012, see the [theory page](../theory/turbulence.md#ssglrr-reynolds-stress-model)), run on the 69 × 49 grid of the TMR series with the TMR wall condition for $\omega$ and compared with the CFL3D and TAU results of the [TMR case page](https://tmbwg.github.io/turbmodels/flatplate_ssglrrrsm.html).
+
+<figure>
+  {% include "vv/images/TP-cf-ssglrr.svg" %}
+  SSG/LRR-ω: skin friction of MOSE on the 137 × 97 grid (see below) and of CFL3D and TAU on the finest TMR grid (545 × 385)
+</figure>
+
+On the grid of the test, 69 × 49, $C_f$ at $x = 0.97$ is 0.002612: 1.6% below CFL3D and 0.7% below TAU on the same grid, which differ by 0.9% from each other. Over the plate it differs from the finest-grid CFL3D curve by 3.4% RMS.
+
+These differences are an effect of the grid. The case was also run on the next coarser and the next finer grid of the TMR series, 35 × 25 and 137 × 97, with the same `input.ini` (300,000 iterations), and `INPUT/ic.tec` and `INPUT/bc.txt` written by ATLAS ICB and BCB on the grid files of `test/2D/viscous/flat-plate-turbulent-tmr/MESH`. On the 69 × 49 grid this gives the files of the case, byte for byte. These two runs are not part of the test.
+
+| Grid | MOSE | CFL3D | TAU | MOSE vs CFL3D | MOSE vs TAU | $C_f$ RMS vs CFL3D 545 × 385 | $u^+$ RMS |
+|---|---|---|---|---|---|---|---|
+| 35 × 25 | 0.002460 | 0.002626 | 0.002555 | −6.3% | −3.7% | 9.1% | 7.5% |
+| 69 × 49 | 0.002612 | 0.002654 | 0.002631 | −1.6% | −0.7% | 3.4% | 3.1% |
+| 137 × 97 | 0.002670 | 0.002674 | 0.002667 | −0.1% | +0.1% | 1.0% | 1.2% |
+| 545 × 385 | | 0.002690 | 0.002690 | | | | |
+
+The gap between MOSE and the TMR codes closes 4 to 12 times at each refinement. On the 137 × 97 grid MOSE lies between CFL3D and TAU, within 0.13% of both. Richardson extrapolation of the three MOSE values gives 0.002706 (observed order 1.4), 0.6% above the 545 × 385 value. The same extrapolation of the CFL3D and TAU values on these three grids overshoots their own 545 × 385 value by 0.9% and 0.5%: the 35 × 25 grid is outside the asymptotic range for all three codes. On the 137 × 97 grid $C_f$ at $x = 0.97$ changes by $2\times10^{-6}$ over the last 60,000 iterations.
+
+<figure>
+  {% include "vv/images/TP-uplus-ssglrr.svg" %}
+  SSG/LRR-ω: velocity profile in wall units in the cell column nearest x = 0.97 of the 137 × 97 grid (x = 0.951) against CFL3D at x = 0.97 (finest grid), and the Reynolds stresses of the model
+</figure>
+
+The velocity profile follows the CFL3D one within 1.2% RMS over $2 < y^+ < 1000$ (3.1% on the 69 × 49 grid). In the log layer the model returns the anisotropy it is built to resolve, $\overline{u'u'} : \overline{v'v'} : \overline{w'w'} = 0.91 : 0.44 : 0.66$ of $k$ with $-\overline{u'v'}/k = 0.30$, where an eddy-viscosity model gives 2/3 to each normal stress.
+
+The variants of the model, on the 69 × 49 grid:
+
+| `turbulence` | `omega-wall-bc` | $C_f$ at $x = 0.97$ | Difference |
+|---|---|---|---|
+| `SSGLRR` | `practical` (TMR) | 0.002612 | - |
+| `SSGLRR-SD` | `practical` | 0.002629 | +0.7% |
+| `SSGLRR-w2019` | `practical` | 0.002612 | none (the length-scale correction is inactive in an attached boundary layer) |
+| `SSGLRR` | `asymptotic` | 0.002698 | +3.3% |
+
+The solution does not depend on the `point-implicit` treatment of the source terms: with it off the wall shear stress changes by less than $10^{-6}$ anywhere on the plate. The density residual does not fall below $7\times10^{-7}$: over the last 10,000 of the 100,000 iterations it stays between $7.3\times10^{-7}$ and $7.8\times10^{-7}$. The two runs reach the same wall shear stress, within $10^{-6}$, by different iteration paths, so the residual that is left does not show in it.

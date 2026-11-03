@@ -88,8 +88,9 @@ test/
 │   │   └── isentropic-vortex/ # Isentropic vortex convection (N1): order of accuracy on 32/64/128 grids
 │   └── viscous/               # Viscous cases
 │       ├── flat-plate-laminar/
-│       ├── flat-plate-turbulent/  # Subdirs: SA/ SST/ Wilcox2006/
+│       ├── flat-plate-turbulent/  # Subdirs: SA/ SST/ Wilcox2006/ SSGLRR/
 │       ├── flat-plate-turbulent-tmr/ # Flat plate of the NASA TMR on three grids, SA, SST, Wilcox 2006 (validation tier; full form: verification)
+│       ├── rsm-decay/             # Reynolds-stress model vs closed-form decay
 │       ├── ablating-wall/     # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column
 │       ├── mms/                   # residuals/: right-hand sides on manufactured fields (RANS, wedge); skewed/: order on skewed grids (validation tier)
 │       ├── wedge-axis-step/       # Local time step next to the axis of the wedge (validation tier)
@@ -350,7 +351,13 @@ step keeps the rows next to the axis stable at the largest vnn the rule
 declares, RK3 0.62 and Heun 0.5, on square cells, on cells twice as long in x
 and with the axis on the last j face, and at the recommended vnn, RK3 0.5 and
 Heun 0.4, on cells four times as long in x with the Prandtl number of air and
-with 0.9.
+with 0.9. `RSMDecay` (`test/2D/viscous/rsm-decay`) is there for its cost, four
+runs of about 13 s of CPU: the four variants of the Reynolds-stress model SSGLRR
+carry isotropic turbulence in a uniform stream through an axisymmetric wedge, and
+k and omega decay as the closed form gives, the stresses stay isotropic, no
+radial velocity appears (the Reynolds stress in the viscous flux of the wedge
+faces) and total enthalpy + k + R11 is conserved (the energy exchange with the
+mean flow and the Reynolds stress on the open boundaries).
 `MMSViscousSkewed` (`test/2D/viscous/mms/skewed`) and `MMSViscous3D`
 (`test/3D/viscous/mms`) check the order of the viscous operator with
 manufactured solutions on grids whose cells are all skewed or whose cell size
