@@ -102,7 +102,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   371 J/(kg K), 0.12 K at 1 MPa (3e-4 K in the column of `AblatingWall`, which no longer gives the former field bit for bit).
 - The property line of the SRM grain (`502`) is `mdot_ref, n, p_ref, T_af, mode, massf(1:ns)` and, in mode 2, the
   turbulence values: the mass flux first, `rho_grain` and `SF_geo` no longer written (MOSE read them and used neither),
-  the mode new. The boundary-condition builder of ATLAS writes this line (its key `grain-bc` sets the mode); a file of the
+  the mode new. The boundary-condition builder of ATLAS writes this line (its logical key `grain-wall` sets the mode: `T`
+  mode 1, a wall; `F`, the default, mode 2, an inlet); a file of the
   former line (`T_af, a, n, p_ref, rho_grain, SF_geo, massf`) is read wrong, and mostly refused by the checks below.
 - The CI jobs that build and test MOSE run on Ubuntu 24.04 (`runs-on: ubuntu-24.04`) instead of `ubuntu-latest`, which
   GitHub moves to Ubuntu 26.04, an image with other versions of gfortran and CMake: the Ubuntu release of these jobs
