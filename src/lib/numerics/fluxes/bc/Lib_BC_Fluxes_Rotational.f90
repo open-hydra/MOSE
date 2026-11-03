@@ -36,6 +36,8 @@ contains
     use MOSE_Lib_Metrics, only : cos_delthe, sin_delthe
     use MOSE_Mod_Riemann
     use FLINT_Lib_Thermodynamic, only : f_ss, co_rotot_Rtot
+    use MOSE_Config_Types_m, only : obj_rans
+    use MOSE_Lib_Fluid, only : Transform_Sym_Tensor, Rotation_Matrix_X
 
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
@@ -77,6 +79,8 @@ contains
       Flux = 0d0
       Flux(nv) = Face_V * Fmass + Prim(np) * Area * Normal(2)
       Flux(nw) = Face_W * Fmass
+      ! The turbulent stress of these faces (the Reynolds stresses, -2/3 rho k with k-energy-coupling) is in their
+      ! viscous flux, BC_Rotational_Periodic_Visc, with the viscous stress
 
       ! Residual update
       FluxSign = 1 - 2 * mod(Fm,2)
@@ -115,6 +119,10 @@ contains
         v_rot =  Prim2(nw) * sin_delthe + Prim2(nv) * cos_delthe
         Prim2(nv) = v_rot
         Prim2(nw) = w_rot
+        if ( obj_rans%RSM ) then ! the Reynolds stresses turn with the velocity
+          Prim1(nt:nt+5) = Transform_Sym_Tensor ( Prim1(nt:nt+5), Rotation_Matrix_X ( cos_delthe, -sin_delthe ) )
+          Prim2(nt:nt+5) = Transform_Sym_Tensor ( Prim2(nt:nt+5), Rotation_Matrix_X ( cos_delthe, -sin_delthe ) )
+        end if
       elseif (Fm == 6) then
         w_rot =  Prim3(nw) * cos_delthe + Prim3(nv) * sin_delthe 
         v_rot = -Prim3(nw) * sin_delthe + Prim3(nv) * cos_delthe
@@ -124,6 +132,10 @@ contains
         v_rot = -Prim4(nw) * sin_delthe + Prim4(nv) * cos_delthe
         Prim4(nv) = v_rot
         Prim4(nw) = w_rot
+        if ( obj_rans%RSM ) then ! the Reynolds stresses turn with the velocity
+          Prim3(nt:nt+5) = Transform_Sym_Tensor ( Prim3(nt:nt+5), Rotation_Matrix_X ( cos_delthe, sin_delthe ) )
+          Prim4(nt:nt+5) = Transform_Sym_Tensor ( Prim4(nt:nt+5), Rotation_Matrix_X ( cos_delthe, sin_delthe ) )
+        end if
       end if  
 
       Dl1 = blk % Dl(Im,Jm,K1) % c(3) * 0.5d0
@@ -174,6 +186,8 @@ contains
         ! Cartesian directions for a cell sitting at θ=0.
         Flux(nv) = ( F_v * cos_delthe + F_w * sin_delthe ) * Area
         Flux(nw) = (-F_v * sin_delthe + F_w * cos_delthe ) * Area
+        if ( obj_rans%RSM ) &
+          Flux(nt:nt+5) = Transform_Sym_Tensor ( Flux(nt:nt+5), Rotation_Matrix_X ( cos_delthe, -sin_delthe ) )
         blk % r(:,Im,Jm,Ks) = blk % r(:,Im,Jm,Ks) - Flux
       end if
     end if
@@ -220,7 +234,8 @@ contains
   subroutine BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, Blk, Mf, Sc, Sct, Prt, Prl, soot_enabled )
     use MOSE_Lib_Metrics, only : delthe, cos_delthe, sin_delthe
     use MOSE_Lib_Diffusive, only : Compute_Diffusive_Flux, Diffusive_Flux
-    use MOSE_Config_Types_m, only : obj_space_scheme
+    use MOSE_Config_Types_m, only : obj_space_scheme, obj_rans
+    use MOSE_Lib_Fluid, only : Transform_Sym_Tensor, Rotation_Matrix_X
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout), target :: Blk
@@ -314,6 +329,9 @@ contains
       g2 = Flux(nv) ; g3 = Flux(nw)
       Flux(nv) =  g2 * cos_delthe + g3 * sin_delthe
       Flux(nw) = -g2 * sin_delthe + g3 * cos_delthe
+      ! and the fluxes of the Reynolds stresses, a tensor, turned back with the momentum
+      if ( obj_rans%RSM ) &
+        Flux(nt:nt+5) = Transform_Sym_Tensor ( Flux(nt:nt+5), Rotation_Matrix_X ( cos_delthe, -sin_delthe ) )
       Blk % r(:,Im,Jm,Ks) = Blk % r(:,Im,Jm,Ks) + Flux
     else
       ! Residual update: momentum only (see above)
@@ -331,6 +349,9 @@ contains
         Rot = Visc
         Rot(nv) = Visc(nv) * cos_delthe + guide(Fm,3) * Visc(nw) * sin_delthe
         Rot(nw) = Visc(nv) * sin_delthe * (-guide(Fm,3)) + Visc(nw) * cos_delthe
+        ! the Reynolds stresses, a tensor, turned with the velocity
+        if ( obj_rans%RSM ) &
+          Rot(nt:nt+5) = Transform_Sym_Tensor ( Visc(nt:nt+5), Rotation_Matrix_X ( cos_delthe, -guide(Fm,3) * sin_delthe ) )
 
       end function Rotated
 

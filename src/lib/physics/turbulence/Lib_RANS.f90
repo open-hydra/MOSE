@@ -117,41 +117,21 @@ module MOSE_Lib_RANS
 
 contains
 
-  ! Setting the value of turbulent stresses at symmetry interfaces and in ghost cells
-  ! NOTE: symmetry interface MUST be either an x-plane, y-plane or z-plane
-  subroutine RSM_Symmetry ( Rij, Rij_w, Rij_g, n )
-    use MOSE_Global_m
+  !> Reynolds stresses [11 22 33 12 13 23] at a symmetry plane of unit normal n. The ghost cell holds
+  !> the mirror image of the boundary cell, Rij_g = Q Rij Q with Q = I - 2 n n^T, and the face their
+  !> mean Rij_w, which has no shear stress on the plane. For a plane normal to an axis this is the
+  !> condition of NASA TMR (https://tmbwg.github.io/turbmodels/rsm-ssglrr.html): the two shear
+  !> stresses carrying that index are zero on the face and change sign in the ghost cell, the other
+  !> four stresses have zero gradient.
+  pure subroutine RSM_Symmetry ( Rij, Rij_w, Rij_g, n )
+    use MOSE_Lib_Fluid, only: Transform_Sym_Tensor, Reflection_Matrix
     implicit none
-    real(R8), intent(in), dimension(:) :: Rij
-    real(R8), intent(out), dimension(:) :: Rij_w, Rij_g
-    real(R8), intent(in), dimension(3) :: n
+    real(R8), intent(in)  :: Rij(6)
+    real(R8), intent(out) :: Rij_w(6), Rij_g(6)
+    real(R8), intent(in)  :: n(3)
 
-    Rij_w(1:3) = Rij(1:3) ! zero-gradient
-
-    if ( n(1) > n(2)+n(3)  ) then ! x-plane
-      Rij_w(4) = 0d0
-      Rij_w(5) = 0d0
-      Rij_w(6) = Rij(6)
-      Rij_g(4) = -Rij(4)
-      Rij_g(5) = -Rij(5)
-      Rij_g(6) = Rij(6)
-    elseif ( n(2) > n(1)+n(3) ) then ! y-plane
-      Rij_w(4) = 0d0
-      Rij_w(5) = Rij(5)
-      Rij_w(6) = 0d0
-      Rij_g(4) = -Rij(4)
-      Rij_g(5) = Rij(5)
-      Rij_g(6) = -Rij(6)
-    elseif ( n(3) > n(1)+n(2) ) then ! y-plane
-      Rij_w(4) = Rij(4)
-      Rij_w(5) = 0d0
-      Rij_w(6) = 0d0
-      Rij_g(4) = Rij(4)
-      Rij_g(5) = -Rij(5)
-      Rij_g(6) = -Rij(6)
-    else
-      error stop ( 'Error: with RSM symmetry must be an x-, y- or z-plane.' )
-    end if
+    Rij_g = Transform_Sym_Tensor ( Rij, Reflection_Matrix ( n ) )
+    Rij_w = 0.5d0 * ( Rij + Rij_g )
 
   end subroutine RSM_Symmetry
 

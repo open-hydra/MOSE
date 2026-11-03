@@ -259,6 +259,8 @@ contains
 
   subroutine Ghost_Axysimmetry ( Im, Jm, Km, Fm, blk )
     use MOSE_Lib_Metrics, only: cos_delthe, sin_delthe
+    use MOSE_Config_Types_m, only: obj_rans
+    use MOSE_Lib_Fluid, only: Transform_Sym_Tensor, Rotation_Matrix_X
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout) :: blk
@@ -284,17 +286,24 @@ contains
       blk % P (1:nu,Ig,Jg,Kg) = blk % P (1:nu,Im,Jm,Ks)
       blk % P (np:nprim,Ig,Jg,Kg) = blk % P (np:nprim,Im,Jm,Ks)
     endif
+
+    ! Reynolds stresses: the tensor turns about the x axis with the ghost cell, as the velocity does
+    if ( obj_rans%RSM ) &
+      blk % P (nt:nt+5,Ig,Jg,Kg) = Transform_Sym_Tensor ( blk % P (nt:nt+5,Ig,Jg,Kg), &
+                                                         Rotation_Matrix_X ( cos_delthe, -guide(Fm,3) * sin_delthe ) )
       
   end subroutine Ghost_Axysimmetry
 
 
   subroutine Ghost_Symmetry ( Im, Jm, Km, Fm, blk )
+    use MOSE_Config_Types_m, only: obj_rans
+    use MOSE_Lib_RANS, only: RSM_Symmetry
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(MOSE_block_type), intent(inout) :: blk
     ! Local
     integer  :: Ig, Jg, Kg, Ic, Jc, Kc
-    real(R8) :: normal(3), vel(3), udotn
+    real(R8) :: normal(3), vel(3), udotn, Rij_face(6), Rij_ghost(6)
 
     Ig = Im - guide(Fm,1)
     Jg = Jm - guide(Fm,2)
@@ -319,6 +328,12 @@ contains
     blk % P (nu:nw,Ig,Jg,Kg) = vel
     blk % P (1:nsc,Ig,Jg,Kg) = blk % P (1:nsc,Im,Jm,Km)
     blk % P (np:nprim,Ig,Jg,Kg) = blk % P (np:nprim,Im,Jm,Km)
+
+    ! Reynolds stresses: mirror image of the tensor of the boundary cell
+    if ( obj_rans%RSM ) then
+      call RSM_Symmetry ( blk % P (nt:nt+5,Im,Jm,Km), Rij_face, Rij_ghost, normal )
+      blk % P (nt:nt+5,Ig,Jg,Kg) = Rij_ghost
+    end if
       
   end subroutine Ghost_Symmetry
 

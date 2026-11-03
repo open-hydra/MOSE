@@ -159,7 +159,7 @@ contains
     Face_Prim(1:nsc)  = Face_rho * BC_ci
     Face_Prim(nu:nw)  = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Prim(np)     = p3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega, Rij of ATLAS) times the inlet density
 
     call Compute_Flux_from_Face (Face_Prim, Face_rho, Face_Rgas, Area, Normal, Flux, fmass)
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
@@ -241,7 +241,7 @@ contains
     Face_Prim(1:nsc)  = Face_rho * BC_ci
     Face_Prim(nu:nw)  = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Prim(np)     = p3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega, Rij of ATLAS) times the inlet density
 
     call Compute_Flux_from_Face (Face_Prim, Face_rho, Face_Rgas, Area, Normal, Flux, fmass)
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
@@ -322,7 +322,7 @@ contains
     Face_Prim(1:nsc)  = Face_rho * BC_ci
     Face_Prim(nu:nw)  = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Prim(np)     = p3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega, Rij of ATLAS) times the inlet density
 
     call Compute_Flux_from_Face (Face_Prim, Face_rho, Face_Rgas, Area, Normal, Flux, fmass)
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
@@ -452,7 +452,7 @@ contains
       Sup_Prim(nv) = BC_Mach_local * Sup_Sound * sin_a * cos_b
       Sup_Prim(nw) = BC_Mach_local * Sup_Sound * sin_b
     end if
-    if (model==2) Sup_Prim(nt:nprim) = BC_RANS * Sup_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
+    if (model==2) Sup_Prim(nt:nprim) = BC_RANS * Sup_rho  ! specific inputs (nuTilde, k, omega, Rij of ATLAS) times the inlet density
 
     ! building a 3 cell stencil to extrapolate the solution at the interface
 
@@ -610,7 +610,7 @@ contains
     Face_Prim(1:nsc) = BC_ci * Face_rho
     Face_Prim(nu:nw) = Un3 * Normal + Ut3 * t_Vec + Ub3 * b_Vec
     Face_Un = Un3
-    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega of ATLAS) times the inlet density
+    if (model==2) Face_Prim(nt:nprim) = BC_RANS * Face_rho  ! specific inputs (nuTilde, k, omega, Rij of ATLAS) times the inlet density
 
     Face_Enthalpy = 0d0
     Face_T = Face_Prim(np) / ( Face_Rgas * Face_rho )

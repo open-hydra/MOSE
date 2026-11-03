@@ -22,7 +22,7 @@ contains
     !! ------------------------------------------------------
     section = trim(codename)//'-Physics'
     call reg%add(section, 'equations', obj_sim_param%simulation_type, '', 'Gas dynamics equations', 'euler , navier-stokes', .true., KEY_FIXED)
-    call reg%add(section, 'turbulence', obj_rans%model, 'none', 'RANS turbulence model', 'SA, SA-R, SA-RC, SAcomp, SST, SST-RC, Wilcox2006, none', .false., KEY_FIXED)
+    call reg%add(section, 'turbulence', obj_rans%model, 'none', 'RANS turbulence model', 'SA, SA-R, SA-RC, SAcomp, SST, SST-RC, Wilcox2006, SSGLRR, SSGLRR-SD, SSGLRR-w2019, SSGLRR-w2019-SD, none', .false., KEY_FIXED)
     call reg%add(section, 'chemistry', obj_chemistry%model, 'frozen', 'Chemistry model', 'frozen, finite-rate, equilibrium', .false., KEY_FIXED)
     call reg%add(section, 'soot-generation', obj_soot%model, 'none', 'Soot generation model', 'LL91, LIN, none', .false., KEY_FIXED)
     call reg%add(section, 'rotational-frame', obj_rot%model, 'none', 'Rotational frame model', 'rigid-body, none', .false., KEY_FIXED_OWN)
@@ -66,9 +66,9 @@ contains
     call reg%add(section, 'Prt', obj_rans%Prt, '0.85', 'Turbulent Prandtl number', '> 0', .false., KEY_TAKEN)
     call reg%add(section, 'Sct', obj_rans%Sct, '0.90', 'Turbulent Schmidt number', '> 0', .false., KEY_TAKEN)
     call reg%add(section, 'point-implicit', obj_rans%point_implicit, '.true.', 'Point-implicit factor 1/(1 + dt d) on the increment of the turbulence equations, steady runs only (time-accurate runs: explicit sources, stiffness in the time step)', 'logical', .false., KEY_TAKEN)
-    call reg%add(section, 'omega-wall-bc', obj_rans%omega_wall_bc, 'practical', 'Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2), beta1 of SST, for both models) or asymptotic (6*nu/(beta*y^2), exact y->0 limit with the beta of the model, beta1 for SST and beta0 for Wilcox2006, for wall-resolved meshes)', 'practical, asymptotic', .false., KEY_FIXED)
+    call reg%add(section, 'omega-wall-bc', obj_rans%omega_wall_bc, 'practical', 'Omega wall condition for the omega-based models (SST, Wilcox2006, SSGLRR): Menter practical (60*nu/(beta1*y^2), beta1 of SST, for every model) or asymptotic (6*nu/(beta*y^2), exact y->0 limit with the beta of the model, beta1 for SST, beta0 for Wilcox2006 and the beta of LRR, 0.075, for SSGLRR, for wall-resolved meshes)', 'practical, asymptotic', .false., KEY_FIXED)
     call reg%add(section, 'sst-production', obj_rans%sst_production, 'incompressible', 'SST production: incompressible (P = mu_t*S^2; NASA TMR SST-2003m, or SST-2003s with k-energy-coupling) or compressible (P = tau_ij*du_i/dx_j as OpenFOAM kOmegaSST arranges it: the limiter on mu_t*(S^2 - 2/3*divU^2) only, then -2/3*rho*k*divU added, and -2/3*gamma*rho*omega*divU in the omega equation; TMR SST-2003e limits the whole P and takes gamma/nu_t times it in the omega equation)', 'incompressible, compressible', .false., KEY_FIXED)
-    call reg%add(section, 'k-energy-coupling', obj_rans%k_energy_coupling, '.false.', 'Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants', 'logical', .false., KEY_FIXED)
+    call reg%add(section, 'k-energy-coupling', obj_rans%k_energy_coupling, '.false.', 'Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants. The Reynolds-stress model SSGLRR is always in this form', 'logical', .false., KEY_FIXED)
 
     
     !! ------------------------------------------------------

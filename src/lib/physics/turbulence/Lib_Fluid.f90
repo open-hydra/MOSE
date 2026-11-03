@@ -132,6 +132,56 @@ contains
   end function
 
 
+  !> Symmetric tensor stored as [11 22 33 12 13 23] (the order of the Reynolds stresses)
+  !> transformed by the orthogonal matrix Q: T' = Q T Q^T
+  pure function Transform_Sym_Tensor ( T6, Q ) result ( R6 )
+    implicit none
+    real(R8), intent(in) :: T6(6), Q(3,3)
+    real(R8) :: R6(6)
+    ! Local
+    real(R8) :: T(3,3)
+
+    T(1,1) = T6(1) ; T(2,2) = T6(2) ; T(3,3) = T6(3)
+    T(1,2) = T6(4) ; T(1,3) = T6(5) ; T(2,3) = T6(6)
+    T(2,1) = T6(4) ; T(3,1) = T6(5) ; T(3,2) = T6(6)
+
+    T = matmul ( Q, matmul ( T, transpose(Q) ) )
+
+    R6 = [ T(1,1), T(2,2), T(3,3), T(1,2), T(1,3), T(2,3) ]
+  end function Transform_Sym_Tensor
+
+
+  !> Reflection across the plane of unit normal n: Q = I - 2 n n^T
+  pure function Reflection_Matrix ( n ) result ( Q )
+    implicit none
+    real(R8), intent(in) :: n(3)
+    real(R8) :: Q(3,3)
+    ! Local
+    integer :: i, j
+
+    do j = 1, 3
+    do i = 1, 3
+      Q(i,j) = - 2d0 * n(i) * n(j)
+    enddo
+    enddo
+    Q(1,1) = Q(1,1) + 1d0 ; Q(2,2) = Q(2,2) + 1d0 ; Q(3,3) = Q(3,3) + 1d0
+  end function Reflection_Matrix
+
+
+  !> Rotation of an angle theta about the x axis, from c = cos(theta) and s = sin(theta) (the periodicity angle has
+  !> them stored, cos_delthe and sin_delthe of MOSE_Lib_Metrics): y' = y c - z s, z' = y s + z c
+  pure function Rotation_Matrix_X ( c, s ) result ( Q )
+    implicit none
+    real(R8), intent(in) :: c, s
+    real(R8) :: Q(3,3)
+
+    Q = 0d0
+    Q(1,1) = 1d0
+    Q(2,2) =  c ; Q(2,3) = -s
+    Q(3,2) =  s ; Q(3,3) =  c
+  end function Rotation_Matrix_X
+
+
   pure function Strain_Tensor ( Gradvel ) result ( E )
     implicit none
     real(R8), intent(in), dimension(3,3) :: Gradvel
