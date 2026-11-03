@@ -58,7 +58,8 @@
 #  the momentum of the blown gas with the gas constant of CH4 for the wall
 #  state, not that of the N2 of the cell, at the static temperature whose
 #  total temperature is T_af, and the energy of the total enthalpy h(T_af);
-#  the grain in mode 2 gives the same changes (make_case.py srmtwogascheck).
+#  the grain in mode 2 gives the same changes, rho u to 3 ulp of the face
+#  pressure, which cancels in its change (make_case.py srmtwogascheck).
 #  Gas: test/common/Air (test/common/Air-viscous for the grain).
 #===============================================================================
 set -uo pipefail

@@ -359,7 +359,13 @@ def srm_twogas_check(diag, diag_mode1=None):
     per unit area and time: the gas constant of the face state, R_w = d(rho u) h p / (dt mdot^2 T_w), is that of the
     composition the grain imposes, CH4, not that of the gas of the cell, N2; the energy mdot (h(T_w) + u^2/2) =
     mdot h(T_af), the total enthalpy, not mdot (h(T_af) + u^2/2); the mass flux mdot. diag_mode1: the grain of mode 1 of
-    the same step, whose changes those of mode 2 (an inflow, the inlet 404) must equal."""
+    the same step, whose changes those of mode 2 (an inflow, the inlet 404) must equal: rho and rho e within 1e-12
+    relative; rho u within 3 ulp of the face pressure. The face pressure, p of the cell (PB), and that of the first face
+    between cells cancel in the change of rho u, mdot u, PB/(mdot u) = 6.4e3 times smaller than either face flux: the two
+    paths (the wall flux of mode 1, the inlet 404 of mode 2) round p + mdot u once per stage each, and RK3 sums its three
+    stages with two more roundings at the size of PB, so their changes of rho u may differ by up to 3 ulp(PB) of flux,
+    2.8e-12 of the change (measured with gfortran 13 on aarch64: 1.5 ulp with -O2 -g -fcheck=bounds, the TESTING flags
+    of the CI, 0 with -O3 -march=native)."""
     d = read_zone(diag)
     h, mdot = LX / N, 1.0
     r_ch4, r_n2 = 8314.46261815324 / WM_TWOGAS[0], 8314.46261815324 / WM_TWOGAS[2]
@@ -387,9 +393,11 @@ def srm_twogas_check(diag, diag_mode1=None):
     ok = err < 1e-9 and erre < 1e-9 and abs(dm - mdot) < 1e-6
     if diag_mode1 is not None:
         w = read_zone(diag_mode1)
-        dev = max(abs(d[k][0] / d["dt"][0] / (w[k][0] / w["dt"][0]) - 1.0) for k in ("rho", "rhou", "rhoe"))
-        print(f"    the changes of mode 2 against those of mode 1: largest relative difference {dev:.1e}")
-        ok = ok and dev < 1e-12
+        dev = max(abs(d[k][0] / d["dt"][0] / (w[k][0] / w["dt"][0]) - 1.0) for k in ("rho", "rhoe"))
+        dev_u = abs(d["rhou"][0] / d["dt"][0] - w["rhou"][0] / w["dt"][0]) * h / math.ulp(PB)
+        print(f"    the changes of mode 2 against those of mode 1: rho and rho e within {dev:.1e} (relative), rho u within "
+              f"{dev_u:.2f} ulp of the face pressure ({dev_u * math.ulp(PB) / (mdot * u):.1e} of the change)")
+        ok = ok and dev < 1e-12 and dev_u <= 3.0
     sys.exit(0 if ok else 1)
 
 
