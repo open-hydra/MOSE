@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Ablative wall boundary conditions -- BC 503 (melting) and 504 (pyrolysis)
+#  Ablative wall boundary conditions -- BC 503 (melting), 504 (pyrolysis) and the SRM grain 502
 #
 #  Runs the blown-column case once per wall model and checks each result against
 #  the analytic solution (see build_case.py and verify.py). Every configuration
@@ -11,7 +11,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
 
-CONFIGS=${CONFIGS:-"melting htpb hdpe pp melting-top hdpe-top melting-inert srm default-schmidt"}
+CONFIGS=${CONFIGS:-"melting htpb hdpe pp melting-top hdpe-top melting-inert srm srm-top srm-inflow srm-inflow-top default-schmidt"}
 status=0
 
 for cfg in $CONFIGS; do
@@ -25,10 +25,10 @@ for cfg in $CONFIGS; do
     status=1
     continue
   fi
-  # The burning-grain BC is not a viscous wall, so it writes no wall file; every
-  # other configuration must produce both.
+  # The burning-grain BC is not a viscous wall (nor an inlet, its inflow mode), so it
+  # writes no wall file; every other configuration must produce both.
   need_wall=1
-  [[ "$cfg" == srm ]] && need_wall=0
+  [[ "$cfg" == srm* ]] && need_wall=0
   if [[ ! -f OUTPUT/field.tec ]] || [[ $need_wall -eq 1 && ! -f OUTPUT/wall.tec ]]; then
     echo "AblatingWall [$cfg]: FAIL - solver produced no wall/field output"
     tail -20 OUTPUT/solve-"$cfg".log

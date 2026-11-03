@@ -422,7 +422,7 @@ positive results up to $\nu = 1$ in 1D and about $2/3$ in 2D). The bound is lowe
 RANS run, whose ghost cell holds $-k_1\rho_G$ (and $-\tilde\nu_1\rho_G$; the wall value of $k$, and of $\tilde\nu$ on
 a smooth wall, is zero), $\rho_G$ the density of the ghost cell: there it is $1/(2 + \rho_G/\rho_1)$, and in smooth
 flow CFL ≤ 1/2 keeps it while the Mach number of the flow normal to the wall is below $2\rho_1/\rho_G$. Next to faces whose ghost
-cells extrapolate the cells, $3q_1 - 3q_2 + q_3$ (type `408`, and the flow and soot variables of type `502`),
+cells extrapolate the cells, $3q_1 - 3q_2 + q_3$ (type `408`, and the flow and soot variables of type `502` in its mode 1),
 positivity is not guaranteed. With moving shocks and Heun keep `cfl` at
 0.5–0.7. With preconditioning,
 $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$ is replaced by the preconditioned eigenvalue

@@ -170,9 +170,10 @@ contains
   !─────────────────────────────────────────────────────────────────────────────
   ! BC 404: Inlet — static temperature T + prescribed mass flux g [kg/m2/s].
   ! Pressure is extrapolated from the interior. g is positive into the domain on every face
-  ! (IO_BC.f90, Need_Inward).
+  ! (IO_BC.f90, Need_Inward). An SRM grain in its inflow mode (502, mode 2) comes here with always_in
+  ! (BC_Fluxes): the face is not closed when the gas of the cell is at rest or moves out.
   subroutine BC_Inlet_MassFlux_T ( Bm, Im, Jm, Km, Fm, Blk, BC_T, BC_g, &
-                                    BC_rel_fac, BC_alpha, BC_beta, BC_ci, BC_RANS, error )
+                                    BC_rel_fac, BC_alpha, BC_beta, BC_ci, BC_RANS, error, always_in )
     use FLINT_Lib_Thermodynamic
     implicit none
     type(MOSE_block_type), intent(inout) :: Blk
@@ -180,6 +181,7 @@ contains
     real(R8), intent(in)    :: BC_T, BC_g, BC_rel_fac, BC_alpha, BC_beta
     real(R8), intent(in)    :: BC_ci(nsc), BC_RANS(1:)
     integer,  intent(inout) :: error
+    logical,  intent(in), optional :: always_in   ! .true.: the gas enters whatever the gas of the cell does
     ! Local
     integer  :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k, s
     real(R8) :: Normal(3), Area, t_Vec(3), BC_Sign, fmass, g
@@ -196,9 +198,15 @@ contains
                                  Bound_Prim, Int_Prim, Un, Bound_rho, Bound_Rgas,    &
                                  Bound_Sound, Bound_Gamma, Riem )
 
+    ! Gas of the cell at rest or moving out: the inlet closes the face (error = 1), but for an SRM grain (always_in)
     if (BC_Sign * Un >= 0d0) then
-      error = 1
-      return
+      if ( .not. present(always_in) ) then
+        error = 1
+        return
+      else if ( .not. always_in ) then
+        error = 1
+        return
+      end if
     end if
 
     call Compute_Inflow_Direction (Normal, BC_alpha, BC_beta, alpha, beta)

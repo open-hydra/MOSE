@@ -41,6 +41,25 @@
 #  the grain by the flux through the grain and the cb2 term of the gradient to
 #  the wall value, plus the source terms with the distance to the grain, and
 #  in the other cells by those source terms alone (make_case.py srmcheck).
+#  The same grain in mode 2, an inflow (applied as the mass-flux inlet 404
+#  of total temperature T_af along the normal): one step from rest lets the products in with
+#  the mass flux of the law at the pressure of the cell, the change of the
+#  grain of mode 1 (the face is not closed by the gas at rest), and the
+#  grain is no wall for the wall distance (no source of rho nu~ in the
+#  other cells: make_case.py srminflowcheck); it runs 40 steps with
+#  Spalart-Allmaras and with SST. A property line of a grain whose mode is
+#  neither 1 nor 2 (3, 1.5), with p_ref = 0, mdot_ref < 0, mdot_ref = 0 in
+#  mode 2, T_af = 0 (what ATLAS writes without eq-CEA-file), T_af above one
+#  kelvin below the last row of the tables (5000 K), or an inflow without
+#  its turbulence value must stop the run at set-up with exit code 1, no
+#  solution and a message with the line, the record and the value
+#  (make_case.py srmbad). A grain that blows CH4 into a duct of N2 at rest
+#  (inviscid, the four species of test/1D/diff1): one step gives the cell
+#  the momentum of the blown gas with the gas constant of CH4 for the wall
+#  state, not that of the N2 of the cell, at the static temperature whose
+#  total temperature is T_af, and the energy of the total enthalpy h(T_af);
+#  the grain in mode 2 gives the same changes, rho u to 3 ulp of the face
+#  pressure, which cancels in its change (make_case.py srmtwogascheck).
 #  Gas: test/common/Air (test/common/Air-viscous for the grain).
 #===============================================================================
 set -uo pipefail
@@ -259,18 +278,108 @@ else
   fail=1
 fi
 mv input-sa.ini input.ini
+cp input.ini input-srm40.ini
 python3 -B make_case.py srm rest || exit 1
 sed -e 's/^iter-threshold = 40$/iter-threshold = 1/' -e 's/^time-accurate = true$/time-accurate = false/' \
     -e 's/^time-scheme = RK3$/time-scheme = euler/' -e 's/^schmidt = 0.7$/schmidt = 0.7\n\n[MOSE-Turbulence]\npoint-implicit = false/' \
     input.ini > input-rest.ini && mv input-rest.ini input.ini
 rm -f OUTPUT/field.tec OUTPUT/diagnostic.tec
 "$LOCAL" > OUTPUT/srm-rest.log 2>&1
+[[ -f OUTPUT/diagnostic.tec ]] && cp OUTPUT/diagnostic.tec OUTPUT/diagnostic-srm-wall.tec
 if [[ -f OUTPUT/diagnostic.tec ]] && python3 -B make_case.py srmcheck OUTPUT/diagnostic.tec; then
   echo "  [ok  ] srm-rest: the ghost cells of the grain hold the wall value nu~ = 0, and the grain is a wall for d"
 else
   echo "  [FAIL] srm-rest: the wall value nu~ = 0 or the distance to the grain missing (see OUTPUT/srm-rest.log)"
   fail=1
 fi
+
+echo "-- an SRM grain boundary (502) in mode 2, an inflow --"
+python3 -B make_case.py srm inflow rest || exit 1
+rm -f OUTPUT/field.tec OUTPUT/diagnostic.tec
+"$LOCAL" > OUTPUT/srm-inflow-rest.log 2>&1
+if [[ -f OUTPUT/diagnostic.tec ]] && grep -a -q 'SRM inflow (as 404)' OUTPUT/srm-inflow-rest.log && \
+   python3 -B make_case.py srminflowcheck OUTPUT/diagnostic.tec OUTPUT/diagnostic-srm-wall.tec; then
+  echo "  [ok  ] srm-inflow-rest: from rest the products enter with the mass flux of the law, and the grain is no wall for d"
+else
+  echo "  [FAIL] srm-inflow-rest: the inflow grain closed at rest, let in another mass flux or was a wall for d (see OUTPUT/srm-inflow-rest.log)"
+  fail=1
+fi
+cp input-srm40.ini input.ini
+python3 -B make_case.py srm inflow || exit 1
+rm -f OUTPUT/field.tec
+"$LOCAL" > OUTPUT/srm-inflow-sa.log 2>&1
+rc=$?
+if [[ $rc -eq 0 && -f OUTPUT/field.tec ]] && ! grep -a -qE 'NaN|Integration failed' OUTPUT/srm-inflow-sa.log; then
+  echo "  [ok  ] srm-inflow-sa: 40 steps with the inflow grain and Spalart-Allmaras, exit code 0"
+else
+  echo "  [FAIL] srm-inflow-sa: exit code $rc, the run with the inflow grain and Spalart-Allmaras did not complete (see OUTPUT/srm-inflow-sa.log)"
+  fail=1
+fi
+python3 -B make_case.py srm inflow sst || exit 1
+sed -e 's/^turbulence = SA$/turbulence = SST/' input-srm40.ini > input.ini
+rm -f OUTPUT/field.tec
+"$LOCAL" > OUTPUT/srm-inflow-sst.log 2>&1
+rc=$?
+if [[ $rc -eq 0 && -f OUTPUT/field.tec ]] && ! grep -a -qE 'NaN|Integration failed' OUTPUT/srm-inflow-sst.log && \
+   ! grep -a -q 'Turbulence variables below zero after a stage' OUTPUT/srm-inflow-sst.log; then
+  echo "  [ok  ] srm-inflow-sst: 40 steps with the inflow grain and SST, exit code 0, k and omega never below zero"
+else
+  echo "  [FAIL] srm-inflow-sst: exit code $rc, the run with the inflow grain and SST did not complete as it should (see OUTPUT/srm-inflow-sst.log)"
+  fail=1
+fi
+cp input-srm40.ini input.ini
+
+echo "-- property lines of an SRM grain (502) that cannot be the record of a grain --"
+srmbad() {   # srmbad <kind> <pattern>: the run must stop at set-up with exit code 1, a message matching the pattern, no solution
+  python3 -B make_case.py srmbad "$1" || exit 1
+  rm -f OUTPUT/field.tec
+  timeout 60 "$LOCAL" > "OUTPUT/srmbad-$1.log" 2>&1
+  local rc=$?
+  if [[ $rc -eq 1 && ! -f OUTPUT/field.tec ]] && grep -a -q -E "$2" "OUTPUT/srmbad-$1.log"; then
+    echo "  [ok  ] $1: stopped at set-up, exit code 1"
+  else
+    echo "  [FAIL] $1: exit code $rc, the record was not refused as it should (see OUTPUT/srmbad-$1.log)"
+    fail=1
+  fi
+}
+h='bc.txt line 2 \(record 1, type 502\)'
+srmbad mode3 "$h: mode = 3\.0000000000000000E\+00 is neither 1 \(a wall that blows the gas in\) nor 2 \(an inflow\)"
+srmbad mode15 "$h: mode = 1\.5000000000000000E\+00 is neither 1 \(a wall that blows the gas in\) nor 2 \(an inflow\)"
+srmbad pref0 "$h: p_ref = 0\.0000000000000000E\+00 is not positive: the reference pressure of the burn rate law"
+srmbad mdotneg "$h: mdot_ref = -1\.0000000000000001E-05 is negative: a grain blows gas into the domain"
+srmbad inflow0 "$h: mdot_ref = 0 in mode 2: an inflow needs a mass flux \(a surface that does not burn is a wall, mode 1\)"
+srmbad taf0 "$h: T_af = 0\.0000000000000000E\+00 is not positive: no flame temperature \(the boundary-condition builder of ATLAS writes 0 for a grain without eq-CEA-file\)"
+srmbad tafhigh "$h: T_af = 5\.0000000000000000E\+03 is above 4999 K, one kelvin below the last row of the tables of the gas, where their interpolation ends"
+srmbad short "$h: the line is short or holds a value that is not a number"
+
+echo "-- an SRM grain (502) that blows in another gas than that of the cell --"
+python3 -B make_case.py srmtwogas || exit 1
+rm -f INPUT/phase.txt INPUT/thermo.dat INPUT/transport.dat INPUT/composition.txt
+for f in phase.txt thermo.dat composition.txt; do ln -sf "../../../../1D/diff1/INPUT/$f" "INPUT/$f"; done
+sed -e 's/^iter-threshold = 40$/iter-threshold = 1/' -e 's/^time-accurate = true$/time-accurate = false/' \
+    -e 's/^time-scheme = RK3$/time-scheme = euler/' -e 's/^equations = navier-stokes$/equations = euler/' \
+    -e '/^turbulence = SA$/d' -e '/^schmidt = 0.7$/d' input-srm40.ini > input.ini
+rm -f OUTPUT/diagnostic.tec
+"$LOCAL" > OUTPUT/srm-twogas.log 2>&1
+if [[ -f OUTPUT/diagnostic.tec ]] && python3 -B make_case.py srmtwogascheck OUTPUT/diagnostic.tec; then
+  echo "  [ok  ] srm-twogas: the wall state of the grain takes the gas constant of the gas it blows in, not that of the cell,"
+  echo "         at the static temperature of total T_af, and the gas gets the total enthalpy h(T_af)"
+else
+  echo "  [FAIL] srm-twogas: the wall state or the energy of the grain is not that of the gas it blows in at total T_af (see OUTPUT/srm-twogas.log)"
+  fail=1
+fi
+[[ -f OUTPUT/diagnostic.tec ]] && cp OUTPUT/diagnostic.tec OUTPUT/diagnostic-twogas-wall.tec
+python3 -B make_case.py srmtwogas inflow || exit 1
+rm -f OUTPUT/diagnostic.tec
+"$LOCAL" > OUTPUT/srm-twogas-inflow.log 2>&1
+if [[ -f OUTPUT/diagnostic.tec ]] && python3 -B make_case.py srmtwogascheck OUTPUT/diagnostic.tec OUTPUT/diagnostic-twogas-wall.tec; then
+  echo "  [ok  ] srm-twogas-inflow: the inflow grain gives the face state and the energy of the grain of mode 1"
+else
+  echo "  [FAIL] srm-twogas-inflow: the inflow grain does not give the face state and energy of mode 1 (see OUTPUT/srm-twogas-inflow.log)"
+  fail=1
+fi
+cp input-srm40.ini input.ini
+rm -f INPUT/composition.txt
 
 if [[ $fail -ne 0 ]]; then
   echo "BCInput: FAILED"

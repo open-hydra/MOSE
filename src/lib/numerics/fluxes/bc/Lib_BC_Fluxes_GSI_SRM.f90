@@ -28,11 +28,17 @@ module MOSE_Lib_BC_Fluxes_GSI_SRM
   !<    properties that set the conductive flux follow from it;
   !<  * the heat reaching the surface plays no part in setting the rate, so `q_conv`
   !<    is passed through to the gas energy flux but never fed back.
+  !<
+  !< The flame temperature T_af of the record is the total temperature of the products,
+  !< that of the gas at rest at the end of the flame (the chamber of an equilibrium
+  !< calculation): the products enter with the total enthalpy h(T_af) per unit mass,
+  !< that of the propellant, at the static temperature of `SRM_Static_Temperature`. In
+  !< mode 2 (an inflow) the grain is the inlet 404 at that static temperature (BC_Fluxes).
 
   use iso_fortran_env, only: I4 => int32, R8 => real64
   use MOSE_Advanced_Types_m
   use MOSE_Global_m
-  use FLINT_Lib_Thermodynamic, only: co_rotot_Rtot
+  use FLINT_Lib_Thermodynamic, only: co_rotot_Rtot, f_tabT, h_tab, cp_tab, Ri_tab
   use MOSE_Lib_BC_Fluxes_GSI_Core, only: wall_face_t, Get_Wall_Face, Wall_Gas_State, &
                                          Ablation_Wall_Fluxes, Surface_Is_Ablating, &
                                          RANS_WALL_BLOWING
@@ -40,7 +46,7 @@ module MOSE_Lib_BC_Fluxes_GSI_SRM
   implicit none
   private
 
-  public :: BC_SRM, SRM_Wall_Turbulence
+  public :: BC_SRM, SRM_Wall_Turbulence, SRM_Static_Temperature
 
 contains
 
@@ -62,7 +68,7 @@ contains
     type(wall_face_t) :: face
     real(R8) :: Prim(nprim), rho, Rgas, T_cell
     real(R8) :: rho_wall, Prim_wall(nprim), mu_wall, k_wall
-    real(R8) :: grad_T(3), q_conv, omega(nsc), mdot
+    real(R8) :: grad_T(3), q_conv, omega(nsc), mdot, T_w
 
     call Get_Wall_Face ( Im, Jm, Km, Fm, Blk, face )
 
@@ -71,31 +77,35 @@ contains
     call co_rotot_Rtot ( Prim(1:nsc), rho, Rgas )
     T_cell = Prim(np) / ( rho * Rgas )
 
-    ! The wall temperature is the flame temperature, known up front, so the wall state
-    ! and the conductive flux follow in a single pass. The wall sees the combustion
-    ! products, not the chamber gas, hence the prescribed composition.
-    call Wall_Gas_State ( face, Prim, rho, Rgas, T_cell, Taf, &
-                          rho_wall, Prim_wall(1:nsc), mu_wall, k_wall, grad_T, q_conv, &
-                          y_wall = y_af )
-
     ! Saint-Robert's law, signed by the face orientation the way GSI_Source signs the
     ! ablation models: (-modfm2) is +1 on a low face and -1 on a high one, so the mass
     ! is injected into the domain whichever side of the block the grain sits on.
     mdot  = aCoeff * ( Prim(np) / pRef )**n * (-face % modfm2)
     omega = mdot * y_af
 
+    ! T_af is the total temperature of the products: they leave the wall at the static
+    ! temperature T_w of h(T_w) + u_b^2/2 = h(T_af), u_b = mdot/rho_wall, so that the gas
+    ! gets back the total enthalpy h(T_af) per unit mass, that of the propellant. T_w, known
+    ! up front, gives the wall state and the conductive flux in a single pass. The wall sees
+    ! the combustion products, not the chamber gas, hence the prescribed composition.
+    T_w = SRM_Static_Temperature ( Taf, abs(mdot), Prim(np), y_af )
+    call Wall_Gas_State ( face, Prim, rho, Rgas, T_cell, T_w, &
+                          rho_wall, Prim_wall(1:nsc), mu_wall, k_wall, grad_T, q_conv, &
+                          y_wall = y_af )
+
     ! An inhibited surface (a = 0) injects nothing, and a failed state must not be
     ! turned into a flux. Leave the residual alone and let the caller close the
-    ! boundary with an impermeable wall at the flame temperature instead.
+    ! boundary with an impermeable wall at the flame temperature instead (no flow:
+    ! static and total temperature are T_af).
     burns = Surface_Is_Ablating ( face, mdot, Taf )
     if ( present(burning)   ) burning   = burns
     if ( present(T_surface) ) T_surface = Taf
     if ( .not. burns ) return
 
     ! The gas loses q_conv to the surface and gets back the enthalpy of the injected
-    ! products, evaluated at the flame temperature from the thermodynamic tables. No
-    ! radiative term: the grain is not heated from outside the domain.
-    call Ablation_Wall_Fluxes ( Im, Jm, Km, face, Blk, Prim, rho, Taf, rho_wall, Prim_wall, &
+    ! products at T_w from the thermodynamic tables and their kinetic energy, h(T_af) per
+    ! unit mass. No radiative term: the grain is not heated from outside the domain.
+    call Ablation_Wall_Fluxes ( Im, Jm, Km, face, Blk, Prim, rho, T_w, rho_wall, Prim_wall, &
                                 mu_wall, grad_T, q_gas=q_conv, q_wall=q_conv, &
                                 omega=omega, mdot=mdot, &
                                 rans_wall_model=RANS_WALL_BLOWING, Ovar=Ovar )
@@ -128,9 +138,9 @@ contains
     Prim = Blk % P(:,Im,Jm,Km)
     call co_rotot_Rtot ( Prim(1:nsc), rho, Rgas )
     T_cell = Prim(np) / ( rho * Rgas )
-    call Wall_Gas_State ( face, Prim, rho, Rgas, T_cell, Taf, &
-                          rho_wall, roi_wall, mu_wall, k_wall, grad_T, q_conv, y_wall = y_af )
     mdot = aCoeff * ( Prim(np) / pRef )**n * (-face % modfm2)
+    call Wall_Gas_State ( face, Prim, rho, Rgas, T_cell, SRM_Static_Temperature ( Taf, abs(mdot), Prim(np), y_af ), &
+                          rho_wall, roi_wall, mu_wall, k_wall, grad_T, q_conv, y_wall = y_af )
 
     if ( Surface_Is_Ablating ( face, mdot, Taf ) ) then
       ! the operations of Ablation_Wall_Fluxes
@@ -147,5 +157,40 @@ contains
     end if
 
   end subroutine SRM_Wall_Turbulence
+
+  pure real(R8) function SRM_Static_Temperature ( T0, g, p, y ) result ( T )
+    !< Static temperature of the products of mass fractions `y` that cross a face with the mass flux `g` >= 0
+    !< (kg/(m^2 s)) at the pressure `p` and have the total temperature `T0` (the T_af of a grain, 502): the root of
+    !< h(T) + u(T)^2/2 = h(T0), u = g R T / p, with h and R of the tables of the gas (f_tabT, Ri_tab), as every state of
+    !< MOSE, so that the gas carries the total enthalpy h(T0). The left side grows with T and is not below h(T0) at T0:
+    !< Newton from T0 comes down to the root (T0 - T = u^2/(2 cp): 2.5e-3 K at 20 kg/(m^2 s) and 7 MPa for products of
+    !< 371 J/(kg K)), in two or three steps; cp of the tables as the slope. g = 0 gives T0.
+    implicit none
+    real(R8), intent(in) :: T0, g, p, y(nsc)
+    ! Local
+    integer  :: it, s
+    real(R8) :: R, a2, h0, F, dF, dT
+
+    T = T0
+    if ( g == 0d0 ) return
+    R  = sum ( y * Ri_tab(1:nsc) )
+    a2 = ( g * R / p )**2                       ! u^2 = a2 T^2
+    h0 = 0d0
+    do s = 1, nsc
+      h0 = h0 + y(s) * f_tabT ( T0, s, h_tab )
+    end do
+    do it = 1, 50
+      F  = 0.5d0 * a2 * T * T - h0
+      dF = a2 * T
+      do s = 1, nsc
+        F  = F  + y(s) * f_tabT ( T, s, h_tab )
+        dF = dF + y(s) * f_tabT ( T, s, cp_tab )
+      end do
+      dT = F / dF
+      T  = T - dT
+      if ( abs(dT) <= 1d-12 * T0 ) exit
+    end do
+
+  end function SRM_Static_Temperature
 
 end module MOSE_Lib_BC_Fluxes_GSI_SRM
