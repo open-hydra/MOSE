@@ -489,10 +489,9 @@ mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;phys
 
 # Reynolds-stress model (SSGLRR and its variants): isotropic turbulence carried by a
 # uniform stream through an axisymmetric wedge, checked against the closed form of
-# its decay and for energy conservation. The only case in the suite that runs the
-# model; the turbulent flat plate (2D/viscous/flat-plate-turbulent/SSGLRR) is too
-# long for CTest. Validation tier: four runs, 52 s of CPU at one thread on a loaded
-# machine, hence a TIMEOUT of its own.
+# its decay and for energy conservation (FlatPlateTMR runs the model on the flat
+# plate of the NASA TMR). Validation tier: four runs, 52 s of CPU at one thread on
+# a loaded machine, hence a TIMEOUT of its own.
 mose_add_fast_script(RSMDecay 2D/viscous/rsm-decay "validation;physics;2D")
 if(TEST RSMDecay)
     set_tests_properties(RSMDecay PROPERTIES TIMEOUT 300)

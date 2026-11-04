@@ -1,9 +1,9 @@
 # Reynolds-stress model: decay of isotropic turbulence
 
 Verification case for the SSG/LRR-omega Reynolds-stress model (`turbulence =
-SSGLRR` and its variants), against an analytic solution. It is the only case of
-the CTest suite that runs the model: the turbulent flat plate
-(`../flat-plate-turbulent/SSGLRR`) takes 100,000 iterations.
+SSGLRR` and its variants), against an analytic solution. The flat plate of the
+NASA TMR (`../flat-plate-turbulent-tmr`, `FlatPlateTMR`) runs the model too,
+against CFL3D and TAU.
 
 ## Setup
 

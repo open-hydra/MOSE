@@ -17,9 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sets its wall value of omega, blowing walls have their own routine, and omega is kept positive. The boundaries carry the
   stress tensor: walls take the wall values in the wall stress, symmetry planes of any orientation reflect it, faces of
   type `200` turn it with the velocity, and inflow, outflow and extrapolation faces carry the Reynolds stress of the
-  boundary cell in the momentum and energy fluxes. Tests: `RSMDecay` (fast tier, the four variants against the closed-form
-  decay of isotropic turbulence on an axisymmetric wedge) and the turbulent flat plate
-  (`test/2D/viscous/flat-plate-turbulent/SSGLRR`, outside CTest; docs/vv/2D-flat-plate-turbulent.md).
+  boundary cell in the momentum and energy fluxes. Tests: `RSMDecay` (validation tier, the four variants against the
+  closed-form decay of isotropic turbulence on an axisymmetric wedge) and the flat plate of the NASA TMR
+  (`FlatPlateTMR` and `FlatPlateTMRFull`, `test/2D/viscous/flat-plate-turbulent-tmr`): SSG/LRR on its three grids
+  against CFL3D and TAU.
 
 - Extrapolation faces (`400`) report the gas that enters the domain through them, which they let in with the state of the
   boundary cell, as they take the flux of the cell state for either direction of the gas. The first time the gas enters
@@ -344,6 +345,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- The turbulent flat plate with boundary conditions of its own (`test/2D/viscous/flat-plate-turbulent`, SA, SST,
+  Wilcox 2006 and SSG/LRR, outside CTest) and its V&V page: the flat plate of the NASA TMR, with the boundary conditions
+  of the TMR, covers the four models on three grids of the same family.
 - The value `inverse-mean` of `diffusive-metric` (`[MOSE-Numerics]`): the key takes `stencil`, the default, exact for a
   linear field on any mesh, or `mean`. A deck that names `inverse-mean` stops at set-up. The inverse-mean face metric stays
   where the code takes it whatever the key: the chimera faces, and with `mean` the faces between blocks and of type `200`.

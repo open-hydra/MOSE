@@ -88,8 +88,7 @@ test/
 │   │   └── isentropic-vortex/ # Isentropic vortex convection (N1): order of accuracy on 32/64/128 grids
 │   └── viscous/               # Viscous cases
 │       ├── flat-plate-laminar/
-│       ├── flat-plate-turbulent/  # Subdirs: SA/ SST/ Wilcox2006/ SSGLRR/
-│       ├── flat-plate-turbulent-tmr/ # Flat plate of the NASA TMR on three grids, SA, SST, Wilcox 2006 (validation tier; full form: verification)
+│       ├── flat-plate-turbulent-tmr/ # Flat plate of the NASA TMR on three grids, SA, SST, Wilcox 2006, SSG/LRR (validation tier; full form: verification)
 │       ├── rsm-decay/             # Reynolds-stress model vs closed-form decay
 │       ├── ablating-wall/     # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column
 │       ├── mms/                   # residuals/: right-hand sides on manufactured fields (RANS, wedge); skewed/: order on skewed grids (validation tier)
