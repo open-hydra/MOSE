@@ -70,7 +70,7 @@ against its criterion, *runs* where it has none (the run ends with exit status 0
 | `2D/viscous/mms/skewed` | `2D-mms-skewed.md` | `MMSViscousSkewed` | manufactured solutions | `verify.py` (N2) | CTest |
 | `3D/viscous/mms` | `3D-mms.md` | `MMSViscous3D`, `MMSViscous3DFull` | manufactured solutions | `verify.py` (N2) | CTest |
 | `2D/viscous/planar-nozzle` | `2D-planar-nozzle-grids.md` | `PlanarNozzleGrids` | mirror symmetry of O and H grids | `verify.py` (N8) | CTest |
-| `2D/viscous/flat-plate-turbulent-tmr` | `2D-flat-plate-turbulent-tmr.md` | `FlatPlateTMR`, `FlatPlateTMRFull` | c_f of CFL3D and FUN3D on the five grids of the TMR (`reference/tmr/`); the converged MOSE solutions of the 35x25 grid (`reference/`) | `verify.py` | CTest |
+| `2D/viscous/flat-plate-turbulent-tmr` | `2D-flat-plate-turbulent-tmr.md` | `FlatPlateTMR`, `FlatPlateTMRFull` | c_f of CFL3D and FUN3D (SSGLRR: CFL3D and TAU) on the five grids of the TMR (`reference/tmr/`); the converged MOSE solutions of the 35x25 grid (`reference/`) | `verify.py` | CTest |
 | `2D/viscous/ablating-wall` | `2D-ablating-wall.md` | `AblatingWall` | closed form of the wall state | `run.sh` (P1) | CTest |
 | `1D/Fer14` | `1D-fer14.md` | outside | digitized velocity and temperature profiles (`reference/*.csv`) | none: `verify.py` plots | runs |
 | `1D/diff1` | `1D-diffusion.md` | outside | Cantera (`reference/reference_unity_lewis.py`); MOSE fields in `reference/` | none: no verifier in the folder | runs |
@@ -404,13 +404,18 @@ grids and of N8, take ~76 s, ~20 s and ~72 s of CPU time at one thread: they are
 **validation** tier, with a TIMEOUT of 900 s as `MMSViscous`.
 
 `FlatPlateTMR` ([`2D/viscous/flat-plate-turbulent-tmr`](2D/viscous/flat-plate-turbulent-tmr)),
-the short form of the flat plate of the NASA TMR, restarts each of its three models for
-5000 iterations from the converged 35x25 solution: 70.5 and 70.6 s of CPU time at one
-thread in two measurements (gfortran 13 `TESTING`, a machine with 192 logical CPUs at a
-load average of 50-53), so it is in the **validation** tier, with a TIMEOUT of 300 s.
-Its full form, `FlatPlateTMRFull` (label `verification`), runs the nine cases of the
-V&V page to 300 000 iterations: about 24.5 h at one thread, an estimate from the solver
-time per iteration of a chain of 500 iterations, with a TIMEOUT of 49 h.
+the short form of the flat plate of the NASA TMR, restarts each of its four models for
+5000 iterations from the converged 35x25 solution: 143 and 145 s of CPU time at one
+thread in two measurements on a machine with 96 logical CPUs at a load average of 74-75,
+152 and 154 s on one with 192 at 63-147 (gfortran 13 `TESTING`; SSG/LRR 41 to 45 s of
+it), so it is in the **validation** tier, with a TIMEOUT of 600 s. (The 70.5 s of the
+three models of before, recorded when the case was added, do not reproduce: on the first
+machine they take 99 and 107 s with the code before SSG/LRR, 102 and 103 s with it.)
+Its full form, `FlatPlateTMRFull` (label `verification`), runs the twelve cases of the
+V&V page to 300 000 iterations: about 51 h at one thread, an estimate from the solver
+time per iteration of a chain of 500 iterations (on the first machine; 36 h of it for
+SA, SST and Wilcox 2006, which were estimated at 24.5 h when the case was added), with a
+TIMEOUT of 103 h.
 
 ---
 

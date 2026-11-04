@@ -3,16 +3,17 @@
 #          FILE: MOSE.sh
 #   DESCRIPTION: turbulent flat plate of the NASA Turbulence Modeling Resource
 #                (TMR) on three grids of the TMR family (35x25, 69x49 and
-#                137x97 nodes), with the Spalart-Allmaras, SST and Wilcox 2006
-#                models
+#                137x97 nodes), with the Spalart-Allmaras, SST, Wilcox 2006
+#                and SSG/LRR-omega models
 #
 #   Every run has its own folder, RUN/<model>-<grid>: make_case.py writes its
 #   INPUT/ic.tec and INPUT/bc.txt, input-<model>.ini its input.ini with the
 #   iterations of the form, and test/common/Air-viscous its gas.
 #
-#   test (full form): the nine runs from the uniform field, 300 000 iterations
-#     each, a numbered solution every 20 000 (long: about 24.5 h at one thread
-#     in a TESTING build; use -p);
+#   test [model ...] (full form): the runs of the models named (all four when
+#     none is) on the three grids from the uniform field, 300 000 iterations
+#     each, a numbered solution every 20 000 (long: the four models take about
+#     51 h at one thread in a TESTING build, SSGLRR 15 h of it; use -p);
 #   testfast (short form, for CTest): for each model, a restart of 5000
 #     iterations from the converged 35x25 solution of the full form
 #     (reference/field-35x25-<model>.tec), in RUN/<model>-35x25-short;
@@ -22,8 +23,9 @@
 function print_usage {
   echo
   echo "Tasks"
-  echo " test                  -->     full form: SA, SST, Wilcox2006 on 35x25, 69x49, 137x97, from the uniform field"
-  echo " testfast              -->     short form: SA, SST, Wilcox2006 restarted from reference/field-35x25-<model>.tec"
+  echo " test [model ...]      -->     full form: the models named (default SA, SST, Wilcox2006, SSGLRR) on"
+  echo "                               35x25, 69x49, 137x97, from the uniform field"
+  echo " testfast              -->     short form: each model restarted from reference/field-35x25-<model>.tec"
   echo " solve <model> <grid>  -->     one run of the full form, e.g. solve SA 35x25"
   echo
   echo "Solver options"
@@ -37,7 +39,7 @@ function print_usage {
 MASTERDIR=../../../../
 MASTER=$MASTERDIR/bin/MOSE
 LOCAL=./bin/MOSE
-MODELS="SA SST Wilcox2006"
+MODELS="SA SST Wilcox2006 SSGLRR"
 GRIDS="35x25 69x49 137x97"
 ITER_FULL=300000
 ITER_SHORT=5000
@@ -97,9 +99,12 @@ if [[ $1 == solve || $1 == test || $1 == testfast ]]; then
       RUNS="$2:$3"
       echo "solve $ITER" > RUN/form.txt
     else
+      shift
+      for MODEL in "$@"; do [[ " $MODELS " == *" $MODEL "* ]] || print_usage; done
+      [[ $# -gt 0 ]] && MODELS="$*"
       RUNS=""
       for MODEL in $MODELS; do for GRID in $GRIDS; do RUNS="$RUNS $MODEL:$GRID"; done; done
-      echo "test $ITER" > RUN/form.txt
+      echo "test $ITER $MODELS" > RUN/form.txt
     fi
     for RUN in $RUNS; do
       IFS=: read -r MODEL GRID <<< "$RUN"

@@ -27,6 +27,8 @@ inflow):
          TMR, p0/p_inf = 1.02828 and T0/T_inf = 1.008, flow normal to the face,
          and the free-stream turbulence of the TMR: SA nu~ = 3 nu_inf; SST and
          Wilcox 2006 k = 9e-9 a_inf^2 and omega = 1e-6 rho_inf a_inf^2/mu_inf;
+         SSGLRR the isotropic stresses R11 = R22 = R33 = 6e-9 a_inf^2 (the same
+         k), R12 = R13 = R23 = 0 and the same omega (the values of CFL3D);
   face 2 (outflow, x = 2) and face 4 (top, y = 1): type 406 at p_inf. MOSE has
          no far-field condition with a moving free stream (type 407 is a
          reservoir at rest), so the top boundary is an outflow at the
@@ -42,9 +44,10 @@ digits (1.1858686e-5 Pa s).
 Initial field: the uniform state that ATLAS ICB writes for p0 = 1.02828e5 Pa,
 T = 555 K and M = 0.2 with the gas of test/common/Air-viscous, with
 nu~ = 1e-6 m^2/s (SA) or k = 2.25e-3 m^2/s^2 and omega = 6250 1/s (SST,
-Wilcox 2006), density-weighted as MOSE reads them.
+Wilcox 2006; SSGLRR the isotropic stresses of that k, R11 = R22 = R33 =
+1.5e-3 m^2/s^2, and zero shear stresses), density-weighted as MOSE reads them.
 
-Usage: python3 make_case.py --model SA|SST|Wilcox2006 --grid 35x25|69x49|137x97 [--out DIR]
+Usage: python3 make_case.py --model SA|SST|Wilcox2006|SSGLRR --grid 35x25|69x49|137x97 [--out DIR]
 (DIR defaults to the current folder; DIR/INPUT/bc.txt and DIR/INPUT/ic.tec
 are written, replacing files of the same name).
 """
@@ -52,7 +55,7 @@ import argparse
 import math
 import os
 
-MODELS = ('SA', 'SST', 'Wilcox2006')
+MODELS = ('SA', 'SST', 'Wilcox2006', 'SSGLRR')
 GRIDS = {'35x25': 4, '69x49': 3, '137x97': 2}   # levels below the finest grid of the TMR family (545x385)
 
 T_INF, P_INF = 555.0, 1.0e5                     # free stream [K, Pa]
@@ -75,11 +78,14 @@ BC_WALL = '    0.000000E+00,    0.000000E+00,    0.000000E+00,'   # 301: adiabat
 
 
 def tmr_turbulence(model):
-    """Free-stream turbulence of the TMR: [nu~] for SA, [k, omega] for SST and Wilcox 2006."""
+    """Free-stream turbulence of the TMR: [nu~] for SA, [k, omega] for SST and Wilcox 2006,
+    [R11, R22, R33, R12, R13, R23, omega] for SSGLRR."""
     rho = P_INF / (R_GAS * T_INF)
     a2 = GAMMA * R_GAS * T_INF
     if model == 'SA':
         return [3.0 * MU_INF / rho]
+    if model == 'SSGLRR':
+        return [6.0e-9 * a2] * 3 + [0.0] * 3 + [1.0e-6 * rho * a2 / MU_INF]
     return [9.0e-9 * a2, 1.0e-6 * rho * a2 / MU_INF]
 
 
@@ -118,7 +124,8 @@ def read_p2dfmt(path):
 
 
 def write_ic(path, model, ni, nj, x, y):
-    turb = ['rhoNuTilde'] if model == 'SA' else ['rhoK', 'rhoOmega']
+    turb = {'SA': ['rhoNuTilde'], 'SSGLRR': ["ru'u'", "rv'v'", "rw'w'", "ru'v'", "ru'w'", "rv'w'", 'rhoOmega']}.get(
+        model, ['rhoK', 'rhoOmega'])
     ncell = (ni - 1) * (nj - 1)
     out = [' VARIABLES = x y z  rho1 u v w p ' + ' '.join(turb),
            ' ZONE  T = B1-IG, I=%d, J=%d, K=2, DATAPACKING=BLOCK, VARLOCATION=([1-3]=NODAL,[4-%d]=CELLCENTERED), '
@@ -128,10 +135,12 @@ def write_ic(path, model, ni, nj, x, y):
         out += col + col                         # the two planes k = 1, 2
     out += ['-' + Z_PLANE] * (ni * nj) + [' ' + Z_PLANE] * (ni * nj)
     bands = [IC_RHO, IC_U, IC_ZERO, IC_ZERO, IC_P]
+    rho = float(IC_RHO)
     if model == 'SA':
         bands.append(IC_RHO_NUT)
+    elif model == 'SSGLRR':
+        bands += [ic_format(rho * 2.0 / 3.0 * K_IC)] * 3 + [IC_ZERO] * 3 + [ic_format(rho * W_IC)]
     else:
-        rho = float(IC_RHO)
         bands += [ic_format(rho * K_IC), ic_format(rho * W_IC)]
     for b in bands:
         out += [b] * ncell
