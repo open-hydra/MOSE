@@ -35,6 +35,7 @@ contains
     use MOSE_Mod_Timers,           only: timer_run_begin
     use MOSE_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index, &
                                          allocate_exchange_schedules
+    use MOSE_Mod_Multirate,        only: Multirate_Check_Config
     implicit none
     type(MOSE_simulation_type), intent(inout) :: simulation
     ! Local
@@ -60,6 +61,7 @@ contains
     setup_error = .false.
     if (mpi_is_root) call Check_Input ( setup_error )
     call Stop_Together ( setup_error, 'input file error (see above)' )
+    call Multirate_Check_Config ()   ! multirate: configurations outside its scope stop here (every rank)
 
     ! Allocate container objects Domain and IOfield.
     allocate ( simulation%domain  ( obj_multigrid%MGL ) )

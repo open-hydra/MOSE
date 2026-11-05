@@ -16,6 +16,7 @@ contains
     use MOSE_Lib_RANS
     use MOSE_Config_Types_m, only: obj_time_scheme
     use MOSE_Mod_MPI, only: is_local_block, mpi_allreduce_min_r8
+    use MOSE_Mod_Timers, only: timer_sync_begin, timer_sync_end
     use MOSE_Lib_Metrics, only: delthe
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
@@ -91,8 +92,11 @@ contains
       !$omp end parallel
     enddo ! end of loop over blocks
 
-    ! MPI: global minimum across all ranks
+    ! MPI: global minimum across all ranks, a collective of the iteration: the time a rank waits there for the others is
+    ! part of the collective wait of MOSE_Mod_Timers, as that of the reduction of the residual (Explicit_Step)
+    call timer_sync_begin()
     call mpi_allreduce_min_r8(dtglobal, dtglobal_mpi)
+    call timer_sync_end()
     domain % dtglobal = dtglobal_mpi
 
     contains

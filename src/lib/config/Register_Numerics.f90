@@ -31,9 +31,13 @@ contains
 
     ! Stability coefficients and related options
     call reg%add( trim(section), 'cfl', obj_time_scheme%cfl, '0.5', &
-                  'CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17)', '> 0', .true., KEY_TAKEN )
+                  'CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17; at most 1 '// &
+                  'with the multirate integrator on ([MOSE-Multirate] enabled = .true., max-level > 0 and nonlocal-cfl = '// &
+                  'redo, levels = recompute and no fixed-macro-step))', '> 0', .true., KEY_TAKEN )
     call reg%add( trim(section), 'vnn', obj_time_scheme%vnn, '0.3', &
-                  'Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62)', &
+                  'Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62; at most '// &
+                  '0.5 in a Navier-Stokes run with the multirate integrator on ([MOSE-Multirate] enabled = .true., '// &
+                  'max-level > 0 and nonlocal-cfl = redo, levels = recompute and no fixed-macro-step))', &
                   '> 0', .false., KEY_TAKEN )
     call reg%add( trim(section), 'cfl-rise-threshold', obj_time_scheme%rampa_cfl_iter, '0', 'CFL rise threshold', '>= 0', .false., KEY_TAKEN )
 
@@ -112,10 +116,69 @@ contains
     ! Multigrid levels --------------------------------------
     call Register_Multigrid_Levels(nmgl)
 
+    ! Multirate (local time stepping) ----------------------
+    call Register_Multirate()
+
     !! ------------------------------------------------------
     !! ------------------------------------------------------
 
   end subroutine Register_Numerics
+
+
+  subroutine Register_Multirate()
+    !> Keys of the multirate integrator (MOSE_Mod_Multirate), section [MOSE-Multirate].
+    use MOSE_Config_Types_m
+    use MOSE_Parameters_m
+    implicit none
+    character(len=llen) :: section
+
+    section = trim(codename)//'-Multirate'
+
+    obj_multirate%warning_message = 'none'
+    obj_multirate%error_message   = 'none'
+    obj_multirate%description     = 'none'
+
+    call reg%add( trim(section), 'enabled', obj_multirate%enabled, '.false.', 'Multirate local time stepping: recursive &
+      &Heun (SSP-RK2) with a level per cell, time-accurate runs only', 'logical', .false., KEY_FIXED )
+    call reg%add( trim(section), 'max-level', obj_multirate%max_level, '10', &
+      'Deepest level allowed (at most 50): the map of the adaptive step takes L = max-level levels below level 0, or fewer '// &
+      'when the local steps span fewer octaves or macro-step-target gives a shorter H, so that H stays within the step of '// &
+      'the slowest cells divided by safety; the finest cells advance with H/2^L', 'in [0, 50]', .false., KEY_FIXED )
+    call reg%add( trim(section), 'safety', obj_multirate%safety, '2.0', &
+      'Safety factor sigma: every cell advances with a sub-step h <= dtcap/sigma (dtcap = local CFL/VNN step); '// &
+      'the default 2 keeps every cell, at the start of a macro step, within the admissible step of each face neighbour '// &
+      'without the interface margin', &
+      '>= 1', .false., KEY_FIXED )
+    call reg%add( trim(section), 'macro-step-target', obj_multirate%macro_step_target, '0.0', &
+      'Target macro step H [s]; 0 = none (H set by the level map, within the step of the slowest cells divided by safety)', &
+      '>= 0', .false., KEY_FIXED )
+    call reg%add( trim(section), 'levels', obj_multirate%levels, 'recompute', &
+      'Level map: computed at the first macro step and kept (fixed) or recomputed from the local steps (recompute)', &
+      'fixed, recompute', .false., KEY_FIXED )
+    call reg%add( trim(section), 'recompute-every', obj_multirate%recompute_every, '1', &
+      'Macro steps between two recomputations of the level map (levels = recompute)', '> 0', .false., KEY_FIXED )
+    call reg%add( trim(section), 'fixed-macro-step', obj_multirate%fixed_macro_step, '0.0', 'Fixed macro step as a multiple &
+      &of the dt_min of the first macro step; 0 = adaptive (verification runs)', '>= 0', .false., KEY_FIXED )
+    call reg%add( trim(section), 'conservative-correction', obj_multirate%conservative_correction, '.true.', 'Conservative &
+      &flux correction at the faces between levels (.false. only as a positive control)', 'logical', .false., KEY_FIXED )
+    call reg%add( trim(section), 'trace', obj_multirate%trace, '.false.', 'Print the stage sequence, the level map and the &
+      &halo lists of the first macro step (standard output)', 'logical', .false., KEY_FIXED )
+    call reg%add( trim(section), 'nonlocal-cfl', obj_multirate%nonlocal_cfl, 'redo', &
+      'Condition (4) of Gnedin et al. checked at every sub-step start: off; count (counts only); redo (a macro step that '// &
+      'fails it is redone from its start with finer levels or a smaller H, with the interface margin; a macro step in '// &
+      'which a cell or a face takes a state that is not physical is redone with H halved (with more than one level))', &
+      'off, count, redo', .false., KEY_FIXED )
+    call reg%add( trim(section), 'interface-margin', obj_multirate%interface_margin, '.false.', &
+      'Faces between levels: the coarse step within dtcap/kappa of the fine cell, kappa = max(cfl (1 + theta) of the '// &
+      'limiter, 1.1) (always on with nonlocal-cfl = redo)', 'logical', .false., KEY_FIXED )
+    call reg%add( trim(section), 'force-redo', obj_multirate%force_redo, '.false.', &
+      'Test device of nonlocal-cfl = redo: the first attempt of every macro step is rejected and redone with the same '// &
+      'macro step and level map, so the results must not change', 'logical', .false., KEY_FIXED )
+    call reg%add( trim(section), 'max-attempts', obj_multirate%max_attempts, '21', &
+      'nonlocal-cfl = redo: attempts of a macro step at most (an attempt rejected by force-redo is not counted); when they '// &
+      'are all rejected the run stops with the rejections by cause', '>= 1', .false., KEY_FIXED )
+
+  end subroutine Register_Multirate
 
 
   subroutine Register_Multigrid_Levels(nmgl)

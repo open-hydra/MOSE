@@ -3,11 +3,16 @@ module MOSE_Lib_Convective
 
   implicit none
   private
-  public :: Convective_Flux
+  public :: Convective_Flux, Interface_State_Lines
 
 contains
 
-  subroutine Convective_Flux ( dl, normal, area, Prim, Res, beta, Ur_0, Ur_1, loc )
+  !> Convective flux of the face between the cells 0 and 1 of the stencil Prim(:,-1:2), added to Res. A reconstructed state
+  !> that is not physical (check_gas_state: negative pressure, temperature outside the tables) stops the run with the lines
+  !> of Interface_State_Lines, unless the caller passes event: then the routine adds no flux, writes no line, returns the
+  !> two error flags of check_gas_state in event and the two reconstructed states in state_lr. The caller sets event to
+  !> zero before the call; on a physical face the routine does not touch event and state_lr.
+  subroutine Convective_Flux ( dl, normal, area, Prim, Res, beta, Ur_0, Ur_1, loc, event, state_lr )
     use MOSE_Global_m
     use MOSE_Lib_Reconstruction, only: Reconstruction
     use MOSE_Mod_Riemann
@@ -20,6 +25,8 @@ contains
     real(R8), intent(in) :: beta
     real(R8), intent(in) :: Ur_0, Ur_1
     integer, intent(in), optional :: loc(5)   ! b, dir, i, j, k of the face (cells i, i+1 along dir): error messages only
+    integer, intent(inout), optional :: event(2)               ! error flags of the left and right states, see above
+    real(R8), intent(inout), optional :: state_lr(nprim,2)     ! the left and right reconstructed states, see above
     ! Local
     real(R8) :: l0, l1, l2, lm, lp
     real(R8), dimension(nprim) :: Prim1, Prim4
@@ -40,19 +47,15 @@ contains
     call check_gas_state ( Prim1(1:nsc), Prim1(np), error1 )
     call check_gas_state ( Prim4(1:nsc), Prim4(np), error4 )
     if (error1 /= 0 .or. error4 /= 0) then
-      write(*,*) '[ERROR] non-physical state detected at the interface.'
-      if (error1 == 1 .or. error4 == 1) then
-        write(*,*) '        Negative pressure'
-      else
-        write(*,*) '        Out-of-bounds temperature'
+      if (present(event)) then
+        event = [error1, error4]
+        if (present(state_lr)) then
+          state_lr(:,1) = Prim1
+          state_lr(:,2) = Prim4
+        end if
+        return
       end if
-      if (present(loc)) write(*,'(A,I0,A,I0,A,3(1X,I0))') &
-        ' [ERROR]   block ', loc(1), ', face between cell (i,j,k) and its +1 neighbour along dir ', loc(2), ':', loc(3:5)
-      write(*,'(A,2(1X,I0))') ' [ERROR]   error flags L, R:', error1, error4
-      write(*,'(A,*(1X,ES12.4))') ' [ERROR]   rho_s u v w p  L:', Prim1(1:np)
-      write(*,'(A,*(1X,ES12.4))') ' [ERROR]   rho_s u v w p  R:', Prim4(1:np)
-      write(*,'(A,*(1X,ES12.4))') ' [ERROR]   stencil p   (cells -1..2):', Prim(np,-1:2)
-      write(*,'(A,*(1X,ES12.4))') ' [ERROR]   stencil rho (cells -1..2):', sum(Prim(1:nsc,-1:2),dim=1)
+      call Interface_State_Lines ( error1, error4, Prim1, Prim4, Prim, loc )
       ! stop 1, not mpi_abort_all: this runs inside OpenMP threads and MPI is
       ! initialised FUNNELED. The non-zero exit code makes the launcher end the other ranks.
       stop 1
@@ -92,6 +95,33 @@ contains
     Res (:,1) = Res (:,1) - Flux
     
   end subroutine Convective_Flux
+
+
+  !> The lines of a face with a reconstructed state that is not physical: what check_gas_state found (error1, error4 of
+  !> the left and right states Prim1, Prim4), the face (loc: block, direction, i, j, k), the two states and the pressure and
+  !> the density of the stencil Prim(:,-1:2).
+  subroutine Interface_State_Lines ( error1, error4, Prim1, Prim4, Prim, loc )
+    use MOSE_Global_m, only: nprim, nsc, np
+    implicit none
+    integer, intent(in) :: error1, error4
+    real(R8), intent(in) :: Prim1(nprim), Prim4(nprim), Prim(nprim,-1:2)
+    integer, intent(in), optional :: loc(5)
+
+    write(*,*) '[ERROR] non-physical state detected at the interface.'
+    if (error1 == 1 .or. error4 == 1) then
+      write(*,*) '        Negative pressure'
+    else
+      write(*,*) '        Out-of-bounds temperature'
+    end if
+    if (present(loc)) write(*,'(A,I0,A,I0,A,3(1X,I0))') &
+      ' [ERROR]   block ', loc(1), ', face between cell (i,j,k) and its +1 neighbour along dir ', loc(2), ':', loc(3:5)
+    write(*,'(A,2(1X,I0))') ' [ERROR]   error flags L, R:', error1, error4
+    write(*,'(A,*(1X,ES12.4))') ' [ERROR]   rho_s u v w p  L:', Prim1(1:np)
+    write(*,'(A,*(1X,ES12.4))') ' [ERROR]   rho_s u v w p  R:', Prim4(1:np)
+    write(*,'(A,*(1X,ES12.4))') ' [ERROR]   stencil p   (cells -1..2):', Prim(np,-1:2)
+    write(*,'(A,*(1X,ES12.4))') ' [ERROR]   stencil rho (cells -1..2):', sum(Prim(1:nsc,-1:2),dim=1)
+
+  end subroutine Interface_State_Lines
 
 
   subroutine Sanitize_Primitive_State(state)

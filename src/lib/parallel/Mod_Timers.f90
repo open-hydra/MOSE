@@ -1,8 +1,15 @@
 !>@brief Wall-clock instrumentation of the solver loop.
 !> Every rank accumulates the time spent in one `Explicit_Step`, the time
-!> blocked on the ghost-cell exchange and the time blocked on collectives.
+!> blocked on the exchanges between the ranks (the wait for their messages and
+!> the copy from the receive buffers, between `timer_comm_begin` and
+!> `timer_comm_end`) and the time blocked on collectives (between
+!> `timer_sync_begin` and `timer_sync_end`).
 !> The accumulators are reduced over the ranks and reported every `timer-diter`
-!> iterations (0 = off) and once at the end of the run.
+!> iterations (0 = off) and once at the end of the run. A run that turns it on
+!> (`timer_xstart_enable`: the multirate integrator, on several ranks) also
+!> accumulates the start of its exchanges (receives and sends posted, send
+!> buffers filled, between `timer_xstart_begin` and `timer_xstart_end`), a part
+!> of the work of the rank that the end-of-run summary gives on its own line.
 !>
 !> Times are reported as the **maximum** over the ranks, which is the critical
 !> path and therefore what sets the time to solution; the spread between the
@@ -28,6 +35,7 @@ module MOSE_Mod_Timers
     real(R8) :: wmin = 0.0_R8       !< compute time, min
     real(R8) :: wavg = 0.0_R8       !< compute time, mean
     real(R8) :: wspread = 0.0_R8    !< (wmax-wavg)/wavg, %
+    real(R8) :: xstartfrac = 0.0_R8 !< start of the exchanges, part of the compute, %
     integer  :: rmax = 0            !< rank holding wmax
     integer  :: rmin = 0            !< rank holding wmin
   end type stats_type
@@ -46,11 +54,16 @@ module MOSE_Mod_Timers
   real(R8) :: t_run_sync = 0.0_R8   !< collective wait over the whole run
   integer  :: n_run = 0             !< iterations over the whole run
 
+  logical  :: xstart_on = .false.   !< the run times the start of its exchanges
+  real(R8) :: t_xstart_beg = 0.0_R8 !< start of the current start of an exchange
+  real(R8) :: t_run_xstart = 0.0_R8 !< start of the exchanges over the whole run
+
   public :: timer_wtime
   public :: timer_run_begin, timer_summary
   public :: timer_iter_begin, timer_iter_end
   public :: timer_comm_begin, timer_comm_end
   public :: timer_sync_begin, timer_sync_end
+  public :: timer_xstart_enable, timer_xstart_begin, timer_xstart_end
   public :: timer_report
 
 contains
@@ -77,6 +90,7 @@ contains
     t_run_comm = 0.0_R8
     t_run_sync = 0.0_R8
     n_run      = 0
+    t_run_xstart = 0.0_R8
 
     t_iter_acc = 0.0_R8
     t_comm_acc = 0.0_R8
@@ -108,19 +122,24 @@ contains
   end subroutine timer_comm_begin
 
 
-  !> Close the exchange-wait timer and accumulate.
-  subroutine timer_comm_end()
-    real(R8) :: dt
-    dt = timer_wtime() - t_comm_beg
-    t_comm_acc = t_comm_acc + dt
-    t_run_comm = t_run_comm + dt
+  !> Close the exchange-wait timer and accumulate; dt, when present, returns the
+  !> time just accumulated, for a caller that keeps its own record of it.
+  subroutine timer_comm_end(dt)
+    real(R8), intent(out), optional :: dt
+    real(R8) :: d
+    d = timer_wtime() - t_comm_beg
+    t_comm_acc = t_comm_acc + d
+    t_run_comm = t_run_comm + d
+    if (present(dt)) dt = d
   end subroutine timer_comm_end
 
 
-  !> Open the collective timer: the residual reduction and the control
-  !> broadcasts. These are synchronisation points, so a rank that finished its
-  !> own work early blocks here — which is where load imbalance shows up when
-  !> the halo exchange does not reveal it.
+  !> Open the collective timer: the reduction of the local time steps
+  !> (`Compute_dt`), the residual reduction and the control broadcasts of
+  !> `Explicit_Step`, and in multirate runs the reductions of the macro step
+  !> (MOSE_Mod_Multirate). These are synchronisation points, so a
+  !> rank that finished its own work early blocks here — which is where load
+  !> imbalance shows up when the halo exchange does not reveal it.
   subroutine timer_sync_begin()
     t_sync_beg = timer_wtime()
   end subroutine timer_sync_begin
@@ -135,9 +154,32 @@ contains
   end subroutine timer_sync_end
 
 
+  !> After this call the run times the start of its exchanges, and the end-of-run
+  !> summary gives it. Every rank must call it, or none: the summary reduces
+  !> that time over the ranks.
+  subroutine timer_xstart_enable()
+    xstart_on = .true.
+  end subroutine timer_xstart_enable
+
+
+  !> Open the timer of the start of an exchange (the receives and the sends
+  !> posted, the send buffers filled). Call from a single-threaded region only.
+  !> That time stays in the work of the rank: it is not part of the exchange
+  !> wait nor of the collective wait.
+  subroutine timer_xstart_begin()
+    t_xstart_beg = timer_wtime()
+  end subroutine timer_xstart_begin
+
+
+  !> Close the timer of the start of an exchange and accumulate.
+  subroutine timer_xstart_end()
+    t_run_xstart = t_run_xstart + (timer_wtime() - t_xstart_beg)
+  end subroutine timer_xstart_end
+
+
   !> Reduce the accumulators over the ranks. Collective: every rank must call
-  !> it on the same iteration.
-  function reduce_times(t_iter, t_comm, t_sync, n) result(s)
+  !> it on the same iteration, with t_xstart present on every rank or on none.
+  function reduce_times(t_iter, t_comm, t_sync, n, t_xstart) result(s)
     use MOSE_Mod_MPI, only: mpi_size_, mpi_allreduce_sum_r8, &
                             mpi_allreduce_min_r8, mpi_allreduce_max_r8, &
                             mpi_gather_r8
@@ -145,9 +187,10 @@ contains
     real(R8), intent(in) :: t_comm  !< exchange wait on this rank
     real(R8), intent(in) :: t_sync  !< collective wait on this rank
     integer,  intent(in) :: n       !< iterations the times were accumulated over
+    real(R8), intent(in), optional :: t_xstart  !< start of the exchanges on this rank, part of t_iter - t_comm - t_sync
     type(stats_type)     :: s
     ! Local
-    real(R8) :: tsum, csum, ssum, t_work
+    real(R8) :: tsum, csum, ssum, xsum, t_work
     real(R8), allocatable :: work(:)
     integer  :: r, ni
 
@@ -171,6 +214,10 @@ contains
     if (s%tavg > 0.0_R8) s%imbalance = (s%tmax - s%tavg) / s%tavg * 100.0_R8
     if (tsum   > 0.0_R8) s%commfrac  = csum / tsum * 100.0_R8
     if (tsum   > 0.0_R8) s%syncfrac  = ssum / tsum * 100.0_R8
+    if (present(t_xstart)) then
+      call mpi_allreduce_sum_r8(t_xstart, xsum)
+      if (tsum > 0.0_R8) s%xstartfrac = xsum / tsum * 100.0_R8
+    end if
 
     s%wmin = work(1); s%wmax = work(1)
     do r = 1, mpi_size_
@@ -239,7 +286,11 @@ contains
 
     ! Both figures are taken on the critical path, i.e. the slowest rank
     call mpi_allreduce_max_r8(timer_wtime() - t_run_beg, elapsed)
-    s = reduce_times(t_run_iter, t_run_comm, t_run_sync, n_run)
+    if (xstart_on) then
+      s = reduce_times(t_run_iter, t_run_comm, t_run_sync, n_run, t_run_xstart)
+    else
+      s = reduce_times(t_run_iter, t_run_comm, t_run_sync, n_run)
+    end if
 
     if (mpi_is_root) then
       write(*,*)
@@ -255,6 +306,8 @@ contains
         write(*,'(A,T35,F7.1,A)')    '   Exchange wait', s%commfrac, ' %'
         write(*,'(A,T35,F7.1,A)')    '   Collective wait', s%syncfrac, ' %'
         write(*,'(A,T35,F7.1,A)')    '   Compute spread over ranks', s%wspread, ' %'
+        ! the start of the exchanges is part of the compute above, not of the exchange wait
+        if (xstart_on) write(*,'(A,T35,F7.1,A)') '   Exchange start', s%xstartfrac, ' %'
       end if
       write(*,'(A)') ' ========================================================================================='
     end if

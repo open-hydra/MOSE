@@ -3,7 +3,7 @@ program MOSE_program
   use omp_lib
 #endif
   use MOSE_Advanced_Types_m, only: MOSE_simulation_type
-  use MOSE_Config_Types_m,   only: obj_sim_param
+  use MOSE_Config_Types_m,   only: obj_sim_param, obj_multirate
   use MOSE_Procedures_m,     only: MOSE_type
   use MOSE_Mod_MPI
 #ifdef USE_MPI
@@ -39,6 +39,9 @@ program MOSE_program
     write(*,'(A,I4)')   ' -  Number of ranks   --> ', mpi_size_
   end if
 #endif
+
+  ! Dummy_Function below is empty: the multirate integrator may run (it does not call it at its stages)
+  obj_multirate%empty_external_function = .true.
 
   ! Solving with MOSE
   call MOSE%setup( simulation )

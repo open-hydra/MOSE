@@ -257,6 +257,133 @@ against its criterion, *runs* where it has none (the run ends with exit status 0
   0, 110 blocks, fewer blocks than ranks) gives the one-rank field, and a map for other
   ranks stops every rank with the same message.
 
+### Multirate integrator (`[MOSE-Multirate]`, label `multirate`)
+The checks live in `test/multirate/mr-<check>` and build their own small cases with
+`test/multirate/mr-common/gen_mr_cases.py` (numpy only); each entry below is a group of them, run one after the other
+by `test/multirate/run_group.sh`. Cases, checks and thresholds: [`docs/vv/multirate.md`](../docs/vv/multirate.md).
+`ctest -L multirate -LE verification` runs the entries below without their longer forms (label `verification`),
+`ctest -L multirate` with them.
+Costs: CPU time with one thread in the build of the CI job without MPI (gfortran 13.2, TESTING), the sum over the
+checks of an entry of the smaller of two runs of each (shared 192-thread machine, load 93–155); I17 is wall time on
+2–4 MPI processes. The fast entry is F31.
+- ☑ **I18 — Multirate identity and equivalence** (`MultirateIdentity`, validation): one level (`max-level` 0,
+  `safety` 1) = single-rate Heun step bit for bit, residual history included, on 33 configurations (blocks, inlets
+  401, 402, 403, 405, 408, 410 and 420, the SRM grain in its inflow mode, laminar plate with the two diffusive
+  metrics and with an isothermal wall, 3-D hot
+  cube, Spalart–Allmaras and SST, also with the rotation and curvature correction, 2-D wedge, 1-D slab between symmetry j and k faces with the y and z velocity frozen, 1-D
+  duct with inclined j and k faces, `bc.txt` in reverse order), and the per-cell copies of the solver routines and the
+  boundary fluxes of a record statement by statement against their originals, with the MPI tags of the multirate
+  apart from those of the
+  single-rate exchanges; 1 against 3 and 4 OpenMP threads bit for bit; equal levels across the connections and one
+  block = three blocks with the same map; the halo of every level against an independent construction; mirror
+  symmetry of a centred pulse; free-stream preservation on a curvilinear periodic mesh. ~6 min.
+- ☑ **I15 — Multirate conservation and exact restart** (`MultirateConservation`, validation): mass, momentum and
+  energy drift ≤ 1e-12 with levels (Euler, laminar, laminar and Spalart–Allmaras with `diffusive-metric = mean`,
+  Spalart–Allmaras on a smooth and on a rough wall, SST, the 2-D axisymmetric wedge; the mass of each species of a
+  frozen mixture of four; `SA-R` and SST with `sst-production = compressible`, mass and energy, and with
+  `k-energy-coupling`, mass, the energy drift reported, each with a result other than that of the run without the
+  option; `safety` 1.5; an SRM grain in its inflow mode with n = 0 at the
+  end of a closed duct, the mass against M(0) + mdot_ref A t) and positive controls that must drift, and with a
+  depth of the map that changes from one macro step to the next;
+  restart from `vtk raw` bit for bit (one and several blocks, map rebuilt at every macro step and every 4) and from
+  `tecplot ascii` (one and several blocks), output
+  instants k·`sol-dtime` and `time-threshold` bit for bit, one residual row per macro step, mass drift ≤ 1e-12 over
+  three restarts; with `recompute-every` 4 the cells per level change, and only at the macro steps 4 m + 1. ~6 min.
+- ☑ **N5 — Multirate temporal order** (`MultirateOrder` and `MultirateOrderInletsMoving`, validation; full forms in
+  `MultirateOrderFull`, verification):
+  with the levels fixed, observed order on the last pair L1 ≥ 1.9 (≥ 1.8 for the turbulent channels) and L∞ near the
+  faces between levels ≥ 1.8 (acoustic and entropy waves, isentropic vortex through three blocks, laminar plate, skewed
+  hot square, a wall on smoothly skewed cells whose levels change along it); 9 and 13 levels: the same order,
+  drift ≤ 1e-12, amplitude after 2000 macro steps ≤ 1.01 × the initial; in `MultirateOrderInletsMoving`, inlets 402
+  and 410 on the finest level: L∞ order at the inlet cells ≥ 1.8, u > 0 in those cells, and the first cell against the
+  table at the same time, at the peak of the data within half of the distance the table has moved from t = 0, at the
+  end of the run within the amplitude of the table, and a simple wave whose faces between levels travel
+  with it, refined jointly in space and time against the exact solution: L1 order on the last pair ≥ 1.9 with the map
+  rebuilt at every macro step, mass drift ≤ 1e-12. The short forms of the order checks judge the macro steps H0 and H0/2
+  against a reference step of dt_min/16, the full forms (`MR_FORM=full`) H0 … H0/8 against dt_min/64; with 13 levels the short
+  form checks the conservation only, the order and the stability run in the full form. The entropy wave passes the
+  first pair with L1 1.93 (threshold 1.9), with ifx and gfortran alike; a change of the spatial scheme or of the case
+  that lowers its ratio of the errors with H0 and H0/2 by about 2 % fails the short form, and the full form then
+  decides on the last pair. ~8 min and ~3 min; full forms ~68 min
+  (one run, gfortran 13.2 TESTING with Intel MPI).
+- ☑ **N6 — Multirate with shocks and the non-local CFL condition** (`MultirateShocks`, validation): Sod tube and a
+  planar shock with levels against the exact Riemann solution and the single rate (conservation ≤ 1e-12, L1 error
+  ≤ 1.05 × the single rate's, shock within one local cell, no more local extrema than the single rate); the
+  diagnostics of the step taken against the step admitted on the new state (positive and negative controls); states
+  that are not physical inside an attempt (a blast tube with far coarse cells and 10 levels: the attempt rejected and
+  redone with H halved, one halving per such rejection, conservation ≤ 1e-12, 1 and 3 threads
+  identical; a face that is not physical at the start of the macro step stops the run at the first stage with its
+  lines; faces that leave the tables after the first stage: the attempts rejected, and the stop below 2^-10 after 11
+  attempts with the face); the limit `max-attempts` (the stop at the rejection that reaches it, with the causes; the
+  outputs unchanged when the attempts stay below it; the limit checked after the floor; the attempt rejected by
+  `force-redo` not counted; a warning when the redo is off) and a local step that is not a positive finite number at
+  the start of the macro step (a cell at a negative pressure, at zero pressure at rest, at a negative density and
+  pressure with viscosity and at a density so small that the diffusion rate overflows: a step that is not a number,
+  infinite, negative and zero; the stop before the first stage, with the cell; the parts whose step is not a number,
+  infinite or zero hold in the builds without floating-point traps, TESTING and RELEASE); the
+  certificate, the interface margin and the redo of condition (4) of Gnedin, Semenov and Kravtsov (outputs unchanged
+  by a forced redo, conservation ≤ 1e-12, 1 and 3 threads identical; a redo that makes the map deeper than that of
+  its first attempt; the solutions at the output instants
+  k·`sol-dtime` bit for bit, the one at the end of the run included; the theta of each limiter in the margin at the
+  first macro step equal to the one of the set-up check; no violation on a uniform flow, whose cell at its limit ties
+  with it at the rounding; at the floor of kappa, no macro step redone on an acoustic wave, with cells raised by the
+  margin); no negative nu~, k or omega after a stage near walls, with a
+  positive control that must print the count. ~3 min.
+- ☑ **I16 — Multirate input checks** (`MultirateInput`, validation): 34 configurations outside the scope stop at
+  set-up or at the first macro step with a non-zero exit code and the message naming the key (among them, with
+  `nonlocal-cfl = redo`, `levels = recompute` and no fixed macro step, a cfl above 1 with van Leer, first-order and
+  minmod, and a vnn above 0.5 in a Navier–Stokes
+  run, `Wilcox2006`, `SA-RC` and `SST-RC` with levels, and an SRM grain in mode 1), and the controls complete (among
+  them vnn 0.5 in a Navier–Stokes run,
+  vnn 0.6 there with max-level 0 and in an Euler run, cfl 1.2 and vnn 0.6 with `nonlocal-cfl = off` and `count`,
+  cfl 1.2 with `nonlocal-cfl = redo` and `levels = fixed` or a fixed macro step, and `levels = fixed` with a fixed
+  macro step above the step of the map, which warns once);
+  a reading of `input.ini` during the run that changes a key of `[MOSE-Multirate]` or a key fixed for every run
+  (`time-accurate`, `k-energy-coupling`), or takes `cfl` and `vnn` (with `redo`) or `cfl-rise-threshold` out of the
+  scope, is not taken (`ini-error = warn`: the residual history of the run without the change, byte for byte) or stops
+  the run (`stop`), with `off` a `cfl` and a `vnn` above the bounds are taken, and a `cfl` within the bound is
+  taken with the interface margin following it, above its floor and at it; `fixed-macro-step` builds the level map of the macro step taken; the
+  depth of the map of the adaptive step is min(`max-level`, floor of the octaves of the local steps), also with
+  `levels = fixed`, and with a `macro-step-target` within the step of the slowest cells the map is the one built for
+  the target (the depth the target gives); the stage sequence of one macro step equals the reference sequence.
+  < 1 min.
+- ☑ **I17 — Multirate on MPI ranks and OpenMP threads** (`MultirateHybrid`, needs-mpi): 1×1 = P×T bit for bit for
+  the single rate and the multirate, the 1×1 multirate runs with cells on more than one level (laminar, Spalart–Allmaras and SST plates in 2×2 blocks, the 3-D hot cube in 2×2×2
+  blocks, the laminar plate in two blocks
+  joined with the orientation -1 0 0 1, Euler cases in blocks, maps whose depth comes from the largest local step of all
+  the processes, also where the blocks of one process alone span fewer octaves, a face
+  between levels one cell from a rank boundary, the block-to-rank map, a blast tube in blocks whose attempts take states
+  that are not physical, the stop below 2^-10 of the first attempt on 3 processes, the stop at `max-attempts` on 1×1,
+  3×1 and 3×2 and the stop on a local step that is not a positive finite number on 3 processes, which holds in the
+  builds without floating-point traps, TESTING and RELEASE, each process stopping with the others), the plate with
+  Spalart–Allmaras and SA-RC with `max-level` 0 on 2 ranks equal to 1×1, conservation
+  ≤ 1e-12, with the probe library of `MPIThreadFunnel` (built on Linux only) no MPI call from a
+  thread other than the main one and the largest MPI tag ≤ 32767; the plate joined with -1 0 0 1 equal to the plate without the
+  turn within 1e-10 of the scale of each variable; the exchange wait, the exchange start and the compute spread of the `Timing`
+  block and the times per level over the ranks on 2 ranks with unequal work by a map that the log names, on 1 and 2 threads; exact
+  restart on 2 ranks × 2 threads. ~6 min (one run,
+  gfortran 13.2 TESTING with Intel MPI).
+- ☑ **P7 — Viscous shock tube of Daru and Tenaud with the multirate integrator** (`MultirateDaruTenaud`, validation):
+  Re = 200, the lower half of the tube on 50 × 25 cells stretched towards the wall; single rate at dt0/4 (the
+  reference) and at dt0, multirate with H = 4 dt0 and with H = dt0 (core cells at the step of the single rate, wall
+  cells smaller); every cell within its limit; with H = dt0 the L1 density error and the errors at ten probes at most
+  1.05 × those of the single rate at every output instant; the largest density jump on the wall and symmetry rows
+  within one local cell of the reference and no more local extrema than the single rate; mass and energy drift
+  ≤ 1e-12. About 2 min of CPU with one thread. The medium form (`MultirateDaruTenaudMedium`, label verification), the same
+  checks on 100 × 50 cells, about 19 min (one run, gfortran 13.2 TESTING with Intel MPI). The full form
+  (`MultirateDaruTenaudFull`, label verification: not run by the
+  pull-request checks), the same checks on 500 × 250 cells, also reports the wall density against table 1 of Zhou, Xu
+  and Liu; about 100 h of CPU with one thread (its four runs take 3.5e5 s of CPU).
+- ☑ **P8 — Start-up of a nozzle with the multirate integrator** (`MultirateNozzleStartUp`, validation): a quasi-1D
+  convergent-divergent nozzle of 371 cells (case mr1d-nozzle-su) started by a ramp of the inlet total pressure from
+  1e5 to 2.6e5 Pa in 8 ms against an outlet at 1e5 Pa, the shock of the start-up moving down the divergent across a
+  face between levels; single rate at dt0/4 (the reference), dt0 and dt0/2, multirate with H = dt0 and with the
+  production macro step H and H/2; every cell of the fixed-step runs within its limit; in the throat band the error of
+  the multirate with H = dt0 at most 1.05 × that of the single rate wherever it has levels, the production runs within
+  the single-rate error plus the step differences and with an observed order ≥ 0.8 where the single rates converge; the
+  moving shock of H/2 within the shift of the single rates and of the two production runs (in faces) from the
+  reference. About 5 min of CPU with one thread.
+
 ---
 
 ## 4. Pre-push fast suite (GitHub-runner friendly)
@@ -317,6 +444,7 @@ less at one thread (the rule of a row, below the table), assert
 | N12 | Face values of the MUSCL reconstruction, a unit check of Reconstruction with each limiter: with van Leer, MC and superbee a cell 1.25 times its neighbour across a face (values 1, 0.01, 0, 0), its mirror image, and one forward Euler step at Courant number 1/2 of a cell of length 1 next to cells of 0.01 (h = 0.01, 0.01, 1, 1, 1; w = 0, 0, 1, 1000, 1000); 50000 random lines of four cells (lengths in ratios up to 100, values over 14 orders of magnitude and zero, beta = 1 and below 1) and 50000 with values from 1e-33 to 1e-8 times the largest length; lines of equal cells, data linear along the line, five cells for the two faces of a cell; 50000 pairs of slopes for the call with the bounds 2 and 2 | every face value within 8 ulp of the values of the two cells of its face (van Albada where the ratio of the slopes is positive; values below 1e-13 times the largest length left out); the cell not below zero after the step; the bounded slope with the sign of the slope without bounds and not larger; one slope for the two faces of a cell; on equal cells and for linear data the limiter's own slope; the call with the bounds 2 and 2 equal to the formulas of the limiters where the build keeps the order of evaluation of the source (printed with `-ffast-math`) | ☑ `MusclFaceBounds` | <1 s |
 | N13 | Face pressure of a reflective (symmetry) treatment, a unit check of the mirror pair of `BC_Symmetry_Eul` with the exact solver and HLLC (the default): N2 at 1e5 Pa and 300 K moving along the normal at 10 m/s (the low speed of a blown gas) and at 100 m/s (where the relations of a rarefaction and of a shock differ beyond the tolerance), away from the face and towards it | away from the face, the face pressure below that of the cell, towards it above; the exact solver within 1e-5 p (its stopping rule) of the exact solution, two rarefactions | ☑ `ReflectivePressure` | <1 s |
 | F30 | Supersonic inlet (`405`) with the flow direction `normal` (1-D tube of air, one forward Euler step, first order, the inlet at Mach 2, the gas of the tube moving in through it at 0.1 a): `normal, normal` on the faces 1 and 2 of the tube along x and of its mirror image (i along −x), and on face 1 of the tube turned so that its axis is (1, 1, 1)/√3; `normal, 0` on face 2; `0.3, normal` on the faces 1 and 2 of a tube along z; `0, normal` and `0.2, normal` on the faces 1 and 2, and `normal, 0.3` on face 1 of the tube along z | mass flux into the domain and velocity of the inlet cell along the normal into the domain = those of `0, 0` on face 1 within 1e-9 of rho a and of a, velocity across that normal below 1e-9 a; the records with one angle `normal` that do not enter along the normal: the mass flux and the velocity of the angles the token stands for on that face, within 1e-9 of rho a and of a | ☑ `BoundaryConditions`/`SupersonicInlet` | ~1 s |
+| F31 | Multirate smoke (1-D acoustic wave and Sod tube of 284 cells): one level = single-rate step, 20 steps; four levels, 20 macro steps; the same run as 10 + restart + 10; cfl 1.2 with `max-level` 3; the Sod tube with one level and cfl 20; a tube of 8 cells with `400` ends and the gas entering through face 1 at 0.5 a, 20 Heun steps with one level and with the single rate | bit-identical fields and residual; mass and energy drift ≤ 1e-12 with four levels used; bit-identical output trees; set-up stop with a non-zero exit code and the message; for the diverging run exit code 1, the message of the state check and no solution; the lines of the gas entering and the end line of the run with one level those of the single rate (one line, 40 evaluations) | ☑ `MultirateSmoke` | ~1.4 s (load average 45) |
 
 **Rule of a row.** The ~Cost of a row is its CPU time at one thread in the build of the
 first CI job (gfortran, `TESTING`), the part run alone as its area runs it
@@ -355,7 +483,8 @@ as CPU time at one thread on the same machine at a load average of ~100 to ~250.
 tests of main keep their tier: measured the same way at a load average of 140 to 145,
 `AblatingWall` takes 10.6 s, `Noh87` 8.5 s and `PrandtlMeyer` 8.4 s.
 
-Current `ctest -L fast`: **27 tests, ~135 s of CPU time** at one thread, one test at a
+Current `ctest -L fast`: **28 tests**, the 27 below and `MultirateSmoke` (F31). The 27 took
+~135 s of CPU time at one thread, one test at a
 time (gfortran 13 `TESTING`, a machine with 192 logical CPUs: the other 25 tests ~134 s
 at a load average of 150-156, `MusclFaceBounds` 0.45 s at 144; `ReflectivePressure` 0.002 s, gfortran 13 `RELEASE` on a
 machine with 12 logical CPUs at a load average of 1.6-4.8). The 27 tests: Sod79, Einfeldt91,
@@ -363,7 +492,8 @@ Noh87, Toro99, ShuOsher, PrandtlMeyer, RiemannSmoke,
 NumericsSmoke, InputChecks, TimeIntegration, BoundaryConditions, Conservation,
 OpenMPEquiv, Connections, Restart, OutputFiles, MMSResiduals, ViscousPatch, AblatingWall,
 MeshGeometry, QCR2000Stress, CellVolume, VolatileOrder, BilinearDistance, RemoteBlocks,
-MusclFaceBounds, ReflectivePressure. MPI
+MusclFaceBounds, ReflectivePressure. `MultirateSmoke`
+takes ~1.4 s of CPU time (the smaller of two runs, on the same machine at a load average of 45). MPI
 builds also register the `needs-mpi` tier (`test/mpi/`; `MPIConnectionFlux`,
 `MPIConnectionOrder`: the two-block cases with one block per rank;
 `MPIDecompositionMap`).
