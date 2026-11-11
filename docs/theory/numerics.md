@@ -796,7 +796,7 @@ Declared limits:
   viscous flux comes from the other solver;
 - the temperature of a `301` wall is extrapolated (consistent, exact for every
   linear field) rather than set from the heat flux;
-- the SRM grain (`502`) and the other types keep the extrapolation
+- the SRM grain (`502`, mode 1; a grain of mode 2 is an inlet `404`) and the other types keep the extrapolation
   $3q_1 - 3q_2 + q_3$ of the primitives; in a RANS run the turbulence variables
   of a `502` grain take their wall values instead, $2\phi_w - \phi_l$ at
   $2\mathbf{x}_f - \mathbf{x}_1$ as behind a wall, with the wall values of the

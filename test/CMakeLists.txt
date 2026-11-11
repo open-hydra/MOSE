@@ -277,7 +277,15 @@ mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;
 # (403, 404, 408, 420) stops the run; so does a 420 without p_sub, with its
 # thresholds out of order, with g above the choked mass flux or with T0 above
 # the tables of the gas, and a record of type 409, 501 or 506, which MOSE does
-# not apply).
+# not apply). The SRM grain (502): a wall for the wall distance in mode 1 (one
+# step at rest), an inflow in mode 2 that lets the products in from rest with
+# the mass flux of its mode-1 twin and is no wall for the distance, runs with
+# Spalart-Allmaras and SST in both modes; a property line with a mode other
+# than 1 and 2, p_ref <= 0, mdot_ref < 0 (0 in mode 2), T_af = 0 or above the
+# tables, or an inflow short of its turbulence value stops the run; the wall
+# state of a grain that blows CH4 into N2 takes the gas constant of CH4, at the
+# static temperature of total T_af, and the gas gets the total enthalpy h(T_af),
+# in both modes.
 # Rotating frame: stationary-face-1, -2, ... of [MOSE-Rotating-Frame] are read
 # and listed, and the run ends (the count stops at the first key missing); a
 # stationary face may be a wall in part and a block connection in part.
@@ -480,9 +488,10 @@ mose_add_parts_script(ViscousPatch fast/viscous-patch
 mose_add_parts_script(ViscousWallPatch fast/viscous-patch
     PARTS viscous-wall-patch LABELS validation numerics 2D 3D)
 
-# Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column,
-# which is an exact steady solution, checked against its closed form. These
-# boundary conditions have no other coverage in the suite.
+# Ablative wall BCs (503 melting / 504 pyrolysis) and the SRM grain (502, its
+# two modes, a blowing wall and an inflow, on both ends): an isothermal blown
+# column, which is an exact steady solution, checked against its closed form.
+# These boundary conditions have no other coverage in the suite.
 # The melting column also runs without schmidt: the default, 0, needs no
 # diffusion table with a single species.
 mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;physics;2D")
@@ -527,6 +536,18 @@ set_tests_properties(QCR2000Stress PROPERTIES LABELS "fast;physics;unit" TIMEOUT
 add_fortran_executable(cell_volume_check unit/cell_volume_check.f90)
 add_test(NAME CellVolume COMMAND cell_volume_check)
 set_tests_properties(CellVolume PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
+
+# Reflective face pressure (ReflectivePressure): a unit check of the pressure a
+# reflective (symmetry) treatment, BC_Symmetry_Eul, returns on a face whose cell
+# gas moves along the normal, with the exact solver and with HLLC (the default
+# of riemann-solver): below the pressure of the cell when the gas moves away
+# from the face (the blown gas of a grain, 502, or of an ablating wall,
+# 503-505), above it when the gas moves towards the face; the exact solver on
+# the exact solution of the mirror problem. The comment of Ablation_Wall_Fluxes
+# gives it as the reason a blowing face carries the pressure of its cell.
+add_fortran_executable(reflective_pressure_check unit/reflective_pressure_check.f90)
+add_test(NAME ReflectivePressure COMMAND reflective_pressure_check)
+set_tests_properties(ReflectivePressure PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
 
 # Order of rounding (VolatileOrder): a difference stored in a VOLATILE variable
 # and read back is rounded as written, also with -ffast-math, which lets the
@@ -691,5 +712,164 @@ if(USE_MPI)
     mose_add_mpi_script(MPIRuntimeInput mpi/runtime-input "needs-mpi;implementation;2D")
     if(TEST MPIRuntimeInput)
         set_tests_properties(MPIRuntimeInput PROPERTIES TIMEOUT 120)
+    endif()
+endif()
+
+# ===========================================================================
+#  Multirate integrator ([MOSE-Multirate], src/lib/numerics/time/explicit/Mod_Multirate.f90)
+#  Label "multirate" on all of them: ctest -L multirate -LE verification runs them without the longer forms (label
+#  verification), ctest -L multirate with them. The checks live in test/multirate/mr-<check>; each builds its
+#  small cases with test/multirate/mr-common/gen_mr_cases.py and needs only numpy. One fast smoke test; the other
+#  checks are grouped by subject in the validation and needs-mpi tiers (test/TESTING-PLAN.md: F31, I15-I18, N5, N6, P7, P8;
+#  cases, checks and thresholds in docs/vv/multirate.md).
+# ===========================================================================
+# Helper: like mose_add_fast_script, with its own timeout.
+function(mose_add_mr_script NAME DIR TIMEOUT)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/test/${DIR}/run.sh")
+        add_test(
+            NAME    ${NAME}
+            COMMAND bash -c "./run.sh"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${DIR}"
+        )
+        set_tests_properties(${NAME} PROPERTIES
+            LABELS      "${ARGN}"
+            TIMEOUT     ${TIMEOUT}
+            ENVIRONMENT "${_MOSE_TEST_ENV}"
+        )
+    endif()
+endfunction()
+
+# Helper: a group of checks of test/multirate (GROUP, the list CHECKS of the directories mr-<check>), run one after
+# the other by run_group.sh: every check runs, the group fails if one of them fails and names it.
+function(mose_add_mr_group NAME TIMEOUT GROUP CHECKS)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/run_group.sh")
+        add_test(
+            NAME    ${NAME}
+            COMMAND bash ./run_group.sh ${GROUP} ${CHECKS}
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate"
+        )
+        set_tests_properties(${NAME} PROPERTIES
+            LABELS      "${ARGN}"
+            TIMEOUT     ${TIMEOUT}
+            ENVIRONMENT "${_MOSE_TEST_ENV}"
+        )
+    endif()
+endfunction()
+
+# F31, fast: one level = single-rate step bit for bit, conservation with four levels, exact restart, and a
+# configuration outside the scope stopped at set-up, on two 1-D cases of 284 cells; the lines of the gas entering through
+# 400 faces, with one level as with the single rate, on a tube of 8 cells.
+mose_add_mr_script(MultirateSmoke multirate/mr-smoke 300 "multirate;fast;implementation;1D")
+
+# I18: one level (max-level 0, safety 1) = single-rate step bit for bit, residual history included, on 33
+# configurations, and the per-cell copies of the solver routines statement by statement against their originals,
+# with the MPI tags of the multirate apart from those of the single-rate exchanges (onelevel); 1 against 3 and 4
+# OpenMP threads bit for bit (threads); equal levels across the connections and one block = three blocks with the
+# same map (blocks); the halo of every level against an independent construction (halo); mirror symmetry of a
+# centred pulse (sym); free-stream preservation on a curvilinear periodic mesh (free).
+mose_add_mr_group(MultirateIdentity 4500 identity "onelevel;threads;blocks;halo;sym;free"
+                  "multirate;validation;implementation;numerics;1D;2D;3D")
+# I15: conservation with levels, also with the diffusive fluxes, with diffusive-metric = mean, with the turbulence
+# models, on a rough wall and in a frozen mixture of four species, and positive controls (conservation); exact restart
+# from vtk raw and from tecplot ascii and exact output instants k*sol-dtime and time-threshold, one and several blocks,
+# map rebuilt at every macro step and every 4, conservation over three restarts (restart).
+mose_add_mr_group(MultirateConservation 3000 conservation "conservation;restart"
+                  "multirate;validation;implementation;numerics;1D;2D;3D")
+# N5: observed temporal order with levels (acoustic and entropy waves, isentropic vortex through three blocks, laminar
+# flat plate, skewed hot square, a wall on skewed cells whose levels change along it, the wall channel with
+# Spalart-Allmaras and SST) (order); 9 and 13 levels: order, conservation, stability over 2000 macro steps (deep). Here
+# order and deep run their short forms (the macro steps H0 and H0/2; with 13 levels only the conservation); their full
+# forms (MR_FORM=full) are MultirateOrderFull, label verification.
+mose_add_mr_group(MultirateOrder 3600 order "order;deep" "multirate;validation;numerics;1D;2D")
+# N5: time-dependent inlets 402 and 410 on the finest level, order in time at the inlet cells (bc); a simple wave whose
+# level boundaries travel with it, refined jointly in space and time, against the exact solution (moving-levels).
+mose_add_mr_group(MultirateOrderInletsMoving 1800 order-inlets-moving "bc;moving-levels" "multirate;validation;numerics;1D")
+if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/run_group.sh")
+    add_test(
+        NAME    MultirateOrderFull
+        COMMAND bash ./run_group.sh orderfull order deep
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate"
+    )
+    set_tests_properties(MultirateOrderFull PROPERTIES
+        LABELS      "multirate;verification;numerics;1D;2D"
+        TIMEOUT     14400
+        ENVIRONMENT "${_MOSE_TEST_ENV};MR_FORM=full"
+    )
+    #   the short and the full forms run in the same folders (mr-order, mr-deep) and remove their cases and runs at
+    #   the start: never at the same time (ctest -j)
+    set_tests_properties(MultirateOrder MultirateOrderFull PROPERTIES RESOURCE_LOCK mr-order-deep)
+endif()
+# N6: Sod tube with the levels rebuilt at every macro step against the exact solution and the single rate (sod); a
+# planar shock through the faces between levels (shock); the step taken against the step admitted on the new state by
+# the cell and by its face neighbours (rpost); the non-local CFL condition (4) of Gnedin, Semenov and Kravtsov:
+# certificate, interface margin and redo (cfl4); no negative nu~, k or omega after a stage where the near-wall
+# destruction acts faster than the transport, with a positive control (positivity).
+mose_add_mr_group(MultirateShocks 3300 shocks "sod;shock;rpost;cfl4;positivity" "multirate;validation;numerics;1D;2D")
+# I16: configurations outside the scope of the integrator stop at set-up or at the first macro step, one run each, and
+# a reading of input.ini during the run that changes a key of [MOSE-Multirate] is not taken or stops the run (reject);
+# with fixed-macro-step the level map is that of the macro step taken (fixedstep); the stage sequence of one macro step
+# against the reference sequence of the recursion (trace).
+mose_add_mr_group(MultirateInput 1020 input "reject;fixedstep;trace" "multirate;validation;implementation;1D;2D;3D")
+# P7: the viscous shock tube of Daru and Tenaud (Re = 200) on 50 x 25 cells: single rate at dt0/4 (the reference) and
+# at dt0, multirate with H = 4 dt0 and with H = dt0; every cell within its limit, the error of the multirate with
+# H = dt0 at most 1.05 times that of the single rate at every output instant and at the probes, the jumps of the
+# reference within one local cell and no more extrema than the single rate on the wall and symmetry rows,
+# conservation within 1e-12 (verify_daru.py).
+mose_add_mr_script(MultirateDaruTenaud multirate/mr-daru 900 "multirate;validation;numerics;2D")
+# P7, medium form: the same checks on 100 x 50 cells; label verification.
+if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru/run.sh")
+    add_test(
+        NAME    MultirateDaruTenaudMedium
+        COMMAND bash -c "./run.sh medium"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru"
+    )
+    set_tests_properties(MultirateDaruTenaudMedium PROPERTIES
+        LABELS      "multirate;verification;numerics;2D"
+        TIMEOUT     3600
+        ENVIRONMENT "${_MOSE_TEST_ENV}"
+    )
+endif()
+# P7, full form: the same checks on 500 x 250 cells, the resolution of the reference solutions; label verification,
+# not run by the pull-request checks (about 100 h of CPU with one thread: its four runs take 3.5e5 s of CPU; the TIMEOUT,
+# 200 h, is twice that).
+if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru/run.sh")
+    add_test(
+        NAME    MultirateDaruTenaudFull
+        COMMAND bash -c "./run.sh full"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru"
+    )
+    set_tests_properties(MultirateDaruTenaudFull PROPERTIES
+        LABELS      "multirate;verification;numerics;2D"
+        TIMEOUT     720000
+        ENVIRONMENT "${_MOSE_TEST_ENV}"
+    )
+    #   the three forms run in the same folder (mr-daru) and remove its cases and runs at the start: never at the
+    #   same time (ctest -j)
+    set_tests_properties(MultirateDaruTenaud MultirateDaruTenaudMedium MultirateDaruTenaudFull PROPERTIES
+        RESOURCE_LOCK mr-daru)
+endif()
+# P8: the start-up of a quasi-1D convergent-divergent nozzle by a ramp of the inlet total pressure (371 cells): single
+# rate at dt0/4 (the reference), dt0 and dt0/2, multirate with H = dt0 and with the production macro step H and H/2;
+# every cell of the fixed-step runs within its limit, in the throat band the error of the multirate with H = dt0 at most
+# 1.05 times that of the single rate and the production runs converging with the step, the moving shock of H/2 within
+# the shift of the single rates and of the two production runs from the reference (verify_nozzle.py).
+mose_add_mr_script(MultirateNozzleStartUp multirate/mr-nozzle 1800 "multirate;validation;numerics;1D")
+# I17 (builds with USE_MPI=ON): 1 x 1 against P x T byte by byte, single rate and multirate (a connection with the
+# orientation -1 0 0 1 among the cases, also against the same case without the turn), on the laminar plate, on the plate
+# with Spalart-Allmaras and with SST, on the hot cube in 3-D (a vertex of eight blocks inside the cells of level 1) and on
+# Euler cases; the block-to-rank map, conservation, the redo and the stops across the processes and, with the probe library
+# of MPIThreadFunnel (built on Linux only), no MPI call from a thread other than the main one; the timers of the multirate
+# on 2 processes with unequal work (hybrid); exact restart on 2 processes x 2 threads (restart-hybrid).
+if(USE_MPI)
+    mose_add_mr_group(MultirateHybrid 3000 hybrid "hybrid;restart-hybrid" "multirate;needs-mpi;implementation;1D;2D;3D")
+    if(TEST MultirateHybrid)
+        set_tests_properties(MultirateHybrid PROPERTIES PROCESSORS 8)
+        set_property(TEST MultirateHybrid APPEND PROPERTY ENVIRONMENT
+            "MOSE_MPIEXEC=${MPIEXEC_EXECUTABLE};MOSE_MPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}")
+        # the probe library of MPIThreadFunnel is built on Linux only: elsewhere mr-hybrid leaves out its part PROBE
+        if(TARGET mpi_thread_probe)
+            set_property(TEST MultirateHybrid APPEND PROPERTY ENVIRONMENT
+                "MOSE_MPI_THREAD_PROBE=$<TARGET_FILE:mpi_thread_probe>")
+        endif()
     endif()
 endif()

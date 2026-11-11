@@ -25,9 +25,11 @@ IF(USE_MPI)
     # interfaces for the routines with choice buffers (MPI 4.1, Section 19.1.3), as the gfortran modules of
     # Intel MPI do: gfortran >= 10 then stops on calls of one such routine with buffers of different types
     # or ranks. -fallow-argument-mismatch turns those errors into warnings; it is set in MPI builds only,
-    # and on Mod_MPI.f90 only, the one file that makes such calls: the builds without MPI, and the other
-    # files of MOSE and FLINT in the MPI builds, keep the full check.
+    # and only on the files that make such calls, Mod_MPI.f90 and Mod_Multirate.f90 (the exchanges of the
+    # multirate integrator): the builds without MPI, and the other files of MOSE and FLINT in the MPI builds,
+    # keep the full check.
     IF(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
-        set_source_files_properties(parallel/Mod_MPI.f90 PROPERTIES COMPILE_OPTIONS -fallow-argument-mismatch)
+        set_source_files_properties(parallel/Mod_MPI.f90 numerics/time/explicit/Mod_Multirate.f90
+                                    PROPERTIES COMPILE_OPTIONS -fallow-argument-mismatch)
     ENDIF()
 ENDIF(USE_MPI)

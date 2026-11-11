@@ -40,9 +40,10 @@ BC_UNUSED, BC_SYMMETRY, BC_EXTRAPOLATION = 0, 300, 400
 BC_MELTING, BC_PYROLYSIS, BC_SRM = 503, 504, 502
 
 # Solid propellant grain (BC 502): Saint-Robert's law in mass-flux form,
-#   mdot = a * (p/pRef)**n ,  a in kg/(m2 s).
+#   mdot = a * (p/pRef)**n ,  a (the record's mdot_ref) in kg/(m2 s).
 # With pRef at the column pressure the reference mass flux is simply a.
-SRM = dict(Taf=1500.0, a=0.2, n=0.35, rho_grain=1750.0, sf=1.0)
+# mode 1: a wall that blows the products in; mode 2: an inflow (the mass-flux inlet 404); T_af the total temperature.
+SRM = dict(Taf=1500.0, a=0.2, n=0.35)
 
 # --- configurations ----------------------------------------------------------
 # Each entry fixes the wall model and the radiative flux driving the ablation.
@@ -68,6 +69,13 @@ CONFIGS = {
     # the injected gas: if the products were injected cold the column could not
     # stay at Taf.
     'srm':         dict(bc=BC_SRM, wall_face=3),
+    'srm-top':     dict(bc=BC_SRM, wall_face=4),
+    # The same grain in its inflow mode: the face is the mass-flux inlet 404 at the total temperature T_af along
+    # the normal, with the mass flux of the law. The gas starts at rest, so the inlet must let the products in
+    # although the cell does not move them in (an inlet 404 alone closes the face then); on both ends, for the two
+    # orientations of the normal.
+    'srm-inflow':     dict(bc=BC_SRM, wall_face=3, srm_mode=2),
+    'srm-inflow-top': dict(bc=BC_SRM, wall_face=4, srm_mode=2),
 }
 
 
@@ -163,9 +171,9 @@ def write_bc(path, cfg):
         # Full double precision: the verifier checks algebraic identities of the
         # wall model to round-off, which a truncated constant would break.
         if cfg['bc'] == BC_SRM:
-            # Taf, a, n, pRef, rhoGrain, SF, mass fractions(1:nsc)
-            p = (f"    {SRM['Taf']:.17E},    {SRM['a']:.17E},    {SRM['n']:.17E},"
-                 f"    {P0:.17E},    {SRM['rho_grain']:.17E},    {SRM['sf']:.17E},"
+            # mdot_ref, n, pRef, Taf, mode, mass fractions(1:nsc) (no turbulence values: a laminar run)
+            p = (f"    {SRM['a']:.17E},    {SRM['n']:.17E},    {P0:.17E},"
+                 f"    {SRM['Taf']:.17E},    {float(cfg.get('srm_mode', 1)):.17E},"
                  f"    {1.0:.17E},")
         elif cfg['bc'] == BC_MELTING:
             # cp_wall, Tw, Ti_wall, dh_wall, qrad, eps_wall, mass fractions(1:nsc)
@@ -220,6 +228,7 @@ def main():
         f.write(f'srm_Taf {SRM["Taf"]!r}\n')
         f.write(f'srm_a {SRM["a"]!r}\n')
         f.write(f'srm_n {SRM["n"]!r}\n')
+        f.write(f'srm_mode {cfg.get("srm_mode", 1)}\n')
         f.write(f'gsi_id {cfg.get("gsi_id", 0)}\n')
         f.write(f'Tw_prescribed {cfg.get("Tw", 0.0)!r}\n')
         f.write(f'wall_face {cfg["wall_face"]}\n')

@@ -156,7 +156,7 @@ or using the `compile` command of the install script as described above.
 
 ### MPI
 
-`-DUSE_MPI=ON` (`--use-mpi`) builds MOSE with MPI through the Fortran wrapper of the MPI library that CMake finds (`mpif90`, `mpiifx`). With GNU Fortran 10 or later the build compiles `Mod_MPI.f90` with `-fallow-argument-mismatch`: it calls the same MPI routine with buffers of different types and ranks.
+`-DUSE_MPI=ON` (`--use-mpi`) builds MOSE with MPI through the Fortran wrapper of the MPI library that CMake finds (`mpif90`, `mpiifx`). With GNU Fortran 10 or later the build compiles `Mod_MPI.f90` and `Mod_Multirate.f90` with `-fallow-argument-mismatch`: they call the same MPI routine with buffers of different types and ranks.
 
 **gfortran with Intel MPI.** The `mpif90` of Intel MPI 2021.12 puts on the include path the `mpi` module built for ifx, which gfortran cannot read ("Reading module .../include/mpi/mpi.mod ... Unexpected EOF"). Give CMake the modules built for gfortran:
 

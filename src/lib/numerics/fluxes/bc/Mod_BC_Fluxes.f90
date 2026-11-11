@@ -164,12 +164,31 @@ contains
               if (error == 1) call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
 
             case (404) ! inlet: static temperature T + prescribed mass flux
-              call BC_Inlet_MassFlux_T ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
-                                          domain % bc(i) % T0, domain % bc(i) % mdot, &
-                                          domain % bc(i) % rel_fac, &
-                                          domain % bc(i) % alpha, domain % bc(i) % beta, &
-                                          domain % bc(i) % ci(nrans+1:nrans+nsc), &
-                                          domain % bc(i) % ci(1:nrans), error )
+              if ( domain % bc(i) % srm_inflow ) then
+                ! An SRM grain in its inflow mode (502, mode 2; IO_BC): the products enter along the normal
+                ! with the mass flux of Saint-Robert's law at the pressure of the boundary cell, as through the
+                ! blowing wall of mode 1 (BC_SRM), and with the total temperature T_af (the record's T0): the
+                ! inlet takes the static temperature of h(T) + u^2/2 = h(T_af) at that pressure and mass flux,
+                ! with u = g/rho, rho = p/(R T) as it builds its face (T0, a scratch here, holds it). The grain
+                ! burns whatever the gas of the cell does: the face is never closed by that gas moving out (or
+                ! at rest, as in a chamber before the ignition).
+                g = domain % bc(i) % aCoeff * &
+                    ( domain % blk(Bm) % P(np,Im,Jm,Km) / domain % bc(i) % pRef ) ** domain % bc(i) % n
+                T0 = SRM_Static_Temperature ( domain % bc(i) % T0, g, domain % blk(Bm) % P(np,Im,Jm,Km), &
+                                              domain % bc(i) % ci(nrans+1:nrans+nsc) )
+                call BC_Inlet_MassFlux_T ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
+                                            T0, g, 1d0, &
+                                            domain % bc(i) % alpha, domain % bc(i) % beta, &
+                                            domain % bc(i) % ci(nrans+1:nrans+nsc), &
+                                            domain % bc(i) % ci(1:nrans), error, always_in = .true. )
+              else
+                call BC_Inlet_MassFlux_T ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
+                                            domain % bc(i) % T0, domain % bc(i) % mdot, &
+                                            domain % bc(i) % rel_fac, &
+                                            domain % bc(i) % alpha, domain % bc(i) % beta, &
+                                            domain % bc(i) % ci(nrans+1:nrans+nsc), &
+                                            domain % bc(i) % ci(1:nrans), error )
+              end if
               if (error == 1) call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
 
             case (405) ! inlet: supersonic — Mach + static temperature and static pressure

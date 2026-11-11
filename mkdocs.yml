@@ -134,6 +134,7 @@ nav:
     - Ablating Wall: vv/2D-ablating-wall.md
     - HyShot II Scramjet Combustor: vv/3D-hyshotII.md
     - Rotating Frame: vv/rotating-frame.md
+    - Multirate Verification: vv/multirate.md
 
   - Developer Guide:
     - development/index.md

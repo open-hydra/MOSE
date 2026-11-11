@@ -191,6 +191,29 @@ inside the iteration loop and is the figure to quote when timing the code;
 output. On more than one rank the block also reports load imbalance and the
 fraction of time blocked on halo exchanges and on collectives.
 
+The exchange wait is the time spent waiting for the messages of the exchanges
+between the ranks and copying them from the receive buffers. In the
+single-rate step it is the wait for the ghost cells of the block connections
+between ranks, with their copy into the ghost cells, and for the donor cells of
+chimera faces; the exchanges of the tangential ghost values `Pg` and of the
+connection fluxes, and the wait for the sends, are not part of it. In multirate
+runs it covers every exchange of the stages (ghost cells, tangential ghost
+values, connection fluxes) and of the level map and its lists. Filling the send
+buffers, and in multirate runs computing the tangential values that are sent,
+count as the work of the rank; a multirate run on more than one rank gives the
+start of its exchanges on a line of the block, `Exchange start`: the time of the
+master thread from the first receive posted to the start of the wait, in every
+exchange of the multirate (posting the receives, filling the send buffers, in
+viscous runs also computing the tangential values that are sent, posting the
+sends). It is part of the work of the rank, not of the exchange wait, so the
+compute spread does not change. The
+collective wait is the time in the reduction of the local time steps, in the
+reduction of the residual and in the broadcasts of the controls, and in
+multirate runs in the reductions of the macro step. A multirate run on more
+than one rank ends with the minimum, mean and maximum over the ranks, per level,
+of the time of the stages without their exchanges and of the time of the
+exchanges ([Multirate time stepping](input.md#multirate-time-stepping)).
+
 For a running report rather than a single summary, set `timer-diter` in
 `[MOSE-IO]` to the number of iterations between reports:
 
@@ -208,8 +231,10 @@ Times are the **maximum** over the ranks — the critical path, which is what
 sets the time to solution. `imbalance` is how far the slowest rank is above the
 mean; a large `compute/iter` spread with a small `imbalance` means the ranks are
 unevenly loaded and the fast ones are absorbing it in the exchange wait.
-Reporting is off by default (`timer-diter = 0`) and costs a handful of clock
-reads per iteration when on.
+Reporting is off by default (`timer-diter = 0`). The timers run in every run:
+they read the clock a few times per iteration, and in multirate runs twice per
+stage, per evaluation of the certificate and, with several ranks, per reduction
+of the macro step, and four times per exchange.
 
 ## Output
 

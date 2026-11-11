@@ -21,7 +21,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   closed-form decay of isotropic turbulence on an axisymmetric wedge) and the flat plate of the NASA TMR
   (`FlatPlateTMR` and `FlatPlateTMRFull`, `test/2D/viscous/flat-plate-turbulent-tmr`): SSG/LRR on its three grids
   against CFL3D and TAU.
-
+- The SRM grain (`502`) has two modes, the fifth field of its property line: `1`, a wall that blows the products in, as
+  before; `2`, an inflow, applied as the mass-flux inlet `404` at the total temperature `T_af` along the face normal, with
+  the mass flux of Saint-Robert's law at the pressure of the boundary cell and the turbulence values of the line: the
+  turbulence values, ghost cells and wall distance of an inlet. Unlike an inlet `404` a grain of mode 2 is never closed by
+  the gas of the boundary cell at rest or moving out: the grain burns whatever that gas does, as in a chamber at rest
+  before the ignition.
 - Extrapolation faces (`400`) report the gas that enters the domain through them, which they let in with the state of the
   boundary cell, as they take the flux of the cell state for either direction of the gas. The first time the gas enters
   through the `400` faces of one face of a block (on each grid level), the run prints a line with the iteration, the faces and
@@ -100,9 +105,80 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The patch test of the viscous fluxes checks the cells next to inlets and outlets too (`ViscousPatch`, part
   `ViscousOpenPatch`, fast tier): the ghost cells of `401`–`408` and `420` must sit, in the metric of the face gradients, where
   their values belong. The solver does not change.
+- A multirate (local time stepping) integrator for time-accurate runs, `[MOSE-Multirate] enabled = .true.`: every cell
+  advances with a sub-step close to its own stability limit, the step H/2^l of the macro step H for a cell of level l,
+  instead of the smallest step of the mesh. The scheme is the recursive Heun scheme of Jeanmasson, Mary and Mieussens
+  (2019) with the interpolant of the coarse data of Hoang, Ju, Leng and Wang (2020) and a conservative correction of the
+  fluxes at the faces between levels: mass, momentum and energy are conserved to round-off, and the macro step is of
+  second order in time on a fixed mesh with a fixed level map (Appendix A of `docs/theory/time-integration.md`). The
+  keys of `[MOSE-Multirate]` set the deepest level allowed (10 by default; the map takes fewer levels when the local
+  steps span fewer octaves, so that the macro step stays within the step of the slowest cells divided by the safety
+  factor), the safety factor, a target or a fixed macro step, the level map (rebuilt from the local steps, by default at
+  every macro step, or kept) and the check of the non-local condition (4) of Gnedin, Semenov and Kravtsov (2018) at the
+  start of every sub-step (`nonlocal-cfl = count` or `redo`): by default (`redo`) a macro step that violates it is redone
+  with finer levels or a smaller macro step,
+  and the coarse cell of a face between levels runs within 1/kappa of the limit of the finer cell, kappa = max(cfl (1 +
+  theta), 1.1), so that, with kappa at most the safety factor (the default 2 with cfl up to 1), a rejection for a
+  violation of condition (4) needs a fall of more than 1 - 1/kappa of the admissible
+  step of a cell within the macro step (proven in Appendix A; the value 1.1 is a practice taken from Castro, the fall that its check of the step
+  tolerates, not a value that the scheme gives; below cfl (1 + theta) = 1.1 no key turns it off),
+  and a macro step in which a cell or a face takes a state that is not physical (a value that is not finite, a total
+  density that is not positive, a negative pressure or a temperature outside the tables of the gas) is redone with half
+  the macro step on the same levels when the map has more than one level; a face that is not physical already at the
+  start of the macro step stops the run, as in the single-rate step. A macro step whose H falls below 2^-10 of its first
+  attempt, or whose attempts are all rejected up to `max-attempts` (21 by default), stops the run with its rejections by
+  cause, and at the start of every macro step a local step that is not a positive finite number (zero, negative,
+  infinite or not a number) stops the run with the first such cell. The integrator runs the Euler and the Navier–Stokes
+  equations, laminar or with the Spalart–Allmaras model (`SA`, `SA-R`) or the SST model (with `k-energy-coupling` and
+  either `sst-production`), and with `max-level` 0 also `SA-RC` and `SST-RC`, with the SRM grain (`502`) in its
+  mode 2, an inflow, on several blocks (the 2-D axisymmetric wedge included)
+  and on several MPI processes, each with OpenMP threads, with the same output bits as on one process; the macro step
+  lands on the output instants, and with `levels = recompute` a restart from a `vtk raw` or a `tecplot ascii` solution
+  goes on bit for bit as the run in one go. The configurations outside its scope stop the run at set-up or at its first
+  macro step with a message `[MOSE-Multirate] <item>` and a non-zero exit code; with `max-level` > 0 and
+  `nonlocal-cfl = redo`, with `levels = recompute` and no `fixed-macro-step`, so do a `cfl` above 1 and, in a Navier–Stokes
+  run, a `vnn` above 0.5, the linear stability limits of Heun on the checkerboard mode, with every limiter, up to which the
+  check of condition (4) admits a sub-step within the macro step (with `off` and `count`, and where the certificate only
+  counts, nothing bounds those sub-steps, and the set-up checks neither value). `safety` takes
+  every value of at least 1 (2 by default). The keys of `[MOSE-Multirate]`
+  keep the values of the set-up for the whole run: a reading of `input.ini` during the run that changes one, or that takes
+  `cfl`, `vnn`, `time-accurate` or `cfl-rise-threshold` out of the scope of the integrator, is an error
+  of the reading, which `ini-error` decides. In the `Timing` block and in the `MOSE Timing` and `MOSE Ranks` lines the
+  exchange wait counts the wait for the messages of the exchanges of the integrator and their copy from the receive
+  buffers, and the collective wait its reductions; the start of the exchanges (receives and sends posted, send buffers
+  filled) is part of the compute and has its own line, `Exchange start`, in the `Timing` block of a run on several
+  processes; the wall times per level are read with the clock of these timers, in
+  builds with and without OpenMP, and a run on several processes ends with the minimum, mean and maximum over the
+  processes, per level, of the wall time of the stages without their exchanges and of the time of the exchanges. With
+  the multirate disabled, the default, the results do not change (the `Timing` block changes as the entry under Changed
+  says).
+- The tests of the multirate integrator (directory `test/multirate`, whose cases are built by
+  `test/multirate/mr-common/gen_mr_cases.py`; `ctest -L multirate -LE verification` runs them without the longer forms,
+  `ctest -L multirate` with them): a smoke test in the fast tier (`MultirateSmoke`); the validation groups
+  `MultirateIdentity`, `MultirateConservation`, `MultirateOrder`, `MultirateOrderInletsMoving`, `MultirateShocks`,
+  `MultirateInput`, `MultirateDaruTenaud` (the viscous shock tube of Daru and Tenaud) and `MultirateNozzleStartUp` (the
+  start-up of a nozzle); in builds with `USE_MPI=ON`, `MultirateHybrid` in the `needs-mpi` tier; and, with the label
+  `verification`, the full forms of the order checks (`MultirateOrderFull`) and the medium and full forms of the shock
+  tube of Daru and Tenaud (`MultirateDaruTenaudMedium`, `MultirateDaruTenaudFull`). The V&V page `docs/vv/multirate.md`
+  lists the cases, the checks and their thresholds.
 
 ### Changed
 
+- `T_af` of the SRM grain (`502`) is the total temperature of the products, in both modes: they enter with the total
+  enthalpy h(`T_af`) per unit mass, that of the propellant (the flame temperature of an equilibrium calculation is that of
+  the gas at rest), at the static temperature T of h(T) + u²/2 = h(`T_af`) from the tables, u their velocity through the
+  face. The blowing wall took `T_af` as the static temperature of the blown gas and added its kinetic energy, u²/2 per unit
+  mass more than the propellant holds: T is u²/(2cp) below `T_af`, 2.5e-3 K at 20 kg/(m² s) and 7 MPa for products of
+  371 J/(kg K), 0.12 K at 1 MPa (3e-4 K in the column of `AblatingWall`, which no longer gives the former field bit for bit).
+- The property line of the SRM grain (`502`) is `mdot_ref, n, p_ref, T_af, mode, massf(1:ns)` and, in mode 2, the
+  turbulence values: the mass flux first, `rho_grain` and `SF_geo` no longer written (MOSE read them and used neither),
+  the mode new. The boundary-condition builder of ATLAS writes this line (its logical key `grain-wall` sets the mode: `T`
+  mode 1, a wall; `F`, the default, mode 2, an inlet); a file of the
+  former line (`T_af, a, n, p_ref, rho_grain, SF_geo, massf`) is read wrong, and mostly refused by the checks below.
+- The collective wait of the `Timing` block, and of the `MOSE Timing` lines with `timer-diter`, counts the reduction of the
+  local time steps of every iteration too, as it counts the reduction of the residual: on several MPI processes it grows by
+  the time the processes wait there for the slowest one, and the compute spread over ranks changes by as much. The results
+  do not change.
 - **Breaking:** the `p0_file` table of an inlet `402` is read in Pa, as written, like every other input of MOSE (SI units
   throughout). It was read in bar and multiplied by $10^5$. An old table written in bar must be multiplied by $10^5$.
 - With `k-energy-coupling = .true.` (SST, Wilcox 2006) the stress of the momentum and energy equations holds
@@ -363,6 +439,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The wall state of a burning SRM grain (`502`) takes the gas constant of the composition the grain imposes: it took that
+  of the gas of the boundary cell, so that its density, and with it the blowing velocity, its momentum and kinetic energy,
+  were off by R(cell)/R(products) wherever the cell held another gas (a chamber not yet filled with the products, a
+  multi-species run: 0.80 of the right blowing velocity for products of 371 J/(kg K) blown into N2). The mass flux and the
+  enthalpy of the injected gas do not change; in a single-species run the gas constant of the cell is that of the
+  products, and this change alone changes nothing.
+- A property line of the SRM grain (`502`) stops the run at set-up when its mode is neither 1 nor 2, its `p_ref` is not
+  positive, its `mdot_ref` is negative (or 0 in mode 2), and when `T_af` is not positive (the boundary-condition builder of
+  ATLAS writes 0 for a grain without `eq-CEA-file`) or does not lie on the tables of the gas, from their lowest temperature
+  above 0 K to one kelvin below their last row: the tables hold the enthalpy of `Tmax - 1` above it, so the gas entered
+  with that enthalpy while the wall stayed at `T_af`, and a `T_af` of 0 made the grain an isothermal wall at 0 K (a slip
+  wall in an inviscid run).
 - The MUSCL reconstruction keeps the value of a cell at each of its faces between the value of the cell and that of the
   neighbour across the face on lines of cells of any lengths, with every limiter (van Albada excepted where the two slopes
   have opposite signs): the limited slope is bounded so that its change over half the cell is at most the jump to each

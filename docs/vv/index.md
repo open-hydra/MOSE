@@ -31,6 +31,7 @@ This section documents the Verification & Validation (V&V) test suite for MOSE. 
 | [Ablating Wall](2D-ablating-wall.md) | 2D | ~0 (blown column) | Gas-surface interaction: melting and pyrolysis walls, mass/energy surface balance | Closed-form surface energy balance (both face orientations) | HLLC | [GSI theory](../theory/gsi.md) |
 | [HyShot II Scramjet Combustor](3D-hyshotII.md) | 3D | 2.65 | Reacting scramjet combustor: sonic H$_2$ injection, shock train, finite-rate chemistry, chimera overset | HyShot II experiment (wall pressure, with uncertainty) + TAU S-A RANS | HLLC (SA) | Karl (2011); Chapuis et al. (2013) |
 | [Rotating Frame](rotating-frame.md) | 3D | low Mach | Coriolis and centrifugal source terms | Analytical / balance | HLLC | rotating-frame theory |
+| [Multirate Verification](multirate.md) | 1D, 2D, 3D | subsonic–supersonic | Multirate time stepping: one level = single rate, conservation, temporal order with fixed and moving faces between levels, Sod and blast waves, the non-local CFL condition, deep hierarchies, blocks, halo, OpenMP threads and MPI processes, restart, laminar and RANS (SA, SST) flows, viscous shock tube, nozzle start-up, set-up rejections | Single rate (bit for bit, and with a finer step), exact Riemann and simple-wave solutions, conservation to round-off, published wall density (Zhou, Xu and Liu 2018) | HLLC | Jeanmasson et al. (2019); Hoang et al. (2020); Gnedin et al. (2018) |
 
 ## Running the tests
 

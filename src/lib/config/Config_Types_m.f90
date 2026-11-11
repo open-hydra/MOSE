@@ -220,6 +220,33 @@ module MOSE_Config_Types_m
   !! ------------------------------------------------------
 
   !! ------------------------------------------------------
+  !! Multirate (local time stepping) ----------------------
+  !! ------------------------------------------------------
+  type, public :: multirate_t
+    character(len=llen) :: warning_message
+    character(len=llen) :: error_message
+    character(len=llen) :: description
+    ! USER-DEFINED INPUTS ([MOSE-Multirate], see MOSE_Mod_Multirate)
+    logical             :: enabled = .false.           ! Multirate integration (recursive Heun with per-cell levels)
+    integer             :: max_level = 10              ! Deepest level allowed: L = max_level, or fewer for fewer octaves of dtcap
+    real(R8)            :: safety = 2.0_R8             ! sigma: every cell advances with h_c <= dtcap_c/sigma
+    real(R8)            :: macro_step_target = 0.0_R8  ! Target macro step H [s] (0: none)
+    character(len=llen) :: levels = 'recompute'        ! Level map policy: fixed | recompute
+    integer             :: recompute_every = 1         ! Macro steps between two recomputations of the map
+    real(R8)            :: fixed_macro_step = 0.0_R8   ! H as a multiple of the dt_min of the first macro step (0: adaptive)
+    logical             :: conservative_correction = .true. ! Flux correction at the faces between levels
+    logical             :: trace = .false.             ! Stage sequence of the first macro step, level map and halo lists
+    character(len=llen) :: nonlocal_cfl = 'redo'       ! Certificate of condition (4) of Gnedin et al.: off | count | redo
+    logical             :: interface_margin = .false.  ! h_c <= dtcap_v/kappa on faces between levels, kappa = max(cfl(1+theta),1.1)
+    logical             :: force_redo = .false.        ! Test device: the first attempt of every macro step is redone
+    integer             :: max_attempts = 21           ! nonlocal-cfl = redo: attempts of a macro step at most
+    ! Useful variables
+    logical             :: empty_external_function = .false. ! Set by a program whose per-stage External_Function is empty
+  end type multirate_t
+  !! ------------------------------------------------------
+  !! ------------------------------------------------------
+
+  !! ------------------------------------------------------
   !! Multigrid --------------------------------------------
   !! ------------------------------------------------------
   type :: multigrid_t
@@ -406,6 +433,7 @@ module MOSE_Config_Types_m
   type(riemann_t), public               :: obj_riemann
   type(shock_detector_t), public        :: obj_shock_detector
   type(multigrid_t), public             :: obj_multigrid
+  type(multirate_t), public             :: obj_multirate
   type(chemistry_t), public             :: obj_chemistry
   type(soot_t), public                  :: obj_soot
   type(rans_t), public                  :: obj_rans
