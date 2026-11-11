@@ -245,7 +245,7 @@ must be separated by commas.
 | `un` | Velocity into the domain along the face normal [m/s] (type `408`), positive on every face |
 | `rel_fac` | Relaxation factor (0–1; use 1.0 for no relaxation); no effect on `401`, `402`, `403`, `407` and `420` |
 | `massf_s` | Mass fraction of species $s$ (multi-species only; one value per species) |
-| `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega` |
+| `turb_vars` | Turbulence quantities, **specific**, the same values as the initial condition: $\tilde\nu$ (SA), $k$ and $\omega$ (SST, Wilcox 2006), from the ATLAS keys `nuTilde`, `k`, `omega`; for SSGLRR the six stresses $R_{11}, R_{22}, R_{33}, R_{12}, R_{13}, R_{23}$ and $\omega$, from the ATLAS keys `Rij` (one value for the three normal stresses, the shear ones are set to $10^{-8}$) and `omega` |
 
 `g` and `un` are positive into the domain on every face; ATLAS writes them as its input gives them, and for a `420`
 given with `Ae_At` computes a positive `g`. On the faces 2, 4

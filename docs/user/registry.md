@@ -102,7 +102,7 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 | Parameter | Default | Allowed | Required | During the run | Description |
 |-----------|---------|---------|----------|----------------|-------------|
 | equations |  | euler , navier-stokes | yes | fixed | Gas dynamics equations |
-| turbulence | none | SA, SA-R, SA-RC, SAcomp, SST, SST-RC, Wilcox2006, none |  no | fixed | RANS turbulence model |
+| turbulence | none | SA, SA-R, SA-RC, SAcomp, SST, SST-RC, Wilcox2006, SSGLRR, SSGLRR-SD, SSGLRR-w2019, SSGLRR-w2019-SD, none |  no | fixed | RANS turbulence model |
 | chemistry | frozen | frozen, finite-rate, equilibrium |  no | fixed | Chemistry model |
 | soot-generation | none | LL91, LIN, none |  no | fixed | Soot generation model |
 | rotational-frame | none | rigid-body, none |  no | fixed | Rotational frame model |
@@ -129,9 +129,9 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 | Prt | 0.85 | > 0 |  no | taken | Turbulent Prandtl number |
 | Sct | 0.90 | > 0 |  no | taken | Turbulent Schmidt number |
 | point-implicit | .true. | logical |  no | taken | Point-implicit factor 1/(1 + dt d) on the increment of the turbulence equations, steady runs only (time-accurate runs: explicit sources, stiffness in the time step) |
-| omega-wall-bc | practical | practical, asymptotic |  no | fixed | Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2), beta1 of SST, for both models) or asymptotic (6*nu/(beta*y^2), exact y->0 limit with the beta of the model, beta1 for SST and beta0 for Wilcox2006, for wall-resolved meshes) |
+| omega-wall-bc | practical | practical, asymptotic |  no | fixed | Omega wall condition for the omega-based models (SST, Wilcox2006, SSGLRR): Menter practical (60*nu/(beta1*y^2), beta1 of SST, for every model) or asymptotic (6*nu/(beta*y^2), exact y->0 limit with the beta of the model, beta1 for SST, beta0 for Wilcox2006 and the beta of LRR, 0.075, for SSGLRR, for wall-resolved meshes) |
 | sst-production | incompressible | incompressible, compressible |  no | fixed | SST production: incompressible (P = mu_t*S^2; NASA TMR SST-2003m, or SST-2003s with k-energy-coupling) or compressible (P = tau_ij*du_i/dx_j as OpenFOAM kOmegaSST arranges it: the limiter on mu_t*(S^2 - 2/3*divU^2) only, then -2/3*rho*k*divU added, and -2/3*gamma*rho*omega*divU in the omega equation; TMR SST-2003e limits the whole P and takes gamma/nu_t times it in the omega equation) |
-| k-energy-coupling | .false. | logical |  no | fixed | Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants |
+| k-energy-coupling | .false. | logical |  no | fixed | Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants. The Reynolds-stress model SSGLRR is always in this form |
 
 ## MOSE-Rotating-Frame
 

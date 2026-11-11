@@ -283,7 +283,7 @@ At run time `Assign_Setup` reads `turbulence` from the input file and, in
 | `SST` | `Lib_SST` | Menter k-ω SST (SST-2003) |
 | `SST-RC` | `Lib_SST`, `Lib_SpalartShur` | SST + rotation–curvature correction (Smirnov–Menter) |
 | `Wilcox2006` | `Lib_Wilcox2006` | Wilcox k-ω (2006 revision) |
-| `SSGLRR` | `Lib_SSGLRR` | Speziale–Sarkar–Gatski RSM; in the source code, `turbulence` does not accept it |
+| `SSGLRR` | `Lib_SSGLRR` | SSG/LRR-ω Reynolds-stress model (7 equations); variants `SSGLRR-SD`, `SSGLRR-w2019`, `SSGLRR-w2019-SD` |
 | `QCR2000` | `Lib_QCR2000` | Quadratic Constitutive Relation; in the source code, `turbulence` does not accept it |
 
 ### Wall distance

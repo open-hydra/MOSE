@@ -91,6 +91,7 @@ contains
     Gradient(np,Dir) = dT
 
     ! Wall variables
+    Prim_wall = Prim
     Prim_wall(1:nsc) = Prim(1:nsc) * rho_wall / rho
 
     if (model==2)  then
@@ -122,8 +123,8 @@ contains
       call Eddy_Viscosity ( mut=mit, rans_variables=Prim_Wall(nt:nprim), mul=mil, rho=rho_wall, &
                             vel_gradient=VelGrad, walldist=0d0, k_rough=kr )
 
-    ! Stress vector
-    Stress = Stress_Vector ( VelGrad, Normal, mil, mit, Prim(nt:) )
+    ! Stress vector, with the turbulence variables of the wall (no Reynolds stress, no k)
+    Stress = Stress_Vector ( VelGrad, Normal, mil, mit, Prim_Wall(nt:) )
 
     ! Fluxes
     Flux = 0.0d0

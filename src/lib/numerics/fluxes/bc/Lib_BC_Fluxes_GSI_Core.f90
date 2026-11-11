@@ -376,6 +376,7 @@ contains
     ! Local
     integer  :: s
     real(R8) :: Gradient(nprim,3), Blowing(3), Stress(3), Flux(nprim), Sum_Omegai_Hwi, dl
+    real(R8) :: Rans_wall(max(nRANS,1))
 
     Gradient = 0d0
     Gradient(np,:) = grad_T
@@ -386,7 +387,9 @@ contains
     Gradient(nu:nw,:) = matmul ( Gradient(nu:nw,:), face % M )
 
     if ( model > 0 ) then
-      Stress = Stress_Vector ( Gradient(nu:nw,:), face % normal, mu_wall, 0d0, Prim(nt:) )
+      ! The turbulence variables entering the stress (Reynolds stresses, k) are zero at the wall
+      Rans_wall = 0d0
+      Stress = Stress_Vector ( Gradient(nu:nw,:), face % normal, mu_wall, 0d0, Rans_wall )
     else
       Stress = 0d0
     end if

@@ -269,7 +269,7 @@ With the vtk formats each output is a multi-block file, `OUTPUT/field.vtm` for i
 
 ### Output Variables
 
-By default, MOSE writes primitive variables ($\rho$, $u$, $v$, $w$, $p$, $T$) and, under a RANS model, the density-weighted turbulence variables it advances: `rhoNuTilde` $= \rho\tilde\nu$ (Spalart-Allmaras), `rhoK` and `rhoOmega` ($k$-$\omega$ models), the names of the initial condition ([Initial Conditions](initial-conditions.md#required-variables)). Additional variable groups can be enabled in `[MOSE-IO]` via `sol-variables`:
+By default, MOSE writes primitive variables ($\rho$, $u$, $v$, $w$, $p$, $T$) and, under a RANS model, the density-weighted turbulence variables it advances: `rhoNuTilde` $= \rho\tilde\nu$ (Spalart-Allmaras), `rhoK` and `rhoOmega` ($k$-$\omega$ models), `ru'u'`, `rv'v'`, `rw'w'`, `ru'v'`, `ru'w'`, `rv'w'` and `rhoOmega` (SSG/LRR Reynolds-stress model), the names of the initial condition ([Initial Conditions](initial-conditions.md#required-variables)). Additional variable groups can be enabled in `[MOSE-IO]` via `sol-variables`:
 
 - `thermo` — specific heat ratio $\gamma$, gas constant $R$
 - `transport` — laminar viscosity $\mu_l$ (`mil`), thermal conductivity $k_l$ (`kl`) and, under a RANS model, eddy viscosity $\mu_t$ (`mut`)

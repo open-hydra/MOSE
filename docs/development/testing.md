@@ -94,8 +94,8 @@ test/
 │   │   └── isentropic-vortex/ # Isentropic vortex convection (N1): order of accuracy on 32/64/128 grids
 │   └── viscous/               # Viscous cases
 │       ├── flat-plate-laminar/
-│       ├── flat-plate-turbulent/  # Subdirs: SA/ SST/ Wilcox2006/
-│       ├── flat-plate-turbulent-tmr/ # Flat plate of the NASA TMR on three grids, SA, SST, Wilcox 2006 (validation tier; full form: verification)
+│       ├── flat-plate-turbulent-tmr/ # Flat plate of the NASA TMR on three grids, SA, SST, Wilcox 2006, SSG/LRR (validation tier; full form: verification)
+│       ├── rsm-decay/             # Reynolds-stress model vs closed-form decay
 │       ├── ablating-wall/     # Ablative wall BCs (503 melting / 504 pyrolysis): an isothermal blown column
 │       ├── mms/                   # residuals/: right-hand sides on manufactured fields (RANS, wedge); skewed/: order on skewed grids (validation tier)
 │       ├── wedge-axis-step/       # Local time step next to the axis of the wedge (validation tier)
@@ -373,7 +373,13 @@ step keeps the rows next to the axis stable at the largest vnn the rule
 declares, RK3 0.62 and Heun 0.5, on square cells, on cells twice as long in x
 and with the axis on the last j face, and at the recommended vnn, RK3 0.5 and
 Heun 0.4, on cells four times as long in x with the Prandtl number of air and
-with 0.9.
+with 0.9. `RSMDecay` (`test/2D/viscous/rsm-decay`) is there for its cost, four
+runs of about 13 s of CPU: the four variants of the Reynolds-stress model SSGLRR
+carry isotropic turbulence in a uniform stream through an axisymmetric wedge, and
+k and omega decay as the closed form gives, the stresses stay isotropic, no
+radial velocity appears (the Reynolds stress in the viscous flux of the wedge
+faces) and total enthalpy + k + R11 is conserved (the energy exchange with the
+mean flow and the Reynolds stress on the open boundaries).
 `MMSViscousSkewed` (`test/2D/viscous/mms/skewed`) and `MMSViscous3D`
 (`test/3D/viscous/mms`) check the order of the viscous operator with
 manufactured solutions on grids whose cells are all skewed or whose cell size
@@ -382,13 +388,13 @@ jumps, made of blocks that meet with permuted indices, and `PlanarNozzleGrids`
 on grids whose blocks have different index orientations; they are there for
 their cost, 15 to 80 s of CPU time each.
 `FlatPlateTMR` (`test/2D/viscous/flat-plate-turbulent-tmr`) restarts the
-Spalart–Allmaras, SST and Wilcox 2006 runs of the turbulent flat plate of the
-NASA TMR from their converged solutions on the 35 × 25 grid, 5000 iterations
-each: the restarts must do their iterations, the skin friction at
+Spalart–Allmaras, SST, Wilcox 2006 and SSG/LRR-ω runs of the turbulent flat plate
+of the NASA TMR from their converged solutions on the 35 × 25 grid, 5000
+iterations each: the restarts must do their iterations, the skin friction at
 x = 0.970084071 and 1.90334 and the drag must stay within 1e-5 (relative) of the converged
 values, and the criteria of the [V&V page](../vv/2D-flat-plate-turbulent-tmr.md),
-computed again from the stored results of the full form, must hold; about 71 s
-of CPU at one thread.
+computed again from the stored results of the full form, must hold; about
+150 s of CPU at one thread.
 `ExitCodes` and `RuntimeInput` (`test/fast/input-checks`) and `ViscousWallPatch`
 (`test/fast/viscous-patch`) are there for their cost alone, 13 to 31 s of CPU
 time each at one thread, over the cap of a row of the fast tier (test plan,
@@ -409,13 +415,13 @@ TIMEOUT of three days; `./MOSE.sh -p <threads> test` and `python3 -B verify.py`
 in its folder run it on a cluster node in about 1 h 10 min with 18 or 32 threads.
 
 `FlatPlateTMRFull` (`test/2D/viscous/flat-plate-turbulent-tmr`, label
-`verification`) runs the full form of `FlatPlateTMR`, the nine runs of the
-[V&V page](../vv/2D-flat-plate-turbulent-tmr.md): the three models on the
+`verification`) runs the full form of `FlatPlateTMR`, the twelve runs of the
+[V&V page](../vv/2D-flat-plate-turbulent-tmr.md): the four models on the
 35 × 25, 69 × 49 and 137 × 97 grids of the TMR, 300 000 iterations each from the
 uniform field, and the criteria of the page. It writes in `RUN/reference/` the
 files to copy to `reference/` when a change of MOSE moves the steady state that
-the short form guards. CTest runs it at one thread, about 24.5 h (an estimate),
-with a TIMEOUT of 49 h: run it on a cluster node, or faster with
+the short form guards. CTest runs it at one thread, about 51 h (an estimate),
+with a TIMEOUT of 103 h: run it on a cluster node, or faster with
 `./MOSE.sh -p <threads> test` and `python3 -B verify.py` in its folder.
 
 ### MPI tier contents

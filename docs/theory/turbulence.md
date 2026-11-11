@@ -5,9 +5,10 @@ turbulent flows, selected at run time via the `turbulence` key in the
 `[MOSE-Physics]` section of the input file.  The eddy-viscosity models
 described in detail below range from the one-equation Spalart–Allmaras
 model (with several variants) to the two-equation Menter SST and
-Wilcox 2006 $k$–$\omega$ models.  A full Reynolds-stress closure
-(SSG–LRR) and an algebraic non-linear correction (QCR2000) are in the
-code, but `turbulence` does not accept them — see [Other models](#other-models).
+Wilcox 2006 $k$–$\omega$ models; beyond them, the
+[SSG/LRR-$\omega$ Reynolds-stress model](#ssglrr-reynolds-stress-model)
+transports the Reynolds stresses themselves.  An algebraic non-linear
+correction (QCR2000) is also available — see [Other models](#other-models).
 
 ---
 
@@ -548,6 +549,13 @@ of the mean flow, $\tfrac12|\mathbf{U}|^2$, and no $k$ (OpenFOAM-dev, commit
 10f026fd, `applications/modules/shockFluid/thermophysicalPredictor.C` and
 `applications/modules/fluid/thermophysicalPredictor.C`).
 
+The $-\tfrac23\rho k\,\delta_{ij}$ part of the stress is a pressure in all but
+name, and is applied wherever the pressure is: besides the interior faces, on the
+inflow, outflow and extrapolation faces (from the boundary cell) and, on an
+axisymmetric mesh, on the two side faces of the wedge, where it adds
+$\tfrac23\rho k$ to the pressure in the radial momentum balance.  At a wall
+$k = 0$ and the term vanishes.
+
 ---
 
 ## Wilcox 2006 $k$–$\omega$ — Two-Equation Model
@@ -630,21 +638,216 @@ $$
 
 ---
 
+## SSG/LRR-$\omega$ — Reynolds-Stress Model { #ssglrr-reynolds-stress-model }
+
+The SSG/LRR-$\omega$ model of Eisfeld, Rumsey & Togiti [15] does not use the
+Boussinesq hypothesis: it transports the six Reynolds stresses
+$\rho R_{ij} = \overline{\rho\,u_i''u_j''}$ and the specific dissipation rate
+$\omega$, seven equations in all.  The pressure–strain model and the $\omega$
+equation blend the Launder–Reece–Rodi (LRR) coefficients near walls with the
+Speziale–Sarkar–Gatski (SSG) ones away from them [7].  Being anisotropy-resolving, the
+model captures secondary flows and the effects of streamline curvature and
+rotation that the eddy-viscosity models miss, at the cost of the additional
+equations.
+
+MOSE follows the specification of the NASA Turbulence Modeling Resource [16].
+The `turbulence` key selects the variant:
+
+| `turbulence` | TMR name | Diffusion of the stresses | Length-scale correction |
+|---|---|---|---|
+| `SSGLRR` | SSGLRR-RSM-w2012 | generalized gradient | no |
+| `SSGLRR-SD` | SSGLRR-RSM-w2012-SD | simple (eddy viscosity) | no |
+| `SSGLRR-w2019` | SSGLRR-RSM-w2019 | generalized gradient | yes |
+| `SSGLRR-w2019-SD` | SSGLRR-RSM-w2019-SD | simple (eddy viscosity) | yes |
+
+### Transport equations
+
+$$
+\frac{\partial(\rho R_{ij})}{\partial t}
++ \nabla\!\cdot\!(\rho\,\mathbf{v}\,R_{ij})
+= \rho P_{ij} + \rho\,\Pi_{ij} - \rho\,\varepsilon_{ij} + \rho D_{ij}
+$$
+
+with $k = \tfrac12 R_{ii}$ and $\varepsilon = C_\mu\,k\,\omega$, $C_\mu = 0.09$.
+The production is exact and the dissipation isotropic:
+
+$$
+\rho P_{ij} = -\rho R_{ik}\,\frac{\partial u_j}{\partial x_k}
+              -\rho R_{jk}\,\frac{\partial u_i}{\partial x_k},
+\qquad
+\rho\,\varepsilon_{ij} = \tfrac23\,\rho\,\varepsilon\,\delta_{ij}
+$$
+
+The pressure–strain correlation is written with the anisotropy tensor
+$a_{ij} = R_{ij}/k - \tfrac23\delta_{ij}$, the strain rate $S_{ij}$, its
+deviator $S^\ast_{ij} = S_{ij} - \tfrac13 S_{kk}\delta_{ij}$ and the rotation
+tensor $W_{ij} = \tfrac12(\partial u_i/\partial x_j - \partial u_j/\partial x_i)$:
+
+$$
+\begin{aligned}
+\rho\,\Pi_{ij} ={}& -\bigl(C_1\,\rho\,\varepsilon + \tfrac12 C_1^\ast\,\rho P_{kk}\bigr)\,a_{ij}
+ + C_2\,\rho\,\varepsilon\,\bigl(a_{ik}a_{kj} - \tfrac13 a_{kl}a_{kl}\,\delta_{ij}\bigr) \\
+ & + \bigl(C_3 - C_3^\ast\sqrt{a_{kl}a_{kl}}\bigr)\,\rho k\,S^\ast_{ij}
+ + C_4\,\rho k\,\bigl(a_{ik}S_{jk} + a_{jk}S_{ik} - \tfrac23 a_{kl}S_{kl}\,\delta_{ij}\bigr) \\
+ & + C_5\,\rho k\,\bigl(a_{ik}W_{jk} + a_{jk}W_{ik}\bigr)
+\end{aligned}
+$$
+
+The diffusion is the generalized gradient model of Daly & Harlow [17], or, with
+the `-SD` suffix, a simple gradient model built on $\mu_t = \rho k/\omega$:
+
+$$
+\rho D_{ij} = \frac{\partial}{\partial x_k}\!\left[
+  \left(\mu\,\delta_{kl} + D\,\frac{\rho R_{kl}}{C_\mu\,\omega}\right)
+  \frac{\partial R_{ij}}{\partial x_l}\right]
+\qquad\text{or}\qquad
+\rho D_{ij} = \frac{\partial}{\partial x_k}\!\left[
+  \left(\mu + \frac{D_\text{SD}}{C_\mu}\,\mu_t\right)
+  \frac{\partial R_{ij}}{\partial x_k}\right]
+$$
+
+with $D_\text{SD} = 0.5\,C_\mu F_1 + \tfrac23\,0.22\,(1 - F_1)$.  The length-scale
+equation is
+
+$$
+\frac{\partial(\rho\omega)}{\partial t}
++ \nabla\!\cdot\!(\rho\,\mathbf{v}\,\omega)
+= \alpha_\omega\,\frac{\omega}{k}\,\frac{\rho P_{kk}}{2} - \beta_\omega\,\rho\,\omega^2
++ \nabla\!\cdot\!\Bigl[\Bigl(\mu + \sigma_\omega\frac{\rho k}{\omega}\Bigr)\nabla\omega\Bigr]
++ \sigma_d\,\frac{\rho}{\omega}\,\max\!\bigl(\nabla k\!\cdot\!\nabla\omega,\;0\bigr)
+$$
+
+### Model constants
+
+Every coefficient $\phi$ is blended as
+$\phi = F_1\,\phi^{(\omega)} + (1 - F_1)\,\phi^{(\varepsilon)}$ with Menter's function
+
+$$
+F_1 = \tanh\!\bigl(\zeta^4\bigr), \qquad
+\zeta = \min\!\left[
+  \max\!\left(\frac{\sqrt{k}}{C_\mu\,\omega\,d},\;\frac{500\,\mu}{\rho\,\omega\,d^2}\right),\;
+  \frac{4\,\sigma_\omega^{(\varepsilon)}\rho k}{\text{CD}\,d^2}\right],
+\qquad
+\text{CD} = \sigma_d^{(\varepsilon)}\,\frac{\rho}{\omega}\,\max\!\bigl(\nabla k\!\cdot\!\nabla\omega,\;0\bigr)
+$$
+
+where $d$ is the distance to the nearest wall.
+
+| Set | $\alpha_\omega$ | $\beta_\omega$ | $\sigma_\omega$ | $\sigma_d$ | $C_1$ | $C_1^\ast$ | $C_2$ | $C_3$ | $C_3^\ast$ | $C_4$ | $C_5$ | $D$ |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| $\omega$ (LRR, near wall) | 0.5556 | 0.075 | 0.5 | 0 | 1.8 | 0 | 0 | 0.8 | 0 | $\tfrac{9C_2^\text{LRR}+6}{11}$ | $\tfrac{-7C_2^\text{LRR}+10}{11}$ | $0.75\,C_\mu$ |
+| $\varepsilon$ (SSG, outer) | 0.44 | 0.0828 | 0.856 | 1.712 | 1.7 | 0.9 | 1.05 | 0.8 | 0.65 | 0.625 | 0.2 | 0.22 |
+
+with $C_2^\text{LRR} = 0.52$.
+
+### Length-scale correction (w2019)
+
+The `-w2019` variants [18] multiply the destruction of $\omega$ by
+$1 - F^\text{(LSC)}$, which removes it where the turbulent length scale exceeds
+that of the log layer, near stagnation and reattachment points:
+
+$$
+F^\text{(LSC)} = \tfrac12\Bigl\{1 + \tanh\bigl[A\,(\chi - \chi_T)\bigr]\Bigr\},
+\qquad
+\chi = \max\!\bigl[(r - 1)\,r^2,\;0\bigr],
+\qquad
+r = \frac{\sqrt{k}}{C_\mu^{1/4}\,\kappa\,\omega\,d}
+$$
+
+with $A = 31$, $\chi_T = 1$ and $\kappa = 0.41$.  In an attached boundary layer
+$r \le 1$ and the correction is inactive.
+
+### Coupling with the mean flow
+
+The momentum and energy equations carry the modelled stress directly,
+
+$$
+\tau_{ij} = 2\mu\bigl(S_{ij} - \tfrac13\nabla\!\cdot\!\mathbf{v}\,\delta_{ij}\bigr) - \rho R_{ij},
+$$
+
+and the turbulent heat and species fluxes are gradient models with
+$\mu_t = \rho k/\omega$ and the turbulent Prandtl and Schmidt numbers `Prt` and
+`Sct` (TMR uses $Pr_t = 0.9$).  The same $\mu_t$ enters the time-step limit.
+
+The energy is treated as with [`k-energy-coupling`](#energy-coupling-k-energy-coupling),
+which the Reynolds-stress model always has: MOSE advances the mean-flow energy
+$E_m = e + \tfrac12 u_iu_i$, whose equation is the total-energy equation of
+TMR [11] minus the $k$ equation (half the trace of the stress equations).  The
+diffusion of $k$ cancels in the difference, and what is left is the exchange
+with the turbulence,
+
+$$
+\frac{\partial(\rho E_m)}{\partial t} + \dots = \dots
+- \bigl(\tfrac12\rho P_{kk} - \rho\,\varepsilon\bigr),
+$$
+
+so that $E_m + k$ is conserved: the work of the Reynolds stresses in the energy
+flux contains the production of $k$, which is returned to the turbulence here,
+and the dissipated $k$ comes back as heat.
+
+### Boundary conditions
+
+**Walls.**  $R_{ij} = 0$ and
+$\omega_\text{wall} = C\,\nu_w/y_c^2$, imposed on the wall face exactly as for
+[SST](#wall-boundary-conditions); `omega-wall-bc` selects $C$, and the default
+`practical` ($C = 800$) is the condition of TMR.  The wall stress is the
+molecular one.  On blowing (ablating) walls the stresses are zero as well.
+
+**Symmetry planes.**  The ghost cell holds the mirror image of the stress
+tensor, $\mathbf{Q}\,\mathbf{R}\,\mathbf{Q}$ with
+$\mathbf{Q} = \mathbf{I} - 2\,\mathbf{n}\mathbf{n}^T$, and the face their mean,
+which has no shear stress on the plane.  For a plane normal to an axis this is
+the condition of TMR (the two shear stresses carrying that index vanish on the
+plane, the other stresses have zero gradient); the plane may have any
+orientation.
+
+**Inlets and initial conditions.**  ATLAS gives the three normal stresses one
+value (isotropic turbulence, $R_{11} = R_{22} = R_{33} = \tfrac23 k$) and sets
+the shear stresses to $10^{-8}$; with $\omega$ this fixes the state.  In the
+`[ICB-Block*]` sections the keys are `Rij` (specific, m²/s²) or `rhoRij`, with
+`omega` or `rhoOmega`; in a boundary section they are `Rij` and `omega`, both
+specific, which MOSE multiplies by the inlet density as it does `k` and
+`nuTilde` (the density-weighted `rhoRij` is an `[ICB-Block*]` key only, and a
+boundary section carrying it is refused).  The initial-condition and
+solution files carry the density-weighted bands
+`ru'u' rv'v' rw'w' ru'v' ru'w' rv'w' rhoOmega`.  The freestream values follow
+the [same rule](#freestream-and-inlet-values-k-omega-tildenu) as for the
+two-equation models, with $R_{ii} = \tfrac23 k_\infty$.
+
+**Inflow, outflow and extrapolation faces.**  They carry no diffusive flux, but
+the Reynolds stress is not one: it acts on these faces as the pressure does, and
+its flux in the momentum and energy equations, $\rho R_{ij}n_j$ and
+$\rho R_{ij}n_j u_i$, is taken from the boundary cell.  Without it the pressure
+jumps by $\rho R_{nn}$ in the cells next to an open boundary.
+
+**Axisymmetric and rotationally periodic faces.**  The stress tensor turns
+with the ghost cell, as the velocity does, in the inviscid flux of the faces of
+type `200` and in their viscous flux (`BC_Rotational_Periodic_Visc`), whose
+stress includes $-\rho R_{ij}$ of the face: on the two side faces of an
+axisymmetric wedge the azimuthal normal stress $\rho R_{\theta\theta}$ thus
+enters the radial momentum balance with the viscous hoop stress.
+
+### Realizability
+
+After every update the normal stresses are kept positive, the shear stresses
+within $|R_{ij}| \le \sqrt{R_{ii}R_{jj}}$ (no sum), and $\omega$ positive.
+
+### Rotating frame
+
+In a [rotating frame](rotating-frame.md) of angular velocity $\boldsymbol\Omega$
+the stress equations gain the Coriolis term
+
+$$
+\rho\,G_{ij} = -2\,\Omega_k\,\bigl(\epsilon_{ikm}\,\rho R_{jm} + \epsilon_{jkm}\,\rho R_{im}\bigr),
+$$
+
+which redistributes the stresses without producing $k$ ($G_{kk} = 0$), and the
+pressure–strain model uses the absolute rotation tensor
+$W_{ij} + \epsilon_{mji}\,\Omega_m$ [19, 20].
+
+---
+
 ## Other models
-
-### SSG–LRR (Reynolds-stress model)
-
-In addition to the eddy-viscosity closures above, the code has the
-**SSG–LRR** differential Reynolds-stress model (`Lib_SSGLRR`),
-which transports the six independent components of the Reynolds-stress
-tensor together with a length-scale variable instead of assuming the
-Boussinesq relation. It blends the Speziale–Sarkar–Gatski (SSG)
-pressure–strain model away from walls with the Launder–Reece–Rodi (LRR)
-model near walls. Being anisotropy-resolving, it captures secondary
-flows and strong streamline-curvature effects that the two-equation
-models miss, at the cost of the additional transport equations.
-`turbulence` does not accept the name `SSGLRR` (its allowed values are listed
-in the [registry](../user/registry.md)), so no run uses it.
 
 ### QCR2000 (non-linear constitutive correction)
 
@@ -670,7 +873,7 @@ defined in `Mod_RANS`:
 | Pointer | Purpose |
 |---------|---------|
 | `Eddy_Viscosity` | Compute $\mu_t$ from model variables |
-| `RANS_Diffusive_Flux` | Turbulent diffusion terms for $k$, $\omega$, $\tilde\nu$ |
+| `RANS_Diffusive_Flux` | Turbulent diffusion terms for $k$, $\omega$, $\tilde\nu$, $R_{ij}$ |
 | `Stress_Vector` | Viscous + Reynolds stress on a face |
 | `RANS_Set_Wall_Values` | Set turbulence BC at walls |
 | `RANS_Extrapolate_Wall` | Ghost-cell value of the RANS variables at walls, $2Z_\text{wall} - Z_\text{cell}$ |
@@ -888,6 +1091,8 @@ of the destruction ($d/2$ for $\tilde\nu$ and $\omega$, whose destruction is qua
 | SST / Wilcox | $k$ | $\beta^\ast\,\omega$ |
 | SST / Wilcox | $\omega$ | $2\,\beta\,\omega$ |
 | SA | $\tilde\nu$ | $2\,c_{w1}\,f_w\,\tilde\nu/y^2$ |
+| SSG/LRR | $R_{ij}$ | $C_1\,C_\mu\,\omega + \tfrac12 C_1^\ast\max(P_{kk},0)/k$ (dissipation and return to isotropy) |
+| SSG/LRR | $\omega$ | $2\,\beta_\omega\,\omega$ |
 
 ($y$ the wall distance; $f_w$ is held fixed.) Steady and time-accurate runs treat this
 stiffness in two different ways.
@@ -928,6 +1133,10 @@ $$
 The two increments add up to $\Delta t\,(F_E + F_k)$, the fluxes of $E_m + k$ alone, at every stage, and
 the converged solution, $F_k + S_k = 0$ and $F_E = S_k$, does not depend on the time step.
 
+The Reynolds-stress model SSG/LRR, always in this energy form, takes one factor $1/(1 + \Delta t\,d)$ for its six
+stress equations, with the rate $d$ of the table, and its own for $\omega$; its energy row is treated in the same way,
+with $\rho k = \tfrac12(\rho R_{11} + \rho R_{22} + \rho R_{33})$ and $S_k$ half the trace of the stress sources.
+
 ```ini
 [MOSE-Turbulence]
 point-implicit = .true.   ; (default) point-implicit factor on the turbulence increment, steady runs
@@ -962,9 +1171,12 @@ alone, without gradients or ghost cells:
 | Wilcox 2006 | $\max(\beta^\ast, 2\beta_0)\,\omega$ | $\beta = \beta_0 f_\beta$, and $f_\beta \le 1$ takes the velocity gradient: $1/f_\beta$, 1 in 2-D ($\chi_\omega = 0$), at most $1/0.85$ |
 | SA | $2\,c_{w1}\,(1 + c_{w3}^6)^{1/6}\,\tilde\nu/y^2$ | $f_w = g\,[(1 + c_{w3}^6)/(g^6 + c_{w3}^6)]^{1/6}$ grows with $g \ge 0$ towards $(1 + c_{w3}^6)^{1/6} = 2.005$: $2.005/f_w$, 1 where $r$ reaches its cap of 10, about 2 where $r \approx 1$ (an equilibrium boundary layer, where the destruction is slow against the diffusion) |
 
-($y$ the wall distance of the source, moved below a rough wall.) The Reynolds-stress model SSG/LRR,
-which the key `turbulence` does not select, takes no bound: none was derived for its
-sources, and its $\hat d$ is zero. Then
+($y$ the wall distance of the source, moved below a rough wall.) For the Reynolds-stress model SSG/LRR,
+$\hat d = \max\bigl(\max(C_1^\text{LRR}, C_1^\text{SSG})\,C_\mu,\ 2\max(\beta_\omega^\text{LRR}, \beta_\omega^\text{SSG})\bigr)\,\omega
+= 0.1656\,\omega$: with $\omega$ held, the dissipation and the return to isotropy of the stresses,
+$-\tfrac23\rho\varepsilon\,\delta_{ij} - C_1\rho\varepsilon\,a_{ij}$ with $\varepsilon = C_\mu k\omega$, decay the trace at
+$C_\mu\omega$ and the deviatoric part at $C_1 C_\mu\omega$, and $\omega$ at $2\beta_\omega\omega$; the bound leaves out the part
+$\tfrac12 C_1^\ast P_{kk}/k$ of the return to isotropy, which needs the velocity gradient. Then
 $\Delta t\,d \le \Delta t\,\hat d \le 1$: a forward-Euler stage cannot make
 $\tilde\nu$, $k$ or $\omega$ negative through their destruction, and neither can Heun and RK3, whose
 stages are convex combinations of forward-Euler stages (W. Hundsdorfer, *Numerical Solution of
@@ -1078,3 +1290,18 @@ fallback when a model's destruction Jacobian is not readily available.
     critical analysis of some popular methods for the discretisation of the
     gradient operator in finite volume methods," *Phys. Fluids*, 29, 127103,
     2017, doi:10.1063/1.4997682.
+15. B. Eisfeld, C. Rumsey, V. Togiti, "Verification and validation of a
+    second-moment-closure model," *AIAA J.*, 54(5), pp. 1524–1541, 2016,
+    doi:10.2514/1.J054718; erratum *AIAA J.*, 54(9), p. 2926, 2016,
+    doi:10.2514/1.J055336.
+16. NASA Langley Turbulence Modeling Resource, "SSG/LRR full Reynolds stress
+    model," <https://tmbwg.github.io/turbmodels/rsm-ssglrr.html>: definitions and
+    naming of the variants (SSGLRR-RSM-w2012, -SD, -w2019).
+17. B. J. Daly, F. H. Harlow, "Transport equations in turbulence,"
+    *Phys. Fluids*, 13, pp. 2634–2649, 1970, doi:10.1063/1.1692845.
+18. B. Eisfeld, C. Rumsey, "Length-scale correction for Reynolds-stress
+    modeling," *AIAA J.*, 58(4), pp. 1518–1528, 2020, doi:10.2514/1.J058858.
+19. B. E. Launder, D. P. Tselepidakis, B. A. Younis, "A second-moment closure
+    study of rotating channel flow," *J. Fluid Mech.*, 183, pp. 63–75, 1987.
+20. C. G. Speziale, "Turbulence modeling in noninertial frames of reference,"
+    *Theor. Comput. Fluid Dyn.*, 1, pp. 3–19, 1989.

@@ -58,7 +58,7 @@ $$\boldsymbol{S}_{E} = \boldsymbol{w} \cdot (\rho \omega^2 \boldsymbol{r}_{\perp
 
 ### RANS Turbulence Equations
 
-The transport equations themselves are **unchanged** from the inertial frame, but every closure that consumes the vorticity (rather than the strain rate) must use the **absolute** vorticity. For constant $\boldsymbol{\Omega}$ the kinematic identity
+The transport equations of the eddy-viscosity models are **unchanged** from the inertial frame (those of the Reynolds stresses are not, see below), but every closure that consumes the vorticity (rather than the strain rate) must use the **absolute** vorticity. For constant $\boldsymbol{\Omega}$ the kinematic identity
 
 $$\boldsymbol{\omega}_{\rm abs} = \boldsymbol{\omega}_{\rm rel} + 2\boldsymbol{\Omega}$$
 
@@ -70,9 +70,15 @@ follows from $\nabla\times(\boldsymbol{\Omega}\times\boldsymbol{r}) = 2\boldsymb
 | SA + Spalart–Shur (SA-RC) | $\tilde r$ in the rotation/curvature factor $f_{r1}$ |
 | Menter SST $k$–$\omega$ | $O = \sqrt{2 W_{ij}W_{ij}}$ in the SST-RC denominator and $f_{r1}$ |
 | Wilcox 2006 $k$–$\omega$ | $f_\beta$ vortex-stretching limiter, $W_{ij}W_{jk}\hat S_{ki}$ |
-| SSG–LRR (RSM; in the source code, `turbulence` does not accept it) | $W_{ij}^{\rm abs}$ in the $C_5$ pressure-strain term |
+| SSG/LRR-$\omega$ (RSM) | $W_{ij}^{\rm abs}$ in the $C_5$ pressure-strain term |
 
 In SA-RC and SST-RC the rate of change of the strain in $\tilde r$ is its steady convective part $\mathbf{u}\cdot\nabla S_{ij}$: the frame enters through the absolute vorticity, but the frame-rotation term $(\epsilon_{imn}S_{jn} + \epsilon_{jmn}S_{in})\,\Omega_m$ of the published $\tilde r$ is not included.
+
+**Reynolds-stress model.** The stresses are not scalars, and their transport equations written for the relative velocity gain the Coriolis term
+
+$$\rho\,G_{ij} = -2\,\Omega_k\,\bigl(\epsilon_{ikm}\,\rho R_{jm} + \epsilon_{jkm}\,\rho R_{im}\bigr),$$
+
+which MOSE adds to the production of the SSG/LRR-$\omega$ model. It exchanges energy between the stress components without changing $k$ ($G_{kk} = 0$): for a rotation $\Omega$ about $z$, $G_{11} = 4\Omega R_{12}$, $G_{22} = -4\Omega R_{12}$ and $G_{12} = -2\Omega\,(R_{11} - R_{22})$.
 
 **Strain-rate-based production is frame-invariant.** The $S_{ij}$-driven production used by SST and Wilcox 2006 needs no correction — only the vorticity-dependent auxiliary terms above receive the $2\boldsymbol{\Omega}$ shift.
 

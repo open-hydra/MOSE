@@ -74,13 +74,23 @@ If $k-\omega$ or SST turbulence model is used, the IC file must also include:
 | $\rho k$ (`rhoK`) | Turbulent kinetic energy times density | kg/(m·s²) |
 | $\rho\omega$ (`rhoOmega`) | Specific dissipation rate times density | kg/(m³·s) |
 
+If the SSG/LRR Reynolds-stress model is used, the IC file must also include, in this order:
+
+| Variable | Description | Units |
+|----------|-------------|-------|
+| $\rho R_{11},\, \rho R_{22},\, \rho R_{33}$ (`ru'u'`, `rv'v'`, `rw'w'`) | Normal Reynolds stresses times density | kg/(m·s²) |
+| $\rho R_{12},\, \rho R_{13},\, \rho R_{23}$ (`ru'v'`, `ru'w'`, `rv'w'`) | Shear Reynolds stresses times density | kg/(m·s²) |
+| $\rho\omega$ (`rhoOmega`) | Specific dissipation rate times density | kg/(m³·s) |
+
 The turbulence variables are always the density-weighted ones MOSE advances, in the
 IC file as in the restart and solution files, under the names `rhoNuTilde`,
 `rhoK`, `rhoOmega` ($\rho\tilde\nu$ is the variable the Spalart-Allmaras model
 transports, not the eddy viscosity $\mu_t$, which MOSE writes as `mut`). ATLAS ICB
 writes them from either the specific keys `nuTilde`, `k`, `omega` (multiplied by the
 density of each cell) or the density-weighted keys `rhoNuTilde`, `rhoK`, `rhoOmega`
-(written as given). MOSE reads the variables by position. When the file carries their names
+(written as given); for the Reynolds-stress model the keys are `Rij` or `rhoRij`, one
+value for the three normal stresses (the shear stresses are set to $10^{-8}$), with
+`omega` or `rhoOmega`. MOSE reads the variables by position. When the file carries their names
 (ASCII Tecplot), it checks the turbulence names: the earlier names of the same
 variables (`mi_t`, `mi_tilde`, and `kappa` with its `omega`) are accepted, and any
 other name, such as the specific `nuTilde` or `k`, or the eddy viscosity `mut`,

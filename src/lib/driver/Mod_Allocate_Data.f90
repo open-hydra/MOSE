@@ -91,7 +91,8 @@ contains
     !! rhoOmega: the names of the density-weighted keys of ATLAS, which ICB writes and MOSE
     !! writes back. The earlier names of the same variables (mi_t, mi_tilde, and kappa with its
     !! omega) are accepted; any other name, e.g. the specific nuTilde or k, or the eddy viscosity
-    !! mut, stops the run instead of being read as density-weighted. The names are known for an
+    !! mut, stops the run instead of being read as density-weighted. For the Reynolds-stress model
+    !! the bands are ru'u' rv'v' rw'w' ru'v' ru'w' rv'w' rhoOmega. The names are known for an
     !! ASCII file only (ORION does not return those of a .szplt file).
     use MOSE_Global_m
     use Lib_ORION_data
@@ -101,10 +102,11 @@ contains
     implicit none
     type(ORION_data), intent(in) :: IOfield
     ! Local
-    character(len=32) :: name(2), expected
+    character(len=32) :: name(7), expected
+    character(len=32), parameter :: stress(6) = [character(len=32) :: "ru'u'", "rv'v'", "rw'w'", "ru'v'", "ru'w'", "rv'w'"]
     integer :: off, d
 
-    if ( nrans /= 1 .and. nrans /= 2 ) return
+    if ( nrans /= 1 .and. nrans /= 2 .and. nrans /= 7 ) return
     if ( .not. allocated(IOfield%varnames) ) return
     off = size(IOfield%varnames) - size(IOfield%block(1)%vars, 1)
     if ( off < 0 ) return
@@ -124,11 +126,19 @@ contains
         expected = 'rhoOmega'
         ! an earlier file names it omega, next to kappa: next to rhoK, omega is the specific one
         if ( name(2) == 'rhoomega' .or. ( name(2) == 'omega' .and. name(1) == 'kappa' ) ) cycle
+      case ( 71:76 )
+        expected = stress(d)
+        if ( name(d) == stress(d) ) cycle
+      case ( 77 )
+        expected = 'rhoOmega'
+        ! an earlier file names it omega, next to the stresses
+        if ( name(7) == 'rhoomega' .or. name(7) == 'omega' ) cycle
       end select
       write(*,'(A,I0,A)') '[ERROR] '//trim(obj_io%nameinit)//': variable ', off + nt + d - 1, ' is named '''// &
         trim(adjustl(IOfield%varnames(off + nt + d - 1)))//''', where MOSE reads the density-weighted '// &
         trim(expected)//' (the turbulence variables of an initial condition are density-weighted: ATLAS ICB'// &
-        ' writes rhoNuTilde, rhoK, rhoOmega from either the specific or the density-weighted keys)'
+        ' writes rhoNuTilde, rhoK, rhoOmega, and the Reynolds stresses with their rhoOmega, from either the'// &
+        ' specific or the density-weighted keys)'
       stop 1
     end do
 

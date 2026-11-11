@@ -189,4 +189,41 @@ contains
 
   end subroutine Report_400_Entering
 
+
+  !> Turbulent stress on an open boundary face (inflow, outflow, extrapolation). These faces carry
+  !> no diffusive flux. Where the momentum and energy equations hold the turbulent stress itself
+  !> (the Reynolds stresses of a Reynolds-stress model, -2/3 rho k with k-energy-coupling), it
+  !> acts on them as the pressure does and cannot be dropped with the rest: without it the
+  !> boundary cell is left with the stress of its inner face only, and the pressure jumps by
+  !> rho*R_nn there. The stress is that of the boundary cell.
+  subroutine BC_Open_Turbulent_Stress ( Im, Jm, Km, Fm, Blk )
+    use MOSE_Lib_Fluid, only: Stress_Vector
+    implicit none
+    integer, intent(in) :: Im, Jm, Km, Fm
+    type(MOSE_block_type), intent(inout) :: Blk
+    ! Local
+    integer :: Dir, Face_i, Face_j, Face_k, FluxSign
+    real(R8) :: Normal(3), Area, Prim(nprim), Stress(3), NoGradient(3,3)
+
+    ! Boundary face coordinates
+    call Face_Index ( Fm, dir, Im, Jm, Km, Face_i, Face_j, Face_k )
+
+    ! Metric stuff
+    Normal = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
+    Area = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
+
+    ! boundary cell primitive variables
+    Prim = Blk % P(:,Im,Jm,Km)
+
+    ! No velocity gradient and no viscosity: what is left of the stress is its turbulent part
+    NoGradient = 0d0
+    Stress = Stress_Vector ( NoGradient, Normal, 0d0, 0d0, Prim(nt:) )
+
+    ! Residual update
+    FluxSign = 1 - 2 * mod(Fm,2)
+    Blk % r(nu:nw,Im,Jm,Km) = Blk % r(nu:nw,Im,Jm,Km) - FluxSign * Area * Stress
+    Blk % r(np,Im,Jm,Km)    = Blk % r(np,Im,Jm,Km)    - FluxSign * Area * dot_product ( Stress, Prim(nu:nw) )
+
+  end subroutine BC_Open_Turbulent_Stress
+
 end module MOSE_Lib_BC_Fluxes_Extrapolation

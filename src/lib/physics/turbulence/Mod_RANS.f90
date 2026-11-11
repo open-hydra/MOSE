@@ -23,6 +23,9 @@ contains
     obj_rans%SAcomp = .false.
     obj_rans%QCR2000 = .false.
     obj_rans%blowing_corr = .false.
+    obj_rans%RSM = .false.
+    obj_rans%SD = .false.
+    obj_rans%LSC = .false.
 
     if (trim(obj_rans%model) == 'SAcomp') then
       obj_rans%SAcomp = .true.
@@ -141,10 +144,13 @@ contains
       RANS_Enforce_Realizability => SST_Enforce_Realizability
 
     elseif ( index ( trim(obj_rans%model), 'SSGLRR' ) > 0 ) then
+      ! SSGLRR (TMR SSGLRR-RSM-w2012), -SD: simple diffusion, -w2019: length-scale correction
       nRANS = 7
       obj_rans%RSM = .true.
+      obj_rans%SD  = index ( trim(obj_rans%model), '-SD' ) > 0
+      obj_rans%LSC = index ( trim(obj_rans%model), '-w2019' ) > 0
       Eddy_Viscosity => SSGLRR_Eddy_Viscosity
-      if ( index ( trim(obj_rans%model), '-SD' ) > 0 ) then
+      if ( obj_rans%SD ) then
         RANS_Diffusive_Flux => SSGLRR_SD_RANS_Diffusive_Flux
       else
         RANS_Diffusive_Flux => SSGLRR_RANS_Diffusive_Flux
@@ -153,6 +159,7 @@ contains
       RANS_Source_Terms => SSGLRR_Source_Terms
       RANS_Stiffness_Bound => SSGLRR_Stiffness_Bound
       RANS_Set_Wall_Values => SSGLRR_Set_Wall_Values
+      RANS_Set_Blowing_Wall => SSGLRR_Set_Blowing_Wall
       RANS_Extrapolate_Wall => SSGLRR_Extrapolate_Wall
       RANS_Enforce_Realizability => SSGLRR_Enforce_Realizability
 

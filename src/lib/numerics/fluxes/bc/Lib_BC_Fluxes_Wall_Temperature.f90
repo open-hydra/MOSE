@@ -69,6 +69,7 @@ contains
     ! Boundary layer: p(wall) = p(cell). Also, non catalytic wall, so R(wall) = R(cell) and ci(wall) = ci(cell), but not roi.
     ! Laminar viscosity/conductivity at interface computed at Twall. The same wall state as the ghost cells of the wall
     ! (Ghost_Wall in MOSE_Lib_Ghost).
+    Prim_wall = Prim
     call Wall_State_Temperature ( Prim, rho, Rgas, T_wall, rho_wall, Prim_wall(1:nsc), mil, kl )
 
     ! Difference in Across-face direction: symmetry; tangential direction: null (below: with the wall stencil the
@@ -131,8 +132,8 @@ contains
       kt = mit * f_cp ( Prim_wall(1:nsc), T_wall, rho_wall ) / obj_rans%Prt
     end if
 
-    ! Stress vector
-    Stress = Stress_Vector ( VelGrad, Normal, mil, mit, Prim(nt:) )
+    ! Stress vector, with the turbulence variables of the wall (no Reynolds stress, no k)
+    Stress = Stress_Vector ( VelGrad, Normal, mil, mit, Prim_Wall(nt:) )
 
     ! Fluxes
     Flux = 0.0d0 

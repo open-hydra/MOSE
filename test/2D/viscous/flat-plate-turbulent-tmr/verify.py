@@ -1,6 +1,8 @@
 """
-Turbulent flat plate of the NASA Turbulence Modeling Resource (TMR): SA, SST
-and Wilcox 2006 on the 35x25, 69x49 and 137x97 grids of the TMR family.
+Turbulent flat plate of the NASA Turbulence Modeling Resource (TMR): SA, SST,
+Wilcox 2006 and SSG/LRR-omega on the 35x25, 69x49 and 137x97 grids of the TMR
+family. The TMR codes are CFL3D and FUN3D, CFL3D and TAU for SSG/LRR (the
+"second code" below).
 
 Quantities, from the wall output of the plate (face 3): c_f = |tau_x|/q_inf
 at the face centres of the plate (x > 0), with q_inf = gamma p_inf M^2/2 =
@@ -19,12 +21,15 @@ sign, when p < 0.5 or p > 4, when |e21| >= |e32|, or when |e21| or |e32| is
 below 10 e_it.
 Criteria of the V&V page:
   (d) e_it <= GCI |f1|/10, for c_f(0.970084071), c_f(1.90334) and C_D;
-  (1) on each grid, |c_f - (c_CFL3D + c_FUN3D)/2| <= |c_CFL3D - c_FUN3D|/2
-      + m c_f for c_f(0.970084071), against CFL3D and FUN3D on the same grid;
-      required on the 137x97 grid, reported on the two coarser grids;
+  (1) on each grid, |c_f - (c_CFL3D + c_2)/2| <= |c_CFL3D - c_2|/2 + m c_f
+      for c_f(0.970084071), against CFL3D and the second code on the same
+      grid; required on the 137x97 grid, reported on the two coarser grids;
   (2) |f_ext - c_CFL3D,545x385| <= U + m c_f,1 for c_f(0.970084071);
-with m = 0.5 % (SA) and 1 % (SST, Wilcox 2006), for the differences of the
-case from the TMR (see the V&V page).
+with m = 0.5 % (SA) and 1 % (SST, Wilcox 2006, SSG/LRR), for the differences
+of the case from the TMR (see the V&V page).
+SSG/LRR, reported: u+(y+) in the column of cells nearest x = 0.97008 of the
+137x97 grid against CFL3D (545x385), RMS over 2 < y+ < 1000, and the
+Reynolds stresses of that column (reference/profile-SSGLRR-137x97.dat).
 
 Short form (./MOSE.sh testfast): for each model, the restart from the
 converged 35x25 solution (reference/field-35x25-<model>.tec) must
@@ -33,18 +38,20 @@ converged 35x25 solution (reference/field-35x25-<model>.tec) must
      iter-threshold of its input.ini), and n new rows in residual-history.dat;
   2. keep c_f(0.970084071), c_f(1.90334) and C_D within TOL_SHORT (relative)
      of the values of that solution (reference/levels.json).
-Then it computes again, from the stored results of the full form (the nine
+Then it computes again, from the stored results of the full form (the twelve
 final wall outputs reference/wall-<model>-<grid>.tec and reference/levels.json),
 the tables and the criteria of the V&V page, and writes its figures in
 RUN/figures/: it fails if a stored wall output does not give its stored values
 (to 1e-12, relative), or if (d), (1) on the 137x97 grid or (2) fails for a
 model.
-Full form (./MOSE.sh test): the same analysis on the nine runs in RUN/, the
-figures, and RUN/reference/ with the files of reference/ that the runs give
-(levels.json, the nine final wall outputs and the three converged 35x25
-solutions), to be copied to reference/ when the solver changes the steady
-state; it fails if a run is missing or if (d), (1) on the 137x97 grid or (2)
-fails for a model.
+Full form (./MOSE.sh test [model ...]): the same analysis on the runs in RUN/
+of the models named in RUN/form.txt (the others from reference/), the
+figures, and RUN/reference/ with the files of reference/ (levels.json, the
+final wall outputs of the three grids and the converged 35x25 solution of
+each model, the SSG/LRR profile): those of the models run from their runs, the
+others copied from reference/; RUN/reference/ is to be copied to reference/
+when the solver changes the steady state. It fails if a run is missing or
+if a criterion fails as in the short form.
 
 Usage:
     python verify.py            # report, figures in RUN/figures/, exit 0/1
@@ -62,7 +69,7 @@ from pathlib import Path
 
 import numpy as np
 
-MODELS = ("SA", "SST", "Wilcox2006")
+MODELS = ("SA", "SST", "Wilcox2006", "SSGLRR")
 GRIDS = ("35x25", "69x49", "137x97")                 # coarse to fine
 N_TMR = {"35x25": 816, "69x49": 3264, "137x97": 13056}   # cells, as the TMR files count the grids
 N_545 = 208896                                       # the 545x385 grid
@@ -71,15 +78,21 @@ U_INF = 0.2 * math.sqrt(1.4 * 287.0 * 555.0)         # M a_inf [m/s]
 STATIONS = (0.970084071, 1.90334)                    # c_f stations of the TMR [m]
 KEYS = ("cf(0.970084071)", "cf(1.90334)", "C_D", "y+max")
 UE_X, UE_Y = (0.97008, 1.90334), 0.1                 # stations and height of the TMR velocity profiles [m]
-MARGIN = {"SA": 0.005, "SST": 0.01, "Wilcox2006": 0.01}
+MARGIN = {"SA": 0.005, "SST": 0.01, "Wilcox2006": 0.01, "SSGLRR": 0.01}
 P_FORMAL = 2.0
 TOL_SHORT = 1.0e-5
 TMR_CONV = {"SA": "reference/tmr/SA/cf_convergence.dat", "SST": "reference/tmr/SST/cf_convergence_sstv.dat",
-            "Wilcox2006": "reference/tmr/W06/cf_convergence_w06.dat"}
+            "Wilcox2006": "reference/tmr/W06/cf_convergence_w06.dat",
+            "SSGLRR": "reference/tmr/SSGLRR/cf_convergence_ssglrrrsm.dat"}
 TMR_PLATE = {"SA": "reference/tmr/SA/cf_plate.dat", "SST": "reference/tmr/SST/cf_plate_sstv.dat",
-             "Wilcox2006": "reference/tmr/W06/cf_plate_w06.dat"}
+             "Wilcox2006": "reference/tmr/W06/cf_plate_w06.dat", "SSGLRR": "reference/tmr/SSGLRR/cf_plate_ssglrrrsm.dat"}
 TMR_U = "reference/tmr/SA/flatplate_u.dat"
-TMR_NAME = {"SA": "SA", "SST": "SST-Vm", "Wilcox2006": "Wilcox2006-klim-m"}
+TMR_UPLUS = "reference/tmr/SSGLRR/flatplate_u+y+_rsme.dat"       # log10(y+), u+ of CFL3D, 545x385
+TMR_NAME = {"SA": "SA", "SST": "SST-Vm", "Wilcox2006": "Wilcox2006-klim-m", "SSGLRR": "SSGLRR-RSM-w2012"}
+SECOND = {"SA": "FUN3D", "SST": "FUN3D", "Wilcox2006": "FUN3D", "SSGLRR": "TAU"}   # the other TMR code
+PROFILE = "profile-SSGLRR-137x97.dat"                # SSG/LRR column nearest UE_X[0] on the 137x97 grid
+MU = 1.1858686e-5                                    # constant viscosity of test/common/Air-viscous [Pa s]
+YPLUS_RMS, YPLUS_LOG = (2.0, 1000.0), (50.0, 300.0)  # ranges of the u+ RMS and of the log-layer stresses
 
 root = Path(__file__).resolve().parent
 for parent in [root, *root.parents]:
@@ -177,7 +190,7 @@ def tmr_zones(path, cols=(0, 1)):
     zones, label, rows = {}, None, []
     for ln in open(path):
         s = ln.strip()
-        if not s or s.upper().startswith("VARIABLES"):
+        if not s or s.startswith("#") or s.upper().startswith("VARIABLES") or re.match(r"(title|t)\s*=", s, re.I):
             continue
         if s.upper().startswith("ZONE"):
             if label is not None:
@@ -198,6 +211,104 @@ def tmr_outer_velocity():
         a = a[np.argsort(a[:, 1])]
         out.append((float(label.split("=")[1]), float(np.interp(UE_Y, a[:, 1], a[:, 0]))))
     return [u for _, u in sorted(out)]
+
+
+# ---------------------------------------------------------------------------- SSG/LRR profile
+PROFILE_COLS = ("y+", "u+", "R11+", "R22+", "R33+", "-R12+")
+
+
+def ssg_profile(field, wall):
+    """x of the column of cells nearest UE_X[0] and its y+, u+ and Reynolds stresses in wall units (R_ij/u_tau^2),
+    from the field and wall outputs of an SSG/LRR run; nu_w from the density of the wall cell."""
+    xf, yf, _, vf, names = read_TEC(field)
+    v = {n: vf[0][k][:, :, 0] for k, n in enumerate(names[3:])}
+    x, y = xf[0][:, :, 0], yf[0][:, :, 0]
+    xc = 0.5 * (x[:-1, 0] + x[1:, 0])
+    i = int(np.argmin(np.abs(xc - UE_X[0])))
+    yc = 0.25 * (y[i, :-1] + y[i + 1, :-1] + y[i, 1:] + y[i + 1, 1:])
+    xw, _, _, vw, wn = read_TEC(wall)
+    xn = xw[0][:, 0, 0]
+    if not np.allclose(0.5 * (xn[:-1] + xn[1:]), xc):
+        raise SystemExit("verify.py: %s and %s do not have the same columns of cells" % (field, wall))
+    rho = v["rho(1)"][i, :]
+    tau = abs(vw[0][wn.index("tauX") - 3][i, 0, 0])
+    ut = math.sqrt(tau / rho[0])
+    cols = [yc * ut * rho[0] / MU, v["u"][i, :] / ut] + \
+           [s * v[n][i, :] / rho / ut ** 2 for s, n in ((1, "ru'u'"), (1, "rv'v'"), (1, "rw'w'"), (-1, "ru'v'"))]
+    return float(xc[i]), np.array(cols).T
+
+
+def write_profile(path, xcol, prof):
+    with open(path, "w") as fh:
+        fh.write("# SSG/LRR, 137x97 grid: column of cells at x = %.6f (nearest %g), wall units\n" % (xcol, UE_X[0]))
+        fh.write("# " + " ".join("%-22s" % c for c in PROFILE_COLS) + "\n")
+        for row in prof:
+            fh.write(" ".join("%22.15e" % v for v in row) + "\n")
+
+
+def read_profile(path):
+    xcol = float(re.search(r"x = ([-0-9.eE+]+)", open(path).readline()).group(1))
+    return xcol, np.loadtxt(path, comments="#")
+
+
+def profile_report(xcol, prof):
+    """u+ against CFL3D (RMS over YPLUS_RMS) and the mean stresses over YPLUS_LOG, as lines."""
+    yp, up = prof[:, 0], prof[:, 1]
+    ref = tmr_zones(TMR_UPLUS)
+    z = [k for k in ref if abs(float(k.split("=")[1]) - UE_X[0]) < 1e-4][0]
+    a = ref[z][np.argsort(ref[z][:, 0])]
+    sel = (yp >= YPLUS_RMS[0]) & (yp <= YPLUS_RMS[1])
+    err = (up[sel] - np.interp(np.log10(yp[sel]), a[:, 0], a[:, 1])) / np.interp(np.log10(yp[sel]), a[:, 0], a[:, 1])
+    log = (yp >= YPLUS_LOG[0]) & (yp <= YPLUS_LOG[1])
+    k = 0.5 * (prof[:, 2] + prof[:, 3] + prof[:, 4])
+    an = [float(np.mean(prof[log, c] / k[log])) for c in (2, 3, 4, 5)]
+    return ["SSGLRR profile, 137x97, x = %.4f: first cell y+ %.2f; u+ against CFL3D 545x385 (x = %g): RMS %.2f %% "
+            "(%g < y+ < %g, %d cells); log layer (%g < y+ < %g, %d cells): u'u'/k %.3f, v'v'/k %.3f, w'w'/k %.3f, "
+            "-u'v'/k %.3f" % (xcol, yp[0], UE_X[0], 100 * math.sqrt(np.mean(err ** 2)), YPLUS_RMS[0], YPLUS_RMS[1],
+                              int(sel.sum()), YPLUS_LOG[0], YPLUS_LOG[1], int(log.sum()), *an)]
+
+
+def profile_figure(xcol, prof):
+    """u+(y+) against CFL3D (left) and the Reynolds stresses in wall units (right), SSG/LRR on the 137x97 grid."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("  (matplotlib not available: no figure)")
+        return
+    plt.rcParams.update({"figure.facecolor": "none", "axes.facecolor": "none", "savefig.facecolor": "none",
+                         "svg.fonttype": "none", "svg.hashsalt": "flat-plate-tmr"})
+    fs = 15
+    blue, orange = "#0072B2", "#E69F00"
+    fig, (a, b) = plt.subplots(1, 2, figsize=(14, 6))
+    ref = tmr_zones(TMR_UPLUS)
+    z = [k for k in ref if abs(float(k.split("=")[1]) - UE_X[0]) < 1e-4][0]
+    a.semilogx(10.0 ** ref[z][:, 0], ref[z][:, 1], color=orange, linestyle="--", linewidth=3.0,
+               label="CFL3D, 545x385, x = %g" % UE_X[0])
+    a.semilogx(prof[:, 0], prof[:, 1], color=blue, marker="o", ms=6, linestyle="none",
+               label="MOSE, 137x97, x = %.3f" % xcol)
+    a.set_xlim(0.1, 2e4)
+    a.set_ylim(0.0, 30.0)
+    a.set_xlabel(r"$y^+$", fontsize=fs)
+    a.set_ylabel(r"$u^+$", fontsize=fs)
+    for c, col, lab in ((2, "#0072B2", r"$\overline{u'u'}^+$"), (3, "#D55E00", r"$\overline{v'v'}^+$"),
+                        (4, "#009E73", r"$\overline{w'w'}^+$"), (5, "#CC79A7", r"$-\overline{u'v'}^+$")):
+        b.semilogx(prof[:, 0], prof[:, c], color=col, marker="o", ms=4, linewidth=2.0, label=lab)
+    b.set_xlim(0.1, 2e4)
+    b.set_ylim(0.0, 4.0)
+    b.set_xlabel(r"$y^+$", fontsize=fs)
+    b.set_ylabel(r"$\overline{u_i'u_j'}\,/\,u_\tau^2$", fontsize=fs)
+    for ax in (a, b):
+        ax.tick_params(labelsize=fs - 2)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="best", fontsize=fs - 3)
+    fig.tight_layout()
+    os.makedirs("RUN/figures", exist_ok=True)
+    out = "RUN/figures/flat-plate-tmr-ssglrr-profile.svg"
+    fig.savefig(out, metadata={"Date": None})
+    plt.close(fig)
+    print("  figure: %s" % out)
 
 
 # ---------------------------------------------------------------------------- analysis
@@ -262,30 +373,31 @@ def analyse(model, runs):
                         r["f_ext"], 100 * r["GCI"], r["U"], e1, "met" if r["d_ok"] else "NOT met"))
         ok &= r["d_ok"]
     T = tmr_convergence(TMR_CONV[model])
-    c, f, m = T["CFL3D"], T["FUN3D"], MARGIN[model]
+    two = SECOND[model]
+    c, f, m = T["CFL3D"], T[two], MARGIN[model]
     crit1 = {}
     for g in GRIDS:
         cf, n = runs[g]["final"][KEYS[0]], N_TMR[g]
         mid, half = 0.5 * (c[n] + f[n]), 0.5 * abs(c[n] - f[n])
         dev = abs(cf - mid)
-        crit1[g] = dict(cf=cf, cfl3d=c[n], fun3d=f[n], dev=dev, band=half + m * cf, ok=dev <= half + m * cf)
-        lines.append("  (1) %-6s c_f %.6e; CFL3D %.6e, FUN3D %.6e; |c_f - mean| %.4e %s band %.4e: %s"
-                     % (g, cf, c[n], f[n], dev, "<=" if crit1[g]["ok"] else ">", half + m * cf,
+        crit1[g] = dict(cf=cf, cfl3d=c[n], second=f[n], dev=dev, band=half + m * cf, ok=dev <= half + m * cf)
+        lines.append("  (1) %-6s c_f %.6e; CFL3D %.6e, %s %.6e; |c_f - mean| %.4e %s band %.4e: %s"
+                     % (g, cf, c[n], two, f[n], dev, "<=" if crit1[g]["ok"] else ">", half + m * cf,
                         "inside" if crit1[g]["ok"] else "outside"))
     ok &= crit1["137x97"]["ok"]
     r = res[KEYS[0]]
     dlim = abs(r["f_ext"] - c[N_545])
     bound = r["U"] + m * r["f1"]
     ok2 = dlim <= bound
-    crit2 = dict(f_ext=r["f_ext"], cfl3d=c[N_545], fun3d=f[N_545], delta=dlim, bound=bound, ratio=dlim / bound, ok=ok2,
+    crit2 = dict(f_ext=r["f_ext"], cfl3d=c[N_545], second=f[N_545], delta=dlim, bound=bound, ratio=dlim / bound, ok=ok2,
                  difference=(r["f_ext"] - c[N_545]) / c[N_545])
-    lines.append("  (2) f_ext %.6e against CFL3D 545x385 %.6e (FUN3D %.6e): |D| %.4e %s U + m c_f %.4e: %s; "
+    lines.append("  (2) f_ext %.6e against CFL3D 545x385 %.6e (%s %.6e): |D| %.4e %s U + m c_f %.4e: %s; "
                  "|D|/(U + m c_f) %.3f; f_ext %+.3f %% from CFL3D"
-                 % (r["f_ext"], c[N_545], f[N_545], dlim, "<=" if ok2 else ">", bound, "met" if ok2 else "NOT met",
+                 % (r["f_ext"], c[N_545], two, f[N_545], dlim, "<=" if ok2 else ">", bound, "met" if ok2 else "NOT met",
                     crit2["ratio"], 100 * crit2["difference"]))
     ok &= ok2
-    orders = dict(CFL3D=order3(c), FUN3D=order3(f))
-    lines.append("  orders of CFL3D and FUN3D on the same three grids: %.3f, %.3f" % (orders["CFL3D"], orders["FUN3D"]))
+    orders = {"CFL3D": order3(c), two: order3(f)}
+    lines.append("  orders of CFL3D and %s on the same three grids: %.3f, %.3f" % (two, orders["CFL3D"], orders[two]))
     ue_tmr = tmr_outer_velocity()
     lines.append("  u/U_inf at y = %g, cells nearest it: " % UE_Y + "; ".join(
         "x = %g: %s, CFL3D 545x385 %.6f (SA)" % (x, ", ".join("%s %.6f" % (g, runs[g]["u_e"][k]) for g in GRIDS), ue_tmr[k])
@@ -294,7 +406,8 @@ def analyse(model, runs):
         "%s %.1f orders" % (g, runs[g]["residual"]["orders"]) for g in GRIDS) +
         "; 35x25, last 2000 iterations: %.2e to %.2e" % (runs["35x25"]["residual"]["last2000_min"],
                                                          runs["35x25"]["residual"]["last2000_max"]))
-    return ok, lines, dict(three_levels=res, criterion1=crit1, criterion2=crit2, orders_tmr=orders, u_e_tmr=ue_tmr)
+    return ok, lines, dict(three_levels=res, criterion1=crit1, criterion2=crit2, orders_tmr=orders, u_e_tmr=ue_tmr,
+                           second_code=two)
 
 
 def figure(model, levels, analysis, walls):
@@ -312,7 +425,7 @@ def figure(model, levels, analysis, walls):
     blue, orange, green = "#0072B2", "#E69F00", "#009E73"
     fig, (a, b) = plt.subplots(1, 2, figsize=(14, 6))
     T = tmr_convergence(TMR_CONV[model])
-    for code, col, mk in (("CFL3D", orange, "s"), ("FUN3D", green, "^")):
+    for code, col, mk in (("CFL3D", orange, "s"), (SECOND[model], green, "^")):
         n = sorted(T[code])
         a.plot([1e3 * nn ** -0.5 for nn in n], [1e3 * T[code][nn] for nn in n], color=col, marker=mk, ms=8,
                linewidth=2.5, linestyle="--", label=code + " (" + TMR_NAME[model] + ")")
@@ -332,7 +445,7 @@ def figure(model, levels, analysis, walls):
     for g, ls in zip(GRIDS, (":", "--", "-")):
         x, cf = walls[g]
         b.plot(x, 1e3 * cf, color=blue, linestyle=ls, linewidth=3.0, label="MOSE, %s" % g)
-    for code, col in (("CFL3D", orange), ("FUN3D", green)):
+    for code, col in (("CFL3D", orange), (SECOND[model], green)):
         z = [k for k in zones if k.upper().startswith(code)][0]
         b.plot(zones[z][:, 0], 1e3 * zones[z][:, 1], color=col, linewidth=2.0, linestyle="-.", label=code + ", 545x385")
     b.set_xlim(0.0, 2.0)
@@ -350,8 +463,9 @@ def figure(model, levels, analysis, walls):
     print("  figure: %s" % out)
 
 
-def page(levels, walls_of):
-    """Tables, criteria and figures of the V&V page from the values of the nine runs; True if the criteria hold."""
+def page(levels, walls_of, profile):
+    """Tables, criteria and figures of the V&V page from the values of the runs of the four models and the
+    SSG/LRR profile; True if the criteria hold."""
     ok, out = True, {}
     for model in MODELS:
         okm, lines, an = analyse(model, levels[model])
@@ -360,6 +474,8 @@ def page(levels, walls_of):
         figure(model, levels[model], an, {g: walls_of(model, g) for g in GRIDS})
         ok &= okm
         out[model] = an
+    print("\n".join(profile_report(*profile)))
+    profile_figure(*profile)
     os.makedirs("RUN", exist_ok=True)
     with open("RUN/analysis.json", "w") as fh:
         json.dump(out, fh, indent=1)
@@ -410,14 +526,19 @@ def short_form(n_expected):
                       % (model, g, model, g))
                 same = False
     if same:
-        print("  the nine wall outputs give the values of reference/levels.json")
-    okp = page(levels, lambda m, g: wall_cf("reference/wall-%s-%s.tec" % (m, g)))
+        print("  the wall outputs give the values of reference/levels.json")
+    okp = page(levels, lambda m, g: wall_cf("reference/wall-%s-%s.tec" % (m, g)), read_profile("reference/" + PROFILE))
     return ok and same and okp
 
 
-def full_form():
+def full_form(run_models):
+    """The runs in RUN/ of the models in run_models; the other models from reference/."""
+    ref = json.load(open("reference/levels.json"))["runs"]
     levels = {}
     for model in MODELS:
+        if model not in run_models:
+            levels[model] = ref[model]
+            continue
         levels[model] = {}
         for g in GRIDS:
             d = "RUN/%s-%s" % (model, g)
@@ -425,16 +546,24 @@ def full_form():
                 print("FAIL - %s/OUTPUT/wall.tec missing (run './MOSE.sh test')" % d)
                 return False
             levels[model][g] = run_series(d)
-    print("Full form: the nine runs of RUN/")
-    ok = page(levels, lambda m, g: wall_cf("RUN/%s-%s/OUTPUT/wall.tec" % (m, g)))
+    wall = lambda m, g: ("RUN/%s-%s/OUTPUT/wall.tec" % (m, g)) if m in run_models else "reference/wall-%s-%s.tec" % (m, g)
+    if "SSGLRR" in run_models:
+        profile = ssg_profile("RUN/SSGLRR-137x97/OUTPUT/field.tec", "RUN/SSGLRR-137x97/OUTPUT/wall.tec")
+    else:
+        profile = read_profile("reference/" + PROFILE)
+    print("Full form: the runs of RUN/ for %s; %s from reference/" % (", ".join(run_models), ", ".join(
+        m for m in MODELS if m not in run_models) or "none"))
+    ok = page(levels, lambda m, g: wall_cf(wall(m, g)), profile)
     os.makedirs("RUN/reference", exist_ok=True)
     with open("RUN/reference/levels.json", "w") as fh:
         json.dump(dict(quantities=list(KEYS), stations=list(STATIONS), q_inf=Q_INF, u_inf=U_INF, runs=levels), fh, indent=1)
     for model in MODELS:
         for g in GRIDS:
-            shutil.copyfile("RUN/%s-%s/OUTPUT/wall.tec" % (model, g), "RUN/reference/wall-%s-%s.tec" % (model, g))
-        shutil.copyfile("RUN/%s-35x25/OUTPUT/field.tec" % model, "RUN/reference/field-35x25-%s.tec" % model)
-    print("  RUN/reference/: levels.json, wall-<model>-<grid>.tec, field-35x25-<model>.tec")
+            shutil.copyfile(wall(model, g), "RUN/reference/wall-%s-%s.tec" % (model, g))
+        shutil.copyfile(("RUN/%s-35x25/OUTPUT/field.tec" % model) if model in run_models else
+                        "reference/field-35x25-%s.tec" % model, "RUN/reference/field-35x25-%s.tec" % model)
+    write_profile("RUN/reference/" + PROFILE, *profile)
+    print("  RUN/reference/: levels.json, wall-<model>-<grid>.tec, field-35x25-<model>.tec, %s" % PROFILE)
     return ok
 
 
@@ -442,7 +571,7 @@ form = open("RUN/form.txt").read().split() if os.path.exists("RUN/form.txt") els
 if form[0] == "testfast":
     passed = short_form(int(form[1]))
 elif form[0] == "test":
-    passed = full_form()
+    passed = full_form(form[2:] or list(MODELS))
 else:
     print("verify.py: RUN/form.txt says %r; run './MOSE.sh testfast' or './MOSE.sh test' first" % " ".join(form))
     passed = False

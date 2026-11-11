@@ -139,10 +139,9 @@ contains
     type(MOSE_block_type), intent(inout), target :: Blk
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, dir, Face_i, Face_j, Face_k, a, b, c
-    integer :: ig, jg, kg
     real(R8) :: Normal(3), Area, Prim(nprim), rho, Rgas, mil, mie
     real(R8), pointer, contiguous :: M(:,:)   ! the metric of the cell or of the face, read in place
-    real(R8) :: Prim_Wall(nprim), Gradrij(nRANS,3), dist
+    real(R8) :: Prim_Wall(nprim), Gradrij(nRANS,3), Rij_Ghost(6), dist
     real(R8) :: Gradient(3,3), Stress(3), Flux(nprim)
     real(R8), dimension(3) :: Vel1, Vel2, Vel3, Vel4, Vel5, Vel6, Vel7, Vel8, Vel9, Vel10, Vel
 
@@ -220,7 +219,12 @@ contains
                             walldist=dist, k_rough=Blk % k_rough(Im,Jm,Km) )
     end if
     
-    Stress = Stress_Vector ( Gradient, Normal, mil, mie, Prim(nt:) )
+    ! Turbulence variables on the face: those of the boundary cell (zero gradient), except the
+    ! Reynolds stresses, whose shear components on the plane vanish
+    Prim_Wall = Prim
+    if ( RSM ) call RSM_Symmetry ( Prim(nt:nt+5), Prim_Wall(nt:nt+5), Rij_Ghost, Normal )
+
+    Stress = Stress_Vector ( Gradient, Normal, mil, mie, Prim_Wall(nt:) )
 
     Vel = 0.5d0 * ( Vel1 + Vel2 )
 
@@ -229,15 +233,10 @@ contains
     Flux(nu:nw) = Area * Stress
     Flux(np) = Area * dot_product ( Vel, Stress )
 
-    ! Special treatment of Reynolds stress for RSM models
+    ! Special treatment of Reynolds stress for RSM models: diffusion of the shear stresses that
+    ! vanish on the plane (the ghost cell is set by Ghost_Symmetry)
     if ( RSM ) then
       Gradrij = 0d0 ! initialization
-      ig = im - guide(fm,1)
-      jg = jm - guide(fm,2)
-      kg = km - guide(fm,3) ! ghost cell coordinates
-      call RSM_Symmetry ( Prim(nt:), Prim_Wall(nt:), Blk%P(nt:,Ig,Jg,Kg), Normal ) ! setting Rij
-      Prim_Wall(nprim) = Prim(nprim) 
-      Blk%P(nprim,Ig,Jg,Kg) = Prim(nprim) ! setting omega
       Gradrij(:,Dir) = ( Prim(nt:nprim) - Prim_Wall(nt:nprim) )/rho * modfm3 ! gradient normal to BC face
       Gradrij = matmul ( Gradrij, M )
       call RANS_Diffusive_Flux ( flux=Flux(nt:nprim), &

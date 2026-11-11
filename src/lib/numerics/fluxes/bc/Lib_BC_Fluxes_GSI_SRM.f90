@@ -132,7 +132,7 @@ contains
     ! Local
     type(wall_face_t) :: face
     real(R8) :: Prim(nprim), rho, Rgas, T_cell, roi_wall(nsc), mu_wall, k_wall, grad_T(3), q_conv, mdot
-    real(R8) :: Blowing(3), VelGrad(3,3), Stress(3)
+    real(R8) :: Blowing(3), VelGrad(3,3), Stress(3), Rans_zero(max(nRANS,1))
 
     call Get_Wall_Face ( Im, Jm, Km, Fm, Blk, face )
     Prim = Blk % P(:,Im,Jm,Km)
@@ -148,7 +148,9 @@ contains
       VelGrad = 0d0
       VelGrad(:,face % dir) = ( Prim(nu:nw) - Blowing ) * face % modfm3
       VelGrad = matmul ( VelGrad, face % M )
-      Stress = Stress_Vector ( VelGrad, face % normal, mu_wall, 0d0, Prim(nt:) )
+      ! the turbulence variables entering the stress (Reynolds stresses, k) are zero at the wall
+      Rans_zero = 0d0
+      Stress = Stress_Vector ( VelGrad, face % normal, mu_wall, 0d0, Rans_zero )
       call RANS_Set_Blowing_Wall ( rho=rho_wall, mil=mu_wall, rans_variables=rans_wall, &
                                    tau=Stress, mdot=mdot, dist=Blk % yn(Im,Jm,Km) )
     else

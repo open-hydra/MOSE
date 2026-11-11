@@ -37,12 +37,14 @@ contains
     real(R8) :: T0, g, pstat, rhot(nsc), visct(1:nrans)
     real(R8) :: r_fc(3)                              ! Face centre [m] (stationary-wall BCs)
     logical  :: RSM, soot_enabled
+    logical  :: open_stress                          ! the turbulent stress acts on the open boundaries
     logical  :: ablating                             ! GSI walls: is the surface consuming material?
     real(R8) :: Tw_surface                           ! GSI walls: wall temperature for the inert fallback
     real(R8) :: Sc, Sct, Prt, Prl
     real(R8) :: dR(nprim)                            ! Share of a face in the residual of its cell
 
     RSM = obj_rans%RSM
+    open_stress = model == 2 .and. ( obj_rans%RSM .or. obj_rans%k_energy_coupling )
     Sc  = obj_sim_param%Sc
     Sct = obj_rans%Sct
     Prt = obj_rans%Prt
@@ -319,6 +321,15 @@ contains
             ! TODO: implement this case in the future
 
           end select
+
+          ! Inflow, outflow and extrapolation faces: Reynolds stresses (or -2/3 rho k with
+          ! k-energy-coupling) of the momentum and energy equations
+          if ( open_stress ) then
+            select case ( domain % bc(i) % type )
+              case (400:408, 410, 420)
+                call BC_Open_Turbulent_Stress ( Im, Jm, Km, Fm, domain % blk(Bm) )
+            end select
+          end if
 
         enddo
 

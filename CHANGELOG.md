@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- The key `turbulence` of `[MOSE-Physics]` selects the SSG/LRR-ω Reynolds-stress model of the NASA Turbulence Modeling
+  Resource, in four variants: `SSGLRR` (TMR SSGLRR-RSM-w2012), `SSGLRR-SD` (simple diffusion), `SSGLRR-w2019` (with the
+  length-scale correction of Eisfeld and Rumsey) and `SSGLRR-w2019-SD`. `Lib_SSGLRR` held the model, but the registry
+  refused the name, so no run used it. The model exchanges energy with the mean flow as `k-energy-coupling` does; its
+  sources take the point-implicit factor of steady runs (the energy row with them) and, in time-accurate runs, a bound of
+  their stiffness in the time step; a rotating frame adds the Coriolis term to the stress equations; `omega-wall-bc`
+  sets its wall value of omega, blowing walls have their own routine, and omega is kept positive. The boundaries carry the
+  stress tensor: walls take the wall values in the wall stress, symmetry planes of any orientation reflect it, faces of
+  type `200` turn it with the velocity, and inflow, outflow and extrapolation faces carry the Reynolds stress of the
+  boundary cell in the momentum and energy fluxes. Tests: `RSMDecay` (validation tier, the four variants against the
+  closed-form decay of isotropic turbulence on an axisymmetric wedge) and the flat plate of the NASA TMR
+  (`FlatPlateTMR` and `FlatPlateTMRFull`, `test/2D/viscous/flat-plate-turbulent-tmr`): SSG/LRR on its three grids
+  against CFL3D and TAU.
 - The SRM grain (`502`) has two modes, the fifth field of its property line: `1`, a wall that blows the products in, as
   before; `2`, an inflow, applied as the mass-flux inlet `404` at the total temperature `T_af` along the face normal, with
   the mass flux of Saint-Robert's law at the pressure of the boundary cell and the turbulence values of the line: the
@@ -54,13 +67,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `ctest -L verification` runs it on request: a plain `ctest` now runs it too, so the whole suite without it is
   `ctest -LE verification`.
 - The turbulent flat plate of the NASA Turbulence Modeling Resource as a verification case, `test/2D/viscous/flat-plate-turbulent-tmr`,
-  with its V&V page: Spalart–Allmaras, SST and Wilcox 2006 on the 35 × 25, 69 × 49 and 137 × 97 grids of the TMR, with the
-  inflow at the total conditions of the TMR and its free-stream turbulence. `FlatPlateTMR` (validation tier, about 71 s of
-  CPU at one thread) restarts each model for 5000 iterations from its converged 35 × 25 solution: the skin friction at
-  x = 0.970084071 and 1.90334 and the drag must stay within 1e-5 (relative) of the converged values, and the criteria of the page, computed
-  again from the stored results of the full form, must hold. `FlatPlateTMRFull` (label `verification`, about 24.5 h at one
-  thread, an estimate) runs the nine cases to 300 000 iterations and checks the 137 × 97 grid against CFL3D and FUN3D on that
-  grid and the limit of the three grids against CFL3D on the 545 × 385 grid.
+  with its V&V page: Spalart–Allmaras, SST, Wilcox 2006 and SSG/LRR-ω on the 35 × 25, 69 × 49 and 137 × 97 grids of the
+  TMR, with the inflow at the total conditions of the TMR and its free-stream turbulence. `FlatPlateTMR` (validation tier,
+  about 150 s of CPU at one thread) restarts each model for 5000 iterations from its converged 35 × 25 solution: the skin
+  friction at x = 0.970084071 and 1.90334 and the drag must stay within 1e-5 (relative) of the converged values, and the
+  criteria of the page, computed again from the stored results of the full form, must hold. `FlatPlateTMRFull` (label
+  `verification`, about 51 h at one thread, an estimate) runs the twelve cases to 300 000 iterations and checks the
+  137 × 97 grid against CFL3D and the second code of the TMR on that grid (FUN3D; TAU for SSG/LRR-ω) and the limit of
+  the three grids against CFL3D on the 545 × 385 grid.
 - The key `decomposition-map` of `[MOSE-IO]` names a file of `INPUT/` that gives the MPI rank of every block (with the phase
   prefix of `bc.txt` in multi-phase runs), in the format of the decomposition map that the ATLAS mesh decomposer (MDB) writes
   next to the split mesh; with `none`, the default, MOSE assigns the blocks itself and reads no map. A map that does not fit the
@@ -167,6 +181,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   do not change.
 - **Breaking:** the `p0_file` table of an inlet `402` is read in Pa, as written, like every other input of MOSE (SI units
   throughout). It was read in bar and multiplied by $10^5$. An old table written in bar must be multiplied by $10^5$.
+- With `k-energy-coupling = .true.` (SST, Wilcox 2006) the stress of the momentum and energy equations holds
+  -2/3 rho k: the wall faces (`301`, `302`, the gas-surface walls and the grain `502`) now take it with the k of the wall,
+  zero, instead of the k of the boundary cell, and the inflow, outflow and extrapolation faces (`400` to `408`, `410`,
+  `420`), which carry no diffusive flux, carry it with the k of the boundary cell, as they carry the pressure. Without
+  it the pressure of the cells next to an open boundary jumped by 2/3 rho k. Runs without `k-energy-coupling` keep their
+  bits.
 - The CI jobs that build and test MOSE run on Ubuntu 24.04 (`runs-on: ubuntu-24.04`) instead of `ubuntu-latest`, which
   GitHub moves to Ubuntu 26.04, an image with other versions of gfortran and CMake: the Ubuntu release of these jobs
   changes only with a change of `.github/workflows/ctest.yml`.
@@ -401,6 +421,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- The turbulent flat plate with boundary conditions of its own (`test/2D/viscous/flat-plate-turbulent`, SA, SST,
+  Wilcox 2006 and SSG/LRR, outside CTest) and its V&V page: the flat plate of the NASA TMR, with the boundary conditions
+  of the TMR, covers the four models on three grids of the same family.
 - The value `inverse-mean` of `diffusive-metric` (`[MOSE-Numerics]`): the key takes `stencil`, the default, exact for a
   linear field on any mesh, or `mean`. A deck that names `inverse-mean` stops at set-up. The inverse-mean face metric stays
   where the code takes it whatever the key: the chimera faces, and with `mean` the faces between blocks and of type `200`.
