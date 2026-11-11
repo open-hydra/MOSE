@@ -1,5 +1,5 @@
 """Style of the figures of the multirate tests for the V&V pages (docs/vv/multirate.md): the style of the V&V figures of
-MOSE, as test/2D/viscous/swbli/compare.py and test/2D/viscous/flat-plate-turbulent/*/verify.py draw them:
+MOSE, as test/2D/viscous/swbli/compare.py draws them:
   - transparent background and text kept as text (svg.fonttype none), so that the pages draw the text in their own
     colour (docs/stylesheets/extra.css);
   - axis labels at 17 pt, tick labels and legend at 15 pt, legend where it hides the least, grid at alpha 0.3;

@@ -162,7 +162,7 @@ Cases of the laminar Navier-Stokes equations (input.ini with equations = navier-
   mr3d-hot-8b    mr3d-hot in 2 x 2 x 2 blocks cut through the middle of the hot cube: a vertex of eight blocks inside the
                  cells of level 1, connections 101 and periodic 201 (test mr-hybrid)
 Cases of the Spalart-Allmaras and SST models (turb_plate_case, chan_case):
-  mr2d-plate-sa, mr2d-plate-sst  the turbulent flat plate of test/2D/viscous/flat-plate-turbulent on its coarse mesh
+  mr2d-plate-sa, mr2d-plate-sst  the turbulent flat plate of mr-common/plate on its coarse mesh
                  (68 x 48 cells, 4 um at the wall), uniform start at Mach 0.2, with Spalart-Allmaras or SST; cfl 0.5,
                  vnn 0.4
   mr2d-plate-sa-4b, mr2d-plate-sst-4b  mr2d-plate-sa and mr2d-plate-sst in 2 x 2 blocks
@@ -931,26 +931,26 @@ def copy_viscous_air(d, air):
 
 def turb_plate_case(d, air, model, PI, PJ):
     """mr2d-plate-sa, mr2d-plate-sst and the split mr2d-plate-sa-4b and mr2d-plate-sst-4b: the turbulent flat plate of
-    test/2D/viscous/flat-plate-turbulent on its coarse mesh (68 x 48 cells; x from -0.333 to 2 m, y from the wall to 1 m,
-    cells from 4 um at the wall), uniform start at Mach 0.2 and 555 K; inlet 404, outlet 406, symmetry 300 for x < 0 and
-    on the top face, adiabatic wall 301 for x > 0, null k faces (0). SST: SST/INPUT/ic.tec and bc.txt. SA: the initial
-    field SA/INPUT/ic-coarse.tec, on the same mesh, with the records of SST/INPUT/bc.txt and in the inlet records the
-    SA value of SA/INPUT/bc.txt (rho nu~ = 1e-6) in place of k and omega (the bc-coarse.txt of SA is in another
-    format). Text copied; SOLUTIONTIME of the initial field set to 0 (the files carry the time of the run that wrote them).
-    Air of test/common/Air-viscous (the gas files of that test are the same bytes). cfl 0.5, vnn 0.4; SST with
-    omega-wall-bc = asymptotic, as the test."""
+    mr-common/plate on its coarse mesh (68 x 48 cells; x from -0.333 to 2 m, y from the wall to 1 m, cells from 4 um
+    at the wall), uniform start at Mach 0.2 and 555 K; inlet 404, outlet 406, symmetry 300 for x < 0 and on the top
+    face, adiabatic wall 301 for x > 0, null k faces (0). SST: ic-SST.tec and bc-SST.txt. SA: the initial field
+    ic-SA.tec, on the same mesh, with the records of bc-SST.txt and in the inlet records the SA value rho nu~ = 1e-6 in
+    place of k and omega. The three files are those of the SST and SA cases of the turbulent flat plate with boundary
+    conditions of its own (test/2D/viscous/flat-plate-turbulent, since removed), byte for byte. Text copied;
+    SOLUTIONTIME of the initial field set to 0 (the files carry the time of the run that wrote them). Air of
+    test/common/Air-viscous (the gas files of that test are the same bytes). cfl 0.5, vnn 0.4; SST with
+    omega-wall-bc = asymptotic, as that test."""
     import re
-    common = os.path.dirname(os.path.abspath(air))
-    src = os.path.join(common, '..', '2D', 'viscous', 'flat-plate-turbulent')
-    bc = open(os.path.join(src, 'SST', 'INPUT', 'bc.txt')).read()
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plate')
+    bc = open(os.path.join(src, 'bc-SST.txt')).read()
     if model == 'SA':
-        ic = open(os.path.join(src, 'SA', 'INPUT', 'ic-coarse.tec')).read()
+        ic = open(os.path.join(src, 'ic-SA.tec')).read()
         old = '    0.225000E-02,    0.625000E+04,'
         n404 = len(re.findall(r'^\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+404\s*$', bc, re.M))
         assert bc.count(old) == n404 > 0, 'inlet records of the SST plate'
         bc = bc.replace(old, '    0.100000E-05,')
     else:
-        ic = open(os.path.join(src, 'SST', 'INPUT', 'ic.tec')).read()
+        ic = open(os.path.join(src, 'ic-SST.tec')).read()
     ic, n = re.subn(r'SOLUTIONTIME=\s*[-+0-9.EeDd]+', 'SOLUTIONTIME=0.000000000000000E+000', ic, count=1)
     assert n == 1, 'SOLUTIONTIME'
     if (PI, PJ) != (1, 1):
