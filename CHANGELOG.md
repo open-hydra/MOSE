@@ -398,6 +398,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the solution converges at first order. The paragraph on the axis led with the centroid of the cell volume, which read as
   the point where the value of a cell belongs; MOSE takes that value at the mean of the eight nodes, as cell-centred
   schemes typically do. No run changes.
+- ORION, OSLO and FLINT are required by a range of releases (`semver_dependency` of `cmake/SemVerDeps.cmake`, as FLINT and
+  ATLAS require theirs), no longer as submodules: ORION 2.1 or a later 2.x, OSLO 1.1 or a later 1.x and FLINT 2.0 or a later
+  2.x, in place of ORION `a978930`, FLINT 1.1.0 and its OSLO 1.0.0. The first configure of a clone lists the tags of each
+  library over https and checks the newest release in range out in `lib/`; `deps.lock`, in the source root and not tracked,
+  keeps the releases selected, and the next configures use them without the network. `-DSEMVER_UPDATE=ALL`
+  (`./install.sh build --update-deps`) selects the newest releases again, `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>`
+  (`--include-orion|flint|oslo=<path>`) builds a local checkout instead. In an existing clone git leaves `lib/ORION` and
+  `lib/FLINT` in place: the configure moves each one to its release when it is a detached checkout without changes, and
+  otherwise stops and names the folder. MOSE built inside another project (Hydra) runs none of this, and that project
+  provides the three libraries, as before. FiNeR and its five libraries stay submodules; the CI no longer fetches the OSLO
+  of FLINT. What the releases change in a run: OSLO 1.1 has no `dodesol` (Intel ODE), and `ode-solver = dodesol` prints
+  "dodesol is not a valid integrator" after the loading and ends the run with exit code 0, with no solution written; a
+  build by ifx with OpenMP refuses FATODE's Rosenbrock solvers (`ros2`, `ros3`, `ros4`, `rodas3`, `rodas4`) with a message
+  that names `H-rodas` and exit code 1, `test/1D/premixed-flame` (`ros4`) among them; the coefficients of these solvers are
+  double-precision constants (they were single-precision literals), and their results change in every build (the premixed
+  flame with `ros4`, gfortran, 40 iterations: the densities of the species by up to 1.4e-7 of their peak; with `H-rodas`
+  and with `lobatto3c` it does not change). FLINT 2.0's `CEA_solve` returns, when it does not converge, the input
+  temperature and mass fractions and prints a `[WARNING] FLINT CEA_solve` line; FLINT 1.1 returned the partial densities,
+  which the equilibrium step of MOSE takes as mass fractions.
 
 ### Removed
 
@@ -413,6 +432,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the discretized equations: in one step from the same state the time derivative changed, by an amount that did not depend on
   the step, and so did the final density of a Sod run. The change does not vanish as the step does. MOSE has no dual time
   stepping, in whose pseudo time residual smoothing belongs.
+- The submodules `lib/ORION` and `lib/FLINT`, the CMake variables `ORION_PATH` and `FLINT_PATH`, and `OSLO_PATH`, which
+  `install.sh` handed to FLINT: `FETCHCONTENT_SOURCE_DIR_ORION`, `FETCHCONTENT_SOURCE_DIR_FLINT` and
+  `FETCHCONTENT_SOURCE_DIR_OSLO` give a local checkout instead.
 
 ### Fixed
 
