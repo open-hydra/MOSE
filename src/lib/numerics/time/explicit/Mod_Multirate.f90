@@ -2623,6 +2623,15 @@ contains
         error stop 'MOSE-Multirate: boundary type without a multirate boundary flux'
 
     end select
+
+    ! Inflow, outflow and extrapolation faces: Reynolds stresses (or -2/3 rho k with k-energy-coupling) of the momentum
+    ! and energy equations, as after the select of BC_Fluxes
+    if ( model == 2 .and. ( obj_rans%RSM .or. obj_rans%k_energy_coupling ) ) then
+      select case ( bc % type )
+        case (400:408, 410, 420)
+          call BC_Open_Turbulent_Stress ( Im, Jm, Km, Fm, domain % blk(Bm) )
+      end select
+    end if
     end associate
 
   end subroutine BC_Flux_Record
