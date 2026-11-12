@@ -177,7 +177,7 @@ contains
     ! ghost values (Ghost_Wall) and their positions (Setup_Stencil_Metrics); every record, on every rank
     do i = 1, domain % nbound
       select case ( domain % bc(i) % type )
-        case (103, 104, 301, 302, 400, 503:505)
+        case (103, 104, 301, 302, 400, 503:506)
           Bm = domain % bc(i) % b
           domain % bc(i) % sx = Extrapolation_Ratio ( domain % blk(Bm) % node, domain % bc(i) % i, domain % bc(i) % j, &
                                                       domain % bc(i) % k, domain % bc(i) % f, domain % blk(Bm) % dim )

@@ -27,17 +27,18 @@
 #  interpolation ends (T0 = 10000 K, the last row of test/common/Air), with
 #  T0 and that temperature, 9999 K (make_case.py
 #  nozzle). A record of type 409 (a forced outlet), 501 (a manifold) or
-#  506 (surface reactions and pyrolysis), which MOSE does not apply, must
+#  501 (a manifold), which MOSE does not apply, must
 #  stop the run at set-up with exit code 1, no solution and a message with
 #  the line of bc.txt, the record and the type, and not on the count of
 #  the records: the outlet of the duct (record 2) of type 409, without a
-#  property line, or 501, and the outlet of the duct of the grain with
-#  Spalart-Allmaras of type 506, the 501 and the 506 written as the
-#  boundary-condition builder of ATLAS writes them (make_case.py
-#  unapplied). A wall of surface reactions (505) on the outlet of that
-#  duct, whose gas has none of their eight species, must stop the run at
-#  set-up with exit code 1 and a message that names them (make_case.py
-#  refused). An SRM grain boundary (502) with the
+#  property line, or 501, written as the boundary-condition builder of
+#  ATLAS writes it (make_case.py unapplied). A wall of surface reactions
+#  (505) or of the pyrolysing ablator (506) on the outlet of the duct of
+#  the grain, whose gas has none of their eight species, must stop the run
+#  at set-up with exit code 1 and a message that names them; a 506 line
+#  of an older ATLAS (five values with one species), a seventh value,
+#  reac_id other than 1, phi < 0 and pyro_id 0 with phi > 0 must stop it
+#  with the line of bc.txt (make_case.py refused). An SRM grain boundary (502) with the
 #  Spalart-Allmaras model runs (40 steps), and so with SST, its ghost cells
 #  hold the wall value nu~ = 0 and it is a wall for the wall distance: one
 #  explicit step at rest from a uniform rho nu~ changes it in the cell next to
@@ -264,8 +265,6 @@ else
   echo "  [FAIL] srm-rans: exit code $rc, the run with the grain and Spalart-Allmaras did not complete (see OUTPUT/srm-rans.log)"
   fail=1
 fi
-echo "-- a record of a type that MOSE does not apply: the outlet of the duct of the grain of type 506 --"
-unapplied 506 "bc.txt line 3 (record 2, type 506): MOSE does not apply type 506 (surface reactions and pyrolysis): $none; give the face type 504 (pyrolysis) or 505 (surface reactions)"
 refused() {   # refused <kind> <message>: the duct of the grain with record 2 of make_case.py REFUSED[kind]; the run must stop
               # at set-up with exit code 1, the message and no solution
   python3 -B make_case.py refused "$1" || exit 1
@@ -281,6 +280,13 @@ refused() {   # refused <kind> <message>: the duct of the grain with record 2 of
 }
 echo "-- a wall of surface reactions (505) on a gas without their species: the outlet of the duct of the grain --"
 refused gsi505-species "bc.txt: the surface reactions of the walls 505 and 506 (Bradley) need the species O2, O, OH, H, H2, H2O, CO and CO2 in the gas (phase.txt); it has no O2 O OH H H2 H2O CO CO2"
+echo "-- a wall of the pyrolysing ablator (506) on the outlet of the duct of the grain: its property line read or refused --"
+refused gsi506-species "bc.txt: the surface reactions of the walls 505 and 506 (Bradley) need the species O2, O, OH, H, H2, H2O, CO and CO2 in the gas (phase.txt); it has no O2 O OH H H2 H2O CO CO2"
+refused gsi506-old "bc.txt line 4 (record 2, type 506): the line is short or holds a value that is not a number"
+refused gsi506-extra "bc.txt line 4 (record 2, type 506): the line holds more than the six values pyro_id, reac_id, phi, h_v0, q_rad, eps_wall"
+refused gsi506-reac "bc.txt line 4 (record 2, type 506): reac_id is 2: the surface reactions of the wall 506 are those of Bradley, reac_id = 1"
+refused gsi506-phi "bc.txt line 4 (record 2, type 506): phi is -5.00000E-01: the ratio phi = mdot_pg/mdot_ch is 0 or positive"
+refused gsi506-pyro "bc.txt line 4 (record 2, type 506): pyro_id is 0: with phi > 0 the wall blows the gas of a table of INPUT/pyrolysis.dat, from 1"
 python3 -B make_case.py srm sst || exit 1
 sed -e 's/^turbulence = SA$/turbulence = SST/' input.ini > input-sst.ini
 mv input.ini input-sa.ini && mv input-sst.ini input.ini

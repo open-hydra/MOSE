@@ -6,7 +6,7 @@ module MOSE_Lib_GSI
   implicit none
 
   private
-  public :: GSI_Initialize, GSI_Melting, GSI_Carbon_Bradley, GSI_HDPE, GSI_HTPB, GSI_PP
+  public :: GSI_Initialize, GSI_Melting, GSI_Carbon_Bradley, GSI_Char_Pyrolysis, GSI_HDPE, GSI_HTPB, GSI_PP
 
   ! Species indices for GSI subroutines (GSI_Initialize; 0: not a species of the gas)
   integer :: iH = 0, iC2H4 = 0, iOH = 0, iCO = 0, iCO2 = 0, iH2 = 0, iH2O = 0, iO2 = 0, iO = 0
@@ -184,6 +184,47 @@ contains
     end do
 
   end subroutine GSI_Carbon_Bradley
+
+
+
+  subroutine GSI_Char_Pyrolysis ( roi, Tw, p, table, phi, h_v0, omegadot, q_pyro, mdot )
+    !< Pyrolysing ablator (BC 506; thesis eqs 2.100, 2.101, 2.96, 2.115, 2.116). The char of a carbon wall reacts with the
+    !< gas (GSI_Carbon_Bradley: omega_ch, mdot_ch) and the gas of the pyrolysing virgin material is blown through it,
+    !< mdot_pg = phi mdot_ch, with the equilibrium composition y_pg(p, Tw) of its table (FLINT_Lib_PyrolysisGas, read
+    !< only when phi > 0). The surface energy balance is that of steady conduction in the solid: the heat the surface
+    !< absorbs is the enthalpy the blown species carry at Tw less that of the virgin material they come from,
+    !<   omega = omega_ch + mdot_pg y_pg,  mdot = mdot_ch + mdot_pg,  q_pyro = sum_s omega_s h_s(Tw) - mdot h_v0,
+    !< i.e. q_ch + mdot_pg h_pg(Tw) - (mdot_ch + mdot_pg) h_v0. With phi = 0 omega and mdot are those of the surface
+    !< reactions, untouched, and q_pyro = q_ch - mdot_ch h_v0: with h_v0 = 0 too, the result of BC 505 bit for bit.
+    !< Magnitudes positive out of the solid, as every model here (GSI_Source orients them).
+    use FLINT_Lib_Thermodynamic, only: f_tabT, h_tab
+    use FLINT_Lib_PyrolysisGas,  only: pyrolysis_gas_composition
+    implicit none
+    real(R8), intent(in)    :: roi(nsc), Tw
+    real(R8), intent(in)    :: p              !< wall pressure of the table lookup (the boundary cell's) [Pa]
+    integer,  intent(in)    :: table          !< pyrolysis-gas table (1-based), read when phi > 0
+    real(R8), intent(in)    :: phi            !< mdot_pg / mdot_ch
+    real(R8), intent(in)    :: h_v0           !< enthalpy of the virgin material, on the datum of h_tab [J/kg]
+    real(R8), intent(inout) :: omegadot(nsc), q_pyro, mdot
+    real(R8) :: y_pg(nsc), mdot_pg
+    integer :: s
+
+    call GSI_Carbon_Bradley ( roi, Tw, omegadot, q_pyro, mdot )
+
+    if ( phi > 0d0 ) then
+      mdot_pg = phi * mdot
+      call pyrolysis_gas_composition ( table, p, Tw, y_pg )
+      omegadot = omegadot + mdot_pg * y_pg
+      mdot = mdot + mdot_pg
+      q_pyro = 0d0
+      do s = 1, nsc
+        q_pyro = q_pyro + omegadot(s)*f_tabT( Tw,s,h_tab )
+      end do
+    end if
+
+    q_pyro = q_pyro - mdot * h_v0
+
+  end subroutine GSI_Char_Pyrolysis
 
 
 

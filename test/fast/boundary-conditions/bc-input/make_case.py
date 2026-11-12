@@ -28,13 +28,11 @@ set-up. The case of p0.dat with its inlet (face 1, record 1) the nozzle of area 
 (G* = 2 g of that nozzle). Fed from the last row of the tables, T_TOP, the same nozzle has the same thresholds and its g
 times sqrt(T0/T_TOP), as G* of a calorically perfect gas.
 
-Types that MOSE does not apply. A record of type 409 (a forced outlet), 501 (a manifold) or 506 (surface reactions and
-pyrolysis) must stop the run at set-up, with the line of bc.txt, the record and its type: MOSE does not apply these types,
-and the face would get no flux. The case of p0.dat with its outlet (record 2, face 2, line 3 of bc.txt) of type 409 or 501,
-and the duct of the grain (srm, below) with its outlet of type 506: 409 without a property line, as the reader counts it
-(the boundary-condition builder of ATLAS does not write 409); 501 and 506 as that builder writes them, 501 with the source
-block and face as two integers, 506 with the pyrolysis and surface-reaction ids as integers, then q_rad, eps_wall and the
-mass fraction of the single species.
+Types that MOSE does not apply. A record of type 409 (a forced outlet) or 501 (a manifold) must stop the run at set-up,
+with the line of bc.txt, the record and its type: MOSE does not apply these types, and the face would get no flux. The
+case of p0.dat with its outlet (record 2, face 2, line 3 of bc.txt) of type 409 or 501: 409 without a property line, as
+the reader counts it (the boundary-condition builder of ATLAS does not write 409); 501 as that builder writes it, with the
+source block and face as two integers.
 
 Usage (from the test directory):
   python3 -B make_case.py case NAME      INPUT/ic.tec, INPUT/bc.txt naming the table NAME, and the table under that name
@@ -55,8 +53,7 @@ Usage (from the test directory):
   python3 -B make_case.py srminflowcheck DIAG DIAGWALL   exit status 0 when one step from rest lets in the mass flux of
                                          the law through the inflow grain, as through the grain of mode 1 (DIAGWALL), and
                                          the grain is not a wall for the distance (below)
-  python3 -B make_case.py unapplied TYPE the case of p0.dat (TYPE 409 or 501) or the duct of the grain (506) with its outlet
-                                         (record 2) of TYPE
+  python3 -B make_case.py unapplied TYPE the case of p0.dat with its outlet (record 2) of TYPE (409 or 501)
   python3 -B make_case.py refused KIND   the duct of the grain with its outlet (record 2) of the type and line of
                                          REFUSED[KIND], refused at set-up
   python3 -B make_case.py srmcheck DIAG   exit status 0 when the change of rho nu~ over one step is that of the wall value
@@ -403,7 +400,7 @@ def srm_twogas_check(diag, diag_mode1=None):
     sys.exit(0 if ok else 1)
 
 
-UNAPPLIED = ("409", "501", "506")                    # types that MOSE does not apply
+UNAPPLIED = ("409", "501")                           # types that MOSE does not apply
 
 
 # Records refused at set-up on the duct of the grain (make_case.py refused KIND): record 2, the outlet on face 2 at line 3
@@ -412,6 +409,16 @@ UNAPPLIED = ("409", "501", "506")                    # types that MOSE does not 
 REFUSED = {
     # reac_id, q_rad, eps_wall: the surface reactions on a gas without their eight species
     "gsi505-species": ("505", f"       1,{0.0:24.16E},{0.0:24.16E},"),
+    # pyro_id, reac_id, phi, h_v0, q_rad, eps_wall (BC 506): with phi = 0 no table, the same refusal as 505
+    "gsi506-species": ("506", f"       0,       1,{0.0:24.16E},{0.0:24.16E},{0.0:24.16E},{0.0:24.16E},"),
+    # the line of 506 of an ATLAS before the pyrolysing ablator, one species: pyro_id, reac_id, q_rad, eps_wall, massf
+    "gsi506-old": ("506", f"       1,       1,{1.0e6:24.16E},{0.9:24.16E},{1.0:24.16E},"),
+    # a seventh value (the line of an older ATLAS with three species holds seven numbers; with two species it holds six
+    # and is read as a valid line, DEC-1)
+    "gsi506-extra": ("506", f"       1,       1,{0.25:24.16E},{0.0:24.16E},{1.0e4:24.16E},{0.0:24.16E},{1.0:24.16E},"),
+    "gsi506-reac": ("506", f"       0,       2,{0.0:24.16E},{0.0:24.16E},{0.0:24.16E},{0.0:24.16E},"),
+    "gsi506-phi": ("506", f"       0,       1,{-0.5:24.16E},{0.0:24.16E},{0.0:24.16E},{0.0:24.16E},"),
+    "gsi506-pyro": ("506", f"       0,       1,{0.25:24.16E},{0.0:24.16E},{0.0:24.16E},{0.0:24.16E},"),
 }
 
 
@@ -430,26 +437,19 @@ def write_refused(kind):
 
 
 def write_unapplied(kind):
-    """The case of p0.dat (409, 501) or the duct of the grain (506, write_srm) with record 2, the outlet on face 2 at line
-    3 of INPUT/bc.txt, of type kind: 409 without a property line, as the reader counts it (the boundary-condition builder
-    of ATLAS does not write 409); 501 and 506 as that builder writes them: 501 with the source block and face, 1 and 1, as
-    two integers; 506 with the pyrolysis and surface-reaction ids as integers, then q_rad, eps_wall and the mass fraction of
-    the single species, each value followed by a comma."""
+    """The case of p0.dat with record 2, the outlet on face 2 at line 3 of INPUT/bc.txt, of type kind: 409 without a
+    property line, as the reader counts it (the boundary-condition builder of ATLAS does not write 409); 501 as that
+    builder writes it, with the source block and face, 1 and 1, as two integers, each followed by a comma."""
     if kind not in UNAPPLIED:
         sys.exit(f"unknown type {kind}")
-    if kind == "506":
-        write_srm()
-    else:
-        write_case("p0.dat")
+    write_case("p0.dat")
     with open("INPUT/bc.txt") as f:
         lines = f.readlines()
     lines[2] = f"       1     {N:3d}       1       1       2     {kind}\n"
     if kind == "409":
         del lines[3]
-    elif kind == "501":
-        lines[3] = "       1,       1,\n"
     else:
-        lines[3] = f"       1,       1,{1.0e6:24.16E},{0.9:24.16E},{1.0:24.16E},\n"
+        lines[3] = "       1,       1,\n"
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(lines))
 

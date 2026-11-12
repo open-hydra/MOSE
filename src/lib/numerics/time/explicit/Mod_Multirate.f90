@@ -437,13 +437,13 @@ contains
         call Reject('SRM grain', 'an SRM grain in mode 1 (type 502, a wall that blows the products in) is not '// &
                     'supported: BC_Flux_Record has no branch for its flux (BC_SRM); a grain in mode 2, an inflow, runs '// &
                     'as the mass-flux inlet 404')
-      case (503:505)
-        call Reject('GSI wall', 'gas-surface interaction walls (types 503-505) are not supported')
+      case (503:506)
+        call Reject('GSI wall', 'gas-surface interaction walls (types 503-506) are not supported')
       case (200)
         if (ndir == 3) call Reject('3D rotational periodicity', &
           'rotational periodic boundaries (type 200) in 3D are not supported (the 2D axisymmetric wedge is)')
       case (0, 101, 201, 300, 301, 302, 400:408, 410, 420)
-        ! types with a boundary flux in BC_Flux_Record, or without one as in BC_Fluxes (0 null); 409, 501 and 506 stop
+        ! types with a boundary flux in BC_Flux_Record, or without one as in BC_Fluxes (0 null); 409 and 501 stop
         ! every run at the reading of bc.txt (Unapplied_Type, IO_BC.f90), before this check
       case default
         write(tname,'(I0)') t
@@ -2710,7 +2710,7 @@ contains
         call Ghost_Q2D_Mapped ( domain % bc(r), domain % blk(Bm), domain % time )
       case (0,401:407,420)
         call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
-      case (103,104,301,302,400,503:505)
+      case (103,104,301,302,400,503:506)
         call Ghost_Wall ( domain % bc(r), domain % blk(Bm) )
       case (502)
         call Ghost_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )

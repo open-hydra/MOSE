@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Boundary condition `506`, the pyrolysing ablator: a charring wall whose char reacts with the gas (the surface reactions of
+  `505`) and through which the gas of the pyrolysing virgin material is blown, `mdot_pg = phi mdot_ch`, with the equilibrium
+  composition of a table of `INPUT/<prefix>pyrolysis.dat` (FLINT `FLINT_Lib_PyrolysisGas`, bilinear in pressure and wall
+  temperature) at the pressure of the boundary cell; the surface energy balance of steady conduction subtracts
+  `mdot h_v0`, the enthalpy of the virgin material. Property line `pyro_id, reac_id, phi, h_v0, q_rad, eps_wall`; the table
+  file is read only when a record has `phi > 0`. With `phi = 0` and `h_v0 = 0` the wall is `505` bit for bit. A `506` line of
+  an older ATLAS (ids, `q_rad`, `eps_wall`, mass fractions) stops the run: short with one species, a seventh value with three
+  or more; with exactly two species it holds six numbers and is read as `phi = q_rad`, `h_v0 = eps_wall` (DEC-1 of the plan).
+  Requires FLINT 2.1 (the range of `CMakeLists.txt`).
 - `AblatingWall` covers the surface reactions of a carbon wall (`505`): three columns on the gas
   `test/common/CHO-N2-viscous`, N2 with H2O and CO2 at 1800 K on both ends and N2 with O2 at 1500 K, checked by the
   relations of the wall model at the state reached (the rates of an independent Python copy within 1e-11, the surface
@@ -226,10 +235,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   state of the cell, with less total pressure and thrust: in air at an exit Mach number of 2.94, 0.90 times the momentum
   flux of the design state with the cell at 2 `p_sup` and 0.87 midway between the sonic pressure of that mass flux and
   p_shock. From p_shock up to `p_sub` the face takes that state as before. `bc.txt` does not change.
-- A record of type `409`, `501` or `506` in `bc.txt` stops the run at set-up, on every rank, with exit code 1 and a message with
+- A record of type `409` or `501` in `bc.txt` stops the run at set-up, on every rank, with exit code 1 and a message with
   the line of the file, the record and its type: MOSE does not apply these types. The run went on with no flux through such a
   face, not even that of the pressure, and ended with exit code 0. The boundary-condition builder of ATLAS writes `501` for a
-  `manifold` section and `506` for a `gsi` section with `pyrolysis-model`, `surface-reactions` and `qrad`.
+  `manifold` section. (`506` stopped the run the same way until the pyrolysing ablator, see Added.)
 - The interior faces of the viscous fluxes no longer take by default the mean of the two metrics, which divided the difference
   across a face by the mean of 1/h instead of the distance between the cell centres: it overstated the face-normal gradient, and
   with it the viscous, conductive and diffusive fluxes, by (1 + r)²/(4r) at a cell-size ratio r (4.2 % at r = 1.5, 8.9 % at

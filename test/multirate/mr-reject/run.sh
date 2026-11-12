@@ -7,7 +7,7 @@
 #  checked on the keys right after input.ini (the set-up of MOSE also refuses
 #  IRS in a time-accurate run on its own, before the first macro step). The laminar
 #  Navier-Stokes equations are supported; item 28: a boundary type that BC_Flux_Record does not know
-#  stops the run (only 0 has no flux, as in BC_Fluxes; the records of type 409, 501 and 506 stop every run earlier, at
+#  stops the run (only 0 has no flux, as in BC_Fluxes; the records of type 409 and 501 stop every run earlier, at
 #  the reading of bc.txt, so they have no item here). The Spalart-Allmaras and SST
 #  models are supported (control: the wall channel with Spalart-Allmaras runs; SA-R, k-energy-coupling and
 #  sst-production = compressible run in the test mr-conservation), and the other models have their own item (29:
@@ -98,6 +98,9 @@ expect_reject 15-gsi504     "GSI wall"     mr1d-acu --bc 3 504 "1 0.0 0.0 1.0" -
 # 505 on the air of the case stops at set-up, before the checks of the multirate: its surface reactions need their eight
 # species (Setup_BC); the multirate rejection of the gas-surface interaction walls is the branch of 503 and 504 (14, 15)
 expect_reject 16-gsi505     "[ERROR] bc.txt: the surface reactions of the walls 505 and 506 (Bradley) need" mr1d-acu --bc 3 505 "1 0.0" -- "${VISC[@]}"
+# 506 (pyro_id, reac_id, phi, h_v0, q_rad, eps_wall) is read now and stops there too, on the same air; the multirate branch
+# of the gas-surface interaction walls, 503-506, is that of items 14 and 15
+expect_reject 17-gsi506     "[ERROR] bc.txt: the surface reactions of the walls 505 and 506 (Bradley) need" mr1d-acu --bc 3 506 "0 1 0.0 0.0 0.0 0.0" -- "${VISC[@]}"
 expect_reject 18-rot3d      "3D rotational periodicity"    mr3d-sector
 expect_reject 19-steady     "time-accurate"                mr1d-acu -- "MOSE-Numerics|time-accurate|.false."
 expect_reject 20-cflramp    "cfl-rise-threshold"           mr1d-acu -- "MOSE-Numerics|cfl-rise-threshold|10"

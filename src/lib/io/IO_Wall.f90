@@ -179,6 +179,7 @@ contains
     use MOSE_Lib_BC_Fluxes_GSI_Melting
     use MOSE_Lib_BC_Fluxes_GSI_Pyrolysis
     use MOSE_Lib_BC_Fluxes_GSI_Reactions
+    use MOSE_Lib_BC_Fluxes_GSI_Char_Pyrolysis
     use MOSE_Config_Types_m,    only: obj_rot
     use MOSE_Lib_RotatingFrame, only: RF_Is_Stationary_Face, RF_Wall_Velocity, RF_Wall_Velocity_Gradient, RF_Face_Center
     implicit none
@@ -302,6 +303,14 @@ contains
               call BC_Wall_Reactions ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_surf_reac_id, &
                                        domain % bc(i) % qrad, Ovar, &
                                        ablating = ablating, T_surface = Tw_surface )
+              if (.not. ablating) &
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
+
+            case (506) ! GSI - pyrolysing ablator
+              call BC_Wall_Char_Pyrolysis ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_surf_reac_id, &
+                                            domain % bc(i) % pyro_table, domain % bc(i) % phi, domain % bc(i) % h_v0, &
+                                            domain % bc(i) % qrad, Ovar, &
+                                            ablating = ablating, T_surface = Tw_surface )
               if (.not. ablating) &
                 call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, Ovar, rec = domain % bc(i) )
 

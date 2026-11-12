@@ -615,10 +615,10 @@ contains
   !> or 302, the only boundary conditions that take the velocity of a wall at rest in the laboratory, and with no record
   !> that would take it in part. The records fall in three classes by the points that read the stationary flag
   !> (RF_Is_Stationary_Face): the walls 301 and 302 read it everywhere (inviscid and viscous flux, ghost cells, wall output,
-  !> torque); the types 0, 101, 102, 200, 201, 400, 407, 410, 501 and 506 never read it, so their boundary condition is the
+  !> torque); the types 0, 101, 102, 200, 201, 400, 407, 410 and 501 never read it, so their boundary condition is the
   !> same with or without the key (a face of a casing that is wall in part and connection in part); every other type reads
   !> it in part, in the inviscid flux of BC_Symmetry_Eul, which 103, 104 and 300 call always and 401-406, 408, 420 and
-  !> 502-505 as a fallback (103 and 104 also in the ghost cells), so the face would be at rest in part only: that stops the
+  !> 502-506 as a fallback (103 and 104 also in the ghost cells), so the face would be at rest in part only: that stops the
   !> run. A face with no wall 301 or 302, or with no record of the mesh, has no wall to put at rest: that stops the run too.
   !> A new type that never reads the flag must be added to the types skipped here; if it is not, it stops the run as one
   !> that reads it in part.
@@ -644,7 +644,7 @@ contains
         select case ( domain % bc(l) % type )
           case (301, 302)
             nwall = nwall + 1
-          case (0, 101, 102, 200, 201, 400, 407, 410, 501, 506)
+          case (0, 101, 102, 200, 201, 400, 407, 410, 501)
             ! never reads the stationary flag
           case default
             write(msg,'(A,I0,A,I0,A,I0,A,I0,A,3(1X,I0),A)') '[ERROR] Rotating frame: stationary-face-', k, &
