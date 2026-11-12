@@ -8,6 +8,7 @@ module MOSE_IO_BC
 
   ! BC type counters — populated by Read_BCfile, consumed by Print_BC_Summary
   integer :: nconnect, nwall, ngsi, nSRM, nSRMin, nio, nsym, nper, nchimera, ncoupled, next, nKaffs, nstate
+  integer :: nreac                          ! walls with the surface reactions of a carbon wall (505, 506)
   logical :: has_tdep_bc
 
   ! Empty fields of a property line. A null value of list-directed input (two commas with only blanks between) leaves
@@ -30,13 +31,15 @@ contains
     use MOSE_Advanced_Types_m
     use FLINT_Lib_Thermodynamic, only: species_names
     use MOSE_Config_Types_m,     only: obj_multigrid, obj_io_bc
-    use MOSE_Global_m,           only: model
+    use MOSE_Global_m,           only: model, MOSE_phase_prefix
     use MOSE_IO_BC_Q2D,          only: Setup_Q2D_BC_Data
     use MOSE_Lib_GSI,            only: GSI_Initialize
+    use MOSE_Mod_MPI,            only: mpi_stop_all
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain(obj_multigrid%MGL)
     ! Local
     integer :: m, error
+    character(len=:), allocatable :: missing   ! species of the surface reactions that the gas lacks (GSI_Initialize)
 
     do m = 1, obj_multigrid%MGL
 
@@ -71,9 +74,13 @@ contains
     end do
 
     !! Phase 3: Initialize BCs for specific models
-    ! GSI BCs
+    ! GSI BCs. The surface reactions of a carbon wall (505, 506: GSI_Carbon_Bradley) need their eight species in the gas:
+    ! without one of them the run stops here, on every rank (every rank reads the same phase.txt and bc.txt)
     if (ngsi > 0) then
-      call GSI_Initialize(species_names)
+      call GSI_Initialize(species_names, missing)
+      if ( nreac > 0 .and. len(missing) > 0 ) call mpi_stop_all ( '[ERROR] '//trim(MOSE_phase_prefix)//'bc.txt: the '// &
+        'surface reactions of the walls 505 and 506 (Bradley) need the species O2, O, OH, H, H2, H2O, CO and CO2 in the '// &
+        'gas (phase.txt); it has no '//missing )
     end if
 
   end subroutine Setup_BC
@@ -212,6 +219,7 @@ contains
       nconnect = 0
       nwall    = 0
       ngsi     = 0
+      nreac    = 0
       nSRM     = 0
       nSRMin   = 0
       nio      = 0
@@ -621,6 +629,7 @@ contains
         case(505)
           if (level == 1) nwall  = nwall  + 1
           if (level == 1) ngsi   = ngsi   + 1
+          if (level == 1) nreac  = nreac  + 1
           obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
           bc(i)%qrad = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )

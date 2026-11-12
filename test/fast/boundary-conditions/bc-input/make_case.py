@@ -57,6 +57,8 @@ Usage (from the test directory):
                                          the grain is not a wall for the distance (below)
   python3 -B make_case.py unapplied TYPE the case of p0.dat (TYPE 409 or 501) or the duct of the grain (506) with its outlet
                                          (record 2) of TYPE
+  python3 -B make_case.py refused KIND   the duct of the grain with its outlet (record 2) of the type and line of
+                                         REFUSED[KIND], refused at set-up
   python3 -B make_case.py srmcheck DIAG   exit status 0 when the change of rho nu~ over one step is that of the wall value
                                          nu~ = 0 in the cell next to the grain, and that of the distance to the grain in
                                          the other cells (below)
@@ -404,6 +406,29 @@ def srm_twogas_check(diag, diag_mode1=None):
 UNAPPLIED = ("409", "501", "506")                    # types that MOSE does not apply
 
 
+# Records refused at set-up on the duct of the grain (make_case.py refused KIND): record 2, the outlet on face 2 at line 3
+# of INPUT/bc.txt, of the type and property line of REFUSED[KIND], as the boundary-condition builder of ATLAS writes it,
+# each value followed by a comma; the gas of the duct of the grain, test/common/Air-viscous, has one species.
+REFUSED = {
+    # reac_id, q_rad, eps_wall: the surface reactions on a gas without their eight species
+    "gsi505-species": ("505", f"       1,{0.0:24.16E},{0.0:24.16E},"),
+}
+
+
+def write_refused(kind):
+    """The duct of the grain (write_srm) with record 2 of the type and property line of REFUSED[kind]."""
+    if kind not in REFUSED:
+        sys.exit(f"unknown kind {kind}")
+    btype, line = REFUSED[kind]
+    write_srm()
+    with open("INPUT/bc.txt") as f:
+        lines = f.readlines()
+    lines[2] = f"       1     {N:3d}       1       1       2     {btype}\n"
+    lines[3] = line + "\n"
+    with open("INPUT/bc.txt", "w") as f:
+        f.write("".join(lines))
+
+
 def write_unapplied(kind):
     """The case of p0.dat (409, 501) or the duct of the grain (506, write_srm) with record 2, the outlet on face 2 at line
     3 of INPUT/bc.txt, of type kind: 409 without a property line, as the reader counts it (the boundary-condition builder
@@ -520,6 +545,8 @@ def main():
         srm_inflow_check(sys.argv[2], sys.argv[3])
     elif what == "unapplied":
         write_unapplied(sys.argv[2])
+    elif what == "refused":
+        write_refused(sys.argv[2])
     elif what == "srmcheck":
         srm_check(sys.argv[2])
     elif what == "same":

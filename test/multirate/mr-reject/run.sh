@@ -95,7 +95,9 @@ expect_reject 11-coupled    "coupled wall" mr1d-acu --bc 3 103 "1 1 1 1 4 1 0 0 
 expect_reject 13-srm        "SRM grain"    mr1d-acu --bc 3 502 "1.0 0.4 1.0e6 3000.0 1.0 1.0"
 expect_reject 14-gsi503     "GSI wall"     mr1d-acu --bc 3 503 "1000.0 300.0 300.0 1.0e5 0.0 0.0 1.0" -- "${VISC[@]}"
 expect_reject 15-gsi504     "GSI wall"     mr1d-acu --bc 3 504 "1 0.0 0.0 1.0" -- "${VISC[@]}"
-expect_reject 16-gsi505     "GSI wall"     mr1d-acu --bc 3 505 "1 0.0" -- "${VISC[@]}"
+# 505 on the air of the case stops at set-up, before the checks of the multirate: its surface reactions need their eight
+# species (Setup_BC); the multirate rejection of the gas-surface interaction walls is the branch of 503 and 504 (14, 15)
+expect_reject 16-gsi505     "[ERROR] bc.txt: the surface reactions of the walls 505 and 506 (Bradley) need" mr1d-acu --bc 3 505 "1 0.0" -- "${VISC[@]}"
 expect_reject 18-rot3d      "3D rotational periodicity"    mr3d-sector
 expect_reject 19-steady     "time-accurate"                mr1d-acu -- "MOSE-Numerics|time-accurate|.false."
 expect_reject 20-cflramp    "cfl-rise-threshold"           mr1d-acu -- "MOSE-Numerics|cfl-rise-threshold|10"

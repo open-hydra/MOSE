@@ -8,8 +8,8 @@ module MOSE_Lib_GSI
   private
   public :: GSI_Initialize, GSI_Melting, GSI_Carbon_Bradley, GSI_HDPE, GSI_HTPB, GSI_PP
 
-  ! Species indices for GSI subroutines
-  integer :: iH, iC2H4, iOH, iCO, iCO2, iH2, iH2O, iO2, iO
+  ! Species indices for GSI subroutines (GSI_Initialize; 0: not a species of the gas)
+  integer :: iH = 0, iC2H4 = 0, iOH = 0, iCO = 0, iCO2 = 0, iH2 = 0, iH2O = 0, iO2 = 0, iO = 0
 
   ! ! Paraffin/Melting
   ! real(R8) :: T_i = 298.15d0             ! initial temperature of paraffin
@@ -47,14 +47,32 @@ module MOSE_Lib_GSI
 
 contains
 
-  subroutine GSI_Initialize(species_name)
+  subroutine GSI_Initialize(species_name, missing)
+    !< The indices of the species of the surface reactions in the gas of the run, by name. missing: the species of the
+    !< surface reactions of a carbon wall (GSI_Carbon_Bradley: O2, O, OH, H, H2, H2O, CO, CO2) that the gas does not have,
+    !< blank-separated, empty when it has them all; Setup_BC stops the run on them when a wall 505 or 506 needs them.
     implicit none
     character(len=*), dimension(:), intent(in) :: species_name
+    character(len=:), allocatable, intent(out), optional :: missing
     integer :: i
 
+    iH = 0 ; iC2H4 = 0 ; iOH = 0 ; iCO = 0 ; iCO2 = 0 ; iH2 = 0 ; iH2O = 0 ; iO2 = 0 ; iO = 0
     do i = 1, nsc
       call name2index( trim(adjustl(species_name(i))), i )
     end do
+
+    if ( present(missing) ) then
+      missing = ''
+      if ( iO2  == 0 ) missing = missing//' O2'
+      if ( iO   == 0 ) missing = missing//' O'
+      if ( iOH  == 0 ) missing = missing//' OH'
+      if ( iH   == 0 ) missing = missing//' H'
+      if ( iH2  == 0 ) missing = missing//' H2'
+      if ( iH2O == 0 ) missing = missing//' H2O'
+      if ( iCO  == 0 ) missing = missing//' CO'
+      if ( iCO2 == 0 ) missing = missing//' CO2'
+      missing = trim(adjustl(missing))
+    end if
 
   end subroutine GSI_Initialize
 
@@ -133,8 +151,13 @@ contains
     k7   = 5.35d-1*exp( -63.64d6/RuTw)  ! O2c
     k8   = 1.81d7 *exp(-406.10d6/RuTw)  ! O2d
 
-    ! Compute ybig term
-    Y_term = 1d0 / ( 1d0 + k8/(k7*pi(iO2)) )
+    ! Compute ybig term, the fraction of the reactive sites 1/(1 + k8/(k7 pO2)); without O2 its limit 0, without the
+    ! division by zero (the same value as in IEEE arithmetic, where k8/0 = Inf; a trap in the DEBUG build)
+    if ( k7*pi(iO2) /= 0d0 ) then
+      Y_term = 1d0 / ( 1d0 + k8/(k7*pi(iO2)) )
+    else
+      Y_term = 0d0
+    end if
 
     dotm_H2O = kH2O * sqrt(pi(iH2O))
     dotm_CO2 = kCO2 * sqrt(pi(iCO2))

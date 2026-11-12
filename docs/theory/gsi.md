@@ -334,7 +334,7 @@ Five surface reactions consume solid carbon:
 | $\mathrm{C_{(s)}} + \mathrm{OH} \rightarrow \mathrm{CO} + \mathrm{H}$ | hydroxyl | $\dot m_{\mathrm{OH}}$ |
 | $\mathrm{C_{(s)}} + \mathrm{O} \rightarrow \mathrm{CO}$ | atomic oxygen | $\dot m_{\mathrm{O}}$ |
 
-This requires the gas mixture to contain $\mathrm{H}$, $\mathrm{OH}$, $\mathrm{CO}$, $\mathrm{CO_2}$, $\mathrm{H_2}$, $\mathrm{H_2O}$, $\mathrm{O_2}$ and $\mathrm{O}$ — the species set of a hydrocarbon or hydrogen combustion product. The steam and Boudouard routes usually dominate in a solid-motor throat, since $\mathrm{H_2O}$ and $\mathrm{CO_2}$ are major products while free $\mathrm{O}$, $\mathrm{OH}$ and $\mathrm{O_2}$ are minor.
+This requires the gas mixture to contain $\mathrm{H}$, $\mathrm{OH}$, $\mathrm{CO}$, $\mathrm{CO_2}$, $\mathrm{H_2}$, $\mathrm{H_2O}$, $\mathrm{O_2}$ and $\mathrm{O}$ — the species set of a hydrocarbon or hydrogen combustion product. A run with a wall `505` or `506` whose gas lacks one of them stops at set-up with a message that names the missing species; without $\mathrm{O_2}$ in the gas ($p_{\mathrm{O_2}} = 0$) the oxygen rate is 0 ($\chi = 0$). The steam and Boudouard routes usually dominate in a solid-motor throat, since $\mathrm{H_2O}$ and $\mathrm{CO_2}$ are major products while free $\mathrm{O}$, $\mathrm{OH}$ and $\mathrm{O_2}$ are minor.
 
 #### Rate laws
 

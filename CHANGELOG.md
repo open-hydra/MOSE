@@ -461,6 +461,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A run with a wall of surface reactions (`505`) whose gas lacks one of their eight species (O2, O, OH, H, H2, H2O, CO,
+  CO2) stops at set-up, on every rank, with exit code 1 and a message that names the missing species. The indices of the
+  species had no initial value and were set only for the names found: the TESTING build stopped at the first boundary flux
+  with an index out of bounds, the RELEASE build read and wrote outside its arrays (index 0 of the partial pressures and
+  of the sources). Without O2 in the gas the oxygen rate is 0 without a division by zero (the same value as before in IEEE
+  arithmetic; the DEBUG build trapped it).
 - The O2 rate of the surface reactions of a carbon wall (`505`) is the two-site form of Nagle and Strickland-Constable,
   x k5 p/(1 + k6 p) + (1 - x) k7 p, that `docs/theory/gsi.md` gives: the code had 1 + k6 p x in the denominator, which
   multiplied the saturating term by (1 + k6 p)/(1 + k6 p x) and overstated the rate 4.69 times at 3000 K and 1 atm of O2,

@@ -34,7 +34,10 @@
 #  property line, or 501, and the outlet of the duct of the grain with
 #  Spalart-Allmaras of type 506, the 501 and the 506 written as the
 #  boundary-condition builder of ATLAS writes them (make_case.py
-#  unapplied). An SRM grain boundary (502) with the
+#  unapplied). A wall of surface reactions (505) on the outlet of that
+#  duct, whose gas has none of their eight species, must stop the run at
+#  set-up with exit code 1 and a message that names them (make_case.py
+#  refused). An SRM grain boundary (502) with the
 #  Spalart-Allmaras model runs (40 steps), and so with SST, its ghost cells
 #  hold the wall value nu~ = 0 and it is a wall for the wall distance: one
 #  explicit step at rest from a uniform rho nu~ changes it in the cell next to
@@ -263,6 +266,21 @@ else
 fi
 echo "-- a record of a type that MOSE does not apply: the outlet of the duct of the grain of type 506 --"
 unapplied 506 "bc.txt line 3 (record 2, type 506): MOSE does not apply type 506 (surface reactions and pyrolysis): $none; give the face type 504 (pyrolysis) or 505 (surface reactions)"
+refused() {   # refused <kind> <message>: the duct of the grain with record 2 of make_case.py REFUSED[kind]; the run must stop
+              # at set-up with exit code 1, the message and no solution
+  python3 -B make_case.py refused "$1" || exit 1
+  rm -f OUTPUT/field.tec
+  timeout 60 "$LOCAL" > "OUTPUT/refused-$1.log" 2>&1
+  local rc=$?
+  if [[ $rc -eq 1 && ! -f OUTPUT/field.tec ]] && grep -a -q -F -- "$2" "OUTPUT/refused-$1.log"; then
+    echo "  [ok  ] $1: stopped at set-up, exit code 1"
+  else
+    echo "  [FAIL] $1: exit code $rc, not refused with the message (see OUTPUT/refused-$1.log)"
+    fail=1
+  fi
+}
+echo "-- a wall of surface reactions (505) on a gas without their species: the outlet of the duct of the grain --"
+refused gsi505-species "bc.txt: the surface reactions of the walls 505 and 506 (Bradley) need the species O2, O, OH, H, H2, H2O, CO and CO2 in the gas (phase.txt); it has no O2 O OH H H2 H2O CO CO2"
 python3 -B make_case.py srm sst || exit 1
 sed -e 's/^turbulence = SA$/turbulence = SST/' input.ini > input-sst.ini
 mv input.ini input-sa.ini && mv input-sst.ini input.ini
