@@ -7,3 +7,9 @@ OUTPUT
 .ID
 logfile
 error_file
+
+# Releases of ORION, OSLO and FLINT checked out by the configure (cmake/SemVerDeps.cmake), and those selected
+deps.lock
+lib/ORION
+lib/OSLO
+lib/FLINT

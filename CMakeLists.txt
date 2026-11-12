@@ -75,12 +75,6 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set (CMAKE_Fortran_MODULE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/modules")
 
   # -------- Path fallbacks (standalone builds) --------
-  if (NOT DEFINED ORION_PATH)
-    set(ORION_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/ORION/")
-  endif()
-  if (NOT DEFINED FLINT_PATH)
-    set(FLINT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/FLINT/")
-  endif()
   if (NOT DEFINED FINER_PATH)
     set(FINER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/third_party/FiNeR/")
   endif()
@@ -114,19 +108,16 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     endif()
   endmacro()
 
-  # ORION
-  if (NOT TARGET ORION)
-    ensure_submodule_initialized("${ORION_PATH}")
-    set(orionD "${ORION_PATH}" "${CMAKE_BINARY_DIR}/lib/ORION")
-    add_subdirectory(${orionD})
-  endif()
-
-  # FLINT
-  if (NOT TARGET FLINT)
-    ensure_submodule_initialized("${FLINT_PATH}")
-    set(flintD "${FLINT_PATH}" "${CMAKE_BINARY_DIR}/lib/FLINT")
-    add_subdirectory(${flintD})
-  endif()
+  # ORION, OSLO and FLINT by release range (cmake/SemVerDeps.cmake), checked out in lib/, releases kept in deps.lock: all
+  # three required before any is made available, as FLINT requires ORION and OSLO too. FLINT sets FLINT_SRC, the
+  # sources src/lib compiles, in this directory
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SemVerDeps.cmake)
+  semver_dependency(OSLO GIT_REPOSITORY https://github.com/MarcoGrossi92/OSLO.git VERSION 1.1 GIT_SUBMODULES ""
+                    SOURCE_DIR lib/OSLO)
+  semver_dependency(ORION GIT_REPOSITORY https://github.com/MarcoGrossi92/ORION.git VERSION 2.1 SOURCE_DIR lib/ORION)
+  semver_dependency(FLINT GIT_REPOSITORY https://github.com/MarcoGrossi92/FLINT.git VERSION 2.0 GIT_SUBMODULES ""
+                    SOURCE_DIR lib/FLINT)
+  FetchContent_MakeAvailable(OSLO ORION FLINT)
 
   # Libraries of FiNeR: FiNeR 2.0.7 and later do not carry them as submodules (its CMake build expects them in its
   # src/third_party/, fetched with FoBiS) and add each one only when the target is not defined yet: MOSE provides
