@@ -21,6 +21,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   closed-form decay of isotropic turbulence on an axisymmetric wedge) and the flat plate of the NASA TMR
   (`FlatPlateTMR` and `FlatPlateTMRFull`, `test/2D/viscous/flat-plate-turbulent-tmr`): SSG/LRR on its three grids
   against CFL3D and TAU.
+- The key `sst-dilatation-dissipation` of `[MOSE-Turbulence]`: a compressibility correction of the SST dissipation for
+  compressible shear layers (Rumsey, NASA/TM-2009-215705, eqs. 40–43). The destruction coefficients become
+  β*(1 + ξ* F(M_T)) and β − β* ξ* F(M_T), M_T = √(2k)/a the turbulent Mach number: `wilcox` (F = M_T² − M_T0² above
+  M_T0 = 0.25, ξ* = 2; for jets and mixing layers) or `zeman` (F = 1 − exp(−((M_T − M_T0)/Λ)²) above M_T0 = 0.2,
+  ξ* = 0.75, Λ = 0.66; for boundary layers). β − β* ξ* F is floored at 0 (Wilcox: M_T > 0.65), the point-implicit factors
+  take the corrected coefficients. Default `none`: every run without the key is unchanged.
 - The SRM grain (`502`) has two modes, the fifth field of its property line: `1`, a wall that blows the products in, as
   before; `2`, an inflow, applied as the mass-flux inlet `404` at the total temperature `T_af` along the face normal, with
   the mass flux of Saint-Robert's law at the pressure of the boundary cell and the turbulence values of the line: the
