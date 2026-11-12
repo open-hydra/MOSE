@@ -11,8 +11,8 @@
 #  the reading of bc.txt, so they have no item here). The Spalart-Allmaras and SST
 #  models are supported (control: the wall channel with Spalart-Allmaras runs; SA-R, k-energy-coupling and
 #  sst-production = compressible run in the test mr-conservation), and the other models have their own item (29:
-#  turbulence = SAcomp, which the set-up of MOSE refuses with its own message for both integrators, before the checks of
-#  the multirate; Wilcox2006, whose sources the stages do not evaluate, on the wall channel; SA-RC and SST-RC with
+#  turbulence = SAcomp, whose compressibility correction the stages do not evaluate (the single-rate integrator runs it);
+#  Wilcox2006, whose sources the stages do not evaluate, on the wall channel; SA-RC and SST-RC with
 #  max-level 3, whose rotation and curvature terms the cell-wise sources of a level do not compute, while with
 #  max-level 0 they give the single-rate step bit for bit (test mr-onelevel)). Item 13: an SRM grain in mode 1 (a
 #  wall that blows the products in; in mode 2, an inflow, the grain is the inlet 404, test mr-onelevel).
@@ -101,8 +101,8 @@ expect_reject 19-steady     "time-accurate"                mr1d-acu -- "MOSE-Num
 expect_reject 20-cflramp    "cfl-rise-threshold"           mr1d-acu -- "MOSE-Numerics|cfl-rise-threshold|10"
 expect_reject 21-multigrid  "multigrid"                    mr1d-acu -- "MOSE-Multigrid|levels|2"
 expect_reject 22-extfun     "external function"            mr1d-acu --bin "$MR_MMS"
-# SAcomp: the set-up of MOSE refuses it for both integrators (a correction whose result depends on the units)
-expect_reject 29-sacomp    "[ERROR] turbulence = SAcomp: its compressibility correction" mr1d-acu-sa -- "${VISC[@]}" \
+# SAcomp: the single-rate integrator runs it; the stages of the multirate do not evaluate its correction
+expect_reject 29-sacomp    "turbulence model: turbulence = SAcomp is not supported" mr1d-acu-sa -- "${VISC[@]}" \
   "MOSE-Physics|turbulence|SAcomp"
 # Wilcox2006, whose sources the stages do not evaluate, and the rotation and curvature correction with levels, whose
 # terms are a field of the whole domain that the cell-wise sources of a level do not compute: stopped at the first

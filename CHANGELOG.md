@@ -446,10 +446,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The value `inverse-mean` of `diffusive-metric` (`[MOSE-Numerics]`): the key takes `stencil`, the default, exact for a
   linear field on any mesh, or `mean`. A deck that names `inverse-mean` stops at set-up. The inverse-mean face metric stays
   where the code takes it whatever the key: the chimera faces, and with `mean` the faces between blocks and of type `200`.
-- The compressibility correction of Spalart–Allmaras (`turbulence = SAcomp`): it is refused at set-up. It took c from
-  c² f(c) = 25 Ω ν_t / a, a number against a speed, so the factor it gave the production depended on the units: 0.99 with
-  lengths in metres and 0.22 with lengths in millimetres for Ω = 1e3 1/s, ν_t = 1e-3 m²/s and a = 340 m/s; at Ω = 1e5 1/s it
-  cut the production by 78 % whatever the Mach number. No case or test of the repository used it.
 - Implicit residual smoothing (`irs = true` or `irs-beta > 0`) in time-accurate runs: it is refused at set-up; steady runs keep
   it. The smoothed residual is not the residual of the space discretization, so a run with it did not follow the transient of
   the discretized equations: in one step from the same state the time derivative changed, by an amount that did not depend on
@@ -508,6 +504,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   summary gave an empty mechanism name. Runs with `frozen`
   or `equilibrium` chemistry, which need no mechanism, and finite-rate runs with the file do not change. The tests of the
   finite-rate chemistry in `ExitCodes` and `MPIExitCodes` take the gas and the mechanism of `test/1D/Fer14`.
+- The compressibility correction of Spalart–Allmaras (`turbulence = SAcomp`, Paciorri and Sabetta, J. Spacecraft Rockets
+  40(3), 2003): the local convective Mach number M̃c is taken from M̃c² f₂(M̃c) = 25 ν_t |ω| / a², the paper's eq. 12, where the
+  code divided by a instead of a²; the right side was a speed, so the factor on the production depended on the unit of
+  length (0.99 with metres, 0.22 with millimetres for Ω = 1e3 1/s, ν_t = 1e-3 m²/s, a = 340 m/s) and cut the production
+  wherever the shear was strong, whatever the Mach number (78 % at Ω = 1e5 1/s). With a² both sides are numbers; the same
+  state gives a factor of 1.00. The set-up accepts the model again (it had been refused since the error was found); the
+  Newton iteration for M̃c is capped at 100 steps. The constants (25 = 1/(4 τᵢ), τᵢ = 0.01), f₁, f₂, the eddy viscosity
+  ν̃ f_v1, the vorticity and the local speed of sound follow the paper. No case or test of the repository used the model.
 - The testing guide and the test plan say what the tests take and give: the fast tier holds parts of about 10 s of CPU time or
   less at one thread each, the rule of a row of the plan (the guide said "a few seconds each"); `MMSViscous3DFull` takes 18 h
   at one thread with a RELEASE build on one core of a shared cluster node and about 1 h 10 min with 18 or 32 threads (the

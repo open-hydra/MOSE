@@ -188,25 +188,39 @@ smooth code path bit for bit.
 
 #### Compressibility Correction
 
-Paciorri–Sabetta correction that scales the production term with a
-function of the turbulent stress ratio:
+The correction of Paciorri and Sabetta (J. Spacecraft Rockets 40(3), 2003,
+doi:10.2514/2.3967) for the reduced growth of compressible mixing layers.
+The production term is multiplied by $f_1(\tilde M_c)\,f_2(\tilde M_c)$, with
 
 $$
-S_\tau = \frac{\omega\,\tilde\nu\,f_{v1}}{a^2}
+f_1(M_c) = \frac{0.6}{1 + 9 M_c^6} + 0.4, \qquad
+f_2(M_c) = \frac{0.44}{1 + 14 M_c^5} + 0.56
 $$
 
-Activated when compressibility effects on turbulence are significant
-(high-speed boundary layers, mixing layers).
+(their eqs. 5 and 6: the growth-rate and shear-stress ratios of a
+compressible mixing layer to the incompressible one, fitted to measurements
+against the convective Mach number $M_c$). The local estimate $\tilde M_c$
+solves their eq. 12,
 
-!!! warning "Not available"
-    MOSE does not offer this correction. It takes
-    $c$ from $c^2 f(c) = 25\,\Omega\,\tilde\nu f_{v1}/a$, with
-    $f(c) = 0.44/(1 + 14c^5) + 0.56$, and multiplies the production by
-    $f_1(c)\,f(c)$, with $f_1(c) = 0.6/(1 + 9c^6) + 0.4$: the left side is a
-    number and the right side a speed, so the factor depends on the unit of
-    length. For $\Omega = 10^3$ 1/s, $\nu_t = 10^{-3}$ m²/s and $a = 340$ m/s
-    it is 0.99 with lengths in metres and 0.22 with lengths in millimetres
-    (doi:10.2514/2.3967).
+$$
+\tilde M_c^2\, f_2(\tilde M_c) = \frac{\nu_t\,|\omega|}{4\,\tau_i\,a^2}
+= 25\,\frac{\tilde\nu f_{v1}\,|\omega|}{a^2},
+$$
+
+with $\tau_i = 0.01$ the shear-stress ratio of the incompressible model,
+$\nu_t = \tilde\nu f_{v1}$ the eddy viscosity, $|\omega|$ the vorticity and
+$a$ the local speed of sound; both sides are numbers. The code solves it by
+Newton's method from $\tilde M_c = 1$ (the left side grows with $\tilde M_c$:
+one root). At low $\tilde M_c$ the factor is 1; it falls to 0.22 at
+$\tilde M_c \gtrsim 1.5$.
+
+!!! note "Boundary layers"
+    The paper fits mixing layers and warns that the correction alters the
+    compressible boundary layer at high Mach number, where $\tilde M_c$ is
+    large too; it gives no switch, and MOSE applies the correction in every
+    cell. Before 2026-11 the code divided by $a$ instead of $a^2$: the factor
+    then depended on the unit of length and cut the production wherever the
+    shear was strong, whatever the Mach number.
 
 #### SA-R — Rotation Correction
 
