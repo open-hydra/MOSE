@@ -214,9 +214,10 @@ integrator does not support stop
 the run at set-up or at its first macro step with a message
 `[MOSE-Multirate] <item>` and a non-zero exit code: among them `Wilcox2006`, whose sources the stages do not evaluate,
 and, with `max-level` > 0, `SA-RC` and `SST-RC`, whose rotation and curvature terms are a field of the whole domain that
-the cell-wise sources of a level do not compute (`SAcomp` the set-up of MOSE refuses for both integrators); `SA`,
-`SA-R`, `SST`, `k-energy-coupling` and both forms of `sst-production` run.  An SRM grain (`502`) runs in mode 2, an
-inflow, and stops the run in mode 1, a wall that blows the products in.  The boundary types `409` and `501`,
+the cell-wise sources of a level do not compute, and `SAcomp`, whose compressibility correction the stages do not
+evaluate (the single-rate integrator runs it); `SA`,
+`SA-R`, `SST`, `k-energy-coupling`, both forms of `sst-production` and `sst-dilatation-dissipation` run.  An SRM grain (`502`) runs in mode 2, an
+inflow, and stops the run in mode 1, a wall that blows the products in.  The boundary types `409`, `501` and `506`,
 which MOSE does not apply, stop every run at
 the reading of `bc.txt` ([Boundary Conditions](boundary-conditions.md)).  With `SA`, `SA-R` or `SST` the local step includes a bound of the stiffness of the turbulence
 sources (see the time step below), and so do the levels.  The multirate integrator runs on several MPI processes, each with
@@ -338,8 +339,6 @@ Notes on these keys:
   is an error of the reading. On a run started with it, `irs-beta` and `irs-variables` can change during the run, and
   it goes off when the values in force give neither `irs = true` nor `irs-beta` > 0: `irs-beta = 0` switches it off
   unless `irs = true` is in force, and `irs = false` leaves it on while `irs-beta` > 0.
-- `turbulence = SAcomp` stops at set-up: its correction depends on the unit of length
-  ([Turbulence](../theory/turbulence.md#compressibility-correction)).
 - In time-accurate runs `point-implicit` is ignored; when `input.ini` sets `point-implicit = .true.`, a warning at
   start-up recalls it. Time-accurate runs with `SA-RC` or `SST-RC` print a warning: the correction is for steady flows.
 - `ode-solver`: the default `H-radau5` is the Radau IIA method of order 5; `cvode` needs OSLO built with SUNDIALS, and

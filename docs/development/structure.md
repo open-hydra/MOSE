@@ -283,7 +283,7 @@ At run time `Assign_Setup` reads `turbulence` from the input file and, in
 | Key | Implementation | Description |
 |-----|---------------|-------------|
 | `SA` | `Lib_Spalart` | Baseline Spalart–Allmaras |
-| `SAcomp` | `Lib_Spalart` | + compressibility correction (stops at set-up: its result depends on the units) |
+| `SAcomp` | `Lib_Spalart` | + compressibility correction of Paciorri and Sabetta (production times f₁f₂ of the local convective Mach number) |
 | `SA-R` | `Lib_Spalart` | + rotation correction |
 | `SA-RC` | `Lib_SpalartShur` | Rotation–curvature (Shur) correction |
 | `SST` | `Lib_SST` | Menter k-ω SST (SST-2003) |
