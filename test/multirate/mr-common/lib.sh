@@ -2,11 +2,11 @@
 #===============================================================================
 #  Common helpers of the multirate tests (test/multirate/mr-*): build the small cases with gen_mr_cases.py, run MOSE in a
 #  separate directory per run, compare outputs byte by byte. Sourced by each run.sh (cwd = the test directory).
-#  MOSE_BIN overrides the solver (default: bin/MOSE of this tree), MOSE_MMS_BIN the MMS driver.
+#  MOSE_BIN overrides the solver (default: bin/MOSE of this tree), MOSE_MMS_BIN the MMS driver (default: build/test/MOSE_mms).
 #===============================================================================
 MR_COMMON="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MR_MASTER="${MOSE_BIN:-$MR_COMMON/../../../bin/MOSE}"
-MR_MMS="${MOSE_MMS_BIN:-$MR_COMMON/../../../bin/MOSE_mms}"
+MR_MMS="${MOSE_MMS_BIN:-$MR_COMMON/../../../build/test/MOSE_mms}"
 MR_AIR="$MR_COMMON/../../common/Air"
 ulimit -s unlimited 2>/dev/null || true
 export KMP_STACKSIZE=100M

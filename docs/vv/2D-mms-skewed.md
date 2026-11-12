@@ -137,8 +137,10 @@ cd test/2D/viscous/mms/skewed
 python verify.py
 ```
 
-The case runs `bin/MOSE_mms`, the variant of the solver that adds the analytic
-source at every Runge–Kutta stage.
+The case runs `MOSE_mms`, the variant of the solver that adds the analytic
+source at every Runge–Kutta stage. It is built with the test programs in
+`build/test/` (CTest passes its path; by hand, `MOSE.sh` takes `build/test/MOSE_mms`
+or the file named by `MOSE_MMS_BIN`).
 
 ## References
 

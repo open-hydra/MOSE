@@ -31,6 +31,12 @@ if(USE_TECIO)
     list(APPEND _MOSE_TEST_ENV "MOSE_TECIO=1")
 endif()
 
+# The driver of the manufactured-solution tests, test/unit/mms.f90: the solver with an external callback that
+# injects the analytic source term. It is built here, in <build>/test with the checks of test/unit, and not in bin/;
+# the tests that run it find it through MOSE_MMS_BIN (the scripts by hand: build/test/MOSE_mms, or MOSE_MMS_BIN).
+add_fortran_executable(MOSE_mms unit/mms.f90)
+list(APPEND _MOSE_TEST_ENV "MOSE_MMS_BIN=$<TARGET_FILE:MOSE_mms>")
+
 # ---------------------------------------------------------------------------
 #  Tiers: test/tiers.txt, "<Name> <light|medium|heavy> <seconds>" per line; the seconds are the time on the CI runner
 #  (tools/ctest_tiers.py keeps them). A change of the file reconfigures.

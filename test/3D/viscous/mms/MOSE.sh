@@ -4,7 +4,7 @@
 #   DESCRIPTION: manufactured-solution order study of the 3D viscous operator
 #                on skewed and non-smooth grids
 #
-#   Uses the MOSE_mms driver (src/app/mms.f90), which adds the analytic source
+#   Uses the MOSE_mms driver (test/unit/mms.f90), which adds the analytic source
 #   of the field chosen with MOSE_MMS_FIELD, so that the field is an exact
 #   steady solution of the Navier-Stokes equations.  The generator of the 2D
 #   cases, ../../../2D/viscous/mms/skewed/make_case.py, builds the mesh,
@@ -36,7 +36,8 @@ function print_usage {
 }
 
 MASTERDIR=../../../../
-MASTER=$MASTERDIR/bin/MOSE_mms
+# the driver is built with the checks of test/unit: <build>/test/MOSE_mms (the CTest tests pass MOSE_MMS_BIN)
+MASTER=${MOSE_MMS_BIN:-$MASTERDIR/build/test/MOSE_mms}
 LOCAL=./bin/MOSE_mms
 GEN=../../../2D/viscous/mms/skewed/make_case.py
 
@@ -63,6 +64,7 @@ if [[ $1 == solve || $1 == test || $1 == testfast ]]; then
   ulimit -s unlimited
   export KMP_STACKSIZE=100M
   export OMP_NUM_THREADS=$NTHREADS
+  [[ -x "$MASTER" ]] || { echo "MOSE.sh: $MASTER not found: build MOSE (the driver is built in build/test), or set MOSE_MMS_BIN"; exit 1; }
   if [[ "$MASTER" -nt "$LOCAL" ]]; then cp $MASTER $LOCAL; fi
 
   if [[ $1 == solve ]]; then

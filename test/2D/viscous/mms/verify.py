@@ -3,7 +3,7 @@
 
 A smooth, periodic field is made an EXACT steady solution of the compressible
 Navier-Stokes equations by an analytic source term (injected by the MOSE_mms
-driver, src/app/mms.f90).  Because the exact solution is known everywhere, the
+driver, test/unit/mms.f90).  Because the exact solution is known everywhere, the
 discretisation error of each grid is measured directly for every primitive
 variable and the *observed order of accuracy* is extracted by refinement:
 
@@ -41,7 +41,7 @@ ORDER_MIN = 1.6                 # minimum acceptable observed order (finest pair
 # documented study (32/64/128) share one verifier.
 ALL_GRIDS = [32, 64, 128]
 
-# manufactured-field parameters — must match build_ic.py and src/app/mms.f90
+# manufactured-field parameters — must match build_ic.py and test/unit/mms.f90
 OM = 2.0 * np.pi
 RHO0, ARHO = 1.0, 0.1
 U0, AU = 40.0, 8.0
