@@ -138,7 +138,7 @@ $H_0/2$, $H_0/4$ and $H_0/8$ up to $T = 64 H_0$, against a single-rate reference
 mesh. The figures are written by `test/multirate/mr-order/plot_order.py` from the results of the full form.
 
 <figure>
-  {% include "vv/images/multirate-order.svg" %}
+  --8<-- "docs/vv/images/multirate-order.svg"
   Density error of the eight cases against the macro step $H$, relative to the error with $H_0$: left, the $L^1$ error over
   all cells; right, the $L^\infty$ error over the cells within 4 cells of a face between levels (floor 5 % of the global
   $L^\infty$). Dashed: the slope of second order. The legend gives the number of cells of each case and, in brackets,
@@ -147,7 +147,7 @@ mesh. The figures are written by `test/multirate/mr-order/plot_order.py` from th
 </figure>
 
 <figure>
-  {% include "vv/images/multirate-wall-s-levels.svg" %}
+  --8<-- "docs/vv/images/multirate-wall-s-levels.svg"
   Level map of `mr2d-wall-s` (48 × 8 cells; $\sigma = 2$, $L = 2$, the run with $H_0$, which both forms make; levels 0, 1
   and 2 in grey, blue and green): bands of cells of 8, 2.8, 1.28, 2.8 and 8 mm along
   the no-slip wall (black line, $y = 0$) take the levels 0, 1, 2, 1 and 0, so four faces between levels cut the wall, on cells
@@ -172,7 +172,7 @@ single rate with the macro step $H$ and with $dt_{\min}$ are there for compariso
 `test/multirate/mr-moving-levels/plot_moving_levels.py` from the results of the test.
 
 <figure>
-  {% include "vv/images/multirate-moving-levels-order.svg" %}
+  --8<-- "docs/vv/images/multirate-moving-levels-order.svg"
   Density error of the simple wave against the number of cells $n$ ($\Delta x$ and $H$ halved together, $T = 0.5$): left,
   the $L^1$ error; right, the $L^\infty$ error, for the multirate with the map rebuilt at every macro step (thick), with the
   map of the first macro step kept, and for the single rate with the macro step $H$ and with $dt_{\min}$ (dashed). Black:
@@ -209,7 +209,7 @@ block; the figures and the numbers of the full form below come from these four r
 mesh cut along $x$ into 12 blocks of 41 or 42 columns.
 
 <figure>
-  {% include "vv/images/multirate-daru-medium-errors.svg" %}
+  --8<-- "docs/vv/images/multirate-daru-medium-errors.svg"
   Medium form (100 × 50 cells). Left: the density error $e = \sum V\,|\rho - \rho_\mathrm{ref}| / \sum V\,\rho_\mathrm{ref}$
   of the single rate with $dt_0$ and of the two multirate runs at the ten output times. Right: the error of the
   multirate run with $H = dt_0$ over that of the single rate, which the test asks to stay within 1.05 at every output
@@ -217,7 +217,7 @@ mesh cut along $x$ into 12 blocks of 41 or 42 columns.
 </figure>
 
 <figure>
-  {% include "vv/images/multirate-daru-medium-levels.svg" %}
+  --8<-- "docs/vv/images/multirate-daru-medium-levels.svg"
   Medium form (100 × 50 cells): the share of the cells on the levels 1 to $L$ at every macro step of the two multirate
   runs, stacked (level 0 holds the rest), and their work: the cell updates over those of the single rate with $dt_0$
   over the same time.
@@ -230,26 +230,26 @@ from one another by less than $10^{-5}$ (relative) at the 20 abscissae of table 
 1500 × 750 solution, and agree with the table within 0.79 % on average and 4.2 % at most, at $x = 0.6123$.
 
 <figure>
-  {% include "vv/images/multirate-daru-full-errors.svg" %}
+  --8<-- "docs/vv/images/multirate-daru-full-errors.svg"
   Full form (500 × 250 cells). Left: the density error of the single rate with $dt_0$ and of the two multirate runs at
   the ten output times. Right: the error of the multirate run with $H = dt_0$ over that of the single rate, within the
   limit 1.05 of the test at every output time.
 </figure>
 
 <figure>
-  {% include "vv/images/multirate-daru-full-levels.svg" %}
+  --8<-- "docs/vv/images/multirate-daru-full-levels.svg"
   Full form (500 × 250 cells): the share of the cells on the levels 1 to $L$ at every macro step of the two multirate
   runs, stacked (level 0 holds the rest), and their work: 0.27 for $H = 4\,dt_0$ and 1.01 for $H = dt_0$.
 </figure>
 
 <figure>
-  {% include "vv/images/multirate-daru-full-wall.svg" %}
+  --8<-- "docs/vv/images/multirate-daru-full-wall.svg"
   Full form (500 × 250 cells), final time: the density along the bottom wall of the four runs, which lie on one another,
   and the 20 points of table 1 of Zhou, Xu and Liu.
 </figure>
 
 <figure>
-  {% include "vv/images/multirate-daru-full-density.svg" %}
+  --8<-- "docs/vv/images/multirate-daru-full-density.svg"
   Full form (500 × 250 cells), final time: the density field of the multirate run with $H = 4\,dt_0$ for
   $0.3 \le x \le 1$ and $y \le 0.3$.
 </figure>
@@ -275,7 +275,7 @@ correction at the faces between levels is the business of `mr-conservation` (a r
 `test/multirate/mr-nozzle/plot_nozzle.py` from the results of the test.
 
 <figure>
-  {% include "vv/images/multirate-nozzle-short-shock.svg" %}
+  --8<-- "docs/vv/images/multirate-nozzle-short-shock.svg"
   371 cells, the form run in CI: the position of the moving shock (the face of largest compression in the divergent) at
   the outputs where it is a shock, the density of the reference jumping by at least 1.5 across it (from the seventh
   output on); grey lines: the faces between the bands of 1.6 and 4 mm and of 4 and 10 mm, which are faces between
@@ -283,7 +283,7 @@ correction at the faces between levels is the business of `mr-conservation` (a r
 </figure>
 
 <figure>
-  {% include "vv/images/multirate-nozzle-short-errors.svg" %}
+  --8<-- "docs/vv/images/multirate-nozzle-short-errors.svg"
   371 cells, the form run in CI. Left: the density error in the throat band of every run against the reference. Right:
   the error of the multirate run with $H = dt_0$ over that of the single rate at the outputs where it has levels, which
   the test bounds by 1.05.

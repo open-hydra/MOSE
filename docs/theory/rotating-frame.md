@@ -117,11 +117,11 @@ $$\boldsymbol{w}_{\text{wall}} = \boldsymbol{0}$$
 
 (i.e., zero relative velocity at a wall moving with the frame).
 
-A wall at rest in the laboratory (a casing or a hub that does not turn) is listed in `[MOSE-Rotating-Frame]` as `stationary-face-<n> = <block> <face>`, numbered from 1; the walls `301` and `302` of that block face take it. The other records of that face may be of the types that never read whether their face is stationary, whose boundary condition is then the same as without the key: block connections, periodic and chimera faces (`101`, `102`, `200`, `201`), extrapolation (`400`), the ambient boundary (`407`), the mapped boundary (`410`) and unused faces (`0`); so a casing face that is a wall in part and a block connection in part can be stationary. A stationary face that covers a type that would take the velocity of the wall at rest in part only (the inviscid flux of a symmetry `300`, of the inlets and outlets `401`–`406`, `408` and `420`, and of the walls `103`, `104` and `502`–`505`), that has no wall `301` or `302`, or that names a face with no record in `bc.txt` stops the run at set-up. Such a wall moves in the rotating frame with
+A wall at rest in the laboratory (a casing or a hub that does not turn) is a no-slip wall that moves in the rotating frame with
 
 $$\boldsymbol{w}_{\text{wall}} = -\boldsymbol{\Omega} \times (\boldsymbol{x} - \boldsymbol{x}_o)$$
 
-($\boldsymbol{x}_o$ the `origin` of the frame), a velocity linear in $\boldsymbol{x}$: its no-slip condition and its ghost cells take this velocity, and its wall gradient also the differences of this velocity along the wall, from its gradient $-[\boldsymbol{\Omega}\times]$ (see [Gradient Computation for Diffusive Fluxes](numerics.md#gradient-computation-for-diffusive-fluxes)). The energy flux through such a wall is the heat flux plus the work of the wall stress on the wall velocity, $(\boldsymbol{\tau}\cdot\mathbf{n})\cdot\boldsymbol{w}_{\text{wall}}$, as a face between cells carries $(\boldsymbol{\tau}\cdot\mathbf{n})\cdot\boldsymbol{w}$ ([Viscous Fluxes](#viscous-fluxes)); on a wall that turns with the frame $\boldsymbol{w}_{\text{wall}} = \boldsymbol{0}$ and the energy flux is the heat flux alone.
+($\boldsymbol{x}_o$ the origin of the frame), a velocity linear in $\boldsymbol{x}$: its no-slip condition and its ghost cells take this velocity, and its wall gradient also the differences of this velocity along the wall, from its gradient $-[\boldsymbol{\Omega}\times]$ (see [Gradient Computation for Diffusive Fluxes](numerics.md#gradient-computation-for-diffusive-fluxes)). The energy flux through such a wall is the heat flux plus the work of the wall stress on the wall velocity, $(\boldsymbol{\tau}\cdot\mathbf{n})\cdot\boldsymbol{w}_{\text{wall}}$, as a face between cells carries $(\boldsymbol{\tau}\cdot\mathbf{n})\cdot\boldsymbol{w}$ ([Viscous Fluxes](#viscous-fluxes)); on a wall that turns with the frame $\boldsymbol{w}_{\text{wall}} = \boldsymbol{0}$ and the energy flux is the heat flux alone.
 
 A stationary wall must be a surface of revolution about the axis of the frame, as a casing or a hub is: its velocity in the frame is then tangent to it, $\boldsymbol{w}_{\text{wall}}\cdot\mathbf{n} = 0$, so that no mass crosses it and the pressure does no work on it. A wall that is not, such as a strut at rest in the laboratory, moves across the mesh of the rotating frame and cannot be one of its faces.
 
@@ -137,20 +137,12 @@ For steady-state turbomachinery flows, a steady rotating-frame solution avoids t
 ## Implementation Notes
 
 - The computational domain is assumed to rotate as a **rigid body** at constant $\boldsymbol{\Omega}$.
-- The axis and angular velocity magnitude/direction must be specified at initialization. When `input.ini` is read again
-  during the run (every `ini-diter` iterations), the `omega`, `axis` and `origin` read again replace those of the set-up
-  in every term at once (the log of the run prints them): the Coriolis and centrifugal sources, the velocity of the
-  stationary walls, of the inlets and of the far field, and the power of the torque file. The frame is taken at constant
-  $\boldsymbol{\Omega}$ between two readings: the force $-\rho\,\dot{\boldsymbol{\Omega}} \times \boldsymbol{r}$ of a
-  frame that speeds up is not modelled. A change of `rotational-frame` or of the stationary faces, which changes the
-  equations or the boundary conditions, is an error of the reading: a `stationary-face-<n>` key that names another face, or one that
-  the set-up does not have. A key that the file read again leaves out keeps its face, as every parameter left out keeps
-  its value. The keys are counted from 1 up to the first one missing, at the start and at every reading: a key after a
-  gap of the numbering is not read. A value of `axis` or `origin` read again that is not finite (NaN or infinity) or does not
-  read as numbers, a `stationary-face-<n>` value that does not read, or an axis of zero length, is an error of the reading
-  too. With `ini-error = warn`, the default, a reading with an error is not taken and the frame goes on as it was; with
-  `ini-error = stop` the run stops ([Input](../user/input.md)).
-- The axis of rotation passes through `origin` of `[MOSE-Rotating-Frame]` (the origin of the coordinates by default), and $\boldsymbol{r}$ is measured from it.
+- The axis, the angular velocity and the origin of the frame are given at the start and can change during the run;
+  a change acts on every term at once: the Coriolis and centrifugal sources, the velocity of the stationary walls, of
+  the inlets and of the far field, and the power of the torque. The frame is taken at constant $\boldsymbol{\Omega}$
+  between two changes: the force $-\rho\,\dot{\boldsymbol{\Omega}} \times \boldsymbol{r}$ of a frame that speeds up
+  is not modelled.
+- The axis of rotation passes through the origin of the frame (the origin of the coordinates by default), and $\boldsymbol{r}$ is measured from it.
 - All flux routines (convective and viscous) operate on the relative velocity without modification.
 
 The rotating-frame verification cases are documented in [the V&V section](../vv/rotating-frame.md).

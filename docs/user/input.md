@@ -48,7 +48,7 @@ space-reconstruction = MUSCL
     If `input.ini` cannot be opened (missing, or without read permission), holds no line that is not blank, or the INI reader returns an error while it loads the file (a file with no section, a line it cannot parse, which the reader names on its error output), the run stops at the start with the reason and exit code 1; with MPI every rank stops. Without the stop the parameters would keep their defaults in silence. For a reading during the run, see the note «Errors of a reading during the run» below.
 
 !!! warning "Values outside their rules stop the run at the start"
-    A value outside the rule of its parameter (column Allowed of the [Parameter Registry](registry.md): a bound such as `> 0`, an interval such as `in (0, 1)`, where `(` and `)` leave the end out and `[` and `]` take it in, each held by every value of a list of numbers; a list of names; `logical`) stops the run with a message at the start. MOSE reads `input.ini` again during the run, every `ini-diter` iterations (10000 by default), to take the values changed meanwhile; what an error of such a reading does is in the note «Errors of a reading during the run» below. In an MPI run rank 0 reads `input.ini`, at the start and at every reading, and passes its text to every rank, so that every rank takes the same values. With one working folder per rank, only the `input.ini` of rank 0 is read. The parameters that `input.ini` leaves out keep their values, the `stationary-face-<n>` keys of the rotating frame too; what a reading changes in the rotating frame, and what it does not take, is in [Rotating Frame](../theory/rotating-frame.md#implementation-notes).
+    A value outside the rule of its parameter (column Allowed of the [Parameter Registry](registry.md): a bound such as `> 0`, an interval such as `in (0, 1)`, where `(` and `)` leave the end out and `[` and `]` take it in, each held by every value of a list of numbers; a list of names; `logical`) stops the run with a message at the start. MOSE reads `input.ini` again during the run, every `ini-diter` iterations (10000 by default), to take the values changed meanwhile; what an error of such a reading does is in the note «Errors of a reading during the run» below. In an MPI run rank 0 reads `input.ini`, at the start and at every reading, and passes its text to every rank, so that every rank takes the same values. With one working folder per rank, only the `input.ini` of rank 0 is read. The parameters that `input.ini` leaves out keep their values, the `stationary-face-<n>` keys of the rotating frame too; what a reading changes in the rotating frame, and what it does not take, is in [Rotating frame](#rotating-frame).
 
 !!! warning "Values that do not read stop the run at the start"
     A value that does not read as the type of its parameter in the [Parameter Registry](registry.md) stops the run at the start with a message that gives the file, the section, the key and the value as written (a value of `levels` of `[MOSE-Multigrid]` that is not an integer too; for a reading during the run, see the note below): a real must be a finite number (not a word, `NaN`, `0,5`, or `1e999`, which gfortran reads as an infinity), an integer has no decimal point and no exponent (not `2.0` or `1e3`), a logical starts with `T` or `F` after an optional period (not `yes` or `1`; a word that starts with one of them reads as true or false), a list holds no more values than its parameter, and a key has a value. A value of `axis` or `origin` of the rotating frame that is not finite (NaN or infinity) stops the run at the start, with a message that names the key.
@@ -57,7 +57,7 @@ space-reconstruction = MUSCL
     When MOSE reads `input.ini` again during the run, an error of the reading (a file that cannot be read, a value that does not read as the type of its parameter, is out of its rule or is not finite, a value of a key fixed for the run other than the start read, a value of `levels` that is not an integer or is not the one the start read or more `probe<n>` keys than at the start, a change of `rotational-frame` or of the stationary faces of the rotating frame, a value of `axis` or `origin` that is not finite or does not read as numbers, a `stationary-face-<n>` value that does not read, an axis of zero length, residual smoothing switched on in a run started without it, values that a check of the set-up between keys refuses) does what `ini-error` of `[MOSE-IO]` says. With `warn`, the default, the reading is not taken: MOSE writes a warning with the iteration and the error, which names the key and its value as written, and the run goes on with every value it had before the reading, those of the keys of the same reading that were right too. With `stop` the run stops with the message and exit code 1, as at the start; with MPI every rank stops. The value of `ini-error` in force when the reading starts decides. At the start every error stops the run, whatever `ini-error` says.
 
 !!! warning "What a reading during the run changes"
-    The column During the run of the [Parameter Registry](registry.md) gives what a reading does with each key. A key *taken*, such as `cfl`, `vnn` or the intervals of the outputs, takes the value written. A key *fixed* for the run, such as `equations`, `turbulence`, `time-scheme`, `time-accurate`, `space-reconstruction` or `sol-format`, is one from which the set-up makes a choice that a reading cannot make again: the run keeps the value that the start read, and a reading that writes another one is an error of the reading, also when the value names what the run does (`shock-detector = Tramel` in a run that started without the key, whose sensor comes from `riemann-solver = HLLC+Tramel`); the message gives the value of the start, or says that the start left the key out. The grid levels, the probes and the stationary faces of the rotating frame are those of the start too: another `levels`, more `probe<n>` keys, or a `probe<n>` or a `stationary-face-<n>` that names another probe or face, is an error of the reading. A key of the *start only* (`newrun`, `ic-format`, `decomposition-map`) serves the start of the run, and a reading leaves it as it was, whatever value of its rule the file writes (a value that does not read, or is out of its rule, is an error of the reading, as for every key): `newrun = false` written during the run, to prepare a restart, does nothing to the run. A key that the file leaves out keeps its value. The checks between keys that the set-up makes are made again on the values read: `riemann-options-Mco = 0` with a low-Mach Riemann solver (`AUSM+M`, `HLLC+Chen`, `LMRoe`), `schmidt` = 0 with more than one species in a viscous run without `INPUT/diffusion.dat`, or, with the multirate integrator, a `cfl` above its bound or `cfl-rise-threshold` above 0 (section `[MOSE-Multirate]` below), is an error of the reading as it is at the start. Residual smoothing is on with `irs = true` or `irs-beta` above 0, at the start and at every reading, as [Time Integration](../theory/time-integration.md) says: a reading that switches it on in a run started without it is an error of the reading, since its work arrays exist only when it was on at the start.
+    The column During the run of the [Parameter Registry](registry.md) gives what a reading does with each key. A key *taken*, such as `cfl`, `vnn` or the intervals of the outputs, takes the value written. A key *fixed* for the run, such as `equations`, `turbulence`, `time-scheme`, `time-accurate`, `space-reconstruction` or `sol-format`, is one from which the set-up makes a choice that a reading cannot make again: the run keeps the value that the start read, and a reading that writes another one is an error of the reading, also when the value names what the run does (`shock-detector = Tramel` in a run that started without the key, whose sensor comes from `riemann-solver = HLLC+Tramel`); the message gives the value of the start, or says that the start left the key out. The grid levels, the probes and the stationary faces of the rotating frame are those of the start too: another `levels`, more `probe<n>` keys, or a `probe<n>` or a `stationary-face-<n>` that names another probe or face, is an error of the reading. A key of the *start only* (`newrun`, `ic-format`, `decomposition-map`) serves the start of the run, and a reading leaves it as it was, whatever value of its rule the file writes (a value that does not read, or is out of its rule, is an error of the reading, as for every key): `newrun = false` written during the run, to prepare a restart, does nothing to the run. A key that the file leaves out keeps its value. The checks between keys that the set-up makes are made again on the values read: `riemann-options-Mco = 0` with a low-Mach Riemann solver (`AUSM+M`, `HLLC+Chen`, `LMRoe`), `schmidt` = 0 with more than one species in a viscous run without `INPUT/diffusion.dat`, or, with the multirate integrator, a `cfl` above its bound or `cfl-rise-threshold` above 0 (section `[MOSE-Multirate]` below), is an error of the reading as it is at the start. Residual smoothing is on with `irs = true` or `irs-beta` above 0, at the start and at every reading ([Models and methods](#models-and-methods)): a reading that switches it on in a run started without it is an error of the reading, since its work arrays exist only when it was on at the start.
 
 ---
 
@@ -226,6 +226,18 @@ the stages of the first macro step (lines `MR-TRACE`), its level map (lines `MR-
 `MR-VISC`); with several processes, those of the blocks of process 0.  The multirate integrator writes no file of its
 own.
 
+**Scope.** The multirate integrator runs time-accurate Heun (`time-scheme = RK2`) with
+`integration-variables = cons`. At set-up or at its first macro step it stops with a message
+`[MOSE-Multirate] <item>` and a non-zero exit code for the configurations outside its scope: other time schemes,
+`prim` or `prec`, implicit residual smoothing, a shock detector (`shock-detector`, also implied by `HLLC+Tramel`,
+`HLLC+Chen`, `HLLE++`, `AUSM+M`), chemistry, soot, the rotating frame, multigrid sequences, steady runs,
+`cfl-rise-threshold` > 0, chimera (`102`), coupled walls (`103`), an SRM grain `502` in mode 1, gas–surface interaction
+(`503`–`505`), rotational periodicity (`200`) in 3-D (the 2-D axisymmetric wedge runs, with levels too), boundary types
+without a multirate boundary flux, `Wilcox2006`, and, with `max-level` > 0, `SA-RC` and `SST-RC`; with `max-level` > 0,
+`nonlocal-cfl = redo`, `levels = recompute` and no `fixed-macro-step`, a `cfl` above 1 or, in a Navier–Stokes run, a
+`vnn` above 0.5; and a restart (`newrun = false`) with `levels = fixed` or a `fixed-macro-step`. `SA`, `SA-R`, `SST`,
+`k-energy-coupling` and both values of `sst-production` run.
+
 ---
 
 ## Time step: `cfl` and `vnn`
@@ -281,6 +293,60 @@ Navier–Stokes run, a `vnn` above 0.5, the linear limits of Heun in the table
 
 ---
 
+## Models and methods
+
+The [Theory Guide](../theory/index.md) names the methods and their parameters; these are the keys that select them
+(values and defaults in the [Parameter Registry](registry.md)).
+
+| Method (Theory Guide) | Key | Section |
+|---|---|---|
+| Time scheme: forward Euler, Heun, SSP-RK3 | `time-scheme = euler`, `RK2`, `RK3` (required) | `[MOSE-Numerics]` |
+| CFL, VNN; CFL ramp over $N$ iterations | `cfl`, `vnn`; `cfl-rise-threshold` | `[MOSE-Numerics]` |
+| Reconstruction (MUSCL, first order) and limiter | `space-reconstruction`, `flux-limiter` | `[MOSE-Numerics]` |
+| Riemann solver; low-Mach cutoff $M_{co}$ | `riemann-solver`; `riemann-options-Mco` | `[MOSE-Numerics]` |
+| Shock sensor (Tramel, Chen) | `shock-detector = Tramel`, `Chen` | `[MOSE-Numerics]` |
+| Face metric of the viscous fluxes (stencil, mean) | `diffusive-metric = stencil`, `mean` | `[MOSE-Numerics]` |
+| Residual smoothing, coefficient $\varepsilon$; flow or all residuals | `irs`, `irs-beta`; `irs-variables = flow`, `all` | `[MOSE-Numerics]` |
+| Grid sequencing: levels MGL, iterations per level | `levels`; `level<n>-iter` | `[MOSE-Multigrid]` |
+| Multirate integrator | see [Multirate time stepping](#multirate-time-stepping) | `[MOSE-Multirate]` |
+| SA, SA-R, SA-RC, SST, SST-RC, Wilcox 2006 | `turbulence = SA`, `SA-R`, `SA-RC`, `SST`, `SST-RC`, `Wilcox2006` | `[MOSE-Physics]` |
+| SSG/LRR: SSGLRR-RSM-w2012, -w2012-SD, -w2019, -w2019-SD | `turbulence = SSGLRR`, `SSGLRR-SD`, `SSGLRR-w2019`, `SSGLRR-w2019-SD` | `[MOSE-Physics]` |
+| SST production (incompressible, compressible); energy coupling | `sst-production`; `k-energy-coupling` | `[MOSE-Turbulence]` |
+| Wall condition of $\omega$ (practical, asymptotic); point-implicit factor | `omega-wall-bc`; `point-implicit` | `[MOSE-Turbulence]` |
+| Turbulent Prandtl and Schmidt numbers $Pr_t$, $Sc_t$ | `Prt`, `Sct` | `[MOSE-Turbulence]` |
+| Frozen, finite-rate or equilibrium chemistry | `chemistry = frozen`, `finite-rate`, `equilibrium` | `[MOSE-Physics]` |
+| Chemistry integrator | `ode-solver`, `ode-max-steps` | `[MOSE-Chemistry]` |
+| Rotating frame: $\boldsymbol\Omega$, axis, origin $\boldsymbol{x}_o$ | `rotational-frame = rigid-body`; `omega`, `axis`, `origin` | `[MOSE-Physics]`, `[MOSE-Rotating-Frame]` |
+
+Notes on these keys:
+
+- `time-scheme` is required: a run without it stops at set-up with `[ERROR] Required parameter not set: time-scheme`.
+  The Default column of the registry lists `euler` for it, a placeholder that a required key never uses.
+- `space-reconstruction = MUSCL` without `flux-limiter` takes van Leer, with a warning; a `flux-limiter` given with
+  `first-order` is ignored, with a warning.
+- Without `shock-detector`, `HLLC+Tramel` and `HLLE++` take the Tramel sensor, `HLLC+Chen` and `AUSM+M` that of Chen,
+  and the other Riemann solvers none.
+- Residual smoothing is on with `irs = true` or `irs-beta` > 0, and MOSE refuses it at set-up in a time-accurate run.
+  Its arrays are allocated at the start only: a reading of `input.ini` that switches it on in a run started without it
+  is an error of the reading. On a run started with it, `irs-beta` and `irs-variables` can change during the run, and
+  it goes off when the values in force give neither `irs = true` nor `irs-beta` > 0: `irs-beta = 0` switches it off
+  unless `irs = true` is in force, and `irs = false` leaves it on while `irs-beta` > 0.
+- `turbulence = SAcomp` stops at set-up: its correction depends on the unit of length
+  ([Turbulence](../theory/turbulence.md#compressibility-correction)).
+- In time-accurate runs `point-implicit` is ignored; when `input.ini` sets `point-implicit = .true.`, a warning at
+  start-up recalls it. Time-accurate runs with `SA-RC` or `SST-RC` print a warning: the correction is for steady flows.
+- `ode-solver`: the default `H-radau5` is the Radau IIA method of order 5; `cvode` needs OSLO built with SUNDIALS, and
+  `H-dopri5` is explicit, for non-stiff mechanisms only. `ode-max-steps` bounds the integrators of Hairer and of FATODE;
+  `cvode` and `dodesol` do not take it.
+
+### Rotating frame
+
+A wall at rest in the laboratory (a casing or a hub that does not turn) is listed in `[MOSE-Rotating-Frame]` as `stationary-face-<n> = <block> <face>`, numbered from 1; the walls `301` and `302` of that block face take it. The other records of that face may be of the types that never read whether their face is stationary, whose boundary condition is then the same as without the key: block connections, periodic and chimera faces (`101`, `102`, `200`, `201`), extrapolation (`400`), the ambient boundary (`407`), the mapped boundary (`410`) and unused faces (`0`); so a casing face that is a wall in part and a block connection in part can be stationary. A stationary face that covers a type that would take the velocity of the wall at rest in part only (the inviscid flux of a symmetry `300`, of the inlets and outlets `401`–`406`, `408` and `420`, and of the walls `103`, `104` and `502`–`505`), that has no wall `301` or `302`, or that names a face with no record in `bc.txt` stops the run at set-up.
+
+The axis and angular velocity magnitude/direction must be specified at initialization. When `input.ini` is read again during the run (every `ini-diter` iterations), the `omega`, `axis` and `origin` read again replace those of the set-up in every term at once (the log of the run prints them): the Coriolis and centrifugal sources, the velocity of the stationary walls, of the inlets and of the far field, and the power of the torque file. The frame is taken at constant $\boldsymbol{\Omega}$ between two readings: the force $-\rho\,\dot{\boldsymbol{\Omega}} \times \boldsymbol{r}$ of a frame that speeds up is not modelled. A change of `rotational-frame` or of the stationary faces, which changes the equations or the boundary conditions, is an error of the reading: a `stationary-face-<n>` key that names another face, or one that the set-up does not have. A key that the file read again leaves out keeps its face, as every parameter left out keeps its value. The keys are counted from 1 up to the first one missing, at the start and at every reading: a key after a gap of the numbering is not read. A value of `axis` or `origin` read again that is not finite (NaN or infinity) or does not read as numbers, a `stationary-face-<n>` value that does not read, or an axis of zero length, is an error of the reading too. With `ini-error = warn`, the default, a reading with an error is not taken and the frame goes on as it was; with `ini-error = stop` the run stops (note «Errors of a reading during the run» above).
+
+---
+
 ## Blocks without chemistry: `exclude-blocks`
 
 `exclude-blocks` in `[MOSE-Chemistry]` lists the blocks that take no chemistry. With
@@ -295,4 +361,4 @@ run at set-up.
 
 ## Parameter Registry
 
-The **[Parameter Registry](registry.md)** lists the parameters with their defaults and allowed values. It is generated automatically from the source code at every release — do not edit it manually. Three kinds of keys are read at set-up before the registry is built, and the page shows them only in part: `levels` of `[MOSE-Multigrid]`, which it does not list (see [Sections](#sections)); `probe1`, `probe2`, ... of `[MOSE-Probes]`, which it shows as `probe1` with the section of one probe ([Probes](using.md#probes)); `stationary-face-1`, `stationary-face-2`, ... of `[MOSE-Rotating-Frame]`, which it does not list ([Wall Boundaries](../theory/rotating-frame.md#wall-boundaries)).
+The **[Parameter Registry](registry.md)** lists the parameters with their defaults and allowed values. It is generated automatically from the source code at every release — do not edit it manually. Three kinds of keys are read at set-up before the registry is built, and the page shows them only in part: `levels` of `[MOSE-Multigrid]`, which it does not list (see [Sections](#sections)); `probe1`, `probe2`, ... of `[MOSE-Probes]`, which it shows as `probe1` with the section of one probe ([Probes](using.md#probes)); `stationary-face-1`, `stationary-face-2`, ... of `[MOSE-Rotating-Frame]`, which it does not list ([Rotating frame](#rotating-frame)).

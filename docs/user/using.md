@@ -53,6 +53,21 @@ my_case/
     └── <name>.txt            ← time-history at probe locations
 ```
 
+!!! note "Mixture files"
+    Besides `phase.txt` and `thermo.dat`, `INPUT/` holds the files of the models in use, with the phase prefix in a
+    multi-phase run:
+
+    - `chemistry = finite-rate`: `chemistry-info.txt` (the name of the mechanism, its reactions and their types) and
+      its rate tables `chemistry-*.dat`. Without `chemistry-info.txt` MOSE stops at the start with a message that names
+      the file (FLINT would otherwise read no rate table and answer every evaluation of the source terms with its
+      bail-out value, which is not a rate). `frozen` and `equilibrium` do not need it.
+    - `chemistry = equilibrium`: `composition.txt`, the elements of the species: the number of elements, their names
+      one per line, a blank line, the word `composition`, then one line per species, in the order of `phase.txt`, with
+      the number of atoms of each element. Without it MOSE stops at the start with a message.
+    - Viscous runs with more than one species and `schmidt` = 0: `diffusion.dat`, the table of the binary diffusion coefficients, written
+      by the preprocessor with the thermodynamic and transport tables
+      ([Thermodynamics](../theory/thermo.md)).
+
 !!! warning
     MOSE reads the grid geometry directly from the initial condition file (the `x`, `y`, `z` node coordinates). There is no separate mesh file.
 
@@ -66,7 +81,7 @@ my_case/
     (a periodicity with no rotation); otherwise the run stops. A block closed on itself over a full turn about $x$,
     its last $k$ node plane on the first one, is translated by zero: the periodicity by the identity. Every node is
     checked against the move of the nodes per cell in $k$ (defined in
-    [Spatial Discretization](../theory/numerics.md#rotational-periodicity-and-axisymmetric-wedge-type-200)). A block
+    [Spatial Discretization](../theory/numerics.md#rotational-periodicity-and-axisymmetric-wedge)). A block
     is turned when its nodes match the turn
     to within 1 % of that move and better than a translation, translated when they match a translation to within
     1 % of it and better than a turn, or when the angle is null (a turn by the null angle is the translation by
@@ -132,7 +147,7 @@ MOSE prints diagnostic information to the console during loading and iteration. 
 !!! note "Exit code"
     A run that MOSE stops on an error, at loading, at set-up, because the solution diverges («Integration failed at
     b, i, j, k», then «NaN, infinity or p<0 detected») or because an integration of the finite-rate chemistry fails
-    ([Finite-Rate Kinetics](../theory/kinetics.md#ode-integration)), ends with a non-zero exit code: 1 where MOSE ends with `stop 1`
+    (below), ends with a non-zero exit code: 1 where MOSE ends with `stop 1`
     or `error stop 1`, otherwise that of `ERROR STOP` (128 with ifx, 1 with gfortran) or the one the MPI launcher gives
     for `MPI_ABORT` with error code 1. With MPI, an initial condition that cannot be read (also when one rank alone finds
     it), a failed integration of the finite-rate chemistry on any rank, an error that rank 0 finds at set-up or when it
@@ -155,6 +170,36 @@ MOSE prints diagnostic information to the console during loading and iteration. 
     the ORION library with `ERROR STOP` («You can not read in binary format without compiling against TecIO», or «write»
     for a file it writes), with the exit code of `ERROR STOP` given above; with MPI it is not one of the collective
     stops, and the exit code is the one the launcher gives.
+
+!!! note "Chemistry integration failures"
+    An integration of the finite-rate chemistry that the integrator reports as failed (a negative return code; with
+    `dodesol` any code but 0), for instance when it needs more steps than `ode-max-steps` allows or when it refuses its
+    tolerances, leaves the cell at its state, and MOSE stops the run at the end of the chemistry of that step, on every
+    thread and every MPI rank together, before any flux reads the cell, with exit code 1 and the line
+    `STOP: chemistry integration error (see above)`. One message comes before it: the integrator, its return code and
+    what its documentation says the code means, the block (and the grid level in a multigrid run), the cell, the
+    chemistry step, the temperature, the pressure and the density of the cell, and the rank in an MPI run. Among the
+    cells whose integration failed in the step, the message gives the one of the smallest block, then k, j and i, so
+    that it is the same with any number of threads and ranks. No solution of that step is written.
+
+!!! note "Counts at the end of the run"
+    A RANS run in which a stage made $\tilde\nu$, $k$ or $\omega$ negative before the realizability floor prints how
+    many cell updates had such a stage
+    ([Turbulence](../theory/turbulence.md#time-accurate-runs-explicit-sources)):
+
+    ```text
+     Turbulence variables below zero after a stage (set to the floor): <n>
+    ```
+
+    A run in which the limits of the ghost cells of walls and extrapolation faces acted
+    ([Spatial Discretization](../theory/numerics.md#ghost-cells-of-walls-and-extrapolation-faces)) prints the ghost fills
+    in which each did (one of the two counts can be zero):
+
+    ```text
+     Ghost cells of walls and 400 faces, fills with the extrapolation cut: <n>, with the 302 temperature at T_w/2: <m>
+    ```
+
+    A run in which none of this happened prints neither line.
 
 The [Quick Start](../getting-started/quick-start.md) shows the screen of a whole run, from the loading checks
 to the lines after the timing block.

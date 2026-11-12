@@ -73,7 +73,7 @@ table comes from the final time, not from the scheme, which is second-order
 accurate on this smooth flow.
 
 <figure>
-  {% include "vv/images/IsentropicVortex.svg" %}
+  --8<-- "docs/vv/images/IsentropicVortex.svg"
 </figure>
 
 ## Limiter choice and observed order

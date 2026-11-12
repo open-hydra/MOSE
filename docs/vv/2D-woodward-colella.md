@@ -46,13 +46,13 @@ Boundary conditions:
 MOSE solutions compared against OpenFOAM (rhoCentralFoam) reference on the baseline mesh:
 
 <figure>
-  {% include "vv/images/WC-fields.svg" %}
+  --8<-- "docs/vv/images/WC-fields.svg"
 </figure>
 
 Density profile cut at $y = 0.5$ demonstrating sharp resolution of shock structures:
 
 <figure>
-  {% include "vv/images/WC-slice.svg" %}
+  --8<-- "docs/vv/images/WC-slice.svg"
 </figure>
 
 The solution accurately captures all major flow features including the oblique shock angle, shock interaction with the upper boundary, and the expansion fan structure. Pressure and density jumps are well-resolved with minimal oscillation.

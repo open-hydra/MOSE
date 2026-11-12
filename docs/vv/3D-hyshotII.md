@@ -173,7 +173,7 @@ Getting ignition to occur **ahead** of the jet, as the literature reports, addit
 ## Results
 
 <figure>
-  {% include "vv/images/HyShot-pw.svg" %}
+  --8<-- "docs/vv/images/HyShot-pw.svg"
   Wall pressure along the between-injector line.
 </figure>
 

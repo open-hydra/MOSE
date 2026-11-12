@@ -57,7 +57,7 @@ the initial field and the boundary records; `plot_grids.py` draws the four famil
 the coarse level, each block in its own colour:
 
 <figure>
-  {% include "vv/images/planar-nozzle-grids.svg" %}
+  --8<-- "docs/vv/images/planar-nozzle-grids.svg"
 </figure>
 
 ## Setup

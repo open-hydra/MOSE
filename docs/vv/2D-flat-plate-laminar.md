@@ -5,7 +5,7 @@ Incompressible laminar flow over a flat plate at low Mach number. This configura
 **Reference**: Blasius similarity solution for laminar boundary layer over a flat plate (see _e.g._ Anderson, _Introduction to Flight_, McGraw-Hill).
 
 <figure>
-  {% include "vv/images/LP-field.svg" %}
+  --8<-- "docs/vv/images/LP-field.svg"
 </figure>
 
 ---
@@ -63,7 +63,7 @@ Boundary conditions:
 Comparison of skin friction coefficient along the plate surface versus the analytical Blasius distribution:
 
 <figure>
-  {% include "vv/images/LP-Cf.svg" %}
+  --8<-- "docs/vv/images/LP-Cf.svg"
 </figure>
 
 The solution demonstrates excellent agreement with Blasius theory away from the leading edge. Leading-edge errors (x < 0.05 m) are expected due to numerical stagnation effects and coarse initial mesh resolution; Blasius theory assumes an infinitesimal leading edge, whereas practical CFD has finite spatial resolution.
@@ -73,7 +73,7 @@ The solution demonstrates excellent agreement with Blasius theory away from the 
 Comparison of the normalized velocity profile $u/U_\infty$ versus the Blasius similarity coordinate $\eta$ at x = 0.29 m:
 
 <figure>
-  {% include "vv/images/LP-slice.svg" %}
+  --8<-- "docs/vv/images/LP-slice.svg"
 </figure>
 
 The numerical velocity profile shows excellent collapse onto the Blasius self-similar solution, confirming that the boundary layer develops according to classical theory.
