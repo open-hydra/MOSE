@@ -29,7 +29,7 @@ The test validates thermochemical coupling by comparing MOSE velocity and temper
 ### Results and verification
 
 <figure>
-  {% include "vv/images/Fer14.svg" %}
+  --8<-- "docs/vv/images/Fer14.svg"
 </figure>
 
 A perfect agreement is observed between MOSE and the reference data, demonstrating accurate thermochemical coupling in the solver. The velocity and temperature profiles at all three time points closely match the digitized reference curves from Ferrer et al. (2014).

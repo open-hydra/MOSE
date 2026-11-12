@@ -13,20 +13,13 @@ for time-accurate runs.
 ## Explicit Time Integration Schemes
 
 MOSE provides three explicit time integration schemes, all formulated in
-the unified **Shu–Osher convex-combination** form.  The active scheme is
-selected at run time via `n_RK` (1, 2, or 3), set by the key `time-scheme`
-of `[MOSE-Numerics]` (`euler`, `RK2` or `RK3`):
+the unified **Shu–Osher convex-combination** form:
 
 | Scheme | Order | SSP coefficient |
 |--------|:-----:|:---------:|
 | Forward Euler | 1 | 1 |
 | 2-stage SSP Runge–Kutta (Heun) | 2 | 1 |
 | 3-stage SSP Runge–Kutta (Shu–Osher) | 3 | 1 |
-
-`time-scheme` is a required key: a run without it stops at set-up with
-`[ERROR] Required parameter not set: time-scheme`. The Default column of the
-[input parameters](../user/registry.md) lists `euler` for it, a placeholder
-that a required key never uses.
 
 All three are **strong-stability preserving (SSP)**: each stage is a
 convex combination of forward-Euler steps, so the positivity and TVD
@@ -37,7 +30,7 @@ the linear stability limits of the local time step: both are given in
 
 ---
 
-### Forward Euler (`n_RK = 1`)
+### Forward Euler
 
 $$
 \mathbf{U}^{n+1} = \mathbf{U}^n + \Delta t\;\mathcal{L}(\mathbf{U}^n)
@@ -49,7 +42,7 @@ already imposed by chemistry or acoustics.
 
 ---
 
-### 2-stage SSP Runge–Kutta (`n_RK = 2`)
+### 2-stage SSP Runge–Kutta
 
 Also known as **Heun's method** or SSP-RK2:
 
@@ -66,7 +59,7 @@ Second-order accurate, two residual evaluations per step.
 
 ---
 
-### 3-stage SSP Runge–Kutta (`n_RK = 3`)
+### 3-stage SSP Runge–Kutta
 
 The **Shu–Osher RK3** method:
 
@@ -96,8 +89,7 @@ $$
   + c_k\bigl(\mathbf{U}^{(k-1)} - \mathbf{U}^n + \mathbf{R}^\ast\bigr)
 $$
 
-where the stage coefficients $c_k$ are stored in the matrix
-`RKcoeff(n_rk, stage)`:
+with the stage coefficients $c_k$:
 
 $$
 \mathbf{C} =
@@ -108,7 +100,7 @@ $$
 \end{pmatrix}
 $$
 
-Row index = `n_RK`; column index = stage.
+Row = number of stages of the scheme; column = stage.
 
 ### Stage times and time-dependent boundary data
 
@@ -121,8 +113,8 @@ the solution at the stage time $t^n + \theta_k\,\Delta t$:
 | SSP-RK2 (Heun) | 0 | 1 | |
 | SSP-RK3 | 0 | 1 | ½ |
 
-In time-accurate runs the time-dependent boundary data (inlet `402`,
-assigned state `410`) are evaluated at the stage time; with Strang splitting,
+In time-accurate runs the time-dependent boundary data (tabulated inlet
+conditions, assigned boundary states) are evaluated at the stage time; with Strang splitting,
 inside each half step. This is the conventional imposition analysed by
 Carpenter et al. [7]. On a fixed mesh, with $\Delta t \to 0$, both schemes keep
 their order in time (second for Heun, third for SSP-RK3). Refining mesh and
@@ -133,7 +125,7 @@ order. Both statements follow from the boundary error derived below. The
 experiments of [7] show the same loss with a weak (SAT) imposition of the
 data, and its appendix A shows that data entering as a source term give the
 same scheme; the characteristic boundary fluxes of MOSE are outside that
-analysis and are checked by the tests (`TimeIntegration`/`TimeControl`).
+analysis and are checked by the test suite.
 
 [7] gives two ways to keep the full order. One imposes no boundary data at
 the intermediate stages, only at the end of the step: the scheme keeps its
@@ -333,11 +325,11 @@ inflow boundary with upwind differences ([8], §3.3, pp. 26–27): the limits ar
 
 | Scheme | real stability interval | CFL ≤, MUSCL, smooth flow | CFL ≤, first order (limiter at extrema and shocks) | VNN ≤ | CFL and VNN ≤ for positivity with the limiter (equal rectangular cells, smooth flow) |
 |---|---|---|---|---|---|
-| Heun (`RK2`) | $[-2, 0]$ | 1 | 1 | 1/2 | 1/2 |
-| `RK3` | $[-2.5127, 0]$ | 1.17 | 1.25 | 0.62 | 1/2 |
-| explicit Euler (`euler`) | $[-2, 0]$ | unstable | 1 | 1/2 | 1/2 |
+| Heun | $[-2, 0]$ | 1 | 1 | 1/2 | 1/2 |
+| SSP-RK3 | $[-2.5127, 0]$ | 1.17 | 1.25 | 0.62 | 1/2 |
+| forward Euler | $[-2, 0]$ | unstable | 1 | 1/2 | 1/2 |
 
-On the 2-D axisymmetric wedge (type `200` or `300` on the $k$ faces) the stress on the wedge faces adds to the
+On the 2-D axisymmetric wedge (rotational periodicity or symmetry on the $k$ faces) the stress on the wedge faces adds to the
 rows of $u_r$ and $u_\theta$ of every cell terms that grow as $1/r^2$ next to the axis: in the row of
 $u_r$ the diagonal $-\tfrac{4}{3}\nu_e/r^2$ and couplings $\tfrac{2}{3}\nu_e|\nabla\xi_d\cdot\mathbf{e}_r|/(2r)$
 to the $u_r$ and $\tfrac{2}{3}\nu_e|\nabla\xi_d\cdot\mathbf{e}_x|/(2r)$ to the $u_x$ of the neighbours $d\pm1$, in the
@@ -353,7 +345,7 @@ $$
 
 so that $\Delta t\,(4D_{\max}\sum_d|\nabla\xi_d|^2 + s_h) = 4\,\text{VNN}$. The stability limits of the table are proven away
 from the axis on uniform meshes (in 2-D for any skew and aspect ratio, in 3-D with the factor $F$ above) and, next to the
-axis, for the scalars; for the momentum next to the axis they rest on evidence (test `WedgeAxisStep`).
+axis, for the scalars; for the momentum next to the axis they rest on evidence (below).
 The positivity limits of its last column hold on a mesh of equal rectangular cells in smooth flow, the one of the
 diffusion with a constant diffusivity (below).
 
@@ -361,7 +353,7 @@ diffusion with a constant diffusivity (below).
     - Away from the axis, on a uniform mesh of equal cells (parallelograms in 2-D, parallelepipeds in 3-D) with frozen
       coefficients and no boundaries, the viscous operator of MOSE has a real symmetric Fourier symbol. With the face gradient of
       MOSE (the difference across the face, the mean of the central differences of the two cells along it, mapped with the face
-      metric, which on such a mesh is the cell metric for every `diffusive-metric`), a mode $e^{i\boldsymbol\theta\cdot\mathbf c}$
+      metric, which on such a mesh is the cell metric for every choice of face metric), a mode $e^{i\boldsymbol\theta\cdot\mathbf c}$
       gives $\rho\,\dot{\hat{\mathbf u}} = -S\hat{\mathbf u}$ with $S = \mu\,\mathrm{tr}(B)\,I + (\mu+\lambda)B$, $B = G\Theta G^T$,
       the columns of $G$ the rows $\nabla\xi_d$ of the cell metric, $\Theta_{dd} = 4\sin^2(\theta_d/2)$,
       $\Theta_{de} = \sin\theta_d\sin\theta_e$; a scalar of diffusivity $D$ has the symbol $D\,\mathrm{tr}(\Theta\Gamma)$,
@@ -396,18 +388,18 @@ diffusion with a constant diffusivity (below).
       axis. The support is evidence: on the operator of the code for cells with $dx/dr$ from 0.01 to 128 and wedges of 0.25° to 5°,
       its symmetric part is negative semidefinite, its eigenvalues are real to $6\cdot10^{-4}$, and the largest stable VNN with the
       local step is 0.500 to 0.577 with Heun and 0.628 to 0.725 with RK3, approaching the limits of the table, 1/2 and 0.62
-      (0.628), from above for very long or very short cells; on the diffusion-dominated 1° wedge of the test `WedgeAxisStep`
+      (0.628), from above for very long or very short cells; on a diffusion-dominated 1° wedge of the tests
       (32 × 32 cells, 2000 local steps) the largest stable VNN is about 0.5 with Heun (0.508 to 0.519)
       and 0.63 to 0.65 with RK3 for $dx/dr$ = 1, 4 and 8 at Prandtl numbers 0.72 and 0.9 (and 10 at $dx/dr$ = 4), and the
       test runs 2000 steps at the limits and at the recommended values. The eigenvalue criterion can mislead for non-normal operators
       ([8], pp. 26–27).
 
 Next to the axis of square cells $s_h = 8\,\nu/\Delta r^2$; far from it $s_h$ vanishes as $1/r$. The wedge stress, and with it $s_h$, applies
-with either sign of the wedge angle (a right-handed mesh with the axis on the last $j$ face has a negative one). Test
-`WedgeAxisStep`. The step takes $s_h$ on every 2-D mesh with a wedge angle, whatever the type of its $k$ faces: the viscous
-flux of faces of type `200` and that of symmetry faces (`300`), whose mirror image of a cell is, without swirl, the cell
-turned by the wedge angle, both carry this stress; null (`0`) $k$ faces carry none, and there $s_h$ only makes the step
-smaller than it needs to be.
+with either sign of the wedge angle (a right-handed mesh with the axis on the last $j$ face has a negative one). The step
+takes $s_h$ on every 2-D mesh with a wedge angle, whatever the boundary of its $k$ faces: the viscous flux of rotationally
+periodic faces and that of symmetry faces, whose mirror image of a cell is, without swirl, the cell turned by the wedge
+angle, both carry this stress; unused $k$ faces carry none, and there $s_h$ only makes the step smaller than it needs to
+be.
 
 These limits are linear (von Neumann, smooth solutions). With the limiter, positivity (a maximum principle:
 in more than one dimension a second-order scheme is not TVD, Goodman et al. 1985 as cited in [9], p. 15 of the
@@ -423,15 +415,14 @@ rectangular cells with a constant diffusivity, where the face gradient has no cr
 [8] above). On other rectangular cells the bound can be lower for a cell that advances with the step of the rule (a
 local step, or a level of the multirate; with the global step of a time-accurate run, the smallest of the mesh,
 $\text{VNN} \le 1/2$ keeps every cell positive in one dimension with a constant diffusivity): the rule takes the width
-and the largest diffusivity of the cell itself (`Mod_dt`), while the flux of a face takes the distance between the two
-centres (with
-`diffusive-metric = stencil`, the default) and the diffusivity of the mean state of the two cells (`Lib_Diffusive`),
+and the largest diffusivity of the cell itself, while the flux of a face takes the distance between the two
+centres (with the default stencil face metric) and the diffusivity of the mean state of the two cells,
 which can exceed that of the cell; in one dimension, with a constant diffusivity and no convection, the positivity of
 every stage asks $\text{VNN}\,h\,(1/\delta_- + 1/\delta_+) \le 1$ (the forward Euler step; Heun and RK3 inherit it as
 convex combinations of such steps), with $h$ the width of the cell and $\delta_\mp$ the distances to
 the centres of its two neighbours: $\text{VNN} \le 1/2$ on equal cells and on widths in a geometric progression, and
 towards 1/4 in a cell much larger than both neighbours. On skewed cells the face gradient also takes the central
-differences of the two cells along the face (`Lib_Diffusive`), whose cross metric terms can give corner neighbours of a
+differences of the two cells along the face, whose cross metric terms can give corner neighbours of a
 cell a negative weight: on a mesh of equal parallelograms two corner neighbours of every cell have one, at every skew
 angle, and no step makes the diffusion positive there. With the additive rule
 both hold for CFL ≤ 1/2 and VNN ≤ 1/2 in smooth flow on a mesh of equal rectangular cells with a constant diffusivity,
@@ -441,9 +432,9 @@ positive results up to $\nu = 1$ in 1D and about $2/3$ in 2D). The bound is lowe
 RANS run, whose ghost cell holds $-k_1\rho_G$ (and $-\tilde\nu_1\rho_G$; the wall value of $k$, and of $\tilde\nu$ on
 a smooth wall, is zero), $\rho_G$ the density of the ghost cell: there it is $1/(2 + \rho_G/\rho_1)$, and in smooth
 flow CFL ≤ 1/2 keeps it while the Mach number of the flow normal to the wall is below $2\rho_1/\rho_G$. Next to faces whose ghost
-cells extrapolate the cells, $3q_1 - 3q_2 + q_3$ (type `408`, and the flow and soot variables of type `502` in its mode 1),
-positivity is not guaranteed. With moving shocks and Heun keep `cfl` at
-0.5–0.7. With preconditioning,
+cells extrapolate the cells, $3q_1 - 3q_2 + q_3$ (the velocity inlet, and the flow and soot variables of a solid
+propellant grain that blows its products in through a wall), positivity is not guaranteed. With moving shocks and Heun
+keep CFL at 0.5–0.7. With preconditioning,
 $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$ is replaced by the preconditioned eigenvalue
 $\bigl(u_n (1-\alpha) + c^\ast\bigr)|\nabla\xi_d|$.
 
@@ -471,13 +462,13 @@ step changes the path of a steady run, not the steady solution it converges to.
     is at most 1.90 times the cell's own rate), but not on stretched cells crossed obliquely by a strong shock, which need
     CFL ≤ 0.41 at Mach 10; with MUSCL it is observed, not proven.
 
-**Recommended values.** For time-accurate runs with moving shocks and RANS models: with RK3, `cfl = 0.8` (the face Courant
+**Recommended values.** For time-accurate runs with moving shocks and RANS models: with RK3, CFL = 0.8 (the face Courant
 numbers of the HLLC flux above stay within the first-order limit of the scheme, which applies at the shock: 1.47 × 0.8 =
-1.18 < 1.256) and `vnn = 0.5`, 20 % below the limit 0.628 of the scheme (up to that limit, for example at `vnn = 0.6`,
-4.5 % below it, the linearised scheme is stable); with Heun, `cfl` from 0.5 to 0.7 and `vnn = 0.4`, below its limit 0.5. These are
+1.18 < 1.256) and VNN = 0.5, 20 % below the limit 0.628 of the scheme (up to that limit, for example at VNN = 0.6,
+4.5 % below it, the linearised scheme is stable); with Heun, CFL from 0.5 to 0.7 and VNN = 0.4, below its limit 0.5. These are
 values of the scheme, not of a case: a case that runs stable beyond them owes it to its mesh (a non-uniform spacing around the
 cell that sets the step lowers the spectral radius of its diffusion), and its threshold is not a limit to carry elsewhere. The
-viscous rate takes the largest diffusivity, that of the energy, and adds up the directions: a `vnn` tuned on a rule that took
+viscous rate takes the largest diffusivity, that of the energy, and adds up the directions: a VNN tuned on a rule that took
 the momentum diffusivity and the largest direction alone gives here a smaller step (by $\gamma/\text{Pr}_t$, 1.65 with the
 default $\text{Pr}_t = 0.85$, in a
 stretched cell where the turbulent viscosity sets it), and can be raised within the limits of the table. The CFL number of a
@@ -502,9 +493,8 @@ leaves out the part of the return to isotropy that the production drives).
 
 !!! tip "CFL ramp-up"
 
-    `cfl-rise-threshold` (`[MOSE-Numerics]`, 0 by default: no ramp) ramps the time step
-    linearly over the first iterations: at iteration $n$ below $N$ = `cfl-rise-threshold`
-    the local step of every cell is multiplied by $n/N$, with $n$ the iteration number of
+    The time step can be ramped linearly over the first $N$ iterations (no ramp by default): at
+    iteration $n$ below $N$ the local step of every cell is multiplied by $n/N$, with $n$ the iteration number of
     the grid level (1 at its first iteration). This improves robustness when the initial
     condition is far from the solution, and a time-accurate start of a $k$–$\omega$ model
     far from the wall value of $\omega$ needs it
@@ -547,7 +537,7 @@ update.
 ### Smoothing equation
 
 In each coordinate direction $d$ the smoothed residual $\mathbf{R}^\ast$
-satisfies, with $\varepsilon$ = `irs-beta` of `[MOSE-Numerics]`,
+satisfies, with the smoothing coefficient $\varepsilon$,
 
 $$
 \mathbf{R}^\ast_i =
@@ -569,9 +559,8 @@ $\varepsilon = 0.5$ (0.3 in the frozen rocket nozzle).
 
 The smoothed residual is not the residual of the space discretization, so a
 run with IRS does not follow the transient of the discretized equations: IRS
-accelerates the convergence of steady (pseudo-time) runs. It is switched on
-by `irs = true` or by `irs-beta > 0` alone, and MOSE refuses it at set-up
-when `time-accurate = true`. In unsteady computations residual smoothing
+accelerates the convergence of steady (pseudo-time) runs, and MOSE applies it to
+steady runs only. In unsteady computations residual smoothing
 belongs to the pseudo-time iterations of dual time stepping [5], which MOSE
 does not implement.
 
@@ -594,24 +583,15 @@ refuses it because its time-accurate targets include moving shocks.
     - Pass the smoothed residual to the next direction
 3. Use the smoothed residual in the RK stage
 
-By default (`irs-variables = flow`) only the flow residuals (species,
-momentum, energy) are smoothed; the turbulence equations then advance
-with the same local time step without smoothing, and above the explicit
-limit they become the unstable part. `irs-variables = all` smooths every
-residual (turbulence, soot and passive scalars too) in the same way. It is
-meant for Spalart–Allmaras: the k-omega models diverge with it (the SST
-and Wilcox 2006 flat plates of the tests at IRS 0.5).
+By default only the flow residuals (species, momentum, energy) are
+smoothed; the turbulence equations then advance with the same local time
+step without smoothing, and above the explicit limit they become the
+unstable part. Optionally every residual (turbulence, soot and passive
+scalars too) is smoothed in the same way. That suits Spalart–Allmaras: the
+k-omega models diverge with it (the SST and Wilcox 2006 flat plates of the
+tests at $\varepsilon = 0.5$).
 Smoothing changes the path to the steady state, not the steady state
 itself (a zero residual stays zero).
-
-IRS is on with `irs = true` or `irs-beta > 0`, at the start and at every
-reading of `input.ini` during the run. Its arrays are allocated at the start
-only: a reading that switches it on in a run started without it is an error of
-the reading, which `ini-error` decides ([Input](../user/input.md)). On a run
-started with IRS, `irs-beta` and `irs-variables` can change during the run, and
-IRS goes off when the values in force give neither `irs = true` nor
-`irs-beta > 0`: `irs-beta = 0` switches it off unless `irs = true` is in force,
-and `irs = false` leaves it on while `irs-beta > 0`.
 
 ---
 
@@ -623,7 +603,7 @@ coarse-grid solution.
 
 ### Grid hierarchy
 
-- **Number of levels**: the key `levels` of `[MOSE-Multigrid]` (`MGL` below).
+- **Number of levels**: MGL.
 - **Coarsening rule**: each coarse cell corresponds to $2^d$ fine cells
   ($d$ = number of active spatial dimensions).
 - **Compatibility**: the fine-grid dimensions must be divisible by
@@ -649,7 +629,7 @@ coarse-grid solution.
 !!! warning "Starting-mesh divisibility requirement"
     The supplied (finest) mesh must already satisfy the coarsening requirement:
     **every active direction must be divisible by $2^{\text{MGL}-1}$**, while
-    singleton directions ($=1$) are exempt. For example, with `MGL = 5`
+    singleton directions ($=1$) are exempt. For example, with MGL = 5
     ($2^{4} = 16$) a 1-D mesh needs $n_i$ a multiple of $16$ (e.g. $n_i = 4000$,
     $n_j = n_k = 1$). If this is not met, grid generation / setup will reject the
     mesh. Choose $n_i$ (and $n_j$ in 2-D) accordingly **before** generating the
@@ -657,20 +637,11 @@ coarse-grid solution.
 
 ### Level schedule
 
-The levels run in sequence, coarsest first: level $n$ runs `level<n>-iter`
-iterations (or until `res-threshold` / `time-threshold`, which act on every
-level), then its solution is prolongated onto level $n-1$. `level<n>-iter`
-(and `iter-threshold` without multigrid) is re-read with `input.ini` every
-`ini-diter` iterations: lowering it below the iterations already done ends
-the current level at the iteration after that re-read.
-
-Every field write of a coarse level also prolongates its solution to the
-finest level and writes it (`field-prolongated`, `wall-prolongated`). On a
-large mesh that write costs more than the coarse iterations between two
-writes; `prolongated-diter`, a key taken at every reading of `input.ini` (column
-During the run of the [Parameter Registry](../user/registry.md)), spaces it to at
-least that many iterations of the level. The end of a level always writes it, so the one
-written at the end of level 2 is the exact start of level 1.
+The levels run in sequence, coarsest first: level $n$ runs a given number of
+iterations (or until the residual or time criterion of the run, which act on
+every level), then its solution is prolongated onto level $n-1$. The output of
+the coarse levels, prolongated to the finest grid, is described in the
+[User Guide](../user/using.md#output).
 
 ### Restriction (fine → coarse)
 
@@ -688,7 +659,7 @@ $$
 - 1-D: 2-cell average (along $i$)
 
 Primitive variables on the coarse grid are recovered from the averaged
-conservative state via Newton–Raphson (`cons2prim`), using the
+conservative state via Newton–Raphson, using the
 fine-grid temperature as the initial guess.
 
 ### Prolongation (coarse → fine)
@@ -722,11 +693,9 @@ fine cell's position within the coarse cell.
 
 MOSE runs the levels once each, from the coarsest to the finest (grid
 sequencing). At set-up the initial solution is restricted to the coarse
-levels; each coarse level $N$ runs `levelN-iter` iterations (for example
-`level2-iter`), and its solution is prolongated to the next finer level,
-down to level 1, which runs `level1-iter` iterations: with more than one
-level, `iter-threshold` does not set the iterations of level 1. The residual
-criterion of a steady run and `time-threshold` also end a level. The
+levels; each coarse level runs its own number of iterations, and its
+solution is prolongated to the next finer level, down to level 1. The
+residual criterion of a steady run and the final time also end a level. The
 iteration count starts again from zero on each level, and each level advances
 its own time from the initial time of the run (zero in a new run). There are
 no V or W cycles, no coarse-grid correction and no dual time stepping: the
@@ -740,10 +709,21 @@ In a time-accurate run with the global step every cell advances with the
 smallest admissible step of the mesh, $\Delta t = \min_i \Delta t_i$.  When a
 few cells (near walls, in a throat, in a refined band) set that minimum, most
 of the work is spent advancing the other cells with steps far below their own
-limit.  The **multirate** integrator (`[MOSE-Multirate] enabled = .true.`)
-lets each cell advance with a step close to its own limit, keeping, on a fixed
-mesh, the second order in time, and the exact conservation of the single-rate
-scheme.
+limit.  The **multirate** integrator lets each cell advance with a step close
+to its own limit, keeping, on a fixed mesh, the second order in time, and the
+exact conservation of the single-rate scheme.
+
+The integrator has variants, which the sections below name.  The level map is
+either rebuilt from the local steps every $k$ macro steps (a *recomputed map*,
+for production runs) or built at the first macro step and kept (a *fixed
+map*, for studies of the order).  The macro step is either adaptive or a
+*fixed macro step*, a given multiple of the smallest local step of the first
+macro step, for verification.  Condition (4) of the
+[non-local CFL condition](#non-local-cfl-condition) is either imposed, by
+rejecting and redoing the macro steps that violate it (the *redo*, the
+default), only counted, or not checked; the *interface margin* comes with the
+redo and can also be applied alone.  The input keys of these choices are in
+the [User Guide](../user/input.md#multirate-time-stepping).
 
 ### Levels and macro step
 
@@ -752,8 +732,8 @@ sub-steps $h_\ell = H/2^{\ell}$, where $H$ is the **macro step** and $L$ the
 depth of the map, its deepest level.  The level
 comes from the admissible local step $\Delta t^{\text{cap}}_c$ of the cell (the
 [local time step](#local-time-step) above) and a safety factor $\sigma \ge 1$
-(`safety`, 2 by default, see [Non-local CFL condition](#non-local-cfl-condition); $L_{\max}$ = `max-level`),
-for the step $H$ for which the map is built:
+(2 by default, see [Non-local CFL condition](#non-local-cfl-condition)), with $L_{\max}$ the deepest level
+allowed, for the step $H$ for which the map is built:
 
 $$
 \ell_c = \min\Bigl(L_{\max},\ \max\bigl(0,\ \bigl\lceil \log_2(\sigma H/\Delta t^{\text{cap}}_c) - 10^{-12} \bigr\rceil\bigr)\Bigr),
@@ -762,7 +742,7 @@ $$
 then two rules are imposed, iterated until nothing changes:
 
 - **nesting**: the levels of two cells sharing a face differ by at most one;
-- **equal levels across block connections** (types 101 and 201): the two
+- **equal levels across block connections** (direct and periodic): the two
   sides of a connection always advance together, so a connection is never a
   face between levels: its one flux per stage, which the record that owns the
   face computes for both cells, needs the two sides at the same stage times
@@ -785,7 +765,7 @@ of steps of the integrator use the same tolerance, as Castro does on the landing
 
 **Local steps.**  The levels, the depth of the map and $H$ come from the
 admissible local steps, so each of them must be a positive finite number.  At
-the start of every macro step, whatever the keys of `[MOSE-Multirate]`, a cell
+the start of every macro step, in every variant, a cell
 whose $\Delta t^{\text{cap}}_c$ is zero, negative, infinite or not a number stops
 the run before the map is built: a negative step would make $H$ negative, and
 the halving of $H$ while it exceeds a negative $H_{\text{cap}}$ in the redo of
@@ -803,14 +783,7 @@ of an inviscid run infinite, and a density so small that the diffusion rate
 overflows makes the step zero.  A state that is not physical can also give a
 positive finite step (a density and a pressure both negative in an inviscid
 run): the check does not see it, and the run meets it at the first stage, in
-the checks of the faces and of the cells.  The run prints the number of such
-cells and, for the first one in the order of the blocks and of $k$, $j$, $i$,
-its local step and its primitive variables, and every process stops with the
-others (exit code 1).  NaN and infinities are found by their bits, so the test
-holds also in the RELEASE build, whose fast floating-point mode can fold a
-comparison with a NaN; the DEBUG build, which traps invalid operations,
-divisions by zero and overflows, stops with SIGFPE at the first of them, before
-the check.
+the checks of the faces and of the cells.
 
 **Depth of the map.**  The map of the adaptive step is built for
 $H_{\hat L} = 2^{\hat L}\,\Delta t_{\min}/\sigma$ (at most $H_{\text{target}}$), with
@@ -832,15 +805,15 @@ $\sigma$, and the rule leaves no coarse level empty; with $\kappa > \sigma$ the 
 level can stay empty.  Nesting, the margin and
 the connections only raise levels, so in a strongly stretched mesh they can
 raise every cell of the slowest octave as well; the run shows it as a first count
-0 in its line «cells per level».  With a target at or below
+0 in its count of cells per level.  With a target at or below
 $\Delta t^{\text{cap}}_{\max}/\sigma$ every depth passes the test and
 $\hat L = L_{\max}$: the target already keeps $H$ within the step of the slowest
 cells, and the map is the one built for $\min(2^{L_{\max}}\Delta t_{\min}/\sigma,
 H_{\text{target}})$, whose depth $L$ is the one the target gives, at most $L_{\max}$.
 On a uniform mesh ($K < 1$) the map has one level and $H =
 \Delta t_{\min}/\sigma$.  The depth is that of the map of the adaptive step, also
-the one that `levels = fixed` keeps; where $H$ is given, with `fixed-macro-step`
-and `levels = recompute` and in the redo of `nonlocal-cfl = redo`, which keeps
+the one that a fixed map keeps; where $H$ is given, with a fixed macro step
+and a recomputed map and in the redo, which keeps
 the $H$ of its attempt, the levels follow the cells up to $L_{\max}$: for a given
 $H > 2^{\lfloor K\rfloor}\Delta t_{\min}/\sigma$ a cut at $\lfloor K \rfloor$
 would take the cells with $\Delta t_{\min}$ beyond their limit.  The depth
@@ -854,12 +827,12 @@ also when it holds few cells; and with $L_{\max}$ above 10 the floor of the redo
 single-rate run ([Non-local CFL condition](#non-local-cfl-condition)).  Which depth costs least depends on how many
 cells lie in each octave of the local steps and on the cost of a stage.
 
-The map is computed at the first macro step and kept (`levels = fixed`) or
-recomputed every `recompute-every` macro steps (`levels = recompute`), at the
-iterations $1, 1 + k, \dots$ of the run counter.  With `nonlocal-cfl = redo` a
+The map is computed at the first macro step and kept (fixed map) or
+recomputed every $k$ macro steps (recomputed map), at the
+iterations $1, 1 + k, \dots$ of the run counter.  With the redo a
 rejected macro step rebuilds the map with levels that only rise
-([Non-local CFL condition](#non-local-cfl-condition)); with `recompute-every`
-$> 1$ the raised map stays in use until the next rebuild.  One iteration of
+([Non-local CFL condition](#non-local-cfl-condition)); with $k > 1$ the raised
+map stays in use until the next rebuild.  One iteration of
 MOSE is one macro step.
 
 **Which map for which run.**  For a fixed map the macro step is a one-step
@@ -871,20 +844,19 @@ every cell finer than level 0, since every ratio that sets a level
 the interface margin) is proportional to $H$, so its step $h_{\ell_c}$ stays
 the same: its error does not drop, and the measured order would be that of the
 change of map, not of the scheme.  A study of the temporal order therefore uses
-`levels = fixed`: the map of the adaptive step of the first macro step, kept, also with
-`fixed-macro-step`.  A production run needs the opposite: as the state changes,
+a fixed map: the map of the adaptive step of the first macro step, kept, also with
+a fixed macro step.  A production run needs the opposite: as the state changes,
 the map for the $H$ actually taken keeps every cell within its limit at the
 coarsest admissible level, while a map kept from another $H$ either wastes
-steps or exceeds the limits; so `levels = recompute` builds the map for the
-$H$ taken, also with `fixed-macro-step`.  With `levels = fixed` the map keeps
+steps or exceeds the limits; so a recomputed map is built for the
+$H$ taken, also with a fixed macro step.  A fixed map keeps
 every cell within its limit only up to its own step, and it never rises: with an $H$
 above that step the finest cells start the first macro step beyond $\Delta t^{\text{cap}}/\sigma$, and every later one
-until their admissible step grows by the ratio of $H$ to the step of the map; the run reports it with a warning, once,
-and its run line counts the macro steps above the limit, with the largest $h/(\Delta t^{\text{cap}}/\sigma)$, as
-with `levels = recompute` where $L_{\max}$ levels are not enough.
+until their admissible step grows by the ratio of $H$ to the step of the map; the run reports it, as
+with a recomputed map where $L_{\max}$ levels are not enough.
 
 The macro step lands exactly on the output instants $t_k = k\,\Delta t_{out}$
-($\Delta t_{out}$ = `sol-dtime`, $k$ integer) and on `time-threshold`: when
+($\Delta t_{out}$ the output interval, $k$ integer) and on the final time: when
 $t_n + H$ reaches the next of them, or ends within $10^{-12} H$ of it, $H$
 becomes $t_k - t_n$ and the time after the step is $t_k$ itself.  The map of
 the step is kept: every $h_{\ell_c}$ only shrinks (up to the $10^{-12}$ of a
@@ -892,9 +864,8 @@ stretched step), so every cell stays within its limit, and the step is the
 same scheme with a shorter $H$, conservative as any other.  A macro step whose
 $H$ a redo halves does not land: a later macro step reaches the instant.  The
 instants depend only on the time, and the map only on the state and on the run
-counter, so a restart from a solution written with its counters (`vtk raw` or
-`tecplot ascii`, both checked) goes on as the uninterrupted run (with `recompute-every` > 1, when it falls on
-an iteration where the map is rebuilt).
+counter, so a restart from a solution written with its counters goes on as the uninterrupted run (with $k > 1$, when
+it falls on an iteration where the map is rebuilt).
 
 ### Non-local CFL condition
 
@@ -928,13 +899,13 @@ of its face neighbours.  The two cells of a block connection have the same
 level, so there $h_{\ell_c} = h_{\ell_p} \le \Delta t^{\text{cap}}_p/\sigma$.
 Where the convective limit rules, the step of $c$ measured with the limit of
 $v$ has a Courant number of at most $2\,\text{cfl}/\sigma$, which exceeds the
-cfl of the limit of $v$ when $\sigma < 2$.  With the interface margin (below: `interface-margin`, and always with
-`nonlocal-cfl = redo`) the levels and $H$ also keep $h_{\ell_c} \le \Delta t^{\text{cap}}_v/\kappa$, $\kappa \ge 1.1$,
+cfl of the limit of $v$ when $\sigma < 2$.  With the interface margin (below, always on with the redo) the levels and
+$H$ also keep $h_{\ell_c} \le \Delta t^{\text{cap}}_v/\kappa$, $\kappa \ge 1.1$,
 for every face neighbour $v$ in the block, so (3) holds there for every $\sigma \ge 1$.  So $\sigma \ge 2$ is what gives
-(3) without the margin; `safety` takes every value of at least 1.  Without the margin and the certificate of (4)
-(`nonlocal-cfl = off`) the Sod tube `mr1d-sod`, with `max-level` 3, the levels recomputed at every macro step and cfl
+(3) without the margin; $\sigma$ can take every value of at least 1.  Without the margin and the certificate of (4)
+the Sod tube of the multirate tests, with $L_{\max} = 3$, the levels recomputed at every macro step and cfl
 0.8, breaks down with $\sigma = 1$, after the step taken reaches about twice the step admitted on the new state, and
-completes with $\sigma = 2$ (that ratio stays below 0.96) and with $\sigma = 1$ under `nonlocal-cfl = redo`.  With
+completes with $\sigma = 2$ (that ratio stays below 0.96) and with $\sigma = 1$ under the redo.  With
 $L_{\max} = 0$ every cell advances with $H \le \min_c \Delta t^{\text{cap}}_c/\sigma$, (3) holds with $\sigma = 1$
 and the macro step is the single-rate step.  The default is $\sigma = 2$, the smallest value that gives (3) without
 the margin: the term $\sigma H/\Delta t^{\text{cap}}_c = 2^{L}\Delta t_{\min}/\Delta t^{\text{cap}}_c$ of the levels of
@@ -950,7 +921,7 @@ $v$, up to $2\,\text{cfl}/\sigma$.  In one dimension, for the advection
 equation, the forward-Euler MUSCL step is positive and TVD for a Courant
 number up to $1/(1+\theta)$: with
 $u^-_{j+1/2} = \bar u_j + \tfrac12\phi(r_j)\,\Delta_+\bar u_j$ and
-$r_j = \Delta_-\bar u_j/\Delta_+\bar u_j$ (`Lib_Reconstruction`),
+$r_j = \Delta_-\bar u_j/\Delta_+\bar u_j$,
 
 $$
 u^-_{j+1/2} - u^-_{j-1/2} = \Delta_-\bar u_j\,\Bigl[1 + \frac{\phi(r_j)}{2r_j}
@@ -966,7 +937,8 @@ argument of Hundsdorfer [8], §6.4, p. 54, where the limiter condition (5.4) of 
 §5.2, p. 39, bounds the bracket by $1+\mu$):
 $\theta = 1$ for van Leer, MC and superbee ($\phi$ and $\phi/r$ in $[0, 2]$),
 $\theta = 1/2$ for minmod ($[0, 1]$), $\theta = \sqrt2/2$ for van Albada
-($[-0.207, 1.207]$), $\theta = 0$ with the first-order reconstruction.  These bounds hold on cells of equal width. `Lib_Reconstruction`, called by `Lib_Convective`, limits the slopes divided by the
+($[-0.207, 1.207]$), $\theta = 0$ with the first-order reconstruction.  These bounds hold on cells of equal width. The
+reconstruction of MOSE limits the slopes divided by the
 distances between the cell centres and bounds the limited slope so that the value of a cell at each of its faces lies between
 the value of the cell and that of the neighbour across the face
 ([Spatial Discretization](numerics.md#muscl-reconstruction)), so on cells of different widths the face value is
@@ -984,12 +956,10 @@ with the second-order strong-stability-preserving Runge–Kutta scheme in
 two regions joined by one interface cell, with their limiter condition (4.14)
 on the reconstructed values, for a solution regular at the interface and under
 the hypothesis (4.15) that the coarse step meets this bound on the first fine
-cell.  With `interface-margin = .true.`, and
-always with `nonlocal-cfl = redo`, the levels and $H$ also satisfy
+cell.  With the interface margin, always on with the redo, the levels and $H$ also satisfy
 $h_{\ell_c} \le \Delta t^{\text{cap}}_v/\kappa$ for every face neighbour $v$ in
 the block, $\kappa = \max(\text{cfl}\,(1+\theta),\ \kappa_0)$, $\kappa_0 = 1.1$, with the cfl
-in force (a reading of `input.ini` during the run can change cfl within the bound below, and $\kappa$
-follows it from the next macro step): the level of a cell comes from
+in force (when cfl changes during the run, $\kappa$ follows it from the next macro step): the level of a cell comes from
 $\max(\sigma H/\Delta t^{\text{cap}}_c,\ \kappa H/\min_v \Delta t^{\text{cap}}_v)$
 and $H_{\text{cap}}$ takes the term $\min_v \Delta t^{\text{cap}}_v\,2^{\ell_c}/\kappa$.
 With $\sigma \ge \kappa$ this adds nothing on the faces between equal levels or
@@ -998,15 +968,15 @@ raise levels.  It raises a ring of cells on the coarse side of a face between
 levels where the fine cell runs above $1/\kappa$ of its limit.
 The coarse cells run with $\text{cfl}/\sigma$, within $1/(1+\theta)$ when
 $\text{cfl} \le \sigma/(1+\theta)$: with the default $\sigma = 2$ and $\theta \le 1$, $\sigma/(1+\theta) \ge 1$, so every
-cfl up to 1 meets it for every limiter (with $L_{\max} > 0$ and the redo of `nonlocal-cfl = redo` the set-up and every
-reading of `input.ini` reject a cfl above 1: the bounds of cfl and vnn, below); a $\sigma$ below 2 meets it only for
-$\text{cfl} \le \sigma/(1+\theta)$, a property and not a check of the set-up.  This is the hypothesis of the theorem, not the theorem: the scheme is
+cfl up to 1 meets it for every limiter (with $L_{\max} > 0$ and the redo, cfl is bounded by 1: the bounds of cfl and
+vnn, below); a $\sigma$ below 2 meets it only for $\text{cfl} \le \sigma/(1+\theta)$, a property and not a constraint
+that MOSE imposes.  This is the hypothesis of the theorem, not the theorem: the scheme is
 a finite-volume MUSCL scheme, in several dimensions, for systems, with several
 levels.  At the faces between levels the monotonicity is proven for linear
 two-cell fluxes, the first-order upwind flux of a given velocity field without
 discrete divergence and the central diffusion
 ([Appendix A](#appendix-a-order-and-stability-of-the-multirate-macro-step),
-Theorem 2).  For the advection equation in one dimension, with the limited reconstruction of `Lib_Reconstruction`, a limiter
+Theorem 2).  For the advection equation in one dimension, with the limited reconstruction of MOSE, a limiter
 whose $\phi$ and $\phi/r$ lie in $[0, 2\theta]$ (van Albada, whose $\phi$ is negative for $-1 < r < 0$, is outside) and two
 levels, on cells of any widths, one macro step raises the total variation at most by a term local to the face between levels,
 a multiple of the Courant number of the coarse cell of the face times the differences of the solution next to the face. Summed
@@ -1030,18 +1000,17 @@ than $1 - 1/\kappa$ within the macro step, on every mesh and state, for every li
 processes ([Appendix A, Proposition](#proposition-the-margin-on-condition-4)); a front is rejected only when
 it makes the step fall by more than that, and then only where the pair of cells runs that close to its limit: a fall by more
 than $1 - 1/\kappa$ is necessary for a rejection, not sufficient.  That proposition does not fix the value.  $\kappa_0 = 1.1$ is a practice taken from Castro, whose
-check of the step tolerates the same quantity, the fall of the admissible step within the step, up to $1/1.1$ (`change_max`
-[16]); it is not a quantity that the scheme gives.  PETSc and DOPRI5 take a step of 0.9 of the one they estimate on the same
+check of the step tolerates the same quantity, the fall of the admissible step within the step, up to $1/1.1$
+[16]; it is not a quantity that the scheme gives.  PETSc and DOPRI5 take a step of 0.9 of the one they estimate on the same
 principle, that a rejection be rare [14, 17], with another quantity, the error of the step.  Castro accepts a step
 above its limit by up to that factor; here the margin is built into the map, and condition (4) stays imposed as stated.  The
 margin raises a cell only where the admissible step jumps by more than $\sigma/\kappa$ across one of its faces, and
 the rule of a cell reads the local steps of its neighbours, not their levels, so it does not propagate beyond those
-neighbours.  How many cells it raises depends on the mesh and on the state: the run prints the cells whose level the margin term raises
-before nesting.  Below
-$\text{cfl}\,(1+\theta) = 1.1$ the margin does not depend on cfl and no key turns the floor off; a `safety` above 2 gives more
+neighbours.  How many cells it raises depends on the mesh and on the state.  Below
+$\text{cfl}\,(1+\theta) = 1.1$ the margin does not depend on cfl; a $\sigma$ above 2 gives more
 margin at the price of a shorter $H$.
 
-**(4) with `nonlocal-cfl`.**  A state exists only at the start of the
+**The certificate of (4).**  A state exists only at the start of the
 sub-steps, so (4) is checked there: for every cell $v$ and every start $\tau$
 of one of its sub-steps,
 
@@ -1064,11 +1033,10 @@ apart satisfy neither (3) nor (4) ($h_c = 4h_d \le 2\Delta t^{\text{cap}}_d$
 with $\sigma = 2$): a wave reaches a cell only through its faces, along which
 (4) holds pair by pair.
 
-- `off`: (4) is not imposed; the run reports $r_{post}$ and $r_{nb}$ (below).
-- `count`: the certificate counts the violations per level and the macro steps
-  that would be rejected, printed at the end of a run that has some; the results
-  do not change.
-- `redo` (the default): a macro step whose certificate fails is rejected.  The state goes back
+- Not checked: (4) is not imposed; the run measures $r_{post}$ and $r_{nb}$ (below).
+- Counted: the certificate counts the violations per level and the macro steps
+  that would be rejected; the results do not change.
+- Redo (the default): a macro step whose certificate fails is rejected.  The state goes back
   to $t_n$, the map is rebuilt with the same $H$ from the smallest admissible
   step that every cell showed in the attempt, so the levels only rise, up to
   $L_{\max}$ (the map can become deeper than that of the first attempt), and $H$
@@ -1094,7 +1062,7 @@ with $\sigma = 2$): a wave reaches a cell only through its faces, along which
   physical at the first stage of a level at $t_n$ sees only the state at $t_n$,
   which a shorter $H$ does not change: there the run stops with the lines of the
   face, as the single-rate step does.  In a macro step accepted after attempts
-  that the redo can redo (`levels = recompute`, no `fixed-macro-step`, $L > 0$)
+  that the redo can redo (a recomputed map, an adaptive macro step, $L > 0$)
   every cell ends with finite values, partial densities not below the floor, a
   pressure that is not negative and a temperature within the tables.
   The attempts end: the levels are bounded by $L_{\max}$, and as $H$ halves the states
@@ -1102,54 +1070,42 @@ with $\sigma = 2$): a wave reaches a cell only through its faces, along which
   local step is continuous in the state where density and pressure are
   positive); every rejection for a state that is not physical halves $H$, so a
   macro step has at most 11 of them; below $2^{-10}$ of the first $H$ the run
-  stops with a message that gives the rejections of the macro step by cause and,
-  when its last attempt took a state that is not physical, the first one of that
-  attempt in the order of the stages.  With a map of depth $L \le 10$, the default cap, the
+  stops.  With a map of depth $L \le 10$, the default cap, the
   first $H$ is at most $2^{L}\Delta t_{\min}/\sigma$, so this floor is at most
   $\Delta t_{\min}/\sigma$: every cell then advances with at most the step of a single-rate
   run with the same margin.  Their number is bounded too, by a bound
   that grows with the mesh: $H$ takes at most 11 values, and with the same $H$
   the local steps only decrease, so the levels of the rebuilt maps only rise,
-  and every rejection that keeps $H$, but the one of `force-redo`, raises a cell
-  by at least one level; over the $N$ cells of the mesh a macro step has at
-  most $1 + 11\,(N L_{\max} + 2)$ attempts (the term 1 is the attempt rejected by
-  `force-redo`).  $H$ is halved, the factor of the retry of Castro when it has no suggested
+  and every rejection that keeps $H$, but the forced one of the test option
+  below, raises a cell by at least one level; over the $N$ cells of the mesh a
+  macro step has at most $1 + 11\,(N L_{\max} + 2)$ attempts (the term 1 is the
+  forced rejection).  $H$ is halved, the factor of the retry of Castro when it has no suggested
   step [16], and not set to $H_{\text{cap}}$, so that it takes these 11 values, on which the
   bound rests; the macro step can then come out up to twice shorter than $H_{\text{cap}}$.
-  `max-attempts` (21 by default) limits them: when that many
-  attempts of a macro step are rejected (the attempt rejected by `force-redo` is
-  not counted), the run stops with the same message, which names the limit in
-  place of the floor and, for a last attempt without a state that is not
-  physical, gives its violations of (4) or its local step that is not a
-  positive number.  The floor and the limit are rules that stop a run with a
-  message, not conditions of the scheme: the bound above ends the attempts
+  A limit on the attempts (21 by default) bounds them: when that many
+  attempts of a macro step are rejected (the forced rejection is not counted),
+  the run stops.  The floor and the limit are rules that stop a run, not
+  conditions of the scheme: the bound above ends the attempts
   without them.  The floor is 10 halvings of $H$, as many rejections as PETSc
   allows a step by default [14] and as many failures of the nonlinear solver or
   of the inequality constraints as end a step of the ARKODE integrators of
   SUNDIALS [15]; there every rejection shortens the step.  21 is one attempt for
   each of the 11 values of $H$ that the floor allows and 10 more for the
   rejections that keep $H$ and raise levels, which those integrators do not
-  have.  The limit is checked after the floor, so with `max-attempts` $\ge 11$ a
+  have.  The limit is checked after the floor, so with a limit of 11 or more a
   macro step whose rejections all halve $H$ ends as without it.
-  With `fixed-macro-step` or `levels = fixed` the certificate only counts: there
+  With a fixed macro step or a fixed map the certificate only counts: there
   (4) is not imposed, and, as with one level, the stops of the single-rate step
   stay: a cell whose update gives a value that is not finite or a negative
-  pressure, or a face that is not physical, stops the run.  With `recompute-every` $= k > 1$ the map raised by a redo
+  pressure, or a face that is not physical, stops the run.  With $k > 1$ the map raised by a redo
   stays in use until the next rebuild of the counter.  With $L = 0$ there is one
-  level and the check is the own limit at $t_n$, true by construction.  When a
-  macro step was redone, the run prints at its end the attempts per macro step,
-  the macro steps redone, the halvings of $H$, the macro steps whose map a
-  redo made deeper than that of their first attempt and, when there were some,
-  the attempts rejected for a state that is not physical (with a cell, with a
-  face); the counts of the violations of the certificate leave out these
-  attempts; the stage times and the counts
-  of negative turbulence values include the rejected attempts.  The test device `force-redo` rejects the first attempt of
-  every macro step that the certificate accepts and redoes it with the same $H$
-  and map: the state goes back to $t_n$ to the bit, so the results do not
-  change.
+  level and the check is the own limit at $t_n$, true by construction.  A test
+  option rejects the first attempt of every macro step that the certificate
+  accepts and redoes it with the same $H$ and map: the state goes back to $t_n$
+  to the bit, so the results do not change.
 
 **The bounds of cfl and vnn.**  At $t_n$ the map runs every cell with $h \le \Delta t^{\text{cap}}/\sigma$; with
-`nonlocal-cfl = redo` the certificate accepts, at every later start $\tau$ of a sub-step, $\hat h_v$ up to
+the redo the certificate accepts, at every later start $\tau$ of a sub-step, $\hat h_v$ up to
 $\Delta t^{\text{cap}}_v(\tau)$ itself, without $\sigma$ (to the $10^{-12}$ of its test), so within the macro step a cell
 can advance with the whole step that cfl and vnn admit on its state at $\tau$.  On a uniform mesh of equal cells, for the
 frozen-coefficient advection–diffusion model with the first-order upwind flux and the central diffusion, the
@@ -1179,21 +1135,20 @@ of any skew and aspect ratio (in 3-D with the factor that the local step takes o
 directions), with frozen coefficients and away from boundaries, for the scalars exactly and for the momentum
 conservatively ([Local time step](#local-time-step)); on cells of varying size or shape, next to boundaries and at the
 axis of the wedge the local-step rule applies the same bound cell by cell, and its support there is the evidence of
-that section.  So with $L_{\max} > 0$ and `nonlocal-cfl = redo`, where the certificate redoes the attempts
-(`levels = recompute` and no `fixed-macro-step`), the set-up
-and every reading of `input.ini` reject a cfl above 1 and, in Navier–Stokes runs, a vnn above 1/2: these bounds are
-necessary for every sub-step that the certificate accepts to be linearly stable there.  A larger value would not show at
+that section.  So with $L_{\max} > 0$ and the redo, where the certificate redoes the attempts
+(a recomputed map and an adaptive macro step), MOSE refuses a cfl above 1 and, in Navier–Stokes runs, a vnn above
+1/2: these bounds are necessary for every sub-step that the certificate accepts to be linearly stable there.  A larger value would not show at
 $t_n$, where the cells run within $1/\sigma$ of their step.  That a run with a larger value fails is not proven: an
 unstable sub-step occurs only where the admissible step of a cell falls within the macro step by more than
-$\sigma/\text{cfl}$ or $\sigma/(2\,\text{vnn})$, for the sub-steps of that macro step that remain.  With `nonlocal-cfl =
-off` and `count`, and with `redo` and `levels = fixed` or a `fixed-macro-step`, where the certificate only counts,
+$\sigma/\text{cfl}$ or $\sigma/(2\,\text{vnn})$, for the sub-steps of that macro step that remain.  When (4) is not
+checked or only counted, and with the redo and a fixed map or a fixed macro step, where the certificate only counts,
 nothing bounds the sub-steps after the start of the macro step, where every
-cell runs within cfl/$\sigma$ and vnn/$\sigma$, and the set-up checks neither bound.  The two conditions are distinct: at
+cell runs within cfl/$\sigma$ and vnn/$\sigma$, and neither bound is imposed.  The two conditions are distinct: at
 the start of the macro step every cell runs within $\Delta t^{\text{cap}}/\sigma$, so every cell, the coarse cells of a
 face between levels included, has on its own width a Courant number of at most $\text{cfl}/\sigma$, 1/2 with cfl $\le 1$
 and the default $\sigma = 2$, within the bound $1/(1+\theta)$ of the total variation above for every limiter (measured
-with the limit of the finer neighbour, the coarse step reaches $2\,\text{cfl}/\sigma$; the interface margin, on with
-`redo` or `interface-margin`, keeps it within $1/(1+\theta)$); within the macro step, with `redo`, the certificate keeps
+with the limit of the finer neighbour, the coarse step reaches $2\,\text{cfl}/\sigma$; the interface margin keeps it
+within $1/(1+\theta)$); within the macro step, with the redo, the certificate keeps
 every sub-step within the linear stability limit of Heun, on the state where the sub-step starts.  For a cell next to a wall where the diffusion sets the step, with 1 µs its step
 at the limit of Heun (a diffusion number $h\,D_{\max}\sum_d|\nabla\xi_d|^2$ of 1/2 on its state):
 
@@ -1201,13 +1156,13 @@ at the limit of Heun (a diffusion number $h\,D_{\max}\sum_d|\nabla\xi_d|^2$ of 1
 |---|---|---|---|
 | single rate, vnn 0.5 | 1 µs | 0.5, the limit | — (the step is computed again at every step) |
 | multirate, vnn 0.5 | 0.5 µs | 0.25 | 0.5, the limit |
-| multirate, vnn 0.98, which the set-up rejects with the redo | 0.98 µs | 0.49 | 0.98: between 0.5 and 0.98 an accepted sub-step is not linearly stable |
+| multirate, vnn 0.98, which the redo does not allow | 0.98 µs | 0.49 | 0.98: between 0.5 and 0.98 an accepted sub-step is not linearly stable |
 
 For the convection, cfl $\le 1$ puts the threshold of the certificate at the linear limit of Heun in the same way.  With
-$L_{\max} = 0$ the macro step is the single-rate step, whose limits the set-up does not check
-([Time step](../user/input.md#time-step-cfl-and-vnn)).
+$L_{\max} = 0$ the macro step is the single-rate step, whose limits are not imposed
+([Local time step](#local-time-step)).
 
-**Measures without the certificate.**  With `nonlocal-cfl = off` the levels and
+**Measures without the certificate.**  When (4) is not checked the levels and
 $H$ come from the state at the start of the macro step and stay fixed during
 it: if the admissible step of a cell drops within the macro step, its
 neighbours keep their steps.  The run measures (4) on the state reached at
@@ -1228,12 +1183,7 @@ during that sub-step, $r_{nb} \le 1$ gives (4) for it, and $r_{post} \le 1$
 gives the own limit of $c$; a value above 1 flags a possible violation.  The
 measure is partial: it sees only the state at the end of the macro step (not
 the earlier sub-steps) and only the face neighbours in the block (not the
-cells that share an edge or a vertex).  Every `shell-diter`
-iterations the run prints both values of the last macro step and, when a cell
-is above 1 or above $1/\text{cfl}$ (a Courant number above 1 where the
-convective limit rules), the number of such cells, and at the end, for each of the two that went above 1
-in a macro step, its largest value over the run with the number of macro steps
-that had a cell above 1 (also for $r_{post}$ or $r_{nb}$ together).
+cells that share an edge or a vertex).
 
 ### Recursive Heun scheme
 
@@ -1258,12 +1208,12 @@ the four fine stage times: the two differences enter only the $O(H^3)$ term,
 so the macro step is a one-step method of order 2, uniformly at the faces
 between levels, for every linear semi-discretisation and for $f \in C^2$ (the
 limiter and the switches of the turbulence models break $C^2$ where they
-act).  This is what `mr-order`, `mr-deep` and `mr-bc` measure: fixed mesh,
+act).  This is what the order tests of [Multirate Verification](../vv/multirate.md) measure: fixed mesh,
 fixed map, $H \to 0$.  At a fixed Courant number ($H \propto \Delta x$) the
 local error of a macro step is $O(H^2)$ in the cells next to a face between
 levels and $O(H^3)$ elsewhere (first order locally, as the conventional
 boundary data of [7]; Appendix A, Remark 2).  When the map is rebuilt
-(`levels = recompute`) and a face between levels travels with a wave at the
+(a recomputed map) and a face between levels travels with a wave at the
 speed of the wave, the errors of order $H^2$ that each macro step leaves next
 to the face stay on the same part of the wave and can add up.
 [Appendix A, Corollary](#corollary-every-sequence-of-maps) bounds the error
@@ -1272,7 +1222,7 @@ $O(H^2)$, under (H2)–(H4) of Theorem 1; at a fixed Courant number, for the
 linear two-cell fluxes of Theorem 2, by $O(H)$ in the maximum norm and by
 $O(H^2)$ in the volume-weighted $L^1$ norm (with faces between levels of
 bounded total area).  Outside that linear setting no
-bound is proven at a fixed Courant number: the test `mr-moving-levels` of
+bound is proven at a fixed Courant number: the moving-levels test of
 [Multirate Verification](../vv/multirate.md) measures the $L^1$ order of this
 case on a simple wave of the Euler equations (second order); its global
 $L^\infty$ order, near 1.3 as for the single-rate step with
@@ -1289,10 +1239,10 @@ its forward-Euler positivity step in the setting of Theorem 2 (linear two-cell f
 equal rectangular cells with constant coefficients, where the diffusive flux of a scalar is the two-cell flux of
 Theorem 2, the additive local-step rule
 starts every cell within $\max(\text{cfl}, 2\,\text{vnn})/\sigma$ of that step, 0.4 with $\sigma = 2$, cfl 0.8 and
-vnn 0.4, and at most 1/2 with cfl $\le 1$, vnn $\le 1/2$ and the default $\sigma = 2$.  The bounds that the set-up
-enforces with the redo of `nonlocal-cfl = redo` are necessary conditions of linear stability
+vnn 0.4, and at most 1/2 with cfl $\le 1$, vnn $\le 1/2$ and the default $\sigma = 2$.  The bounds that the redo
+imposes are necessary conditions of linear stability
 ([Non-local CFL condition](#non-local-cfl-condition)), not of positivity: on skewed cells the face gradient also takes
-the central differences of the two cells along the face (`Lib_Diffusive`), whose cross metric terms can give corner
+the central differences of the two cells along the face, whose cross metric terms can give corner
 neighbours a negative weight (on equal parallelograms they do, so that no step makes that diffusion positive), and
 Theorem 2 does not cover it.  With a limited
 reconstruction the coarse corrector is not a convex combination of
@@ -1345,8 +1295,8 @@ most one apart, so the correction below keeps the conservation.  For linear
 two-cell fluxes (first-order upwind, central diffusion) Theorem 2 of
 Appendix A covers them (every nested map, bands of one cell included); with the limited reconstruction
 Appendix B bounds the total variation for the advection equation in one dimension with three levels and a band of one
-cell (Theorem 3b), and their effect on the stability is tested by `mr-deep` (bands of one cell, 2000
-macro steps).
+cell (Theorem 3b), and their effect on the stability is tested in
+[Multirate Verification](../vv/multirate.md) (bands of one cell, 2000 macro steps).
 
 The coarser cells read by a stage (the **halo**) are the union of the true
 stencils of the routines the stage calls: the four cells along the axis of
@@ -1356,7 +1306,7 @@ holds the ten cells of every diffusive face (the two cells of the face and
 their neighbours $\pm 1$ in the two other directions, diagonals included)
 and the four tangential neighbours of the partner cell of every block
 connection of the level, which the viscous connection flux reads through the
-values `Pg(:,3:6)` refreshed at every stage after the ghost cells.  The
+tangential ghost values refreshed at every stage after the ghost cells.  The
 viscous fluxes take the viscous variables of these cells (mass fractions,
 velocity, temperature and turbulence variables per unit mass) from an array
 that the single-rate stage fills once for every cell after the ghost cells; a
@@ -1388,7 +1338,7 @@ every cell receives its contributions in the order of the single-rate step.
 ### Blocks and boundary conditions
 
 The level map spans all the blocks.  Because the two sides of a block
-connection (types `101` and `201`) always have the same level, a connection
+connection (direct and periodic) always have the same level, a connection
 is never a face between levels: at the stages of that level the record that
 owns the face computes its one flux for both cells, as the single-rate step
 does, from ghost cells that every stage of the level refreshes from the
@@ -1399,16 +1349,15 @@ connection on the edge between two bands raises the cells of the coarser side
 next to it, and the nesting rule follows.
 
 Every boundary record is evaluated at the stages of the level of its cell,
-with `domain%time` equal to the stage time
-$t_n + \tau$ of that level.  The time-dependent data of the inlet `402` and of
-the assigned state `410` are therefore read at the stage times of each level,
+at the stage time $t_n + \tau$ of that level.  The time-dependent data of the
+tabulated inlets and of the assigned boundary states are therefore read at the stage times of each level,
 the conventional imposition of [7] applied level by level; with one level the
 times coincide with those of the single-rate Heun step (section
 [Stage times](#stage-times-and-time-dependent-boundary-data)).
 
 ### Turbulence models
 
-With the Spalart–Allmaras (`SA`) or SST model the stage of a level ends, as the
+With the Spalart–Allmaras or SST model the stage of a level ends, as the
 single-rate stage, with the turbulence sources of its cells, evaluated on the
 state of the stage; they read the ghost cells of the fluxes of the stage (at
 the walls those of the wall values, one set for the fluxes and the sources).  In
@@ -1423,11 +1372,8 @@ step on its cells that keeps $\tilde\nu$, $k$ and $\omega$ positive against
 their destruction (the coarser cells read by the stage take a convex
 combination of two states, the interpolant with $0 \le \eta \le 1$).  The
 correction on the faces between levels is not a convex combination, so the
-positivity there rests on the step margin and is checked by the tests
-(`mr-positivity`, and the count of negative values that a RANS run prints at
-its end when a stage made one negative).  With one level the stage calls the block routines of the
-single-rate step, so the macro step is the single-rate step to the bit; with
-more levels it calls their per-cell copies on the cells of the level.
+positivity there rests on the step margin and is checked by the tests.  With one level the macro step is the
+single-rate step to the bit.
 
 ### Several processes (MPI)
 
@@ -1451,46 +1397,38 @@ level by level, every time the lists are built (first the tangential values,
 whose sources the partner's process may read from a third process, then the
 ghost cells).  Because both sides of a connection have the same level, no
 face between levels crosses a connection and the conservative correction
-stays within a process.  The MPI calls are made by the master thread only
-(`MPI_THREAD_FUNNELED`), between barriers of the OpenMP team.
+stays within a process.
 
 ### Scope
 
-The multirate integrator runs time-accurate Heun (`time-scheme = RK2`) with
-conservative integration variables.  At set-up or at its first macro step it stops with an error
-(non-zero exit code and a message `[MOSE-Multirate] <item>`) for the
-configurations outside its scope: other time schemes, primitive or
-preconditioned variables, implicit residual smoothing, the shock detector
-(`shock-detector`, also implied by `HLLC+Tramel`, `HLLC+Chen`, `HLLE++`, `AUSM+M`), chemistry,
-soot, the rotating frame, multigrid sequences, steady (local time step) runs,
-the CFL ramp, chimera, coupled (103), SRM-grain boundaries in mode 1 (502, a wall that blows the products in; a
-grain in mode 2, an inflow, runs as the mass-flux inlet 404) and gas-surface-interaction (503-505) boundaries,
-rotational periodicity in 3-D (the 2-D
-axisymmetric wedge is supported, with levels too), and
-programs that pass a non-empty per-stage external function, boundary types without a multirate
-boundary flux, with $L_{\max} > 0$ and the redo of `nonlocal-cfl = redo` (`levels = recompute`, no `fixed-macro-step`) a
-cfl above 1 or, in Navier–Stokes runs, a vnn above 1/2
-(see [Non-local CFL condition](#non-local-cfl-condition)), and a restart
-(`newrun = false`) with `levels = fixed` (the map is not written with the
-solution) or with `fixed-macro-step` (a multiple of the smallest local step of
-the first macro step of the run).  The boundary types `409`, `501` and `506`,
-which MOSE does not apply, stop every run earlier, at the reading of `bc.txt`.
-With `levels = fixed` and a `fixed-macro-step` above the step of the map the run goes on with the finest cells beyond
-their limit, which it reports (see [Levels and macro step](#levels-and-macro-step)).  With `nonlocal-cfl = redo` and
-`fixed-macro-step` or `levels = fixed` the certificate of condition (4) only
-counts; with `recompute-every` $> 1$ a map raised by a redo stays in use until
-the next rebuild.  It supports the Euler and the Navier–Stokes equations,
-laminar or with the Spalart–Allmaras model (`SA`, and `SA-R`) or the SST model, with `k-energy-coupling` and either
-form of `sst-production`, on one or several MPI processes, each with OpenMP threads.  The production of `SA-R` and the
-dilatation part of the compressible production of SST can be a sink outside the bound of the stiffness that the step
-takes ([turbulence sources](turbulence.md#time-accurate-runs-explicit-sources)), as in the single-rate step, and no
-multirate test measures their accuracy (the conservation tests run them with levels).  `Wilcox2006`, whose sources the
-stages do not evaluate, is rejected, and with $L_{\max} > 0$ so are `SA-RC` and `SST-RC`, whose rotation and curvature
-terms are a field of the whole domain that the cell-wise sources of a level do not compute (with $L_{\max} = 0$ the
-stages call the block routine of the single-rate stage, which computes them);
-`SAcomp` the set-up of MOSE refuses for both integrators.  The keys are listed in
-the [Parameter Registry](../user/registry.md#mose-multirate); the
-verification tests in [Multirate Verification](../vv/multirate.md).
+The multirate integrator advances time-accurate runs with Heun's scheme on the
+conservative variables, on one or several MPI processes, each with OpenMP
+threads.  It covers the Euler and the Navier–Stokes equations, laminar or with
+the Spalart–Allmaras model (with or without its rotation correction) or the SST
+model, with either form of the SST production and with or without the
+turbulent kinetic energy in the energy equation, and the 2-D axisymmetric
+wedge, with levels too.  The production of the rotation-corrected
+Spalart–Allmaras model and the dilatation part of the compressible production
+of SST can be a sink outside the bound of the stiffness that the step takes
+([turbulence sources](turbulence.md#time-accurate-runs-explicit-sources)), as
+in the single-rate step, and no multirate test measures their accuracy (the
+conservation tests run them with levels).
+
+Outside its scope are the other time schemes, the primitive and preconditioned
+variables, implicit residual smoothing, the shock detector, chemistry, soot,
+the rotating frame, multigrid sequences, steady (local time step) runs, the CFL
+ramp, chimera, walls coupled to another solver, the solid propellant grain as a
+wall that blows its products in (as an inflow it is covered), gas–surface
+interaction and rotational periodicity in 3-D.  Wilcox 2006 is outside it,
+since the stages do not evaluate its sources, and with $L_{\max} > 0$ so are the
+rotation and curvature corrections of Spalart–Allmaras and SST, whose terms are
+a field of the whole domain that the cell-wise sources of a level do not compute
+(with $L_{\max} = 0$ the single-rate stage computes them).  A fixed map is not
+written with the solution, and a fixed macro step is a multiple of the smallest
+local step of the first macro step of the run: neither can restart.  The
+configurations that MOSE refuses, with their keys, are in the
+[User Guide](../user/input.md#multirate-time-stepping); the verification tests
+in [Multirate Verification](../vv/multirate.md).
 
 The stability statements above are proven only in the linear setting of
 Theorem 2 of [Appendix A](#appendix-a-order-and-stability-of-the-multirate-macro-step)
@@ -1516,7 +1454,7 @@ of maps its Corollary (a)); with the mesh and the macro step refined together at
     bounds the face increment of the reconstruction relative to the upwind
     difference: $\theta = 1$ for the limiters whose slope can reach twice the
     smaller difference (van Leer, MC, superbee) and $\theta = 1/2$ for minmod.
-    On cells of different widths the bounds of the slopes of `Lib_Reconstruction` keep the property on every mesh, for
+    On cells of different widths the bounds of the slopes of the reconstruction keep the property on every mesh, for
     $\nu_j\,(1 + \min(2\theta w^-_j, 1)) \le 1$, which $\nu_j\,(1+\theta) \le 1$ gives with one time step for all the cells
     (see the interface margin in [Non-local CFL condition](#non-local-cfl-condition)).
     This is the bound $(1+\mu)\,\nu \le 1$ of Hundsdorfer [8] (§6.4, p. 54, with
@@ -1534,7 +1472,7 @@ of maps its Corollary (a)); with the mesh and the macro step refined together at
     every cell, isotropic ones included.  On a face between levels the coarse
     step measured with the limit of the fine cell can reach
     $2\,\text{CFL}/\sigma$, above $1/(1+\theta)$, without the interface
-    margin; with it (always with `nonlocal-cfl = redo`, the default) it stays
+    margin; with it (always on with the redo, the default) it stays
     within $1/(1+\theta)$ on the state at the start of the macro step, where the
     levels are built ([Non-local CFL condition](#non-local-cfl-condition)),
     the bound that Hoang et al. [11] (Theorem 4.2, condition (4.15)) assume on
@@ -1657,8 +1595,8 @@ only the constant, through $O(h_m^2)$.  Neither difference adds an order
 condition.
 
 *Remark 2 (range).*  The constant of Theorem 1 contains $\|f'\| \sim 1/\Delta x$:
-the theorem holds for $H \to 0$ on a fixed mesh, which is what `mr-order`,
-`mr-deep` and `mr-bc` measure.  Where the limiter switches, and at the
+the theorem holds for $H \to 0$ on a fixed mesh, which is what the order tests
+of [Multirate Verification](../vv/multirate.md) measure.  Where the limiter switches, and at the
 switches of HLLC and of the turbulence models, (H2) fails locally, and the
 local error of Heun itself is $O(H^2)$ there.  At a fixed Courant number
 ($H \propto \Delta x$) the theorem gives no bound (the Corollary below gives
@@ -1683,7 +1621,7 @@ with $a_f$ the normal velocity through the face of area $A_f$, and 0 for the
 downwind one) and the central diffusion ($\beta_{ij} = D A_f/(\delta_f V_i)$, with
 $\delta_f$ the distance between the two cell centres), on any mesh and in any
 dimension (the diffusive flux of MOSE is this two-cell flux for a scalar on orthogonal cells; on skewed cells it also
-reads the neighbours along the face, `Lib_Diffusive`).  With the upwind flux the velocity field has no discrete divergence
+reads the neighbours along the face).  With the upwind flux the velocity field has no discrete divergence
 ($\sum_f a_f A_f = 0$ over the faces of every cell, $a_f$ outward); this form
 is then the conservative scheme of the face fluxes $|a_f| A_f U_j$, also in the
 macro step, where every cell sends its outflow at its own stage values (on a
@@ -1766,13 +1704,13 @@ $$
 positive up to $x = 1$ (Hundsdorfer [8], §6.1, pp. 49–50): the faces between
 levels cost at most 14 % of the positivity step.  On a mesh of equal rectangular cells with constant coefficients, with
 cfl $\le 1$ and, in Navier–Stokes
-runs, vnn $\le 1/2$, the bounds that the set-up enforces when $L_{\max} > 0$ with the redo of `nonlocal-cfl = redo`
+runs, vnn $\le 1/2$, the bounds that the redo imposes when $L_{\max} > 0$
 ([Non-local CFL condition](#non-local-cfl-condition)), and the default $\sigma = 2$, every cell starts the macro step with
 $x \le 1/2$ (in Euler runs $r_v = 0$ and $x \le \text{cfl}/\sigma$), below $x^*$: (C1) and (C2) hold for every map that
 the level rule builds, whatever the limiter of the run (the loads are those of the first-order fluxes of Theorem 2), for
 every $\sigma \ge 2$, with or without the interface margin; with a smaller
 $\sigma$ they hold while $\max(\text{cfl}, 2\,\text{vnn})/\sigma \le x^*$.  Within the macro
-step the certificate of (4) (with `redo`) accepts, on the state at every start $\tau$ of a sub-step, a cell with $x \le 1$, the load of
+step the certificate of (4) (with the redo) accepts, on the state at every start $\tau$ of a sub-step, a cell with $x \le 1$, the load of
 (C1), and the finer
 cell of a face between levels, at a start that it shares with the coarser one ($\hat h = 2h$), with $x \le 1/2$, where
 $2c(1/2) = 1.22 > 1$, the load of (C2).  Theorem 2 takes the coefficients fixed within the macro step; when they change,
@@ -1886,10 +1824,10 @@ $$
 
 over all the processes, for a nested map with equal levels across connections.
 
-*Hypotheses.*  (M1) $\sigma \ge 2$, $L_{\max} > 0$, the margin on (`nonlocal-cfl = redo` or `interface-margin`).
+*Hypotheses.*  (M1) $\sigma \ge 2$, $L_{\max} > 0$, the interface margin on (with the redo or alone).
 (M2) $\kappa = \max(\text{cfl}\,(1+\theta), \kappa_0)$ with $1 < \kappa_0 \le 2$ and $\text{cfl}\,(1+\theta) \le \sigma$ (from
-cfl $\le 1$, which the set-up and the readings check with the redo of `nonlocal-cfl = redo`, with $\theta \le 1$ and $\sigma \ge 2$), so $1 < \kappa \le \sigma$.  (M3) $H \le (1 + \varepsilon)\, H_{\text{cap}}$: true of every
-attempt without `fixed-macro-step`, since the redo halves $H$ while it is above that bound of the map it has rebuilt, a target and
+cfl $\le 1$, which the redo imposes, with $\theta \le 1$ and $\sigma \ge 2$), so $1 < \kappa \le \sigma$.  (M3) $H \le (1 + \varepsilon)\, H_{\text{cap}}$: true of every
+attempt with an adaptive macro step, since the redo halves $H$ while it is above that bound of the map it has rebuilt, a target and
 a halving only shorten $H$, and a landing lengthens it by at most $\varepsilon H$ plus half a unit in the last place of the time
 (a relative $1.1\cdot10^{-16}\,t/H$, above $\varepsilon$ when $H < 10^{-4}\,t$); (a) then holds with that larger $\varepsilon$, without
 consequence next to $1 - 1/\kappa_0$.  No hypothesis on the mesh, the state, the limiter, the fluxes, the number of dimensions, of blocks or of
@@ -1940,7 +1878,7 @@ coarser neighbour has $\hat h_v = \Delta t_v$.
 *What it does not say.*  It does not say that (4) is sufficient (the source gives no proof either [13]); that a front is
 not rejected (a fall by more than $1 - 1/\kappa$ is necessary for a rejection, not sufficient; where it happens, (4) asks for it); how much the raised cells cost, which depends on how many
 faces have the jump of (b); or why $\kappa_0$ is 1.1, a value taken from another code (section
-[Non-local CFL condition](#non-local-cfl-condition)).  With `fixed-macro-step` (M3) fails, and there the certificate only counts.
+[Non-local CFL condition](#non-local-cfl-condition)).  With a fixed macro step (M3) fails, and there the certificate only counts.
 A map with the margin is a nested map, so Theorem 1, Theorem 2, the Corollary and Appendix B hold for it as for any other.
 
 ## Appendix B: Total variation at a face between levels
@@ -1948,7 +1886,7 @@ A map with the margin is a nested map, so Theorem 1, Theorem 2, the Corollary an
 This appendix proves the bound of the total variation that the section
 [Non-local CFL condition](#non-local-cfl-condition) states for the limited reconstruction, in a restricted setting: the
 advection equation in one dimension, two levels and one face between them (Theorem 3), and three levels with a band of one
-cell (Theorem 3b), with the reconstruction of `Lib_Reconstruction` on cells of different widths.  It is a bound, not the TVD
+cell (Theorem 3b), with the reconstruction of MOSE on cells of different widths.  It is a bound, not the TVD
 property: one macro step can raise the total variation, by terms local to the faces between levels (Remark 6).
 
 **Setting.**
@@ -1960,13 +1898,13 @@ property: one macro step can raise the total variation, by terms local to the fa
   width.  The face between levels lies between the cells 0 and 1, the cell 1 downstream; $\rho = \Delta x_0/\Delta x_1$ is the
   ratio of the upstream to the downstream width there, and $r$ the ratio of the coarse to the fine width ($\rho = r$ with the
   coarse cell upstream, $\rho = 1/r$ with the fine cell upstream).
-- (B2) The reconstruction of `Lib_Reconstruction`, which `Lib_Convective` calls with the distances between the cell centres
+- (B2) The reconstruction of MOSE, with the distances between the cell centres
   $l^0_j = (\Delta x_{j-1} + \Delta x_j)/2$ and $l^1_j = (\Delta x_j + \Delta x_{j+1})/2$ and the half width $\Delta x_j/2$, and the
   upwind flux $a\,q_{j+1/2}$: $q_{j+1/2} = u_j + s_j$ with $s_j = \hat\phi_j\,w^+_j\,\Delta_+u_j$,
   $r'_j = (\Delta_-u_j/\Delta_+u_j)\,(l^1_j/l^0_j)$, $\hat\phi_j = \min(\phi(r'_j),\ 1/w^+_j,\ r'_j/w^-_j)$ for $r'_j > 0$ and
   $\hat\phi_j = 0$ for $r'_j \le 0$, and $s_j = 0$ when $\Delta_+u_j = 0$.  The limiter receives the bounds
   $l^1_j/(\Delta x_j/2) = 1/w^+_j$ and $l^0_j/(\Delta x_j/2) = 1/w^-_j$, which keep the face value between $u_j$ and $u_{j+1}$;
-  with minmod and the first-order reconstruction they never act.  The term $10^{-30}$ that `Lib_Limiters` adds to the
+  with minmod and the first-order reconstruction they never act.  The small term ($10^{-30}$) added to the
   denominator of the ratio of the slopes is left out.  On cells of equal width the bounds are 2 and $2r'_j$, which no limiter of
   (B3) exceeds, and this is the form of the interface margin above.
 - (B3) The limiter: $\phi(r) = 0$ for $r \le 0$, and $0 \le \phi(r) \le 2\theta$, $0 \le \phi(r)/r \le 2\theta$ for $r > 0$,
@@ -2158,8 +2096,8 @@ finer to a coarser cell with $r > 1$ it asks, of the coarse cell downstream, $\l
 with $\theta = 1$ (van Leer, MC, superbee) this is $\lambda_1\,(1 + \theta) \le 1$; with $\theta = \tfrac12$ (minmod) it is
 $\lambda_1\,(1 + r/(r + 1)) \le 1$, which $\lambda_1\,(1 + \theta) \le 1$ does not give.  Where the convective limit rules,
 $\lambda_1 \le \text{cfl}/\sigma$, so with minmod $\text{cfl} \le \sigma/(1 + r/(r + 1))$ suffices, and $\text{cfl} \le \sigma/2$
-for every $r$: with $\sigma = 2$, every $r$ with cfl 1, the largest cfl that the set-up accepts when $L_{\max} > 0$, so
-the set-up gives (B5) for every $r$ and every limiter.  It is a hypothesis of the proof, not a condition shown to be
+for every $r$: with $\sigma = 2$, every $r$ with cfl 1, the largest cfl that the redo allows when $L_{\max} > 0$, so
+the bound on cfl gives (B5) for every $r$ and every limiter.  It is a hypothesis of the proof, not a condition shown to be
 necessary.
 
 *Remark 6 (what the bound does not give).*  The total variation can grow at a face between levels, at first order too: with

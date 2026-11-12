@@ -60,7 +60,7 @@ $c = (T - T_u)/(T_b - T_u)$, which aligns the two flames without any spatial
 shift. Solid lines are MOSE; open symbols are Cantera.
 
 <figure>
-  {% include "vv/images/flame-thermo.svg" %}
+  --8<-- "docs/vv/images/flame-thermo.svg"
 </figure>
 
 ### Species structure
@@ -70,7 +70,7 @@ Y_{\mathrm{H_2O}}$, left axis) and minor species ($Y_{\mathrm{OH}},
 Y_{\mathrm{CO}}$, right axis) against $c$.
 
 <figure>
-  {% include "vv/images/flame-species.svg" %}
+  --8<-- "docs/vv/images/flame-species.svg"
 </figure>
 
 The burnt-gas state and the radical (OH) peak match the Cantera reference

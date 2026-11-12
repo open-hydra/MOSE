@@ -31,15 +31,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          # The submodules of MOSE, without recursion. Of the submodules of
-          # FLINT the build uses only OSLO, fetched by the next step: FLINT's
-          # own ORION is not built, as MOSE builds its ORION, and Cantera
-          # (whose submodule Eigen is hosted on gitlab.com) and SUNDIALS are
-          # built only with USE_CANTERA=ON or USE_SUNDIALS=ON.
+          # The submodules of MOSE (FiNeR and its five libraries), without
+          # recursion. The configure fetches the releases of ORION, OSLO and
+          # FLINT over https (cmake/SemVerDeps.cmake), without their
+          # submodules: Cantera (whose submodule Eigen is hosted on gitlab.com)
+          # and SUNDIALS are built only with USE_CANTERA=ON or USE_SUNDIALS=ON.
           submodules: true
-
-      - name: Fetch OSLO, the submodule of FLINT that the build uses
-        run: git -C lib/FLINT submodule update --init --depth 1 lib/OSLO
 
       - name: Install system dependencies
         run: |
@@ -100,9 +97,6 @@ jobs:
         with:
           # The submodules that the build uses, as in the job above.
           submodules: true
-
-      - name: Fetch OSLO, the submodule of FLINT that the build uses
-        run: git -C lib/FLINT submodule update --init --depth 1 lib/OSLO
 
       - name: Install system dependencies
         run: |

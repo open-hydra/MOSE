@@ -148,15 +148,15 @@ Solid lines are MOSE; open circles are the Cantera low-Mach mixture-averaged
 reference.
 
 <figure>
-  {% include "vv/images/multicomp_T.svg" %}
+  --8<-- "docs/vv/images/multicomp_T.svg"
 </figure>
 
 <figure>
-  {% include "vv/images/multicomp_CH4.svg" %}
+  --8<-- "docs/vv/images/multicomp_CH4.svg"
 </figure>
 
 <figure>
-  {% include "vv/images/multicomp_N2.svg" %}
+  --8<-- "docs/vv/images/multicomp_N2.svg"
 </figure>
 
 The reference markers sit on the MOSE curves at every time and every location —

@@ -7,7 +7,7 @@ This guide walks you through running the **Prandtl–Meyer expansion** test case
     - Python 3 with NumPy (for post-run verification)
 
 <figure>
-  {% include "getting-started/mach.svg" %}
+  --8<-- "docs/getting-started/mach.svg"
   Contours of Mach number from the Prandtl–Meyer expansion test case.
 </figure>
 
@@ -56,7 +56,7 @@ test/2D/euler/prandtl-meyer/
 Shared thermodynamic data (phase table, transport properties) lives in `test/common/Air/` and is symlinked at runtime.
 
 !!! info "Where do input files come from?"
-    The input files (`ic.tec`, `bc.txt`, `phase.txt`, `thermo.dat`) were produced by **ATLAS**, the pre-processor of [Hydra](../overview.md#hydra-cfd-suite). ATLAS is distributed separately and is not part of the MOSE package. For this bundled test case all necessary files are already provided. If ATLAS is not available, files can be prepared manually following the formats described in the [User Guide](../user/using.md).
+    The input files (`ic.tec`, `bc.txt`, `phase.txt`, `thermo.dat`) were produced by **ATLAS**, the pre-processor of [Hydra](../index.md#hydra-cfd-suite). ATLAS is distributed separately and is not part of the MOSE package. For this bundled test case all necessary files are already provided. If ATLAS is not available, files can be prepared manually following the formats described in the [User Guide](../user/using.md).
 
 ### Input Files Description
 

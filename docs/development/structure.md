@@ -12,7 +12,7 @@ MOSE/
 ├── CMakeLists.txt          # Top-level CMake build
 ├── CMakePresets.json        # Developer presets (compilers, paths)
 ├── install.sh               # Build / compile / update helper
-├── mkdocs.yml               # Documentation site configuration
+├── mkdocs.yml               # Documentation site configuration (Zensical)
 │
 ├── src/
 │   ├── app/                 # Executables
@@ -37,10 +37,11 @@ MOSE/
 │           ├── Lib_RotatingFrame.f90
 │           └── Lib_Soot.f90
 │
-├── lib/                     # External dependencies (git submodules)
-│   ├── FLINT/               # Thermochemistry library
-│   ├── ORION/               # Structured-grid I/O library
-│   └── third_party/
+├── lib/                     # External dependencies
+│   ├── FLINT/               # Thermochemistry library (release checked out by the configure)
+│   ├── ORION/               # Structured-grid I/O library (release checked out by the configure)
+│   ├── OSLO/                # ODE solvers, required by FLINT (release checked out by the configure)
+│   └── third_party/         # Git submodules
 │       └── FiNeR/           # INI file parser
 │
 ├── test/                    # Validation test suite
@@ -49,7 +50,7 @@ MOSE/
 │   ├── 3D/                  # 3-D cases
 │   └── common/              # Shared thermodynamic databases
 │
-├── docs/                    # MkDocs documentation source
+├── docs/                    # This documentation (Zensical, mkdocs.yml)
 ├── cmake/                   # CMake modules (flags, OpenMP, etc.)
 ├── bin/                     # Built executables (MOSE, DocGen)
 └── build/                   # Build artefacts
@@ -59,13 +60,18 @@ MOSE/
 
 ## Dependencies
 
-**Required submodules** (always linked, located in `lib/`):
+**Required libraries** (always linked, located in `lib/`):
 
 | Library | Purpose |
 |---------|---------|
-| `FLINT` | Thermochemistry (internally depends on `OSLO` ODE solvers) |
-| `ORION` | Structured multi-block grid I/O |
-| `FiNeR` | INI file parser |
+| `FLINT` | Thermochemistry (release 2.0 or a later 2.x) |
+| `ORION` | Structured multi-block grid I/O (release 2.1 or a later 2.x) |
+| `OSLO` | ODE solvers, required by FLINT (release 1.1 or a later 1.x) |
+| `FiNeR` | INI file parser (submodule) |
+
+ORION, OSLO and FLINT are required by release range with `semver_dependency` (`cmake/SemVerDeps.cmake`): the configure
+checks the newest release that satisfies the range out in `lib/` and records it in `deps.lock` (see
+[Installation](../getting-started/installation.md#orion-oslo-and-flint)).
 
 Optional compile-time dependencies are enabled via CMake flags; see [Key CMake options](#key-cmake-options) in the Build System section.
 `ExactPack` (Python) is used only for V&V post-processing and is never linked at compile time.
@@ -455,7 +461,7 @@ cmake --preset default && cmake --build build
 A default is the value that an option takes when a `cmake` configuration of a new build directory does not set it.
 `USE_OPENMP` and `USE_MPI` are options of MOSE (`CMakeLists.txt`), `USE_TECIO` of ORION
 (`lib/ORION/CMakeLists.txt`), `USE_CANTERA` of FLINT (`lib/FLINT/CMakeLists.txt`) and
-`USE_SUNDIALS` of OSLO (`lib/FLINT/lib/OSLO/CMakeLists.txt`). `install.sh build` sets each of
+`USE_SUNDIALS` of OSLO (`lib/OSLO/CMakeLists.txt`). `install.sh build` sets each of
 them, OFF unless its `--use-*` option is given.
 
 ### Dependency paths
@@ -465,9 +471,10 @@ External library paths are set via CMake cache variables or the
 
 | Variable | Default | Library |
 |----------|---------|---------|
-| `ORION_PATH` | `lib/ORION/` | ORION I/O |
-| `FLINT_PATH` | `lib/FLINT/` | FLINT thermochemistry |
-| `OSLO_PATH` | `lib/FLINT/lib/OSLO/` | OSLO ODE solvers |
+| `FETCHCONTENT_SOURCE_DIR_ORION` | empty: the release, in `lib/ORION/` | ORION I/O |
+| `FETCHCONTENT_SOURCE_DIR_FLINT` | empty: the release, in `lib/FLINT/` | FLINT thermochemistry |
+| `FETCHCONTENT_SOURCE_DIR_OSLO` | empty: the release, in `lib/OSLO/` | OSLO ODE solvers |
+| `SEMVER_UPDATE` | `OFF` | `ALL`: select the newest releases of the three again, once |
 | `FINER_PATH` | `lib/third_party/FiNeR/` | FiNeR INI parser |
 
 ---

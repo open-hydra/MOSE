@@ -49,7 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `.vtm` files list their blocks correctly.
   - Steady outputs carry −iteration as their time.
   - Text formats write 17 digits.
-- ORION updated; FiNeR v2.3.0 with its dependencies as submodules (run `git submodule update --init --recursive`).
+- ORION, OSLO and FLINT come by release range (`cmake/SemVerDeps.cmake`), fetched at configure: ORION 2.1, OSLO 1.1, FLINT 2.0 or a later release of the same major. OSLO 1.1 has no `dodesol`; ifx with OpenMP refuses FATODE's Rosenbrock solvers (`ros2`, `ros3`, `ros4`, `rodas3`, `rodas4`; use `H-rodas`).
+- FiNeR v2.3.0 with its dependencies as submodules (run `git submodule update --init --recursive`).
 - CI:
   - Runs on Ubuntu 24.04 and on merge groups.
   - Checks out only the submodules it needs.
@@ -62,6 +63,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `diffusive-metric = inverse-mean`.
 - `turbulence = SAcomp` (unit-dependent).
 - IRS in time-accurate runs.
+- The submodules `lib/ORION` and `lib/FLINT`, and the CMake variables `ORION_PATH`, `FLINT_PATH` and `OSLO_PATH` (use `FETCHCONTENT_SOURCE_DIR_<NAME>`).
 
 ### Fixed
 
