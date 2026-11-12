@@ -1,9 +1,3 @@
-[submodule "lib/FLINT"]
-	path = lib/FLINT
-	url = https://github.com/MarcoGrossi92/FLINT.git
-[submodule "lib/ORION"]
-	path = lib/ORION
-	url = https://github.com/MarcoGrossi92/ORION.git
 [submodule "lib/third_party/FiNeR"]
 	path = lib/third_party/FiNeR
 	url = https://github.com/szaghi/FiNeR.git

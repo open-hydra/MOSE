@@ -82,7 +82,7 @@ MOSE/
 │   ├── app/           # Main application
 │   ├── lib/           # Solver library sources
 │   └── test/          # Unit tests
-├── lib/               # Git submodule dependencies
+├── lib/               # Dependencies (ORION, OSLO, FLINT releases; FiNeR submodules)
 ├── test/              # Verification & validation cases
 │   ├── 1D/            #   1-D test problems
 │   ├── 2D/            #   2-D test problems

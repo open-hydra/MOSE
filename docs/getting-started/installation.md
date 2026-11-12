@@ -16,16 +16,25 @@ Before attempting to build MOSE make sure your system provides the following ext
 
 **ifx 2024.1 and IPO.** ifx 2024.1 (tested: 2024.1.0, build 20240308) compiles a loop of the ghost metrics of MOSE wrongly at `-O2` and `-O3` without interprocedural optimization: a minimal program in standard Fortran gives wrong values at `-O2` and `-O3`, also at the default level with no `-O` option, and the right ones at `-O0`, `-O1` and with `-ipo`. MOSE built so stops at set-up on the check of the ghost metrics, or runs with wrong ghost metrics. CMake therefore refuses ifx 2024.1 at `-O2` or above without IPO, with a message: a RELEASE build with `-DUSE_IPO=OFF` (`--no-ipo`), or whose toolchain cannot do IPO, and the TESTING build. The RELEASE build with IPO (the default) and the DEBUG build (`-O0`) are accepted. Other versions of ifx have not been tested.
 
+### ORION, OSLO and FLINT
+
+MOSE requires these three libraries by a range of releases, as FLINT and ATLAS do (`cmake/SemVerDeps.cmake`). The configure checks the release out in `lib/`.
+
+| Path         | Repository URL                                | Releases           | Purpose                                 |
+|--------------|-----------------------------------------------|--------------------|-----------------------------------------|
+| `lib/ORION`  | `https://github.com/MarcoGrossi92/ORION.git` | 2.1 or a later 2.x | I/O routines (TecIO, VTK, Plot3D, etc.) |
+| `lib/OSLO`   | `https://github.com/MarcoGrossi92/OSLO.git`  | 1.1 or a later 1.x | ODE solvers library, required by FLINT  |
+| `lib/FLINT`  | `https://github.com/MarcoGrossi92/FLINT.git` | 2.0 or a later 2.x | Thermodynamic database utilities        |
+
+The first configure needs the network: it lists the tags of each library (`git ls-remote`, https) and clones the newest release that satisfies the range. `deps.lock`, in the source root and not tracked, keeps the releases selected: the next configures use them without the network (`-DFETCHCONTENT_FULLY_DISCONNECTED=ON` works then). `-DSEMVER_UPDATE=ALL` (`./install.sh build --update-deps`) selects the newest releases again; `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>` (`--include-orion|flint|oslo=<path>`) builds a local checkout instead. When a project embeds MOSE (Hydra), that project chooses the releases.
+
 ### Git submodules
 
-MOSE depends on several repositories that are included as Git submodules.
+The other dependencies are Git submodules.
 
 | Path                               | Repository URL                                        | Purpose                                  |
 |------------------------------------|-------------------------------------------------------|------------------------------------------|
-| `lib/ORION`                        | `https://github.com/MarcoGrossi92/ORION.git`         | I/O routines (TecIO, VTK, Plot3D, etc.)  |
 | `lib/third_party/FiNeR`            | `https://github.com/szaghi/FiNeR.git`                | INI file parser                      |
-| `lib/FLINT/lib/OSLO` (submodule of FLINT) | `https://github.com/MarcoGrossi92/OSLO.git`   | ODE solvers library               |
-| `lib/FLINT`                        | `https://github.com/MarcoGrossi92/FLINT.git`         | Thermodynamic database utilities          |
 
 [ExactPack](https://github.com/lanl/ExactPack) is a pip dependency of the test
 suite only, installed from LANL's GitHub because it is not published on PyPI:
@@ -45,6 +54,8 @@ cd MOSE
 
 !!! note "An existing clone"
     After pulling new commits into an existing clone, run `git submodule update --init --recursive`: CMake initializes a submodule that is missing, but does not update one that is checked out at an older commit. If FiNeR is older than v2.1.0, CMake stops and gives this command.
+
+    `lib/ORION` and `lib/FLINT` were submodules before they were taken by release: git leaves the two folders in place after that pull. The configure moves each one to its release when it is a detached checkout without changes, and otherwise stops and names the folder.
 
 To fully install MOSE, you may either use the bundled install script or invoke CMake manually. The script is convenient and is the preferred route for most users.
 
@@ -84,10 +95,11 @@ Options accepted by `build`
 * `--use-sundials` – build and link the bundled SUNDIALS library (requires a C compiler).
 * `--use-cantera` – build and link Cantera (requires a C++ compiler; if enabled, SUNDIALS should also be enabled).
 * `--no-ipo` – disable interprocedural (link-time) optimization in the RELEASE build.
-* `--include-orion=PATH` – use an external ORION tree instead of the submodule.
+* `--include-orion=PATH` – build a local ORION checkout instead of a release (`-DFETCHCONTENT_SOURCE_DIR_ORION`).
 * `--include-flint=PATH` – same for FLINT.
 * `--include-oslo=PATH` – same for OSLO.
-* `--include-finer=PATH` – same for FiNeR.
+* `--include-finer=PATH` – use an external FiNeR tree instead of the submodule.
+* `--update-deps` – select again the newest releases of ORION, OSLO and FLINT (`-DSEMVER_UPDATE=ALL`, this build only).
 
 The script sets up environment variables for the chosen compilers and then invokes CMake. After a successful build, a `CMakePresets.json` file is written in the source root so that subsequent compilations can reuse the configuration.
 
@@ -103,7 +115,7 @@ Re‑runs CMake using the previously generated preset and rebuilds the project w
 
 **`update` command**
 
-Synchronises the Git submodules. By default it checks out the commit recorded in `.gitmodules`; passing `--remote` will fetch the latest commit from each remote branch.
+Synchronises the Git submodules (FiNeR and its libraries). By default it checks out the commit recorded in `.gitmodules`; passing `--remote` will fetch the latest commit from each remote branch.
 
 ```bash
 ./install.sh update            # sync to recorded commit
@@ -117,7 +129,7 @@ If you prefer fine‑grained control, perform the configuration yourself. This i
 ```bash
 mkdir build && cd build
 # Fortran compiler: gfortran or ifx. USE_OPENMP: ON or OFF. Optional: USE_TECIO and
-# USE_CANTERA (need a C++ compiler), USE_SUNDIALS (needs a C compiler), the four *_PATH.
+# USE_CANTERA (need a C++ compiler), USE_SUNDIALS (needs a C compiler), FETCHCONTENT_SOURCE_DIR_<NAME>, FINER_PATH.
 cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_Fortran_COMPILER=gfortran \
@@ -125,9 +137,9 @@ cmake .. \
     -DUSE_TECIO=ON \
     -DUSE_SUNDIALS=ON \
     -DUSE_CANTERA=ON \
-    -DORION_PATH=/path/to/ORION \
-    -DFLINT_PATH=/path/to/FLINT \
-    -DOSLO_PATH=/path/to/OSLO \
+    -DFETCHCONTENT_SOURCE_DIR_ORION=/path/to/ORION \
+    -DFETCHCONTENT_SOURCE_DIR_FLINT=/path/to/FLINT \
+    -DFETCHCONTENT_SOURCE_DIR_OSLO=/path/to/OSLO \
     -DFINER_PATH=/path/to/FiNeR
 cmake --build . --parallel
 ```
@@ -178,12 +190,12 @@ compilers of the configuration and its choice of MPI.
 
 ### SUNDIALS
 
-SUNDIALS is a suite of solvers for ODEs. The library is included as a submodule in OSLO (`lib/FLINT/lib/OSLO/lib/sundials`).
-`USE_SUNDIALS` is an option of OSLO (`lib/FLINT/lib/OSLO/CMakeLists.txt`), ON by default: a configuration of a new build
+SUNDIALS is a suite of solvers for ODEs. The library is included as a submodule in OSLO (`lib/OSLO/lib/sundials`).
+`USE_SUNDIALS` is an option of OSLO (`lib/OSLO/CMakeLists.txt`), ON by default: a configuration of a new build
 directory that does not set it builds SUNDIALS from that submodule when it finds in OSLO no install of SUNDIALS, or one built
 with other Fortran flags (the OpenMP flag of `USE_OPENMP`), and stops with
-"Failed to initialize git submodules." when the submodule is missing and `git submodule update --init --recursive` cannot fetch
-it. `install.sh build` enables it only with `--use-sundials`. Enabling SUNDIALS requires a working C compiler.
+"Failed to initialize git submodules." when the submodule is missing and OSLO's `git submodule update --init lib/sundials` cannot
+fetch it. `install.sh build` enables it only with `--use-sundials`. Enabling SUNDIALS requires a working C compiler.
 
 ### Cantera
 
