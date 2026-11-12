@@ -131,7 +131,7 @@ Typical runtime: 5–30 seconds (depending on mesh size and hardware).
 To run with N OpenMP threads:
 
 ```bash
-./MOSE.sh solve -p 4    # Run with 4 threads
+./MOSE.sh -p 4 solve    # Run with 4 threads
 ```
 
 ---

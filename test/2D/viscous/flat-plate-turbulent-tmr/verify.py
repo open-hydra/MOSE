@@ -483,11 +483,12 @@ def page(levels, walls_of, profile):
 
 
 # ---------------------------------------------------------------------------- forms
-def short_form(n_expected):
+def short_runs(n_expected, models):
+    """The short-form runs of the models in `models`, against the converged 35x25 solutions."""
     ok = True
     ref = json.load(open("reference/levels.json"))["runs"]
     print("Short form: restarts from the converged 35x25 solutions (relative tolerance %.0e)" % TOL_SHORT)
-    for model in MODELS:
+    for model in models:
         d = "RUN/%s-35x25-short" % model
         need = [os.path.join(d, f) for f in ("input.ini", "OUTPUT/field.tec", "OUTPUT/wall.tec", "OUTPUT/residual-history.dat")]
         missing = [f for f in need if not os.path.exists(f)]
@@ -515,7 +516,13 @@ def short_form(n_expected):
         if n != n_expected:
             print("  (%s ran %d iterations; MOSE.sh testfast runs %d)" % (model, n, n_expected))
         ok &= good
-    print("\nThe V&V page from the stored results of the full form (reference/):")
+    return ok
+
+
+def reference_page():
+    """The criteria of the V&V page, from the stored results of the full form (reference/)."""
+    ref = json.load(open("reference/levels.json"))["runs"]
+    print("The V&V page from the stored results of the full form (reference/):")
     levels, same = {}, True
     for model in MODELS:
         levels[model] = ref[model]
@@ -528,7 +535,13 @@ def short_form(n_expected):
     if same:
         print("  the wall outputs give the values of reference/levels.json")
     okp = page(levels, lambda m, g: wall_cf("reference/wall-%s-%s.tec" % (m, g)), read_profile("reference/" + PROFILE))
-    return ok and same and okp
+    return same and okp
+
+
+def short_form(n_expected, models):
+    ok = short_runs(n_expected, models)
+    print()
+    return reference_page() and ok
 
 
 def full_form(run_models):
@@ -567,13 +580,25 @@ def full_form(run_models):
     return ok
 
 
-form = open("RUN/form.txt").read().split() if os.path.exists("RUN/form.txt") else ["unknown"]
-if form[0] == "testfast":
-    passed = short_form(int(form[1]))
-elif form[0] == "test":
-    passed = full_form(form[2:] or list(MODELS))
+ITER_SHORT = 5000                                     # the iterations of './MOSE.sh testfast'
+args = sys.argv[1:]
+if args and args[0] == "--short":                     # CTest: one model per test, no RUN/form.txt (the tests share the folder)
+    models = args[1:] or list(MODELS)
+    if not all(m in MODELS for m in models):
+        sys.exit("verify.py --short: models are %s" % ", ".join(MODELS))
+    passed = short_runs(ITER_SHORT, models)
+elif args and args[0] == "--reference":               # CTest: the criteria of the page from reference/, no run
+    passed = reference_page()
+elif args:
+    sys.exit("usage: verify.py [--short <model> ... | --reference]")
 else:
-    print("verify.py: RUN/form.txt says %r; run './MOSE.sh testfast' or './MOSE.sh test' first" % " ".join(form))
-    passed = False
+    form = open("RUN/form.txt").read().split() if os.path.exists("RUN/form.txt") else ["unknown"]
+    if form[0] == "testfast":
+        passed = short_form(int(form[1]), form[2:] or list(MODELS))
+    elif form[0] == "test":
+        passed = full_form(form[2:] or list(MODELS))
+    else:
+        print("verify.py: RUN/form.txt says %r; run './MOSE.sh testfast' or './MOSE.sh test' first" % " ".join(form))
+        passed = False
 print("  STATUS : %s" % ("PASS" if passed else "FAIL"))
 sys.exit(0 if passed else 1)

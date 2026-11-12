@@ -45,16 +45,22 @@ MUSCL with van Leer, HLLC, `diffusive-metric = stencil` (default).
 
 ## Results
 
-- **Short form** (`MMSViscous3D`, validation tier of CTest, zigzag on
+- **Short form** (`MMSViscous3D`, a medium test of CTest, zigzag on
   $N = 8, 12$): passes checks 1, 2 and 4 (check 3 needs walls, which the short
   form does not run).
-- **Full form** (`./MOSE.sh test`; the CTest test `MMSViscous3DFull`, with the
-  `verification` label, outside the CI of the pull requests): the refinement
+- **Full form** (`./MOSE.sh test`; the CTest test `MMSViscous3DFull`, a heavy
+  test that the CI of the pull requests does not run): the refinement
   study of the three cases. With the inputs of this folder, `verify.py` passes
   every check of every case, gives the errors and the observed orders below and
   draws the figures `OUTPUT/mms3d-grids.svg` (the bottom face of the coarsest
   grid of each family, seen along $z$) and `OUTPUT/mms3d-<case>.svg` (the $L_2$
   and $L_\infty$ errors against $N$).
+  At one thread it takes about 18 h (17 h 54 min with a `RELEASE` build on one
+  core of a shared node, an Intel Xeon Gold 6230; $8.0\times10^{-6}$ s of CPU per
+  cell and iteration); on a cluster node `./MOSE.sh -p <threads> test` and
+  `python3 -B verify.py` take about 1 h 10 min with 18 or 32 threads. Run it after
+  any change to the wall boundary conditions, to the face metrics or to the
+  generator of the manufactured cases.
 
 The bottom face of the coarsest grid of each family, seen along $z$, the two
 blocks in two colours (on iface the face is not plane, as $z$ is moved with the

@@ -185,6 +185,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Tests in three tiers by time: `light` (under 5 s), `medium` (5 s to 100 s), `heavy` (100 s and more), in place of `fast`, `validation`, `verification`; pull requests run `light` and `medium` in parallel, `heavy` runs locally.
+- One test per check or part of a check (`TimeIntegration.TimeControl`, `Multirate.Order`, `FlatPlateTMR.SST`); `test/fast` is now `test/checks`; the list of tests in `test/TESTING-PLAN.md` is generated from the registrations.
+- `MOSE_mms`, the driver of the manufactured-solution tests, is `test/unit/mms.f90` and is built in `build/test` with the other test programs, no longer in `bin/` (the scripts take `build/test/MOSE_mms` or `MOSE_MMS_BIN`).
 - Docs built with Zensical; new home page; Overview merged into Getting Started.
 - Theory Guide presents the methods only; input keys, files and messages moved to the User Guide (Models and methods).
 - **Breaking:** the `p0_file` of inlet `402` is read in Pa, not bar.

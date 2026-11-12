@@ -5,31 +5,20 @@ Verification of the multirate (local time stepping) integrator described in
 `test/multirate/mr-*`, build their own small cases with `test/multirate/mr-common/gen_mr_cases.py` (perfect-gas air
 of `test/common/Air`, Euler equations, HLLC, MUSCL with the van Leer limiter; the laminar Navier–Stokes cases use the
 viscous air of `test/common/Air-viscous` or a viscosity of their own, the Spalart–Allmaras and SST cases the air of
-`test/common/Air-viscous`) and need only numpy.  They are registered with CTest, all with the label `multirate`: one fast
-smoke test, groups of checks run one after the other by `test/multirate/run_group.sh`, and the shock tube of Daru and
-Tenaud and the nozzle on their own.  `mr-order`, `mr-deep` and `mr-daru` have a short form, run in CI, and longer forms
-with the label `verification`:
-
-| CTest entry | Tier | Checks |
-|---|---|---|
-| `MultirateSmoke` | fast | `mr-smoke`: one level = single rate, conservation with four levels, exact restart and a set-up stop, on `mr1d-acu` and `mr1d-sod`; the lines of the gas entering through 400 faces, with one level as with the single rate |
-| `MultirateIdentity` | validation | `mr-onelevel`, `mr-threads`, `mr-blocks`, `mr-halo`, `mr-sym`, `mr-free` |
-| `MultirateConservation` | validation | `mr-conservation`, `mr-restart` |
-| `MultirateOrder` | validation | `mr-order`, `mr-deep` (short forms) |
-| `MultirateOrderInletsMoving` | validation | `mr-bc`, `mr-moving-levels` |
-| `MultirateOrderFull` | verification | `mr-order`, `mr-deep` with `MR_FORM=full` (full forms) |
-| `MultirateShocks` | validation | `mr-sod`, `mr-shock`, `mr-rpost`, `mr-cfl4`, `mr-positivity` |
-| `MultirateInput` | validation | `mr-reject`, `mr-fixedstep`, `mr-trace` |
-| `MultirateDaruTenaud` | validation | `mr-daru`: the viscous shock tube of Daru and Tenaud on 50 × 25 cells |
-| `MultirateDaruTenaudMedium` | verification | `mr-daru` with `./run.sh medium`: the same on 100 × 50 cells |
-| `MultirateDaruTenaudFull` | verification | `mr-daru` with `./run.sh full`: the same on 500 × 250 cells |
-| `MultirateNozzleStartUp` | validation | `mr-nozzle`: the start-up of a quasi-1D nozzle by a ramp of the inlet total pressure, 371 cells |
-| `MultirateHybrid` | needs-mpi | `mr-hybrid`, `mr-restart-hybrid` |
+`test/common/Air-viscous`) and need only numpy.  They are registered with CTest, one test per check, all with the label `multirate`: the test is named after its check,
+`Multirate.OneLevel` runs `mr-onelevel`, `Multirate.Cfl4` runs `mr-cfl4`, and so on (`Multirate.Smoke` is `mr-smoke`).
+`mr-order`, `mr-deep` and `mr-daru` have a short form (`Multirate.Order`, `Multirate.Deep`, `Multirate.Daru`) and
+longer forms, heavy tests that are run by hand (`Multirate.OrderFull`, `Multirate.DeepFull` with `MR_FORM=full`;
+`Multirate.DaruMedium`, `./run.sh medium`; `Multirate.DaruFull`, `./run.sh full`). `Multirate.Hybrid` (`mr-hybrid`) and
+`Multirate.RestartHybrid` (`mr-restart-hybrid`) need an MPI build. The tier of each test, light, medium or heavy, is
+in [`test/tiers.txt`](https://github.com/open-hydra/MOSE/blob/main/test/tiers.txt) and in the
+[test plan](https://github.com/open-hydra/MOSE/blob/main/test/TESTING-PLAN.md).
 
 ```bash
-ctest --test-dir build -L multirate -LE verification --output-on-failure   # without the longer forms
-ctest --test-dir build -L multirate --output-on-failure                    # all of them, the longer forms included
-test/multirate/run_group.sh shocks sod cfl4                                # some checks, from the source tree
+ctest --test-dir build -L multirate -LE heavy --output-on-failure   # the multirate tests that a pull request runs
+ctest --test-dir build -L multirate --output-on-failure             # all of them, the heavy ones included
+ctest --test-dir build -R Multirate.Cfl4 -V                         # one check
+cd test/multirate/mr-cfl4 && ./run.sh                               # the same, from the source tree
 ```
 
 ## Cases
@@ -68,9 +57,9 @@ test/multirate/run_group.sh shocks sod cfl4                                # som
 | `mr2d-plate-2br` | `mr2d-plate-2b` with block 2 turned by 180 degrees about $z$ (its $i$ and $j$ reversed): the connection across the boundary layer joins face 4 of both blocks with the orientation `-1 0 0 1` | as `mr2d-plate` | as `mr2d-plate` |
 | `mr2d-hot`, `mr2d-hot-4b` | 2D periodic parallelogram, 60 × 60 skewed cells of 5 mm, one and 2 × 2 blocks | hot square ($8\,T_0$, smooth edges) carried by $u = 100$, $v = 50$ m/s, viscosity 0.3 Pa s, CFL 0.2 | 0, 1 (`max-level = 1`): a square of level 1 with sharp corners |
 | `mr3d-hot`, `mr3d-hot-8b` | 3D periodic, 12 × 12 × 12 cells of 10 mm on an oblique affine mesh, one block and 2 × 2 × 2 blocks | hot cube ($8\,T_0$) carried by $u = 100$, $v = 50$, $w = 30$ m/s, viscosity 0.3 Pa s, CFL 0.2 | 0, 1: a cube of level 1 with sharp edges and vertices |
-| `mr2d-chan-sa`, `mr2d-chan-sst` | wall channel of `test/fast/time-integration/turbulence-sources`, periodic along the flow (4 cells of 1 mm), adiabatic wall, symmetry plane at 0.553 mm, 16 rows from 4 µm growing by 1.25 | $u = U\tanh(y/0.2\,\text{mm})$ with no driving force; Spalart–Allmaras with $\tilde\nu$ twice the near-wall equilibrium, or SST with near-wall $k$ and $\omega$ (wall condition `asymptotic`); CFL 0.8, VNN 0.4 | 0 … 3 by rows |
+| `mr2d-chan-sa`, `mr2d-chan-sst` | wall channel of `test/checks/time-integration/turbulence-sources`, periodic along the flow (4 cells of 1 mm), adiabatic wall, symmetry plane at 0.553 mm, 16 rows from 4 µm growing by 1.25 | $u = U\tanh(y/0.2\,\text{mm})$ with no driving force; Spalart–Allmaras with $\tilde\nu$ twice the near-wall equilibrium, or SST with near-wall $k$ and $\omega$ (wall condition `asymptotic`); CFL 0.8, VNN 0.4 | 0 … 3 by rows |
 | `mr2d-chanrough-sa` | as `mr2d-chan-sa`, rough wall (sand grain 10 µm) | as `mr2d-chan-sa`, SA-rough | 0 … 3 by rows |
-| `mr2d-chanpos-sa`, `mr2d-chanpos-sst` | the positivity channel of `test/fast/time-integration/turbulence-sources`: 2 µm at the wall, 34 rows | near-wall turbulence far above its equilibrium ($\tilde\nu$ ×100; $\omega$ ×10 with the wall condition `practical`): the destruction acts faster than the transport | 0 … 3, recomputed at every macro step |
+| `mr2d-chanpos-sa`, `mr2d-chanpos-sst` | the positivity channel of `test/checks/time-integration/turbulence-sources`: 2 µm at the wall, 34 rows | near-wall turbulence far above its equilibrium ($\tilde\nu$ ×100; $\omega$ ×10 with the wall condition `practical`): the destruction acts faster than the transport | 0 … 3, recomputed at every macro step |
 | `mr2d-plate-sa`, `mr2d-plate-sst`, `mr2d-plate-sa-4b`, `mr2d-plate-sst-4b` | turbulent flat plate of `test/multirate/mr-common/plate` on its coarse mesh (68 × 48 cells, 4 µm at the wall), one and 2 × 2 blocks | uniform start at Mach 0.2 with Spalart–Allmaras or SST; CFL 0.5, VNN 0.4 | by rows |
 
 The 1D and the cartesian 2D cases are slabs one cell thick between slip walls, 10 mm thick, so that every step of the
@@ -83,7 +72,7 @@ $dw/dt = -2aw/\Delta z$, and Heun is stable on the negative real axis for $|\lam
 
 | Check | What it checks | Criterion |
 |---|---|---|
-| `mr-smoke` | the fast tier: `mr1d-acu` with one level against the single rate (20 steps); `mr1d-sod` with four levels (`max-level` 3, `safety` 2, map rebuilt at every macro step), 20 macro steps in one go and as 10 + restart (`vtk raw`) + 10; `mr1d-acu` with cfl 1.2 and `max-level` 3 (`nonlocal-cfl = redo`, the default); `mr1d-sod` with one level and cfl 20 (a run that diverges); a 1-D tube of 8 cells with 400 ends and the gas entering through face 1 at 0.5 a (the case `count` of `test/fast/boundary-conditions/extrapolation-400`), 20 Heun steps at first order, with one level and with the single rate | fields and residual history identical byte by byte; mass and energy drift $\le 10^{-12}$ with the four levels in use; output trees identical byte by byte; non-zero exit code, the message `[MOSE-Multirate] cfl` and no solution; exit code 1, the message of the state check of the multirate (a value that is not finite or a negative pressure) and no solution; the lines of the gas entering through the 400 faces and the end line of the run with one level are those of the single rate, word for word: one line (iteration 1, faces 1) and 40 flux evaluations, one a stage |
+| `mr-smoke` | the light test: `mr1d-acu` with one level against the single rate (20 steps); `mr1d-sod` with four levels (`max-level` 3, `safety` 2, map rebuilt at every macro step), 20 macro steps in one go and as 10 + restart (`vtk raw`) + 10; `mr1d-acu` with cfl 1.2 and `max-level` 3 (`nonlocal-cfl = redo`, the default); `mr1d-sod` with one level and cfl 20 (a run that diverges); a 1-D tube of 8 cells with 400 ends and the gas entering through face 1 at 0.5 a (the case `count` of `test/checks/boundary-conditions/extrapolation-400`), 20 Heun steps at first order, with one level and with the single rate | fields and residual history identical byte by byte; mass and energy drift $\le 10^{-12}$ with the four levels in use; output trees identical byte by byte; non-zero exit code, the message `[MOSE-Multirate] cfl` and no solution; exit code 1, the message of the state check of the multirate (a value that is not finite or a negative pressure) and no solution; the lines of the gas entering through the 400 faces and the end line of the run with one level are those of the single rate, word for word: one line (iteration 1, faces 1) and 40 flux evaluations, one a stage |
 | `mr-onelevel` | `max-level = 0`, `safety = 1` against the single-rate step (`mr1d-acu`, `mr1d-sod`, `mr2d-box`, `mr1d-acu-3b`, `mr2d-box-4b`, and the ducts `mr1d-402`, `mr1d-410` with their data at the stage times, and `mr1d-401`, `mr1d-403`, `mr1d-405`, `mr1d-408`, `mr1d-420` and the SRM grain in its inflow mode, `mr1d-502`, so that every boundary type that the integrator accepts runs); laminar: `mr2d-plate`, `mr2d-plate-2b` and `mr2d-plate-4b` with `diffusive-metric = mean`, `mr2d-plate` and `mr2d-plate-4b` also with `stencil` (the default), `mr2d-hot-4b`, `mr3d-hot`; Spalart–Allmaras and SST: `mr2d-chan-sa`, `mr2d-chan-sst`, `mr2d-chanrough-sa`, `mr2d-plate-sa`, `mr2d-plate-sst`, `mr2d-plate-sa-4b`, and the wall channels with `SA-RC` and with `SST-RC`; the axisymmetric wedge with viscous stress on its faces, `mr2d-wedge-visc`; a 1-D slab between symmetry j and k faces, planes normal to y and z, whose i faces are inclined, `mr1d-skew` (y and z momentum frozen, with the residual the pressure on the inclined faces gives them), and a 1-D duct whose top j and k faces are inclined, `mr1d-nozzle` (not planes normal to y and z: y and z momentum integrated); the plate with the records of `bc.txt` in reverse order, `mr2d-plate-rev`, and with an isothermal wall, `mr2d-plate-302`; the per-cell copies of the turbulence sources, of the local step (`Dtcap_Cell`, wedge term and bound of the stiffness of the turbulence sources included) and of the state check, the select of the ghost cells of a record (`Ghost_Record` against `Fill_Ghost_Cell`, every branch with the calls under a condition: `Ghost_Wall` at the walls and the 400 faces), the select of the boundary fluxes of a record (`BC_Flux_Record` against the branches of `BC_Fluxes` for the types that the integrator accepts), the copy of the loop of the connection fluxes (one flux per face) and the face metrics (the stored metric read in place, or the computed one) and call of the viscous flux of each direction, used with more than one level, against the single-rate routines statement by statement; the MPI tags of the multirate against those of the single-rate exchanges | fields, wall output and residual history identical byte by byte; the set-up lines that say that the y and z velocity of `mr1d-skew` are frozen and those of `mr1d-nozzle` integrated; copies identical to their originals; no MPI tag shared |
 | `mr-conservation` | mass, momentum (periodic cases) and total energy after 400 macro steps (`mr1d-acu`, `mr1d-ent`, `mr1d-sod`, `mr2d-box`, `mr1d-acu-3b`, `mr2d-box-4b`; laminar: `mr2d-hot`, `mr2d-hot-4b`, `mr3d-hot` with the levels recomputed every 5 macro steps; Spalart–Allmaras and SST: `mr2d-chan-sa`, `mr2d-chan-sst`, and Spalart–Allmaras on a rough wall: `mr2d-chanrough-sa`, mass and energy); `diffusive-metric = mean` with levels (`mr2d-chan-sa`, `max-level` 3, mass and energy; `mr3d-hot`, `max-level` 1, mass, momentum and energy); levels recomputed every 5 macro steps; a `macro-step-target` below the adaptive step; positive control with `conservative-correction = .false.`; the axisymmetric wedge with levels (`mr2d-wedge-band`, `max-level` 2, mass and energy) with its own positive control; `mr1d-blast` with `max-level` 10, 200 macro steps, the depth of the map following the octaves of the local steps; `mr1d-mix`, `max-level` 3, the levels recomputed every 5 macro steps: the mass of each species, the total mass and the momentum, with its own positive control; with `max-level` 3 and the levels recomputed every 5 macro steps, `SA-R` and `sst-production = compressible` on the wall channels (mass and energy), `k-energy-coupling` on the SST channel (mass; with $k$ in the total energy the sources of $k$ enter the energy, whose drift is reported), each against the run of the same channel without the option, and `safety` 1.5 on `mr1d-acu-3b` (mass, momentum and energy); the SRM grain in its inflow mode with levels, `mr1d-502c` (`max-level` 3), the mass of the domain against $M(0) + \dot m_\mathrm{ref} A t$, $A$ the area of the grain, with its own positive control | relative drift $\le 10^{-12}$ (for `mr1d-502c` the relative difference to $M(0) + \dot m_\mathrm{ref} A t$); the runs with `SA-R`, `sst-production = compressible` and `k-energy-coupling` not identical to the runs without the option; the controls must drift by $\ge 10^{-9}$; with `mr1d-blast` at least two depths printed and cells at level 0 in every macro step |
 | `mr-order` | temporal order with levels fixed from $H_0 = 2^L\,\Delta t_{\min}/\sigma$; short form: macro steps $H_0$ and $H_0/2$, reference single rate with $\Delta t_{\min}/16$; full form: macro steps $H_0 \dots H_0/8$, reference with $\Delta t_{\min}/64$; the level map (for the interface cells) is read from the log of the run with $H_0$ (`trace = .true.`); `mr1d-acu`, `mr1d-ent` and `mr2d-vortex-3b` (whose interface cells include those next to the connections); laminar: `mr2d-plate` from the uniform start ($L = 3$), `mr2d-hot` ($L = 1$) and `mr2d-wall-s`, a no-slip wall on smoothly skewed cells (skew angle at the wall 14 to 37 degrees) whose levels change along the wall ($L = 2$); Spalart–Allmaras and SST: `mr2d-chan-sa`, `mr2d-chan-sst` ($L = 3$; $\rho$, $u$, $v$, $p$ and $\tilde\nu$, $k$, $\omega$) | last pair of the form: $L^1 \ge 1.9$ ($\ge 1.8$ for the turbulent channels); $L^\infty$ within 4 cells of the faces between levels (floor 5 % of the global $L^\infty$) $\ge 1.8$; for the entropy wave $u$ and $p$ stay uniform to $10^{-12}$; for the hot square and the skewed wall also $L^\infty$ on the cells next to the faces between levels (same floor) $\ge 1.8$ |
@@ -125,7 +114,7 @@ macro step refined together.  The axisymmetric wedge (faces of type 200) runs wi
 and energy with a positive control in `mr-conservation`, halo and ghost records in `mr-halo`).
 
 The full forms decide on the last pair of macro steps, the closest to the asymptotic range
-(Appendix A, Remark 2: next to a face between levels the local error is of first order); the short forms, run in CI,
+(Appendix A, Remark 2: next to a face between levels the local error is of first order); the short forms
 decide on the pair $H_0$, $H_0/2$ with the same thresholds. On the eight cases of `mr-order` the orders of that pair in
 the full form are 1.93 to 2.15 ($L^1$) and 1.91 to 2.19 (interface); the smallest margin is on the entropy wave ($L^1$
 1.93 against 1.9): a change of the spatial scheme or of the case that lowers the ratio of its errors with $H_0$ and
@@ -179,7 +168,7 @@ single rate with the macro step $H$ and with $dt_{\min}$ are there for compariso
   the slopes of second (dashed) and first order (dotted). The legend gives the observed orders of the last pair, $L^1$ and
   $L^\infty$; the test asks $\ge 1.9$ in $L^1$ for the multirate with the map rebuilt. In $L^\infty$ every run, the single
   rate included, stays near 1.3, with the largest error at the maximum of the wave. The test has one
-  form, the one run in CI.
+  form.
 </figure>
 
 The global $L^\infty$ error of every run has its largest value at the maximum of the wave ($x \approx 0.15$ at $T$),
@@ -198,9 +187,9 @@ not measured.
 `mr-daru` runs the viscous shock tube of Daru and Tenaud (Computers & Fluids 30, 89–113, 2001, as Zhou, Xu and Liu state it;
 Re = 200, the lower half of the tube) four times on the same mesh: the single rate with $dt_0/4$ (the reference) and with $dt_0$, and the multirate with the macro steps
 $H = 4\,dt_0$ (levels up to 3) and $H = dt_0$ (the core cells at the step of the single rate, the cells next to the wall
-smaller), each with ten numbered solutions. The short form (`MultirateDaruTenaud`, 50 × 25 cells) runs in CI; the medium
-form (`MultirateDaruTenaudMedium`, 100 × 50 cells, `./run.sh medium`) and the full form (`MultirateDaruTenaudFull`,
-500 × 250 cells, `./run.sh full`) have the label `verification`. The short and the medium forms are judged against their
+smaller), each with ten numbered solutions. The short form (`Multirate.Daru`, 50 × 25 cells) runs in CI; the medium
+form (`Multirate.DaruMedium`, 100 × 50 cells, `./run.sh medium`) and the full form (`Multirate.DaruFull`,
+500 × 250 cells, `./run.sh full`) are heavy tests. The short and the medium forms are judged against their
 own reference only; the full form is the resolution at which the wall density is compared with table 1 of Zhou, Xu
 and Liu (Physics of Fluids 30, 016102,
 2018; arXiv:1705.09062). The figures are written by `test/multirate/mr-daru/plot_daru.py` from the results of the test;
@@ -276,7 +265,7 @@ correction at the faces between levels is the business of `mr-conservation` (a r
 
 <figure>
   --8<-- "docs/vv/images/multirate-nozzle-short-shock.svg"
-  371 cells, the form run in CI: the position of the moving shock (the face of largest compression in the divergent) at
+  371 cells, the form of the test: the position of the moving shock (the face of largest compression in the divergent) at
   the outputs where it is a shock, the density of the reference jumping by at least 1.5 across it (from the seventh
   output on); grey lines: the faces between the bands of 1.6 and 4 mm and of 4 and 10 mm, which are faces between
   levels.
@@ -284,7 +273,7 @@ correction at the faces between levels is the business of `mr-conservation` (a r
 
 <figure>
   --8<-- "docs/vv/images/multirate-nozzle-short-errors.svg"
-  371 cells, the form run in CI. Left: the density error in the throat band of every run against the reference. Right:
+  371 cells, the form of the test. Left: the density error in the throat band of every run against the reference. Right:
   the error of the multirate run with $H = dt_0$ over that of the single rate at the outputs where it has levels, which
   the test bounds by 1.05.
 </figure>

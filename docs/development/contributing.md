@@ -100,7 +100,7 @@ flowchart TD
     A["1. Create<br/>Lib_Riemann_New.f90<br/>in numerics/fluxes/"] --> B["2. Implement<br/>riemann_New(...)"]
     B --> C["3. Register in<br/>Mod_Riemann.f90"]
     C --> D["4. Add the name to<br/>Register_Numerics.f90"]
-    D --> E["5. Add test case<br/>in test/fast/riemann-smoke/"]
+    D --> E["5. Add test case<br/>in test/checks/riemann-smoke/"]
     E --> F["6. Document in<br/>docs/theory/riemann-solvers.md"]
 
     style A fill:#1a237e,stroke:#7986cb,color:#e8eaf6
@@ -199,7 +199,7 @@ Before submitting a PR, please verify:
 - [ ] Code compiles without new warnings in the DEBUG build (`-DCMAKE_BUILD_TYPE=DEBUG`, which adds `-Wall` and `-Wextra` with gfortran)
 - [ ] No line exceeds 132 characters
 - [ ] All new subroutines have `implicit none` and argument intents
-- [ ] Existing tests pass (`ctest -LE verification` from the build directory; at minimum `ctest -L fast`)
+- [ ] Existing tests pass (`ctest -L "light|medium" -j4` from the build directory, which is what a pull request runs; at minimum `ctest -L light`)
 - [ ] New functionality has at least one test case
 - [ ] Documentation updated if user-facing behaviour changed
 - [ ] Commit messages follow the convention above

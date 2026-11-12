@@ -279,7 +279,8 @@ largest of these effects; the runs above use the practical value of the TMR.
 
 ## Running the case
 
-- **Short form**, CTest `FlatPlateTMR` (validation tier, about 150 s of CPU at one thread): `./MOSE.sh testfast`
+- **Short form**, CTest `FlatPlateTMR.SA`, `.SST`, `.Wilcox2006` and `.SSGLRR` (medium tests, 30 to 45 s of CPU each at
+  one thread; `FlatPlateTMR.Reference` runs the criteria of this page on the stored results): `./MOSE.sh testfast [model]`
   restarts each model from its converged 35 × 25 solution (`reference/field-35x25-<model>.tec`, the final
   solution of the runs of this page) for 5000 iterations. `verify.py` checks that each restart did its
   iterations (the global iteration count of its final solution and the rows of `residual-history.dat`) and
@@ -298,7 +299,7 @@ largest of these effects; the runs above use the practical value of the TMR.
   state, and in the builds and thread counts of the tests, $c_f$ and $C_D$ differ from the converged values
   by at most $0.25\,\tau$ after the 5000 iterations ($0.0006\,\tau$ with SSG/LRR-ω). It does not check the
   order or the limit of the grids: the full form does.
-- **Full form**, CTest `FlatPlateTMRFull` (label `verification`, out of the PR CI): `./MOSE.sh test` runs the
+- **Full form**, CTest `FlatPlateTMRFull` (a heavy test: run it by hand): `./MOSE.sh test` runs the
   twelve cases from the uniform field, each in its folder `RUN/<model>-<grid>`, and `./MOSE.sh test <model> ...`
   the cases of the models named; `python3 -B verify.py` gives the tables, the criteria and the figures,
   and writes in `RUN/reference/` the files of `reference/`, from the runs of `RUN/` for the models run

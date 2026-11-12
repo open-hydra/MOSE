@@ -2,8 +2,8 @@
 #===============================================================================
 #  Viscous shock tube of Daru and Tenaud with the multirate integrator: a shock and a contact running into a closed
 #  box, reflected by the end wall onto the boundary layer of the bottom wall, Re = 200, in three forms on cases of
-#  gen_mr_cases.py: short (validation tier), ./run.sh, mr2d-daru-coarse, 50 x 25 cells; medium (label verification),
-#  ./run.sh medium, mr2d-daru, 100 x 50 cells; full (label verification), ./run.sh full, mr2d-daru-full, 500 x 250
+#  gen_mr_cases.py: short (CTest Multirate.Daru), ./run.sh, mr2d-daru-coarse, 50 x 25 cells; medium (Multirate.DaruMedium),
+#  ./run.sh medium, mr2d-daru, 100 x 50 cells; full (Multirate.DaruFull), ./run.sh full, mr2d-daru-full, 500 x 250
 #  cells, the resolution of the reference solutions (hours; OMP_NUM_THREADS as set by the caller).
 #  dt_min(0) from one step on the one-level path; dt0 = (t_fin/10)/M with M the smallest multiple of 32 such that
 #  dt0 <= 0.9 dt_min(0). Four runs on the multirate path, the level map rebuilt at every macro step, fixed-macro-step

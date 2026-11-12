@@ -1,7 +1,7 @@
 """
 3D manufactured solutions on skewed and non-smooth grids: order of accuracy.
 
-The MOSE_mms driver (src/app/mms.f90) adds the analytic source that makes a
+The MOSE_mms driver (test/unit/mms.f90) adds the analytic source that makes a
 smooth field an exact steady solution of the compressible Navier-Stokes
 equations, so the discretisation error of each grid is known everywhere.
 MOSE.sh runs (short form, testfast: zigzag on N = 8, 12; full form, test:

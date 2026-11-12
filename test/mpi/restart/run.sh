@@ -95,7 +95,7 @@ prepare runs/restart
 ( cd runs/restart && write_input "$HALF" true ); solve runs/restart half
 ( cd runs/restart && write_input "$((N - HALF))" false ); solve runs/restart restart
 
-python3 -B ../../fast/restart/check_restart_vtk.py runs/full/OUTPUT runs/restart/OUTPUT \
+python3 -B ../../checks/restart/check_restart_vtk.py runs/full/OUTPUT runs/restart/OUTPUT \
   || fail "the restarted run differs from the uninterrupted one"
 echo "MPIRestart: ok — restart on ${NP}x${NT} bit-identical to the uninterrupted run"
 exit 0

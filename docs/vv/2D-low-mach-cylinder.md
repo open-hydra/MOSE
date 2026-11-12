@@ -118,7 +118,7 @@ unpreconditioned run reaches a similar residual, on a solution that is wrong.
 
 ## What the test checks
 
-`Preconditioning` (validation tier, about 37 s at one thread, `test/2D/euler/low-mach-cylinder/run.sh`):
+`Preconditioning` (a medium test, about 37 s at one thread, `test/2D/euler/low-mach-cylinder/run.sh`):
 
 | Check | Threshold | Measured |
 |---|---|---|
@@ -127,7 +127,7 @@ unpreconditioned run reaches a similar residual, on a solution that is wrong.
 | Front half of the cylinder against potential flow | < 0.3 | 0.20 |
 | The unpreconditioned run differs from the preconditioned one | > 1 | 6.4 |
 
-`InputChecks`/`PrecScope` checks that `prec` is refused in time-accurate runs and `HLLC-PC` without `prec`, and the
+`InputChecks.PrecScope` checks that `prec` is refused in time-accurate runs and `HLLC-PC` without `prec`, and the
 unit check `PrecTransform` the update itself, against the Weiss–Smith matrix.
 
 ## Limits

@@ -4,13 +4,13 @@
 #  2 x 2 blocks) and mr2d-plate-4b (laminar plate in 2 x 2 blocks, a vertex of four blocks in the boundary layer), multirate
 #  (max-level 3, safety 2, levels recomputed at every macro step), solutions every 30 macro steps, residual at every
 #  macro step, on 2 processes x 2 threads: 100 macro steps in one go against 50 + restart (newrun = false, vtk raw) + 50,
-#  OUTPUT trees identical byte by byte (test/fast/restart/check_restart_vtk.py), on the threads asked.
+#  OUTPUT trees identical byte by byte (test/checks/restart/check_restart_vtk.py), on the threads asked.
 #  The launcher is the one CMake found (MOSE_MPIEXEC, MOSE_MPIEXEC_NUMPROC_FLAG; mpirun -n by default).
 #===============================================================================
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; cd "$HERE"
 source ../mr-common/lib.sh
-CHECK=../../fast/restart/check_restart_vtk.py
+CHECK=../../checks/restart/check_restart_vtk.py
 rm -rf cases runs
 MPIEXEC=${MOSE_MPIEXEC:-mpirun}
 NPFLAG=${MOSE_MPIEXEC_NUMPROC_FLAG:--n}

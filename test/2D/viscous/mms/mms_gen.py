@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Derive the manufactured-solution source terms for the 2D compressible
 Navier-Stokes equations (calorically-perfect ideal gas, constant mu/k, Stokes
-hypothesis) and emit Fortran expressions for src/app/mms.f90 and Python for
+hypothesis) and emit Fortran expressions for test/unit/mms.f90 and Python for
 build_ic.py.
 
 Manufactured PRIMITIVE field (periodic on [0,L]^2):

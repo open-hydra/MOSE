@@ -86,7 +86,7 @@ the coarse level, each block in its own colour:
 
 ## Results
 
-- **Short form** (`PlanarNozzleGrids`, validation tier of CTest): passes both
+- **Short form** (`PlanarNozzleGrids`, a medium test of CTest): passes both
   checks.
 
 ## Running the case

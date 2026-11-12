@@ -2,7 +2,7 @@
 #===============================================================================
 #  One flux on the faces between blocks, across MPI ranks (needs-mpi tier)
 #
-#  The two-block periodic cases of test/fast/connections/connection-flux (shock tube; low
+#  The two-block periodic cases of test/checks/connections/connection-flux (shock tube; low
 #  Mach number wave for HLLC-PC), with each block on its own rank: the block
 #  cut and the periodic connection are faces between ranks. With one face
 #  flux, identical on the two sides:
@@ -18,7 +18,7 @@ cd "$HERE"
 MASTER=../../../bin/MOSE
 LOCAL=./bin/MOSE
 AIR=../../common/Air
-CASE=../../fast/connections/connection-flux/make_case.py
+CASE=../../checks/connections/connection-flux/make_case.py
 MPIEXEC=${MOSE_MPIEXEC:-mpiexec}
 NPFLAG=${MOSE_MPIEXEC_NUMPROC_FLAG:--n}
 

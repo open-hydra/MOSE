@@ -338,7 +338,7 @@ for spec in "58 58-read-cfl-ok 1.0" "58b 58b-read-cfl-low 0.4"; do
   if [[ $first != yes || $late == yes ]]; then
     echo "  $lab: FAIL - the change did not come between iterations 5 and 30 (host too slow to poll)"; status=1
   elif [[ $rc -eq 0 && $last == 40 && $nw -eq 0 && $split_ok == yes ]] \
-       && python3 -B ../../fast/restart/check_restart_vtk.py runs/$lab/OUTPUT runs/$nn-split/OUTPUT > runs/$nn-compare.log 2>&1; then
+       && python3 -B ../../checks/restart/check_restart_vtk.py runs/$lab/OUTPUT runs/$nn-split/OUTPUT > runs/$nn-compare.log 2>&1; then
     echo "  $lab: the reading of cfl = $cv is taken, and the run equals 30 macro steps + a restart with cfl = $cv"
   else
     echo "  $lab: FAIL - exit code $rc, last iteration ${last:-none} (required 40), warnings $nw (required 0)," \

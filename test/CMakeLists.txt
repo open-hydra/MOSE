@@ -1,21 +1,24 @@
 # ---------------------------------------------------------------------------
-#  CTest definitions for MOSE validation cases
+#  CTest definitions of MOSE: one ctest per case, check or part of a check.
+#  Tiers, kinds of check and the list of tests: test/TESTING-PLAN.md.
 #
-#  Tiers are expressed through LABELS (see test/TESTING-PLAN.md):
-#    fast            -> tiny, dependency-free; run by the pre-push hook
-#                       (ctest -L fast)
-#    validation      -> analytic / reference comparison
-#    needs-cantera   -> requires USE_CANTERA=ON  (finite-rate / equilibrium)
-#    needs-sundials  -> requires USE_SUNDIALS=ON (stiff ODE chemistry)
-#    needs-mpi       -> requires USE_MPI=ON
-#    verification    -> full form of a verification case (families of grids,
-#                       long runs); run on request (ctest -L verification)
+#  Every test is registered with mose_test() below: a name, a one-line DESC, the
+#  KIND of check and the area LABELS. Its tier is not written here: it comes from
+#  test/tiers.txt (one line per test), because the tier follows from the measured
+#  time of the test, not from what it checks:
 #
-#  PR CI runs everything except the heavy-dependency labels and the full
-#  forms of the verification cases:
-#    ctest -LE "needs-cantera|needs-sundials|needs-mpi|verification"
-#  and, in a second job built with USE_MPI=ON (gfortran, Open MPI), the MPI tier:
-#    ctest -L needs-mpi
+#    light    under 5 s     pre-push hook (ctest -L light) and every PR
+#    medium   5 s to 100 s  every PR
+#    heavy    100 s and up  local, on request (ctest -L heavy)
+#
+#  Labels of a test: its tier; its kind (exact order identity invariant robustness
+#  contract unit reference); its area (physics numerics implementation unit); the
+#  dimensions it runs (1D 2D 3D); multirate; and, where it needs a build option,
+#  needs-mpi. PR CI: ctest -L "light|medium" -LE needs-mpi, and in a second job
+#  built with USE_MPI=ON, ctest -L needs-mpi -LE heavy.
+#
+#  At configure the registration writes <build>/test/inventory.tsv, from which
+#  test/tools/inventory.py renders the tables of the plan.
 # ---------------------------------------------------------------------------
 
 # Common environment for all solver tests
@@ -28,873 +31,654 @@ if(USE_TECIO)
     list(APPEND _MOSE_TEST_ENV "MOSE_TECIO=1")
 endif()
 
-# Helper: register a case that runs "<run-cmd> && python3 -B <verifier>"
-# in a given working directory, with the given labels.
-function(mose_add_test)
-    cmake_parse_arguments(T "" "NAME;DIR;RUN;VERIFY;TIMEOUT" "LABELS" ${ARGN})
+# The driver of the manufactured-solution tests, test/unit/mms.f90: the solver with an external callback that
+# injects the analytic source term. It is built here, in <build>/test with the checks of test/unit, and not in bin/;
+# the tests that run it find it through MOSE_MMS_BIN (the scripts by hand: build/test/MOSE_mms, or MOSE_MMS_BIN).
+add_fortran_executable(MOSE_mms unit/mms.f90)
+list(APPEND _MOSE_TEST_ENV "MOSE_MMS_BIN=$<TARGET_FILE:MOSE_mms>")
+
+# ---------------------------------------------------------------------------
+#  Tiers: test/tiers.txt, "<Name> <light|medium|heavy> <seconds>" per line; the seconds are the time on the CI runner
+#  (tools/ctest_tiers.py keeps them). A change of the file reconfigures.
+# ---------------------------------------------------------------------------
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tiers.txt")
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/tiers.txt" _tier_lines)
+set(_tier_names "")
+foreach(_line IN LISTS _tier_lines)
+    if(_line MATCHES "^[ \t]*(#|$)")
+        continue()
+    endif()
+    if(NOT _line MATCHES "^([^ \t]+)[ \t]+(light|medium|heavy)[ \t]+([0-9.]+|-)[ \t]*$")
+        message(FATAL_ERROR "test/tiers.txt: cannot read the line '${_line}'")
+    endif()
+    set(MOSE_TIER_${CMAKE_MATCH_1} ${CMAKE_MATCH_2})
+    set(MOSE_SECONDS_${CMAKE_MATCH_1} ${CMAKE_MATCH_3})
+    list(APPEND _tier_names ${CMAKE_MATCH_1})
+endforeach()
+
+# ---------------------------------------------------------------------------
+#  mose_test(<Name>
+#      DESC "<what it checks, one line, no semicolon>"
+#      KIND <exact|order|identity|invariant|robustness|contract|unit|reference>
+#      LABELS <area and dimension labels>
+#      [DIR <folder of test/>] [RUN "<shell command>"]   a script run in DIR (default ./run.sh)
+#      [COMMAND <program> <arguments>]                   a program of the build instead (unit checks)
+#      [TIMEOUT <s>] [LOCK <name>] [PROCESSORS <n>] [ENV <VAR=value>...]
+#      [REQUIRES <MPI|LINUX>...])                         built only with USE_MPI, only on Linux
+#  A test that is not built is still listed in the inventory. Two tests that share a folder have the same LOCK.
+# ---------------------------------------------------------------------------
+function(mose_test NAME)
+    cmake_parse_arguments(T "" "DIR;RUN;KIND;DESC;TIMEOUT;LOCK;PROCESSORS" "LABELS;COMMAND;ENV;REQUIRES" ${ARGN})
+    if(NOT T_DESC OR NOT T_KIND OR NOT T_LABELS)
+        message(FATAL_ERROR "mose_test(${NAME}): DESC, KIND and LABELS are required")
+    endif()
+    if(NOT T_KIND MATCHES "^(exact|order|identity|invariant|robustness|contract|unit|reference)$")
+        message(FATAL_ERROR "mose_test(${NAME}): unknown KIND '${T_KIND}'")
+    endif()
+    if(NOT DEFINED MOSE_TIER_${NAME})
+        message(FATAL_ERROR "mose_test(${NAME}): no line for it in test/tiers.txt")
+    endif()
+    set(_tier ${MOSE_TIER_${NAME}})
     if(NOT T_TIMEOUT)
-        set(T_TIMEOUT 300)
+        if(_tier STREQUAL "light")
+            set(T_TIMEOUT 60)
+        elseif(_tier STREQUAL "medium")
+            set(T_TIMEOUT 600)
+        else()
+            set(T_TIMEOUT 3600)
+        endif()
     endif()
-    add_test(
-        NAME    ${T_NAME}
-        COMMAND bash -c "${T_RUN} && python3 -B ${T_VERIFY}"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${T_DIR}"
-    )
-    set_tests_properties(${T_NAME} PROPERTIES
-        LABELS      "${T_LABELS}"
-        TIMEOUT     ${T_TIMEOUT}
-        ENVIRONMENT "${_MOSE_TEST_ENV}"
-    )
-endfunction()
+    set(_labels ${_tier} ${T_KIND} ${T_LABELS})
+    set(_env ${_MOSE_TEST_ENV} ${T_ENV})
+    set(_build TRUE)
+    foreach(_r IN LISTS T_REQUIRES)
+        if(_r STREQUAL "MPI")
+            list(APPEND _labels needs-mpi)
+            list(APPEND _env "MOSE_MPIEXEC=${MPIEXEC_EXECUTABLE}" "MOSE_MPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}")
+            if(NOT T_PROCESSORS)
+                set(T_PROCESSORS 4)
+            endif()
+            if(NOT USE_MPI)
+                set(_build FALSE)
+            endif()
+        elseif(_r STREQUAL "LINUX")
+            if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                set(_build FALSE)
+            endif()
+        else()
+            message(FATAL_ERROR "mose_test(${NAME}): unknown REQUIRES '${_r}'")
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES _labels)
 
-# ===========================================================================
-#  FAST tier  (pre-push: ctest -L fast)  — tiny, no heavy dependencies
-# ===========================================================================
+    set_property(GLOBAL APPEND PROPERTY MOSE_TEST_NAMES ${NAME})
+    set_property(GLOBAL PROPERTY MOSE_TEST_${NAME}_KIND "${T_KIND}")
+    set_property(GLOBAL PROPERTY MOSE_TEST_${NAME}_DESC "${T_DESC}")
+    set_property(GLOBAL PROPERTY MOSE_TEST_${NAME}_LABELS "${_labels}")
+    set_property(GLOBAL PROPERTY MOSE_TEST_${NAME}_BUILT "${_build}")
+    if(NOT _build)
+        return()
+    endif()
 
-# 1-D Riemann problems (4-mesh grid-convergence via the "test" verb)
-mose_add_test(NAME Sod79  DIR 1D/Sod79
-              RUN "./MOSE.sh solve" VERIFY check.py
-              LABELS "fast;validation;1D")
-
-mose_add_test(NAME Einfeldt91 DIR 1D/Ein91
-              RUN "./MOSE.sh test" VERIFY verify.py
-              LABELS "fast;validation;1D")
-
-mose_add_test(NAME Noh87 DIR 1D/Noh87
-              RUN "./MOSE.sh test" VERIFY verify.py
-              LABELS "fast;validation;1D")
-
-mose_add_test(NAME Toro99 DIR 1D/Tor99
-              RUN "./MOSE.sh test" VERIFY verify.py
-              LABELS "fast;validation;1D")
-
-# 1-D Shu-Osher (Mach-3 shock / sine interaction; convergence vs N=1600 ref)
-#   fast tier : single coarse grid (N=200) vs the reference
-mose_add_test(NAME ShuOsher DIR 1D/Shu-Osher
-              RUN "./MOSE.sh solve" VERIFY verify.py
-              LABELS "fast;validation;numerics;1D")
-#   validation tier : 3-grid study (N=200/400/800), monotone convergence + figure
-mose_add_test(NAME ShuOsherConvergence DIR 1D/Shu-Osher
-              RUN "./MOSE.sh test" VERIFY convergence.py
-              LABELS "validation;numerics;1D")
-#   the two run in the same folder and write OUTPUT/field.tec there: never at the same time (ctest -j)
-set_tests_properties(ShuOsher ShuOsherConvergence PROPERTIES RESOURCE_LOCK Shu-Osher)
-
-# 2-D steady Euler (analytic Prandtl-Meyer)
-mose_add_test(NAME PrandtlMeyer DIR 2D/euler/prandtl-meyer
-              RUN "./MOSE.sh solve" VERIFY check.py
-              LABELS "fast;validation;2D")
-
-# 2-D isentropic-vortex convection (N1): order-of-accuracy on 32/64/128 grids
-mose_add_test(NAME IsentropicVortex DIR 2D/euler/isentropic-vortex
-              RUN "./MOSE.sh test" VERIFY verify.py
-              LABELS "validation;numerics;2D")
-
-# 2-D viscous Method of Manufactured Solutions (N2): order-of-accuracy of the
-# *viscous* operator. Uses the MOSE_mms driver (analytic manufactured source).
-# CTest is single-threaded, so it runs the fast 32/64 subset ("testfast"); the
-# full 32/64/128 study ("test") is used offline to make the V&V figure.
-mose_add_test(NAME MMSViscous DIR 2D/viscous/mms
-              RUN "./MOSE.sh testfast" VERIFY verify.py
-              LABELS "validation;numerics;2D"
-              TIMEOUT 900)
-
-# Manufactured solutions on general grids (validation tier): the fields of the
-# MOSE_mms driver (MOSE_MMS_FIELD) on two-block grid families whose blocks meet
-# with permuted indices, zigzag (every cell skewed, its neighbours the other
-# way) and iface (a cell-size jump of 1.5 and kinked grid lines): 2-D periodic
-# and with walls on N = 10, 20, 3-D zigzag on N = 8, 12 ("testfast"; the full
-# studies, "test", make the V&V figures).
-mose_add_test(NAME MMSViscousSkewed DIR 2D/viscous/mms/skewed
-              RUN "./MOSE.sh testfast" VERIFY verify.py
-              LABELS "validation;numerics;2D"
-              TIMEOUT 900)
-mose_add_test(NAME MMSViscous3D DIR 3D/viscous/mms
-              RUN "./MOSE.sh testfast" VERIFY verify.py
-              LABELS "validation;numerics;3D"
-              TIMEOUT 900)
-# The full form of MMSViscous3D (verification tier, out of the PR CI): zigzag on
-# N = 16, 24, 36 and iface, periodic and with walls, on N = 20, 30, 45 ("test"),
-# the runs of the V&V page. Run it after any change to the wall boundary
-# conditions, to the face metrics or to the generator of the cases. At one
-# thread, as CTest runs it, it took 17 h 54 min (verify.py 15 s of it) with a
-# RELEASE build (gfortran 12.2, -O3) on one core of a shared node, an Intel
-# Xeon Gold 6230 at 2.1 GHz with other jobs on at least 40 to 48 of its 80
-# cores for the first 11 h: 8.0e-6 s of CPU per cell and iteration over the
-# cells and the iterations of the nine runs (8.0e9; the walls on N = 45 alone
-# 5.4e9, 11 h 41 min). The CPU time grew by up to 69 % with the load of a
-# shared machine; the TIMEOUT, 3 days, is more than twice that. On a cluster
-# node, ./MOSE.sh -p <threads> test and python3 -B verify.py in the folder run
-# it in about 1 h 10 min (18 or 32 threads).
-mose_add_test(NAME MMSViscous3DFull DIR 3D/viscous/mms
-              RUN "./MOSE.sh test" VERIFY verify.py
-              LABELS "verification;numerics;3D"
-              TIMEOUT 259200)
-#   the short and the full form run in the same folder and write OUTPUT/ there: never at the same time (ctest -j)
-set_tests_properties(MMSViscous3D MMSViscous3DFull PROPERTIES RESOURCE_LOCK mms3d)
-
-# Planar nozzle on grid families (validation tier): a turbulent converging-
-# diverging nozzle (Spalart-Allmaras, SST) on O and H grids whose four blocks
-# have different index orientations stays mirror-symmetric about its centre
-# line, and the zig-zag grid gives a finite flow ("testfast": 300 iterations on
-# the coarse level; the full study, "test", runs every family to convergence).
-mose_add_test(NAME PlanarNozzleGrids DIR 2D/viscous/planar-nozzle
-              RUN "./MOSE.sh testfast" VERIFY verify.py
-              LABELS "validation;numerics;2D"
-              TIMEOUT 900)
-
-# Turbulent flat plate of the NASA TMR (validation tier): Spalart-Allmaras,
-# SST, Wilcox 2006 and SSG/LRR-omega on three grids of the TMR family (35x25,
-# 69x49, 137x97), inflow at the total conditions of the TMR, outflow at the
-# free-stream pressure on the top boundary and at the exit. The short form ("testfast")
-# restarts each model for 5000 iterations from the converged 35x25 solution of
-# the full form (reference/field-35x25-<model>.tec): the restart must do its
-# iterations (global iteration count and rows of residual-history.dat) and
-# keep c_f at x = 0.970084071 and 1.90334 and C_D within 1e-5 (relative) of the converged
-# values; verify.py then computes again, from the stored results of the full
-# form (reference/), the criteria of the V&V page, which must hold. It guards
-# the steady state of the page on the 35x25 grid; the order and the limit of
-# the grids need the full form. 143 to 154 s of CPU at one thread (SSG/LRR
-# 41 to 45 s of it).
-mose_add_test(NAME FlatPlateTMR DIR 2D/viscous/flat-plate-turbulent-tmr
-              RUN "./MOSE.sh testfast" VERIFY verify.py
-              LABELS "validation;physics;2D"
-              TIMEOUT 600)
-# The full form of FlatPlateTMR (verification tier, out of the PR CI): the twelve
-# runs from the uniform field, 300 000 iterations each, and the criteria of the
-# V&V page (iterative error, the 137x97 grid against CFL3D and FUN3D on the
-# same grid, TAU for SSG/LRR, the limit of the three grids against CFL3D on the
-# 545x385 grid); it writes in RUN/reference/ the files of reference/ that the
-# runs give. Run it after any change that moves the steady state of the short
-# form, and copy RUN/reference/ to reference/. At one thread, as CTest runs it,
-# it takes about 51 h, an estimate, not a measurement: the solver time per
-# iteration of each run in a chain of 500 iterations (6.4 to 139 ms) times
-# 300 000. The TIMEOUT, 103 h, is twice that. On a cluster node, ./MOSE.sh -p <threads> test
-# and python3 -B verify.py in the folder run it in a few hours.
-mose_add_test(NAME FlatPlateTMRFull DIR 2D/viscous/flat-plate-turbulent-tmr
-              RUN "./MOSE.sh test" VERIFY verify.py
-              LABELS "verification;physics;2D"
-              TIMEOUT 370800)
-#   the short and the full form run in the same folder and write RUN/ there: never at the same time (ctest -j)
-set_tests_properties(FlatPlateTMR FlatPlateTMRFull PROPERTIES RESOURCE_LOCK flat-plate-tmr)
-
-# ===========================================================================
-#  Additional fast tests defined in their own directories
-#  (added incrementally — see test/TESTING-PLAN.md, section 4)
-# ===========================================================================
-# Helper: register a self-contained fast test driven by its own run.sh.
-function(mose_add_fast_script NAME DIR)
-    if(EXISTS "${CMAKE_SOURCE_DIR}/test/${DIR}/run.sh")
-        add_test(
-            NAME    ${NAME}
-            COMMAND bash -c "./run.sh"
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${DIR}"
-        )
-        set_tests_properties(${NAME} PROPERTIES
-            LABELS      "${ARGN}"
-            TIMEOUT     120
-            ENVIRONMENT "${_MOSE_TEST_ENV}"
-        )
+    if(T_COMMAND)
+        add_test(NAME ${NAME} COMMAND ${T_COMMAND})
+    else()
+        if(NOT T_RUN)
+            set(T_RUN "./run.sh")
+        endif()
+        add_test(NAME ${NAME} COMMAND bash -c "${T_RUN}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${T_DIR}")
+    endif()
+    set_tests_properties(${NAME} PROPERTIES LABELS "${_labels}" TIMEOUT ${T_TIMEOUT} ENVIRONMENT "${_env}")
+    if(T_LOCK)
+        set_tests_properties(${NAME} PROPERTIES RESOURCE_LOCK ${T_LOCK})
+    endif()
+    if(T_PROCESSORS)
+        set_tests_properties(${NAME} PROPERTIES PROCESSORS ${T_PROCESSORS})
     endif()
 endfunction()
 
-# Helper: register some of the parts of an area, "./run.sh <part>...", with the
-# given labels. A part (a row of test/TESTING-PLAN.md, section 4) stays in the
-# fast tier at about 10 s of CPU time at one thread or less; the parts above it
-# run in the validation tier under a registration of their own, and come back
-# when a measurement at a lower load gives 10 s or less (section 4 of the plan
-# gives the rule, the tolerance and the times).
-function(mose_add_parts_script NAME DIR)
-    cmake_parse_arguments(T "" "" "PARTS;LABELS" ${ARGN})
-    if(EXISTS "${CMAKE_SOURCE_DIR}/test/${DIR}/run.sh")
-        list(JOIN T_PARTS " " _parts)
-        add_test(
-            NAME    ${NAME}
-            COMMAND bash -c "./run.sh ${_parts}"
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${DIR}"
-        )
-        set_tests_properties(${NAME} PROPERTIES
-            LABELS      "${T_LABELS}"
-            TIMEOUT     120
-            ENVIRONMENT "${_MOSE_TEST_ENV}"
-        )
-    endif()
-endfunction()
+# ---------------------------------------------------------------------------
+#  Reference cases: 1-D, 2-D and 3-D problems of test/1D, test/2D, test/3D (each folder: MOSE.sh and a verifier)
+# ---------------------------------------------------------------------------
+mose_test(Sod79
+    DIR 1D/Sod79  RUN "./MOSE.sh solve && python3 -B check.py"
+    KIND exact  LABELS numerics 1D
+    DESC "Sod tube against the exact solution")
+mose_test(Einfeldt91
+    DIR 1D/Ein91  RUN "./MOSE.sh test && python3 -B verify.py"
+    KIND exact  LABELS numerics 1D
+    DESC "Einfeldt 1-2-0 tube against the exact solution (ExactPack)")
+mose_test(Noh87
+    DIR 1D/Noh87  RUN "./MOSE.sh test && python3 -B verify.py"
+    KIND exact  LABELS numerics 1D
+    DESC "Noh implosion against the exact solution (ExactPack)")
+mose_test(Toro99
+    DIR 1D/Tor99  RUN "./MOSE.sh test && python3 -B verify.py"
+    KIND exact  LABELS numerics 1D
+    DESC "Toro tubes against the exact solution (ExactPack)")
+mose_test(ShuOsher
+    DIR 1D/Shu-Osher  RUN "./MOSE.sh solve && python3 -B verify.py"
+    KIND reference  LABELS numerics 1D
+    LOCK Shu-Osher
+    DESC "Shu-Osher problem, N=200 against the N=1600 reference")
+mose_test(ShuOsherConvergence
+    DIR 1D/Shu-Osher  RUN "./MOSE.sh test && python3 -B convergence.py"
+    KIND order  LABELS numerics 1D
+    LOCK Shu-Osher
+    DESC "Shu-Osher on N=200, 400, 800: monotone convergence")
+mose_test(PrandtlMeyer
+    DIR 2D/euler/prandtl-meyer  RUN "./MOSE.sh solve && python3 -B check.py"
+    KIND exact  LABELS numerics 2D
+    DESC "Prandtl-Meyer expansion against the analytic solution")
+mose_test(IsentropicVortex
+    DIR 2D/euler/isentropic-vortex  RUN "./MOSE.sh test && python3 -B verify.py"
+    KIND order  LABELS numerics 2D
+    DESC "isentropic vortex on 32, 64, 128 cells: order of accuracy")
+mose_test(MMSViscous
+    DIR 2D/viscous/mms  RUN "./MOSE.sh testfast && python3 -B verify.py"
+    KIND order  LABELS numerics 2D
+    DESC "viscous operator, manufactured solution: order of accuracy")
+mose_test(MMSViscousSkewed
+    DIR 2D/viscous/mms/skewed  RUN "./MOSE.sh testfast && python3 -B verify.py"
+    KIND order  LABELS numerics 2D 3D
+    DESC "manufactured solutions on skewed two-block grids: order of accuracy")
+mose_test(MMSViscous3D
+    DIR 3D/viscous/mms  RUN "./MOSE.sh testfast && python3 -B verify.py"
+    KIND order  LABELS numerics 3D
+    LOCK mms3d
+    DESC "3-D viscous manufactured solutions on two-block grids: order of accuracy")
+mose_test(MMSViscous3DFull
+    DIR 3D/viscous/mms  RUN "./MOSE.sh test && python3 -B verify.py"
+    KIND order  LABELS numerics 3D
+    LOCK mms3d  TIMEOUT 259200
+    DESC "full form of MMSViscous3D, the runs of the V&V page (18 h)")
+mose_test(PlanarNozzleGrids
+    DIR 2D/viscous/planar-nozzle  RUN "./MOSE.sh testfast && python3 -B verify.py"
+    KIND invariant  LABELS numerics 2D
+    DESC "planar nozzle on O and H grids stays mirror-symmetric")
 
-# Riemann smoke-matrix (F5): every shock-capturing solver stays positive;
-# shock-detector = Tramel turns the shock sensor on.
-mose_add_fast_script(RiemannSmoke   fast/riemann-smoke  "fast;numerics;1D")
+# ---------------------------------------------------------------------------
+#  TMR turbulent flat plate: one test per model (restart from the converged 35x25 solution), the criteria of the V&V page, and the full form
+# ---------------------------------------------------------------------------
+mose_test(FlatPlateTMR.SA
+    DIR 2D/viscous/flat-plate-turbulent-tmr  RUN "./MOSE.sh testfast SA && python3 -B verify.py --short SA"
+    KIND reference  LABELS physics 2D
+    LOCK flat-plate-tmr
+    DESC "TMR flat plate, Spalart-Allmaras: restart from the converged 35x25 solution keeps Cf and CD")
+mose_test(FlatPlateTMR.SST
+    DIR 2D/viscous/flat-plate-turbulent-tmr  RUN "./MOSE.sh testfast SST && python3 -B verify.py --short SST"
+    KIND reference  LABELS physics 2D
+    LOCK flat-plate-tmr
+    DESC "TMR flat plate, SST: restart from the converged 35x25 solution keeps Cf and CD")
+mose_test(FlatPlateTMR.Wilcox2006
+    DIR 2D/viscous/flat-plate-turbulent-tmr  RUN "./MOSE.sh testfast Wilcox2006 && python3 -B verify.py --short Wilcox2006"
+    KIND reference  LABELS physics 2D
+    LOCK flat-plate-tmr
+    DESC "TMR flat plate, Wilcox 2006: restart from the converged 35x25 solution keeps Cf and CD")
+mose_test(FlatPlateTMR.SSGLRR
+    DIR 2D/viscous/flat-plate-turbulent-tmr  RUN "./MOSE.sh testfast SSGLRR && python3 -B verify.py --short SSGLRR"
+    KIND reference  LABELS physics 2D
+    LOCK flat-plate-tmr
+    DESC "TMR flat plate, SSG/LRR-omega: restart from the converged 35x25 solution keeps Cf and CD")
+mose_test(FlatPlateTMR.Reference
+    DIR 2D/viscous/flat-plate-turbulent-tmr  RUN "python3 -B verify.py --reference"
+    KIND reference  LABELS physics 2D
+    LOCK flat-plate-tmr
+    DESC "criteria of the V&V page from the stored results (CFL3D, FUN3D, TAU)")
+mose_test(FlatPlateTMRFull
+    DIR 2D/viscous/flat-plate-turbulent-tmr  RUN "./MOSE.sh test && python3 -B verify.py"
+    KIND reference  LABELS physics 2D
+    LOCK flat-plate-tmr  TIMEOUT 370800
+    DESC "full form of the TMR flat plate: 4 models, 3 grids, 300000 iterations each (days)")
 
-# Numerics smoke (N4): limiter / time-scheme / reconstruction / int-var sweep.
-mose_add_fast_script(NumericsSmoke  fast/numerics-smoke "fast;numerics;1D")
+# ---------------------------------------------------------------------------
+#  Cases with their own run.sh in test/2D and test/3D
+# ---------------------------------------------------------------------------
+mose_test(MMSResiduals
+    DIR 2D/viscous/mms/residuals
+    KIND exact  LABELS physics 2D 3D
+    DESC "RANS right-hand sides on manufactured fields (SA, SST, Wilcox 2006)")
+mose_test(PointImplicitSteady
+    DIR 2D/viscous/point-implicit-steady
+    KIND invariant  LABELS numerics 2D
+    DESC "steady state with the point-implicit factor does not depend on the time step")
+mose_test(WedgeAxisStep
+    DIR 2D/viscous/wedge-axis-step
+    KIND robustness  LABELS numerics 2D
+    DESC "local time step next to the axis of a wedge is stable at the largest vnn")
+mose_test(Preconditioning
+    DIR 2D/euler/low-mach-cylinder
+    KIND exact  LABELS numerics 2D
+    DESC "low-Mach cylinder, Mach 0.01 and 0.001: Cp Mach-independent, near potential flow")
+mose_test(AblatingWall
+    DIR 2D/viscous/ablating-wall
+    KIND exact  LABELS physics 2D
+    DESC "ablation 503, 504 and SRM grain 502 against the closed form")
+mose_test(RSMDecay
+    DIR 2D/viscous/rsm-decay
+    KIND exact  LABELS physics 2D
+    DESC "SSG/LRR decay of isotropic turbulence against the closed form")
 
-# Time integration (TimeIntegration): the parts below, each in its folder of
-# test/fast/time-integration, run one after the other by
-# test/fast/time-integration/run.sh.
-# Time control: second order in time with a time-dependent inlet (BC 402,
-# boundary data at the stage times), time tables before their first instant,
-# res-threshold not ending a time-accurate run, and ending a steady run when the
-# density residual has fallen by that factor from the first iteration, at any
-# level of density and across a restart.
-# Local time step: stable on square and skewed 2-D cells, on cubic 3-D cells
-# and in diffusion-dominated cells (heat conduction, species), with Heun and RK3;
-# heat conduction on 3-D rhombohedra at 115 degrees with Heun at vnn 0.5;
-# with integration-variables = prec, next to a wall with SST and Wilcox 2006,
-# the reference velocity of the step takes the eddy viscosity of the model at
-# the strain rate of the cell.
-# Turbulence sources in time-accurate runs: nu~, k and omega converge with the
-# order of Heun and RK3, and no stage makes them negative near a wall, where
-# the step takes the bound of the stiffness of each cell; SST-RC prints the
-# start-up warnings of k-omega models and of -RC; the
-# vortex-stretching function of Wilcox 2006 on a 3-D flow; the asymptotic omega
-# wall value of Wilcox 2006 and SST.
-# Quasi-2D case with symmetry k faces: round-off in w must not grow.
-mose_add_fast_script(TimeIntegration fast/time-integration "fast;numerics;1D;2D;3D")
+# ---------------------------------------------------------------------------
+#  test/checks: small cases that check one mechanism; a check with parts has one test per part (Area.Part)
+# ---------------------------------------------------------------------------
+mose_test(RiemannSmoke
+    DIR checks/riemann-smoke
+    KIND robustness  LABELS numerics 1D
+    DESC "every Riemann solver stays positive, shock sensor on")
+mose_test(NumericsSmoke
+    DIR checks/numerics-smoke
+    KIND robustness  LABELS numerics 1D
+    DESC "limiter, scheme, reconstruction and variable sweep stays positive")
+mose_test(Conservation
+    DIR checks/conservation
+    KIND invariant  LABELS implementation 1D
+    DESC "closed slip-wall box conserves mass to round-off")
+mose_test(OpenMPEquiv
+    DIR checks/openmp-equiv
+    KIND identity  LABELS implementation 1D
+    DESC "1 against 4 threads, bit for bit: Sod tube and a chimera case")
+mose_test(Restart
+    DIR checks/restart
+    KIND identity  LABELS implementation 1D
+    DESC "split run plus restart equals the straight run, every format, probes")
+mose_test(Restart.Counters
+    DIR checks/restart/restart-counters
+    KIND identity  LABELS implementation 1D
+    DESC "a restart carries every counter: numbered outputs, histories, probes")
+mose_test(TimeIntegration.TimeControl
+    DIR checks/time-integration/time-control
+    KIND order  LABELS numerics 1D
+    DESC "second order in time with a time-dependent inlet, time tables, stop rules")
+mose_test(TimeIntegration.LocalTimeStep
+    DIR checks/time-integration/local-time-step
+    KIND robustness  LABELS numerics 2D 3D
+    DESC "local time step stable on square, skewed and cubic cells")
+mose_test(TimeIntegration.TurbulenceSources
+    DIR checks/time-integration/turbulence-sources
+    KIND order  LABELS numerics 1D
+    DESC "turbulence sources in time-accurate runs: order and positivity at a wall")
+mose_test(TimeIntegration.Quasi2DSymmetry
+    DIR checks/time-integration/quasi2d-symmetry
+    KIND invariant  LABELS numerics 1D 2D
+    DESC "symmetry faces of quasi-2-D and 1-D cases: round-off in w does not grow")
+mose_test(BoundaryConditions.Inlets
+    DIR checks/boundary-conditions/inlets
+    KIND exact  LABELS physics 1D
+    DESC "inlets at total conditions, mass flux, normal velocity: fluxes against the face state")
+mose_test(BoundaryConditions.Nozzle
+    DIR checks/boundary-conditions/nozzle
+    KIND exact  LABELS physics 1D
+    DESC "choked nozzle 420: exit state below and above the shock pressures")
+mose_test(BoundaryConditions.BCInput
+    DIR checks/boundary-conditions/bc-input
+    KIND contract  LABELS implementation 1D
+    DESC "property lines of bc.txt are read as written or refused")
+mose_test(BoundaryConditions.RotatingFrame
+    DIR checks/boundary-conditions/rotating-frame
+    KIND contract  LABELS implementation 1D
+    DESC "stationary faces of the rotating frame are read and listed")
+mose_test(BoundaryConditions.WallHeatSign
+    DIR checks/boundary-conditions/wall-heat-sign
+    KIND exact  LABELS physics 1D
+    DESC "sign of the wall heat flux and of the wall stress")
+mose_test(BoundaryConditions.Extrapolation400
+    DIR checks/boundary-conditions/extrapolation-400
+    KIND exact  LABELS physics 1D
+    DESC "extrapolation faces 400: flux of the cell state, report of the gas entering")
+mose_test(BoundaryConditions.SupersonicInlet
+    DIR checks/boundary-conditions/supersonic-inlet
+    KIND exact  LABELS physics 1D
+    DESC "supersonic inlet 405 with the flow direction normal")
+mose_test(Connections.ChimeraFace
+    DIR checks/connections/chimera-face
+    KIND exact  LABELS numerics 2D 3D
+    DESC "viscous stencil of chimera faces on a linear field")
+mose_test(Connections.ConnectionFlux
+    DIR checks/connections/connection-flux
+    KIND identity  LABELS numerics 1D
+    DESC "faces between blocks: one block equals two, bit for bit, and conserves")
+mose_test(Connections.ConnectionOrder
+    DIR checks/connections/connection-order
+    KIND identity  LABELS implementation 2D
+    DESC "sorted and reversed connection records give the same bits")
+mose_test(Connections.SectorRadial
+    DIR checks/connections/sector-radial
+    KIND invariant  LABELS physics 3D
+    DESC "3-D sector with rotational periodicity keeps a radial flow its own mirror image")
+mose_test(Connections.SectorViscous
+    DIR checks/connections/sector-viscous
+    KIND exact  LABELS physics 3D
+    DESC "viscous flux across the rotational periodicity of a 3-D sector")
+mose_test(InputChecks.ExitCodes
+    DIR checks/input-checks/exit-codes
+    KIND contract  LABELS implementation 1D 2D
+    DESC "error stops end with a non-zero exit code and their message")
+mose_test(InputChecks.LimiterDefaults
+    DIR checks/input-checks/limiter-defaults
+    KIND contract  LABELS numerics 1D
+    DESC "the declared limiter is the one that runs, set-up warnings say so")
+mose_test(InputChecks.IRSTimeAccurate
+    DIR checks/input-checks/irs-time-accurate
+    KIND contract  LABELS numerics 1D
+    DESC "residual smoothing is refused in time-accurate runs")
+mose_test(InputChecks.PrecScope
+    DIR checks/input-checks/prec-scope
+    KIND contract  LABELS numerics 1D
+    DESC "prec refused in time-accurate runs, HLLC-PC refused without prec")
+mose_test(InputChecks.DecompositionMap
+    DIR checks/input-checks/decomposition-map
+    KIND contract  LABELS implementation 2D
+    DESC "block-to-rank map: valid maps keep the bits, bad maps are refused")
+mose_test(InputChecks.RuntimeInput
+    DIR checks/input-checks/runtime-input
+    KIND contract  LABELS implementation 1D 2D
+    DESC "input.ini read again during a run: errors, fixed keys, warn and stop")
+mose_test(MeshGeometry.WallDistance
+    DIR checks/mesh-geometry/wall-distance
+    KIND exact  LABELS physics 2D
+    DESC "wall distance of the turbulence models on constructed meshes")
+mose_test(MeshGeometry.MeshType
+    DIR checks/mesh-geometry/mesh-type
+    KIND exact  LABELS implementation 2D
+    DESC "type of the mesh told by its nodes")
+mose_test(OutputFiles.WallOutput
+    DIR checks/output-files/wall-output
+    KIND contract  LABELS implementation 2D
+    DESC "wall files: extent, points, cell values, one file per wall face")
+mose_test(OutputFiles.VtkNames
+    DIR checks/output-files/vtk-names
+    KIND contract  LABELS implementation 2D
+    DESC "VTK outputs are well-formed XML with the right names and times")
+mose_test(OutputFiles.VtkRawFormat
+    DIR checks/output-files/vtk-raw-format
+    KIND contract  LABELS implementation 1D
+    DESC "vtk raw solutions hold raw appended data")
+mose_test(OutputFiles.WallOutputResidual
+    DIR checks/output-files/wall-output-residual
+    KIND invariant  LABELS implementation 2D
+    DESC "wall output does not change the residual")
+mose_test(OutputFiles.ProbePosition
+    DIR checks/output-files/probe-position
+    KIND exact  LABELS implementation 2D
+    DESC "probes given by position take the nearest cell")
+mose_test(ViscousPatch.ViscousLinearPatch
+    DIR checks/viscous-patch/viscous-linear-patch
+    KIND exact  LABELS numerics 2D 3D
+    DESC "patch test of the viscous fluxes: linear fields on any mesh")
+mose_test(ViscousPatch.ViscousWallPatch
+    DIR checks/viscous-patch/viscous-wall-patch
+    KIND exact  LABELS numerics 2D 3D
+    DESC "patch test next to walls of prescribed temperature")
+mose_test(ViscousPatch.ViscousOpenPatch
+    DIR checks/viscous-patch/viscous-open-patch
+    KIND exact  LABELS numerics 2D 3D
+    DESC "patch test next to inlets and outlets")
 
-# Boundary conditions (BoundaryConditions): the parts below, each in its
-# folder of test/fast/boundary-conditions, run one after the other by
-# test/fast/boundary-conditions/run.sh.
-# Inlet boundary conditions: the far-field inlet (407) with the flow direction
-# normal gives the field of the equivalent angles, to the bit, with no
-# transverse velocity; inlets at total conditions (401, 407): when the gas
-# enters (from rest too, and with the gas of the cell moving in at 2a/(gamma-1) or
-# faster), subsonic and choked faces, the slip wall of an inlet the
-# reservoir cannot feed, and the outlet of an ambient face it cannot feed with the gas
-# moving in; one step, mass fluxes against the face state. Inlets with a mass
-# flux or a normal velocity (403, 404, 408, and 420 on face 2): g and un
-# positive into the domain on every face, a negative value on face 2 as its
-# magnitude.
-# Choked nozzle: below p_shock, the pressure behind a normal shock at the exit,
-# and below p_sub, the face of a nozzle 420 takes the supersonic design exit
-# state of its record (air at exit Mach numbers 2.5, 3 and 4, the gas of the
-# frozen rocket nozzle at 4.46, the sonic state at the throat, and air at an
-# exit Mach number of 2.94 with the gas of the tube between p_sup and 1e-6
-# below p_shock), and from p_shock up to p_sub the state of mass flux g (that
-# air 1e-6 above p_shock and at 1.02 p_shock).
-# Boundary input: the property lines of bc.txt are read as written or refused
-# (the inlet 402 table under any file name; a missing or decreasing table stops
-# the run; an inlet on face 1 with g or un negative (404, 408, 420) or zero
-# (403, 404, 408, 420) stops the run; so does a 420 without p_sub, with its
-# thresholds out of order, with g above the choked mass flux or with T0 above
-# the tables of the gas, and a record of type 409, 501 or 506, which MOSE does
-# not apply). The SRM grain (502): a wall for the wall distance in mode 1 (one
-# step at rest), an inflow in mode 2 that lets the products in from rest with
-# the mass flux of its mode-1 twin and is no wall for the distance, runs with
-# Spalart-Allmaras and SST in both modes; a property line with a mode other
-# than 1 and 2, p_ref <= 0, mdot_ref < 0 (0 in mode 2), T_af = 0 or above the
-# tables, or an inflow short of its turbulence value stops the run; the wall
-# state of a grain that blows CH4 into N2 takes the gas constant of CH4, at the
-# static temperature of total T_af, and the gas gets the total enthalpy h(T_af),
-# in both modes.
-# Rotating frame: stationary-face-1, -2, ... of [MOSE-Rotating-Frame] are read
-# and listed, and the run ends (the count stops at the first key missing); a
-# stationary face may be a wall in part and a block connection in part.
-# Sign of the wall heat flux: q_wall of a wall 301 is positive into the fluid on
-# every face (the same wall on both sides of a channel heats it alike), and the
-# wall output writes qw as k grad T . n along the face normal (301 and 302).
-# Extrapolation faces (400): one step in a tube of air, the flux of each 400
-# face from the change of its cell, the flux of the cell state for either
-# direction of the gas; the lines of the gas entering through a 400 boundary,
-# the first one and one at each factor of 10 of its largest |w|/a, and the
-# end line of the evaluations with gas entering, also in a run that stops at
-# its first stage and, with a MOSE built with OpenMP, with 1 and 4 threads on
-# a face of 130 records; no end line in a case without 400 faces.
-# Supersonic inlet (405) with the flow direction normal: the gas enters along
-# the normal of the face into the domain on both ends of a tube along x, of its
-# mirror image, of a tube turned to (1, 1, 1)/sqrt(3) and of one along z; with
-# one angle normal, the angle the token stands for on that face; one step,
-# mass flux and velocity of the inlet cell against those of the angles 0, 0.
-mose_add_fast_script(BoundaryConditions fast/boundary-conditions "fast;implementation;numerics;physics;1D;2D")
-
-# Closed-box mass conservation (I4): slip-wall box conserves mass to round-off.
-mose_add_fast_script(Conservation   fast/conservation   "fast;implementation;1D")
-
-# Serial vs OpenMP equivalence (I5): 1 vs 4 threads bit-identical, the Sod tube
-# and a chimera case whose chimera faces meet at the edges of a block.
-mose_add_fast_script(OpenMPEquiv    fast/openmp-equiv   "fast;implementation;1D")
-
-# Faces between blocks (Connections): the parts below, each in its folder of
-# test/fast/connections, run one after the other by
-# test/fast/connections/run.sh.
-# Viscous stencil of chimera faces (F9): one evaluation of the residual of a
-# linear field next to chimera faces, also at the edges of the block face, in
-# 2-D, in 3-D and on a 2-D axisymmetric wedge (against the same mesh as one
-# block); a chimera face whose first layer of extrapolated ghost cells is
-# turned over stops the run at set-up.
-# Faces between blocks (101, 201): one flux per face. A periodic shock tube as
-# one block and as two blocks gives the same bits, and conserves mass,
-# momentum and energy, with and without shock sensor and preconditioning.
-# Faces between blocks of the same parity (face 4 of one block on face 2 of
-# the other, index directions permuted): the record that computes the flux
-# of the face does not follow the order of bc.txt; sorted and reversed
-# records give the same bits.
-# Sector radial: a 3-D sector closed by the rotational periodicity (type 200 on
-# the k faces) keeps a radial flow its own mirror image.
-# Sector viscous: the two k faces of a 3-D sector closed by type 200 are
-# interior faces of the annulus, and carry their viscous flux: the sector of
-# 90 degrees gives the viscous force of the same cells inside the sector of
-# 180 degrees, and the normal stress of symmetry planes on a radial flow.
-mose_add_fast_script(Connections fast/connections "fast;implementation;numerics;physics;1D;2D;3D")
-
-# Restart round-trip (I3/F6): split+restart reproduces the uninterrupted run;
-# at a restart a missing probe file is written again, an existing one appended,
-# with the probe rows of the uninterrupted run.
-# Restart counters (I3): with vtk raw, steady, time-based-output and multigrid
-# restarts reproduce the uninterrupted runs bit for bit; a multigrid restart from
-# Tecplot goes on with the global iteration count; a time-accurate restart from a
-# steady solution starts at t = 0; a restart from an older solution keeps no
-# residual-history or probe row twice; a first part that ends on an output
-# iteration writes the solution and the probe row due there; a first part
-# killed at its time limit leaves in the history files every row it wrote.
-mose_add_fast_script(Restart        fast/restart        "fast;implementation;1D")
-
-# Output files (OutputFiles): the parts below, each in its folder of
-# test/fast/output-files, run one after the other by
-# test/fast/output-files/run.sh.
-# Wall output: a vtk raw run with no-slip walls ends, and every wall file has
-# the extent, the points and the cell values of its face; wall.vtm lists one
-# file for each wall face, all written.
-# VTK outputs (field, wall, diagnostic) are well-formed XML with the right names.
-# vtk raw outputs (field and diagnostic, steady and time-accurate) hold raw
-# appended data in every block file, as sol-format asks.
-# Wall output and residual: the wall output must not change the residual that
-# the diagnostic output prints next (a converged laminar hypersonic plate).
-# Probes given by position record the cell whose centre is the nearest, never
-# a ghost cell: probes at cell centres hold the values of their cells.
-mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
-
-# Input checks: the parts below, each in its folder of test/fast/input-checks,
-# run one after the other by test/fast/input-checks/run.sh. InputChecks (fast
-# tier) runs LimiterDefaults, IRSTimeAccurate and DecompositionMap; ExitCodes
-# and RuntimeInput, over about 10 s of CPU time each at one thread, run in the
-# validation tier under their own names.
-# Exit codes of the error stops: a run that MOSE stops on an error ends with a
-# non-zero exit code and its message: the Sod tube as a viscous mixture of four
-# species without a diffusion table, a run that diverges, a NaN or an infinity
-# in the initial condition (a stop at set-up, exit code 1, in every build), in
-# the time table of an inlet 402, in a property line of bc.txt and in the file
-# of a face 410, a file of a face 410 that cannot be read (missing, cut, with a
-# word among its values, an unreadable zone header or a value too many), whose
-# zones go back in time, that lacks a part of the state across the face, that
-# leaves a cell of a face 410 without a value at one of its times or whose
-# nodes are not those of the faces (files as ATLAS writes them run, also from a
-# restart, with the same bits when their nodes move within the tolerance), an
-# initial condition with too few variables, a
-# rotating frame
-# with a zero axis, or with an axis or an origin that is not finite,
-# chemistry = equilibrium without the elements of the species,
-# chemistry = finite-rate without its mechanism (chemistry-info.txt), an
-# integration of the finite-rate chemistry that its integrator refuses (with 1
-# and 4 threads, the same line of the failure; on a coarse multigrid level, the
-# line names it), an integration that needs more steps than ode-max-steps in
-# some cells of two blocks (the line gives the failed cell of the smallest
-# block, k, j, i; with 1 and 4 threads, the same line),
-# a value outside the rule of the registry (an interval, a list of reals, a list
-# of integers), an input.ini that cannot be read (missing, empty, of comment
-# lines only), a key of input.ini whose value does not read as its type, a
-# probe of an unknown variable; a valid run with chemistry and
-# exclude-blocks ends with 0, and a block excluded from chemistry = equilibrium
-# keeps the bits of the run without chemistry, also with multigrid. A steady run
-# with a soot model ends normally and its diagnostic output names every variable
-# it writes; a steady single-species run without thermo or transport output
-# stops with a message that says so. A restart from a solution whose time or a
-# counter is not finite stops at set-up.
-# Limiter defaults: the reconstruction that runs is the declared one (MUSCL
-# without flux-limiter = van Leer; first-order ignores a given limiter), and
-# the set-up warnings say so.
-# Implicit residual smoothing is a steady-state accelerator: a time-accurate
-# run that asks for it (irs = true or irs-beta > 0) is refused at set-up.
-# Preconditioning: integration-variables = prec in a time-accurate run, and
-# HLLC-PC without prec, are refused at set-up; a steady prec run with HLLC-PC
-# passes it.
-# Block-to-rank assignment from the map that decomposition-map names in INPUT/,
-# on one rank: a map with every block on rank 0, also one written by the mesh
-# decomposer (MDB) itself, gives the bits of the run without it; maps that do
-# not fit the mesh or the run, a missing named file and a name with a folder
-# stop it at setup with the fault named; a map without the key is not read.
-# input.ini read again during a run (ini-diter): an error of the reading (a
-# value out of the rules of the registry, that does not read or that is not
-# finite, a file that cannot be read, another value of a key fixed for the run,
-# of levels or more probes than at the start, a change of the model or of the
-# stationary faces of the rotating frame) stops the run with its message with
-# ini-error = stop; with warn, the default, the reading is not taken and the
-# run goes on with the values before it, byte for byte; read again unchanged,
-# with keys left out or written, it gives the run without readings; newrun, a
-# key of the start only, written during the run is left as it was; implicit
-# residual smoothing is on with irs = true or irs-beta > 0 at every reading,
-# and switched on in a run started without it is an error of the reading; the
-# checks of the set-up between keys (riemann-options-Mco with a low-Mach
-# Riemann solver, schmidt with more than one species and no diffusion table)
-# are made again on the values read.
-mose_add_parts_script(InputChecks fast/input-checks
-    PARTS limiter-defaults irs-time-accurate prec-scope decomposition-map
-    LABELS fast implementation numerics 1D 2D)
-mose_add_parts_script(ExitCodes fast/input-checks
-    PARTS exit-codes LABELS validation implementation numerics 1D 2D)
-mose_add_parts_script(RuntimeInput fast/input-checks
-    PARTS runtime-input LABELS validation implementation numerics 1D 2D)
-
-# Manufactured fields for the RANS right-hand sides (2D/viscous/mms/residuals).
-# Spalart-Allmaras with variable density: the right-hand side of the equation
-# for rho nu~ converges to the standard conservation form; with SA-RC, the
-# right-hand side of a 3-D flow does not depend on how the flow is turned, it
-# takes the rotation of the frame in r~, a uniform flow keeps nu~, and air at
-# rest next to a wall, or flowing along it on stretched cells, changes nu~ as
-# with SA.
-# Part 4: the viscous force on the axisymmetric wedge (Homann's flow and a field
-# with dilatation and swirl) converges to the Navier-Stokes one with second order;
-# a viscous run with the axis at r = 0 on the wedge or on a 3-D sector stops at setup,
-# and on the polar line of a 3-D mesh with diffusive-metric = mean.
-# Part 5: next to a wall the Spalart-Allmaras sources see the gradient of nu~
-# that the wall value nu~ = 0 gives (linear profile at rest).
-mose_add_fast_script(MMSResiduals 2D/viscous/mms/residuals "fast;physics;2D;3D")
-
-# Steady state with the point-implicit factor: it must not depend on the time
-# step (a short hypersonic plate, Spalart-Allmaras, SST, and SST and Wilcox 2006
-# with k-energy-coupling). Validation tier: it converges 14 000 iterations per
-# model, about 12 s of CPU each.
-mose_add_fast_script(PointImplicitSteady 2D/viscous/point-implicit-steady "validation;numerics;2D")
-
-# Local time step next to the axis of the wedge (BC 200): the stress on the wedge
-# faces stiffens the rows next to the axis. At the largest vnn the step rule
-# declares stable (RK3 0.62, Heun 0.5), on square and on elongated cells, and at
-# the recommended vnn (RK3 0.5, Heun 0.4) on cells four times as long in x, with
-# Prandtl 0.72 and 0.9, no NaN.
-# Validation tier: eight runs of 2000 iterations, 155 s of CPU at one thread on
-# a loaded machine (163 s of wall time), hence a TIMEOUT of its own.
-mose_add_fast_script(WedgeAxisStep 2D/viscous/wedge-axis-step "validation;numerics;2D")
-
-# Preconditioning: inviscid flow past a cylinder at Mach 0.01 and 0.001, first
-# order, steady (test/2D/euler/low-mach-cylinder). integration-variables = prec
-# with HLLC-PC converges (the residual falls by two orders), and its Cp field
-# is the same at the two Mach numbers within 2e-3 (the incompressible limit),
-# within 0.3 of potential flow on the front half; cons with HLLC is off by
-# more than 1 in Cp.
-add_test(NAME Preconditioning COMMAND bash -c "./run.sh"
-         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/2D/euler/low-mach-cylinder")
-set_tests_properties(Preconditioning PROPERTIES
-    LABELS "validation;numerics;2D" TIMEOUT 900 ENVIRONMENT "${_MOSE_TEST_ENV}")
-if(TEST WedgeAxisStep)
-    set_tests_properties(WedgeAxisStep PROPERTIES TIMEOUT 600)
-endif()
-
-# Patch test of the viscous fluxes: the parts below, each in its folder of
-# test/fast/viscous-patch, run one after the other by
-# test/fast/viscous-patch/run.sh. ViscousPatch (fast tier) runs
-# ViscousLinearPatch and ViscousOpenPatch; ViscousWallPatch, over about 10 s
-# of CPU time at one thread, runs in the validation tier under its own name.
-# Patch test of the viscous fluxes: a linear velocity and a linear temperature
-# have zero viscous force and heat conduction in every cell, so the face
-# gradients must give zero to round-off on meshes with nodes moved at random,
-# folds between blocks, a fan of index lines at a wall (the second layer of
-# extrapolated ghost cells turned over, and both layers), points shared by 3 and 5 blocks,
-# symmetry planes and
-# walls with a prescribed heat flux; the face metric mean
-# against an independent replica of its formula. ViscousWallPatch: the
-# cells next to walls of prescribed temperature varying along the wall, and
-# next to faces of type 410 (assigned state from a file).
-# ViscousOpenPatch: the cells next to inlets and outlets (401-408, 420), whose
-# faces have no viscous flux.
-# Cost: 44, 75 and 16 one-step solver runs, about 10 s, 19 s and 4 s of CPU
-# time at one thread (the 12 runs next to faces of type 410 about 4 s).
-mose_add_parts_script(ViscousPatch fast/viscous-patch
-    PARTS viscous-linear-patch viscous-open-patch LABELS fast numerics 2D 3D)
-mose_add_parts_script(ViscousWallPatch fast/viscous-patch
-    PARTS viscous-wall-patch LABELS validation numerics 2D 3D)
-
-# Ablative wall BCs (503 melting / 504 pyrolysis) and the SRM grain (502, its
-# two modes, a blowing wall and an inflow, on both ends): an isothermal blown
-# column, which is an exact steady solution, checked against its closed form.
-# These boundary conditions have no other coverage in the suite.
-# The melting column also runs without schmidt: the default, 0, needs no
-# diffusion table with a single species.
-mose_add_fast_script(AblatingWall 2D/viscous/ablating-wall "fast;validation;physics;2D")
-
-# Reynolds-stress model (SSGLRR and its variants): isotropic turbulence carried by a
-# uniform stream through an axisymmetric wedge, checked against the closed form of
-# its decay and for energy conservation (FlatPlateTMR runs the model on the flat
-# plate of the NASA TMR). Validation tier: four runs, 52 s of CPU at one thread on
-# a loaded machine, hence a TIMEOUT of its own.
-mose_add_fast_script(RSMDecay 2D/viscous/rsm-decay "validation;physics;2D")
-if(TEST RSMDecay)
-    set_tests_properties(RSMDecay PROPERTIES TIMEOUT 300)
-endif()
-
-# Mesh geometry (MeshGeometry): the parts below, each in its folder of
-# test/fast/mesh-geometry, run one after the other by
-# test/fast/mesh-geometry/run.sh.
-# Wall distance: the distance to the wall of the turbulence models is the
-# minimum distance to the wall surface (convex corner, curved wall, nozzle lip
-# on an axisymmetric wedge), and to its periodic images, also when the periods
-# are much shorter than the mesh or nearly dependent, read back from the
-# Spalart-Allmaras source.
-# Mesh type: a plane 2-D mesh, an axisymmetric wedge and a 3-D slab periodic in
-# k are told apart by every node of every block; blocks that disagree stop, and
-# so does a cell folded at a corner (2-D, 3-D, and a cell of a real 3-D mesh);
-# a 3-D ring closed by type 200 over the full turn is translated by zero.
-mose_add_fast_script(MeshGeometry fast/mesh-geometry "fast;implementation;physics;2D")
-
-# Quadratic constitutive relation QCR2000: a unit check of the stress as the
-# solver calls it (laminar viscosity, then eddy viscosity), against the
-# definition. QCR2000 is not selectable from the input, so no run passes there.
+# ---------------------------------------------------------------------------
+#  test/unit: Fortran programs that check one routine
+# ---------------------------------------------------------------------------
 add_fortran_executable(qcr2000_check unit/qcr2000_check.f90)
-add_test(NAME QCR2000Stress COMMAND qcr2000_check)
-set_tests_properties(QCR2000Stress PROPERTIES LABELS "fast;physics;unit" TIMEOUT 60)
-
-# Cell volume (CellVolume): a unit check of the volume of Compute_Metric_Tensor,
-# the integral of det J of the trilinear cell, against its exact value on cells
-# with twisted faces, a non-convex cell, a collapsed edge, 2-D, wedge and
-# left-handed cells, and on a twisted mesh against the volume enclosed by its
-# boundary faces; a cell whose volume has not the sign of det A at its centre
-# raises the flag of degenerate or inverted cells.
 add_fortran_executable(cell_volume_check unit/cell_volume_check.f90)
-add_test(NAME CellVolume COMMAND cell_volume_check)
-set_tests_properties(CellVolume PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
-
-# Reflective face pressure (ReflectivePressure): a unit check of the pressure a
-# reflective (symmetry) treatment, BC_Symmetry_Eul, returns on a face whose cell
-# gas moves along the normal, with the exact solver and with HLLC (the default
-# of riemann-solver): below the pressure of the cell when the gas moves away
-# from the face (the blown gas of a grain, 502, or of an ablating wall,
-# 503-505), above it when the gas moves towards the face; the exact solver on
-# the exact solution of the mirror problem. The comment of Ablation_Wall_Fluxes
-# gives it as the reason a blowing face carries the pressure of its cell.
 add_fortran_executable(reflective_pressure_check unit/reflective_pressure_check.f90)
-add_test(NAME ReflectivePressure COMMAND reflective_pressure_check)
-set_tests_properties(ReflectivePressure PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
-
-# Order of rounding (VolatileOrder): a difference stored in a VOLATILE variable
-# and read back is rounded as written, also with -ffast-math, which lets the
-# compiler evaluate (q - c1) - (c2 - c1) as q - c2; Compute_Metric_Tensor takes
-# its node differences so. The values come from the command line (no folding).
 add_fortran_executable(volatile_order_check unit/volatile_order_check.f90)
-add_test(NAME VolatileOrder COMMAND volatile_order_check 1 18014398509481984 3)
-set_tests_properties(VolatileOrder PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
-
-# Wall distance to a bilinear face (BilinearDistance): the certified minimum of
-# the wall distance against the exact distance of the stationarity equations on
-# twisted, plane, non-convex, degenerate and far faces (within 288 u S, with its
-# certificate), and the fast-path test of the four triangles: taken by plane
-# faces, not by twisted ones (cases: unit/bilinear_distance_cases.txt).
 add_fortran_executable(bilinear_distance_check unit/bilinear_distance_check.f90)
-add_test(NAME BilinearDistance
-         COMMAND bilinear_distance_check ${CMAKE_CURRENT_SOURCE_DIR}/unit/bilinear_distance_cases.txt)
-set_tests_properties(BilinearDistance PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 120)
-
-# Blocks whose state an MPI rank holds (RemoteBlocks): a unit check of
-# blocks_needing_full_arrays and deallocate_remote_computation_data on four
-# blocks of three ranks, each rank set as a run on three ranks sets it (no MPI
-# call): a rank holds its own blocks and the chimera (102) donors of the
-# receivers it owns, not the donors of the receivers of other ranks, nor the
-# donors of a face 104, which are cells of the other solver.
 add_fortran_executable(remote_blocks_check unit/remote_blocks_check.f90)
-add_test(NAME RemoteBlocks COMMAND remote_blocks_check)
-set_tests_properties(RemoteBlocks PROPERTIES LABELS "fast;implementation;unit" TIMEOUT 60)
-
-# Face values of the MUSCL reconstruction (MusclFaceBounds): a unit check of
-# Reconstruction with each limiter on lines of cells of any lengths. Every face
-# value lies between the values of the two cells of its face, within 8 ulp
-# (van Albada where the ratio of the slopes is positive); a cell of length 1
-# next to cells of length 0.01 stays non-negative after a forward Euler step at
-# Courant number 1/2; the bounds only reduce the slope, the two faces of a cell
-# take the same slope, and on lines of equal cells and for linear data the slope
-# is the limiter's own; the call with the bounds 2 and 2, which symmetry
-# planes, walls and the inlets 405 and 420 make, gives the formulas of the
-# limiters, asserted when the build keeps the order of evaluation of the source
-# (the three numbers of VolatileOrder; with -ffast-math the differences are
-# printed).
 add_fortran_executable(muscl_face_bounds_check unit/muscl_face_bounds_check.f90)
-add_test(NAME MusclFaceBounds COMMAND muscl_face_bounds_check 1 18014398509481984 3)
-set_tests_properties(MusclFaceBounds PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
-
-# Preconditioning (PrecTransform): a unit check of the update of
-# integration-variables = prec and prim (Compute_Prim_Residual): the increment
-# of the primitive variables solves Gamma dQ = dU with the Weiss-Smith matrix
-# (Theta = 1/Ur^2 + 1/(cp T); rho_p with prim), for one and three species and
-# Ur from a to 1e-4 a; at Ur = a prec gives the increment of prim. And the
-# reference velocity comp_Ur in its three modes (default, preconditioning-Uref,
-# preconditioning-Mach) with the viscous floor and preconditioning-Ur-min.
 add_fortran_executable(prec_transform_check unit/prec_transform_check.f90)
-add_test(NAME PrecTransform COMMAND prec_transform_check)
-set_tests_properties(PrecTransform PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
 
-# ===========================================================================
-#  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
-#  Each test generates its own small multi-block case and launches the solver
-#  itself through the MPI launcher CMake found, with at most 4 ranks; it
-#  asserts an invariant of the parallel run.
-# ===========================================================================
-if(USE_MPI)
-    function(mose_add_mpi_script NAME DIR)
-        if(EXISTS "${CMAKE_SOURCE_DIR}/test/${DIR}/run.sh")
-            add_test(
-                NAME    ${NAME}
-                COMMAND bash -c "./run.sh"
-                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${DIR}"
-            )
-            set_tests_properties(${NAME} PROPERTIES
-                LABELS      "${ARGN}"
-                TIMEOUT     600
-                PROCESSORS  4
-                ENVIRONMENT "${_MOSE_TEST_ENV};MOSE_MPIEXEC=${MPIEXEC_EXECUTABLE};MOSE_MPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}"
-            )
+mose_test(QCR2000Stress
+    COMMAND qcr2000_check
+    KIND unit  LABELS physics unit
+    DESC "QCR2000 constitutive relation")
+mose_test(CellVolume
+    COMMAND cell_volume_check
+    KIND unit  LABELS numerics unit
+    DESC "cell volume from the metric tensor")
+mose_test(ReflectivePressure
+    COMMAND reflective_pressure_check
+    KIND unit  LABELS numerics unit
+    DESC "face pressure of a reflective wall")
+mose_test(VolatileOrder
+    COMMAND volatile_order_check 1 18014398509481984 3
+    KIND unit  LABELS numerics unit
+    DESC "rounding order of VOLATILE variables")
+mose_test(BilinearDistance
+    COMMAND bilinear_distance_check ${CMAKE_CURRENT_SOURCE_DIR}/unit/bilinear_distance_cases.txt
+    KIND unit  LABELS numerics unit
+    DESC "wall distance to a bilinear face")
+mose_test(RemoteBlocks
+    COMMAND remote_blocks_check
+    KIND unit  LABELS implementation unit
+    DESC "blocks held by an MPI rank")
+mose_test(MusclFaceBounds
+    COMMAND muscl_face_bounds_check 1 18014398509481984 3
+    KIND unit  LABELS numerics unit
+    DESC "MUSCL face values stay between the neighbours")
+mose_test(PrecTransform
+    COMMAND prec_transform_check
+    KIND unit  LABELS numerics unit
+    DESC "Weiss-Smith update of prim and prec, and the reference velocity")
+
+# ---------------------------------------------------------------------------
+#  Multirate integrator ([MOSE-Multirate]): one test per check of test/multirate/mr-<check>; the full forms are heavy
+# ---------------------------------------------------------------------------
+mose_test(Multirate.Smoke
+    DIR multirate/mr-smoke  RUN "bash ./run.sh"
+    KIND identity  LABELS multirate implementation 1D
+    DESC "one level equals the single rate, conservation, restart, refusal at set-up")
+mose_test(Multirate.OneLevel
+    DIR multirate/mr-onelevel  RUN "bash ./run.sh"
+    KIND identity  LABELS multirate implementation numerics 1D 2D 3D
+    DESC "one level equals the single-rate step, bit for bit, on 33 configurations")
+mose_test(Multirate.Threads
+    DIR multirate/mr-threads  RUN "bash ./run.sh"
+    KIND identity  LABELS multirate implementation 1D 2D 3D
+    DESC "1 against 3 and 4 threads, bit for bit")
+mose_test(Multirate.Blocks
+    DIR multirate/mr-blocks  RUN "bash ./run.sh"
+    KIND identity  LABELS multirate implementation 1D 2D
+    DESC "equal levels across block faces, one block equals three")
+mose_test(Multirate.Halo
+    DIR multirate/mr-halo  RUN "bash ./run.sh"
+    KIND exact  LABELS multirate implementation 1D 2D
+    DESC "halo of every level against an independent construction")
+mose_test(Multirate.Sym
+    DIR multirate/mr-sym  RUN "bash ./run.sh"
+    KIND invariant  LABELS multirate numerics 2D
+    DESC "mirror symmetry of a centred pulse with levels")
+mose_test(Multirate.Free
+    DIR multirate/mr-free  RUN "bash ./run.sh"
+    KIND invariant  LABELS multirate numerics 2D
+    DESC "free stream preserved on a curvilinear periodic mesh with levels")
+mose_test(Multirate.Conservation
+    DIR multirate/mr-conservation  RUN "bash ./run.sh"
+    KIND invariant  LABELS multirate numerics 1D 2D 3D
+    DESC "mass, momentum and energy conserved with levels, diffusive, turbulence, mixture")
+mose_test(Multirate.Restart
+    DIR multirate/mr-restart  RUN "bash ./run.sh"
+    KIND identity  LABELS multirate implementation 1D 2D
+    DESC "exact restart and output instants with levels")
+mose_test(Multirate.Order
+    DIR multirate/mr-order  RUN "bash ./run.sh"
+    KIND order  LABELS multirate numerics 1D 2D
+    LOCK mr-order
+    DESC "temporal order with levels: waves, vortex, plate, hot square, wall, SA, SST")
+mose_test(Multirate.Deep
+    DIR multirate/mr-deep  RUN "bash ./run.sh"
+    KIND order  LABELS multirate numerics 1D
+    LOCK mr-deep
+    DESC "9 and 13 levels: order, conservation, 2000-step stability")
+mose_test(Multirate.Bc
+    DIR multirate/mr-bc  RUN "bash ./run.sh"
+    KIND order  LABELS multirate numerics 1D
+    DESC "time-dependent inlets 402 and 410 on the finest level: order at the inlet")
+mose_test(Multirate.MovingLevels
+    DIR multirate/mr-moving-levels  RUN "bash ./run.sh"
+    KIND order  LABELS multirate numerics 1D
+    DESC "order with level boundaries moving with a simple wave")
+mose_test(Multirate.Sod
+    DIR multirate/mr-sod  RUN "bash ./run.sh"
+    KIND exact  LABELS multirate numerics 1D
+    DESC "Sod tube with levels rebuilt every macro step against the exact solution")
+mose_test(Multirate.Shock
+    DIR multirate/mr-shock  RUN "bash ./run.sh"
+    KIND exact  LABELS multirate numerics 2D
+    DESC "planar shock through the faces between levels")
+mose_test(Multirate.Rpost
+    DIR multirate/mr-rpost  RUN "bash ./run.sh"
+    KIND invariant  LABELS multirate numerics 1D 2D
+    DESC "step taken against the step admitted on the new state")
+mose_test(Multirate.Cfl4
+    DIR multirate/mr-cfl4  RUN "bash ./run.sh"
+    KIND invariant  LABELS multirate numerics 1D 2D
+    DESC "non-local CFL condition: certificate, interface margin, redo")
+mose_test(Multirate.Positivity
+    DIR multirate/mr-positivity  RUN "bash ./run.sh"
+    KIND robustness  LABELS multirate physics 1D
+    DESC "no negative nu~, k or omega after a stage with levels")
+mose_test(Multirate.Reject
+    DIR multirate/mr-reject  RUN "bash ./run.sh"
+    KIND contract  LABELS multirate implementation 1D 2D 3D
+    DESC "34 configurations outside the scope are refused with their message")
+mose_test(Multirate.FixedStep
+    DIR multirate/mr-fixedstep  RUN "bash ./run.sh"
+    KIND contract  LABELS multirate implementation 1D 2D
+    DESC "fixed macro step and re-reading of the multirate keys")
+mose_test(Multirate.Trace
+    DIR multirate/mr-trace  RUN "bash ./run.sh"
+    KIND exact  LABELS multirate implementation 1D
+    DESC "stage sequence of one macro step against the reference recursion")
+mose_test(Multirate.Daru
+    DIR multirate/mr-daru  RUN "bash ./run.sh"
+    KIND reference  LABELS multirate numerics 2D
+    LOCK mr-daru
+    DESC "Daru-Tenaud tube on 50x25 cells: multirate against the single rate")
+mose_test(Multirate.Nozzle
+    DIR multirate/mr-nozzle  RUN "bash ./run.sh"
+    KIND reference  LABELS multirate numerics 1D
+    DESC "nozzle start-up: moving shock across levels against the single rate")
+mose_test(Multirate.OrderFull
+    DIR multirate/mr-order  RUN "bash ./run.sh"
+    KIND order  LABELS multirate numerics 1D 2D
+    LOCK mr-order  TIMEOUT 14400  ENV MR_FORM=full
+    DESC "full form of Multirate.Order (about 1 h)")
+mose_test(Multirate.DeepFull
+    DIR multirate/mr-deep  RUN "bash ./run.sh"
+    KIND order  LABELS multirate numerics 1D
+    LOCK mr-deep  TIMEOUT 14400  ENV MR_FORM=full
+    DESC "full form of Multirate.Deep, with the 13-level order (about 1 h)")
+mose_test(Multirate.DaruMedium
+    DIR multirate/mr-daru  RUN "bash ./run.sh medium"
+    KIND reference  LABELS multirate numerics 2D
+    LOCK mr-daru  TIMEOUT 3600
+    DESC "Daru-Tenaud tube on 100x50 cells (about 20 min)")
+mose_test(Multirate.DaruFull
+    DIR multirate/mr-daru  RUN "bash ./run.sh full"
+    KIND reference  LABELS multirate numerics 2D
+    LOCK mr-daru  TIMEOUT 720000
+    DESC "Daru-Tenaud tube on 500x250 cells, as the reference (100 h)")
+
+# ---------------------------------------------------------------------------
+#  needs-mpi: built with USE_MPI=ON (the second CI job); up to 4 ranks x threads each, so PROCESSORS says so
+# ---------------------------------------------------------------------------
+if(USE_MPI AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # the probe library of MPIThreadFunnel and of Multirate.Hybrid: it reports an MPI call from a thread other than the main one
+    find_package(Threads REQUIRED)
+    add_library(mpi_thread_probe MODULE mpi/thread-funnel/mpi_thread_probe.c)
+    target_link_libraries(mpi_thread_probe PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+    set_target_properties(mpi_thread_probe PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+mose_test(MPIRestart
+    DIR mpi/restart
+    KIND identity  LABELS implementation 2D
+    REQUIRES MPI
+    DESC "exact restart on 2 ranks x 2 threads")
+mose_test(MPIBoundaryRecords
+    DIR mpi/boundary-records
+    KIND identity  LABELS implementation 2D
+    REQUIRES MPI
+    DESC "boundary fluxes identical on any ranks x threads and any record order")
+mose_test(MPIVertexStencil
+    DIR mpi/vertex-stencil
+    KIND identity  LABELS implementation 2D
+    REQUIRES MPI
+    DESC "viscous stencil at a vertex of four blocks: same bits on any layout")
+mose_test(MPIBitIdentity
+    DIR mpi/bit-identity
+    KIND identity  LABELS implementation 2D 3D
+    REQUIRES MPI
+    DESC "same output bits on 1x1, 1x4, 2x1, 4x1, 2x2 ranks x threads")
+mose_test(MPIThreadFunnel
+    DIR mpi/thread-funnel
+    KIND contract  LABELS implementation 2D
+    REQUIRES MPI LINUX
+    DESC "no MPI call from a thread other than the main one")
+mose_test(MPIConnectionFlux
+    DIR mpi/connection-flux
+    KIND identity  LABELS implementation 1D
+    REQUIRES MPI
+    DESC "faces between ranks give the one-rank bits and conserve")
+mose_test(MPIConnectionOrder
+    DIR mpi/connection-order
+    KIND identity  LABELS implementation 2D
+    REQUIRES MPI
+    DESC "faces between ranks, sorted and reversed records: same bits")
+mose_test(MPIDecompositionMap
+    DIR mpi/decomposition-map
+    KIND contract  LABELS implementation 2D
+    REQUIRES MPI
+    DESC "block-to-rank map: valid maps are used, bad maps are refused")
+mose_test(MPIExitCodes
+    DIR mpi/exit-codes
+    KIND contract  LABELS implementation 1D
+    REQUIRES MPI
+    DESC "an input error found by rank 0 stops every rank with exit code 1")
+mose_test(MPIRuntimeInput
+    DIR mpi/runtime-input
+    KIND contract  LABELS implementation 2D
+    TIMEOUT 120  REQUIRES MPI
+    DESC "input.ini read again during a run on several ranks")
+mose_test(Multirate.Hybrid
+    DIR multirate/mr-hybrid  RUN "bash ./run.sh"
+    KIND identity  LABELS multirate implementation 1D 2D 3D
+    PROCESSORS 8  REQUIRES MPI
+    DESC "multirate on MPI ranks and threads: same bits as 1x1, timers")
+mose_test(Multirate.RestartHybrid
+    DIR multirate/mr-restart-hybrid  RUN "bash ./run.sh"
+    KIND identity  LABELS multirate implementation 2D
+    PROCESSORS 4  REQUIRES MPI
+    DESC "multirate exact restart on 2 ranks x 2 threads")
+
+if(TARGET mpi_thread_probe)
+    foreach(_t MPIThreadFunnel Multirate.Hybrid)
+        if(TEST ${_t})
+            set_property(TEST ${_t} APPEND PROPERTY ENVIRONMENT "MOSE_MPI_THREAD_PROBE=$<TARGET_FILE:mpi_thread_probe>")
         endif()
-    endfunction()
-
-    # Exact restart from vtk raw on 2 ranks x 2 threads: 24 + 16 steps, the
-    # first part ending on an output step, give the bits of 40 steps in one
-    # go, output numbering and counters included.
-    mose_add_mpi_script(MPIRestart mpi/restart "needs-mpi;implementation;2D")
-
-    # Boundary records: the boundary-flux loop gives the same bits on any
-    # ranks x threads layout and for any order of the records in bc.txt.
-    mose_add_mpi_script(MPIBoundaryRecords mpi/boundary-records "needs-mpi;implementation;2D")
-
-    # Viscous connection stencil at a vertex shared by four blocks: the same
-    # bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads; with equilibrium
-    # chemistry, the same bits on 1x1 and 2x1.
-    mose_add_mpi_script(MPIVertexStencil mpi/vertex-stencil "needs-mpi;implementation;2D")
-
-    # The same output bits on 1x1, 1x4, 2x1, 4x1 and 2x2 ranks x threads: a
-    # 2x2-block box with walls, inlets and outlets, Spalart-Allmaras and SST
-    # steady with implicit residual smoothing, Spalart-Allmaras time-accurate,
-    # and the points shared by 3 and by 5 blocks of ViscousLinearPatch; the
-    # lines of the gas entering through each 400 boundary and the lines at the
-    # end of the run (400 faces with gas entering, ghost cells of walls and 400
-    # faces, turbulence values below zero) the same as on 1x1, none with a
-    # count of zero. With a MOSE built without OpenMP, 1x1, 2x1 and 4x1 only.
-    mose_add_mpi_script(MPIBitIdentity mpi/bit-identity "needs-mpi;implementation;2D;3D")
-
-    # MPI calls only from the main thread (MPI_THREAD_FUNNELED): a probe
-    # library preloaded into the solver counts the MPI calls made by any
-    # other thread; it must count none on 2x2, 2x4 and 2x2 with IRS (steady).
-    # A MOSE built without OpenMP has no other thread: the test then exits with
-    # 77, the code of a skipped test, after its first run.
-    # Linux only: the probe is preloaded with LD_PRELOAD, a variable of the
-    # dynamic loader of ELF systems (ld.so), and gives the names without the
-    # trailing underscore as symbol aliases (the alias attribute of GCC);
-    # elsewhere neither is built nor registered.
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        find_package(Threads REQUIRED)
-        add_library(mpi_thread_probe MODULE mpi/thread-funnel/mpi_thread_probe.c)
-        target_link_libraries(mpi_thread_probe PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
-        set_target_properties(mpi_thread_probe PROPERTIES
-            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-        mose_add_mpi_script(MPIThreadFunnel mpi/thread-funnel "needs-mpi;implementation;2D")
-        if(TEST MPIThreadFunnel)
-            set_property(TEST MPIThreadFunnel APPEND PROPERTY
-                ENVIRONMENT "MOSE_MPI_THREAD_PROBE=$<TARGET_FILE:mpi_thread_probe>")
-            set_tests_properties(MPIThreadFunnel PROPERTIES SKIP_RETURN_CODE 77)
-        endif()
-    endif()
-
-    # Faces between ranks: the two-block cases of ConnectionFlux with one block
-    # per rank give the one-rank and the one-block bits, and conserve.
-    mose_add_mpi_script(MPIConnectionFlux mpi/connection-flux "needs-mpi;implementation;1D")
-
-    # The 2-D case of ConnectionOrder with one block per rank: sorted and
-    # reversed records give the one-rank bits.
-    mose_add_mpi_script(MPIConnectionOrder mpi/connection-order "needs-mpi;implementation;2D")
-
-    # Block-to-rank assignment from the map named by decomposition-map: on 2 and 4 ranks
-    # every map (MOSE's own assignment as MDB writes it, permutations, an idle
-    # rank 0, 110 blocks, fewer blocks than ranks) gives the one-rank field; a
-    # map for other ranks stops every rank with the same message.
-    mose_add_mpi_script(MPIDecompositionMap mpi/decomposition-map "needs-mpi;implementation;2D")
-
-    # Exit codes under MPI: an input error that rank 0 finds at set-up stops both
-    # ranks of a 2-rank run within 60 s, with exit code 1 and the STOP line of both
-    # ranks; an input.ini that rank 0 cannot read, whose outcome rank 0 passes to
-    # every rank, stops them within 60 s, with exit code 1 to 128; a value out of
-    # its rule written during the run in the input.ini of rank 0, which rank 0
-    # reads again and passes to every rank (each rank in its own folder), stops
-    # both ranks with exit code 1 with ini-error = stop.
-    # A value of the initial condition that is not finite stops both ranks with exit
-    # code 1, also when rank 1 alone holds it; so does an initial condition that
-    # rank 1 alone cannot read (two folders), a file of faces 410 whose zones
-    # give the nodes of another block (a block on each rank), a record of
-    # type 409, which MOSE does not apply, in the Sod tube, and an integration
-    # of the finite-rate chemistry that fails in the block of rank 1 alone (2
-    # threads per rank): the line of the failure written once, by rank 1.
-    # Integrations that need more steps than ode-max-steps in some cells of two
-    # blocks, a block on each rank, give one line, written once by the rank that
-    # holds the smallest block with a failed cell.
-    # A rank that stops every rank with MPI_ABORT writes out its output first: one
-    # process without the launcher, its output on a file, keeps in its log the
-    # message (a probe of an unknown variable), the set-up summary before it and a
-    # warning that FLINT writes on the error output.
-    mose_add_mpi_script(MPIExitCodes mpi/exit-codes "needs-mpi;implementation;1D")
-    # input.ini read again during the run: rank 0 reads it and every rank parses
-    # its text. sol-diter = 7 written in the input.ini of rank 0 alone (each
-    # rank in its own folder, an MPMD launch) gives every rank the solutions of
-    # iterations 21, 28 and 35; sol-diter, res-diter, ini-diter and cfl written
-    # in the input.ini of rank 1 alone change nothing, and cfl = -1, or
-    # time-scheme = RK2 (a key fixed for the run), in the input.ini of rank 0
-    # is not taken on any rank (ini-error left out): exit code 0 within 60 s
-    # and the files of the run without the change, byte for byte. A run whose
-    # ranks took different values would hang in its collectives: the test stops
-    # at the first case that fails, and its own TIMEOUT stops it in 120 s.
-    mose_add_mpi_script(MPIRuntimeInput mpi/runtime-input "needs-mpi;implementation;2D")
-    if(TEST MPIRuntimeInput)
-        set_tests_properties(MPIRuntimeInput PROPERTIES TIMEOUT 120)
-    endif()
+    endforeach()
+endif()
+if(TEST MPIThreadFunnel)
+    set_tests_properties(MPIThreadFunnel PROPERTIES SKIP_RETURN_CODE 77)   # no probe library: the test skips itself
 endif()
 
-# ===========================================================================
-#  Multirate integrator ([MOSE-Multirate], src/lib/numerics/time/explicit/Mod_Multirate.f90)
-#  Label "multirate" on all of them: ctest -L multirate -LE verification runs them without the longer forms (label
-#  verification), ctest -L multirate with them. The checks live in test/multirate/mr-<check>; each builds its
-#  small cases with test/multirate/mr-common/gen_mr_cases.py and needs only numpy. One fast smoke test; the other
-#  checks are grouped by subject in the validation and needs-mpi tiers (test/TESTING-PLAN.md: F31, I15-I18, N5, N6, P7, P8;
-#  cases, checks and thresholds in docs/vv/multirate.md).
-# ===========================================================================
-# Helper: like mose_add_fast_script, with its own timeout.
-function(mose_add_mr_script NAME DIR TIMEOUT)
-    if(EXISTS "${CMAKE_SOURCE_DIR}/test/${DIR}/run.sh")
-        add_test(
-            NAME    ${NAME}
-            COMMAND bash -c "./run.sh"
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/${DIR}"
-        )
-        set_tests_properties(${NAME} PROPERTIES
-            LABELS      "${ARGN}"
-            TIMEOUT     ${TIMEOUT}
-            ENVIRONMENT "${_MOSE_TEST_ENV}"
-        )
+# ---------------------------------------------------------------------------
+#  The tiers file and the registrations must list the same tests; the inventory goes to the build folder
+# ---------------------------------------------------------------------------
+get_property(_names GLOBAL PROPERTY MOSE_TEST_NAMES)
+foreach(_n IN LISTS _tier_names)
+    if(NOT _n IN_LIST _names)
+        message(FATAL_ERROR "test/tiers.txt lists '${_n}', which no mose_test() registers")
     endif()
-endfunction()
-
-# Helper: a group of checks of test/multirate (GROUP, the list CHECKS of the directories mr-<check>), run one after
-# the other by run_group.sh: every check runs, the group fails if one of them fails and names it.
-function(mose_add_mr_group NAME TIMEOUT GROUP CHECKS)
-    if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/run_group.sh")
-        add_test(
-            NAME    ${NAME}
-            COMMAND bash ./run_group.sh ${GROUP} ${CHECKS}
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate"
-        )
-        set_tests_properties(${NAME} PROPERTIES
-            LABELS      "${ARGN}"
-            TIMEOUT     ${TIMEOUT}
-            ENVIRONMENT "${_MOSE_TEST_ENV}"
-        )
-    endif()
-endfunction()
-
-# F31, fast: one level = single-rate step bit for bit, conservation with four levels, exact restart, and a
-# configuration outside the scope stopped at set-up, on two 1-D cases of 284 cells; the lines of the gas entering through
-# 400 faces, with one level as with the single rate, on a tube of 8 cells.
-mose_add_mr_script(MultirateSmoke multirate/mr-smoke 300 "multirate;fast;implementation;1D")
-
-# I18: one level (max-level 0, safety 1) = single-rate step bit for bit, residual history included, on 33
-# configurations, and the per-cell copies of the solver routines statement by statement against their originals,
-# with the MPI tags of the multirate apart from those of the single-rate exchanges (onelevel); 1 against 3 and 4
-# OpenMP threads bit for bit (threads); equal levels across the connections and one block = three blocks with the
-# same map (blocks); the halo of every level against an independent construction (halo); mirror symmetry of a
-# centred pulse (sym); free-stream preservation on a curvilinear periodic mesh (free).
-mose_add_mr_group(MultirateIdentity 4500 identity "onelevel;threads;blocks;halo;sym;free"
-                  "multirate;validation;implementation;numerics;1D;2D;3D")
-# I15: conservation with levels, also with the diffusive fluxes, with diffusive-metric = mean, with the turbulence
-# models, on a rough wall and in a frozen mixture of four species, and positive controls (conservation); exact restart
-# from vtk raw and from tecplot ascii and exact output instants k*sol-dtime and time-threshold, one and several blocks,
-# map rebuilt at every macro step and every 4, conservation over three restarts (restart).
-mose_add_mr_group(MultirateConservation 3000 conservation "conservation;restart"
-                  "multirate;validation;implementation;numerics;1D;2D;3D")
-# N5: observed temporal order with levels (acoustic and entropy waves, isentropic vortex through three blocks, laminar
-# flat plate, skewed hot square, a wall on skewed cells whose levels change along it, the wall channel with
-# Spalart-Allmaras and SST) (order); 9 and 13 levels: order, conservation, stability over 2000 macro steps (deep). Here
-# order and deep run their short forms (the macro steps H0 and H0/2; with 13 levels only the conservation); their full
-# forms (MR_FORM=full) are MultirateOrderFull, label verification.
-mose_add_mr_group(MultirateOrder 3600 order "order;deep" "multirate;validation;numerics;1D;2D")
-# N5: time-dependent inlets 402 and 410 on the finest level, order in time at the inlet cells (bc); a simple wave whose
-# level boundaries travel with it, refined jointly in space and time, against the exact solution (moving-levels).
-mose_add_mr_group(MultirateOrderInletsMoving 1800 order-inlets-moving "bc;moving-levels" "multirate;validation;numerics;1D")
-if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/run_group.sh")
-    add_test(
-        NAME    MultirateOrderFull
-        COMMAND bash ./run_group.sh orderfull order deep
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate"
-    )
-    set_tests_properties(MultirateOrderFull PROPERTIES
-        LABELS      "multirate;verification;numerics;1D;2D"
-        TIMEOUT     14400
-        ENVIRONMENT "${_MOSE_TEST_ENV};MR_FORM=full"
-    )
-    #   the short and the full forms run in the same folders (mr-order, mr-deep) and remove their cases and runs at
-    #   the start: never at the same time (ctest -j)
-    set_tests_properties(MultirateOrder MultirateOrderFull PROPERTIES RESOURCE_LOCK mr-order-deep)
-endif()
-# N6: Sod tube with the levels rebuilt at every macro step against the exact solution and the single rate (sod); a
-# planar shock through the faces between levels (shock); the step taken against the step admitted on the new state by
-# the cell and by its face neighbours (rpost); the non-local CFL condition (4) of Gnedin, Semenov and Kravtsov:
-# certificate, interface margin and redo (cfl4); no negative nu~, k or omega after a stage where the near-wall
-# destruction acts faster than the transport, with a positive control (positivity).
-mose_add_mr_group(MultirateShocks 3300 shocks "sod;shock;rpost;cfl4;positivity" "multirate;validation;numerics;1D;2D")
-# I16: configurations outside the scope of the integrator stop at set-up or at the first macro step, one run each, and
-# a reading of input.ini during the run that changes a key of [MOSE-Multirate] is not taken or stops the run (reject);
-# with fixed-macro-step the level map is that of the macro step taken (fixedstep); the stage sequence of one macro step
-# against the reference sequence of the recursion (trace).
-mose_add_mr_group(MultirateInput 1020 input "reject;fixedstep;trace" "multirate;validation;implementation;1D;2D;3D")
-# P7: the viscous shock tube of Daru and Tenaud (Re = 200) on 50 x 25 cells: single rate at dt0/4 (the reference) and
-# at dt0, multirate with H = 4 dt0 and with H = dt0; every cell within its limit, the error of the multirate with
-# H = dt0 at most 1.05 times that of the single rate at every output instant and at the probes, the jumps of the
-# reference within one local cell and no more extrema than the single rate on the wall and symmetry rows,
-# conservation within 1e-12 (verify_daru.py).
-mose_add_mr_script(MultirateDaruTenaud multirate/mr-daru 900 "multirate;validation;numerics;2D")
-# P7, medium form: the same checks on 100 x 50 cells; label verification.
-if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru/run.sh")
-    add_test(
-        NAME    MultirateDaruTenaudMedium
-        COMMAND bash -c "./run.sh medium"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru"
-    )
-    set_tests_properties(MultirateDaruTenaudMedium PROPERTIES
-        LABELS      "multirate;verification;numerics;2D"
-        TIMEOUT     3600
-        ENVIRONMENT "${_MOSE_TEST_ENV}"
-    )
-endif()
-# P7, full form: the same checks on 500 x 250 cells, the resolution of the reference solutions; label verification,
-# not run by the pull-request checks (about 100 h of CPU with one thread: its four runs take 3.5e5 s of CPU; the TIMEOUT,
-# 200 h, is twice that).
-if(EXISTS "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru/run.sh")
-    add_test(
-        NAME    MultirateDaruTenaudFull
-        COMMAND bash -c "./run.sh full"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/multirate/mr-daru"
-    )
-    set_tests_properties(MultirateDaruTenaudFull PROPERTIES
-        LABELS      "multirate;verification;numerics;2D"
-        TIMEOUT     720000
-        ENVIRONMENT "${_MOSE_TEST_ENV}"
-    )
-    #   the three forms run in the same folder (mr-daru) and remove its cases and runs at the start: never at the
-    #   same time (ctest -j)
-    set_tests_properties(MultirateDaruTenaud MultirateDaruTenaudMedium MultirateDaruTenaudFull PROPERTIES
-        RESOURCE_LOCK mr-daru)
-endif()
-# P8: the start-up of a quasi-1D convergent-divergent nozzle by a ramp of the inlet total pressure (371 cells): single
-# rate at dt0/4 (the reference), dt0 and dt0/2, multirate with H = dt0 and with the production macro step H and H/2;
-# every cell of the fixed-step runs within its limit, in the throat band the error of the multirate with H = dt0 at most
-# 1.05 times that of the single rate and the production runs converging with the step, the moving shock of H/2 within
-# the shift of the single rates and of the two production runs from the reference (verify_nozzle.py).
-mose_add_mr_script(MultirateNozzleStartUp multirate/mr-nozzle 1800 "multirate;validation;numerics;1D")
-# I17 (builds with USE_MPI=ON): 1 x 1 against P x T byte by byte, single rate and multirate (a connection with the
-# orientation -1 0 0 1 among the cases, also against the same case without the turn), on the laminar plate, on the plate
-# with Spalart-Allmaras and with SST, on the hot cube in 3-D (a vertex of eight blocks inside the cells of level 1) and on
-# Euler cases; the block-to-rank map, conservation, the redo and the stops across the processes and, with the probe library
-# of MPIThreadFunnel (built on Linux only), no MPI call from a thread other than the main one; the timers of the multirate
-# on 2 processes with unequal work (hybrid); exact restart on 2 processes x 2 threads (restart-hybrid).
-if(USE_MPI)
-    mose_add_mr_group(MultirateHybrid 3000 hybrid "hybrid;restart-hybrid" "multirate;needs-mpi;implementation;1D;2D;3D")
-    if(TEST MultirateHybrid)
-        set_tests_properties(MultirateHybrid PROPERTIES PROCESSORS 8)
-        set_property(TEST MultirateHybrid APPEND PROPERTY ENVIRONMENT
-            "MOSE_MPIEXEC=${MPIEXEC_EXECUTABLE};MOSE_MPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}")
-        # the probe library of MPIThreadFunnel is built on Linux only: elsewhere mr-hybrid leaves out its part PROBE
-        if(TARGET mpi_thread_probe)
-            set_property(TEST MultirateHybrid APPEND PROPERTY ENVIRONMENT
-                "MOSE_MPI_THREAD_PROBE=$<TARGET_FILE:mpi_thread_probe>")
-        endif()
-    endif()
-endif()
+endforeach()
+string(ASCII 9 _tab)
+set(_inventory "")
+foreach(_n IN LISTS _names)
+    get_property(_kind GLOBAL PROPERTY MOSE_TEST_${_n}_KIND)
+    get_property(_desc GLOBAL PROPERTY MOSE_TEST_${_n}_DESC)
+    get_property(_labels GLOBAL PROPERTY MOSE_TEST_${_n}_LABELS)
+    get_property(_built GLOBAL PROPERTY MOSE_TEST_${_n}_BUILT)
+    string(REPLACE ";" "," _labels "${_labels}")
+    string(APPEND _inventory "${_n}${_tab}${MOSE_TIER_${_n}}${_tab}${MOSE_SECONDS_${_n}}${_tab}${_kind}${_tab}${_labels}${_tab}${_built}${_tab}${_desc}\n")
+endforeach()
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/inventory.tsv" "${_inventory}")
