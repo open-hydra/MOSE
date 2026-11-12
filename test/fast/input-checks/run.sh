@@ -13,6 +13,8 @@
 #      reconstruction
 #    IRSTimeAccurate (irs-time-accurate): implicit residual smoothing in
 #      time-accurate runs
+#    PrecScope (prec-scope): integration-variables = prec and HLLC-PC, steady
+#      runs only
 #    DecompositionMap (decomposition-map): block-to-rank map of
 #      INPUT/decomposition.map
 #    RuntimeInput (runtime-input): input.ini read again during a run
@@ -22,7 +24,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PARTS=(exit-codes limiter-defaults irs-time-accurate decomposition-map runtime-input)
+PARTS=(exit-codes limiter-defaults irs-time-accurate prec-scope decomposition-map runtime-input)
 if [[ $# -gt 0 ]]; then
   PARTS=("$@")
 fi

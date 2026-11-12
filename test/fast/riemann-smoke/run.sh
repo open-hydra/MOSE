@@ -40,9 +40,10 @@ SOLVERS=(
 # NOTE — low-Mach / preconditioned solvers are intentionally NOT in the Sod
 # smoke set: they are designed for smooth low-Mach flow and diverge on a strong
 # shock tube by construction (and HLLC-PC additionally requires
-# integration-variables = prec).  They are exercised by the low-Mach Gresho
-# vortex case instead.  See test/TESTING-PLAN.md (F5) for the plan to add a
-# dedicated low-Mach smoke covering:  HLLC+Chen  HLLC-PC  LMRoe  MiczekRoe
+# integration-variables = prec, steady). HLLC+Chen and HLLC-PC run in
+# Connections/ConnectionFlux, HLLC-PC also in Preconditioning (the low-Mach
+# cylinder, test/2D/euler/low-mach-cylinder); AUSM+M and LMRoe in the Gresho
+# vortex, outside CTest; MiczekRoe in no test.
 
 # --- environment -----------------------------------------------------------
 ulimit -s unlimited 2>/dev/null || true
