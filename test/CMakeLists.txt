@@ -601,6 +601,14 @@ add_fortran_executable(gsi_bradley_check unit/gsi_bradley_check.f90)
 add_test(NAME GSIBradley COMMAND gsi_bradley_check)
 set_tests_properties(GSIBradley PROPERTIES LABELS "fast;physics;unit" TIMEOUT 60)
 
+# The pyrolysing ablator (GSIAblator): a unit check of GSI_Char_Pyrolysis with the table unit/gsi_ablator_table.dat
+# (written by unit/gsi_ablator_table.py): phi = 0 gives the surface reactions bit for bit, h_v0 shifts q by -mdot h_v0,
+# phi > 0 adds phi mdot_ch y_pg(p, Tw) and conserves the elements of the table, q = sum omega h - mdot h_v0, and the
+# table is read at the pressure given.
+add_fortran_executable(gsi_ablator_check unit/gsi_ablator_check.f90)
+add_test(NAME GSIAblator COMMAND gsi_ablator_check ${CMAKE_CURRENT_SOURCE_DIR}/unit/gsi_ablator_table.dat)
+set_tests_properties(GSIAblator PROPERTIES LABELS "fast;physics;unit" TIMEOUT 60)
+
 # ===========================================================================
 #  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
 #  Each test generates its own small multi-block case and launches the solver

@@ -90,3 +90,17 @@ state the solver reached — the rates of `gsi_models.py` (an independent copy o
 committed `thermo.dat` interpolated as FLINT does) give the reported `mdot` within 1e-11, the surface energy balance
 `q(Tw) = q_rad + q_conv` holds within 1e-11, and its root in `Tw` is the reported one — plus the direction of the blowing
 and a uniform pressure. The drift from the initial state is printed.
+
+## The pyrolysing ablator (BC 506)
+
+The `ablator` configurations run 506 on the column of `carbon`, in `gsi/<config>/`: `ablator` and `ablator-top` blow the
+pyrolysis gas with `phi = 0.25` and `h_v0 = -8.44e5 J/kg`, the composition of a table that `build_case.py` writes as
+`INPUT/pyrolysis.dat` (`gsi_models.write_pyrolysis_table`: the water-gas shift of 1 CO + 1 H2O + 0.5 H2 on 2 pressures and
+3 temperatures, every row with the elements of that mixture; a synthetic table, not an equilibrium, so no reference
+pressure enters it), and are checked as the 505 columns, the rates now
+`(1 + phi) mdot_ch` with the table read at the wall pressure and temperature. `ablator-phi0` (`phi = 0`, `h_v0 = 0`, no table)
+must give the field and wall files of `carbon` byte for byte (one thread); `ablator-hv0` (`phi = 0`, `h_v0 = -8.44e5 J/kg`)
+must not, which shows that the comparison sees a change, and its energy balance carries `-mdot h_v0`. `ablator-nofile`,
+`ablator-pyro2` and `ablator-cond` must stop at set-up: no table file, `pyro_id = 2` with one table, a table with a
+condensed-carbon column. The species sources, the element balance of the blown gas and the pressure of the lookup are
+checked by the unit check `GSIAblator`.

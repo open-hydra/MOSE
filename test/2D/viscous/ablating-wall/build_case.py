@@ -84,6 +84,22 @@ CONFIGS = {
     'carbon':     dict(bc=BC_REACTIONS, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, wall_face=3),
     'carbon-top': dict(bc=BC_REACTIONS, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, wall_face=4),
     'carbon-o2':  dict(bc=BC_REACTIONS, T0=1500.0, y0={'N2': 0.98, 'O2': 0.02}, wall_face=3),
+    # The pyrolysing ablator (BC 506) on the column of 'carbon': with the table of gsi_models.write_pyrolysis_table
+    # (phi = 0.25, h_v0 = -8.44e5 J/kg) on both ends; with phi = 0 and h_v0 = 0, which must be 'carbon' byte for byte;
+    # with phi = 0 and h_v0 = -8.44e5 J/kg, the control of that comparison. Refused at set-up (run.sh refuse_gsi): no
+    # table file, pyro_id beyond the tables of the file, a table with a condensed-carbon column.
+    'ablator':        dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, phi=0.25, h_v0=-8.44e5,
+                           pyro_id=1, wall_face=3),
+    'ablator-top':    dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, phi=0.25, h_v0=-8.44e5,
+                           pyro_id=1, wall_face=4),
+    'ablator-phi0':   dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, wall_face=3),
+    'ablator-hv0':    dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, h_v0=-8.44e5, wall_face=3),
+    'ablator-nofile': dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, phi=0.25, pyro_id=1,
+                           table='none', refused=True, wall_face=3),
+    'ablator-pyro2':  dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, phi=0.25, pyro_id=2,
+                           refused=True, wall_face=3),
+    'ablator-cond':   dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, phi=0.25, pyro_id=1,
+                           table='condensed', refused=True, wall_face=3),
 }
 
 
@@ -94,7 +110,7 @@ def expected_wall_state(cfg):
         mdot = SRM['a']          # pRef is the column pressure, so (p/pRef)**n = 1
     elif cfg['bc'] in (BC_REACTIONS, BC_ABLATOR):
         Tw = cfg['T0']
-        mdot = gsi_initial_state(cfg)[1]
+        mdot = 0.0 if cfg.get('refused') else gsi_initial_state(cfg)[1]
     elif cfg['bc'] == BC_MELTING:
         Tw = cfg['Tw']
         mdot = 0.0 if cfg.get('inert') else mdot_melting(cfg['qrad'], Tw=Tw)
@@ -253,9 +269,9 @@ def main():
     massf, R_gas = None, R_AIR
     if cfg['bc'] in (BC_REACTIONS, BC_ABLATOR):
         names, W, _, massf, R_gas = gsi_gas(cfg)
-        if cfg.get('phi', 0.0) > 0.0:
-            write_pyrolysis_table('INPUT/pyrolysis.dat', names, W)
-        cfg = dict(cfg, qrad=gsi_initial_state(cfg)[0])
+        if cfg.get('phi', 0.0) > 0.0 and cfg.get('table') != 'none':
+            write_pyrolysis_table('INPUT/pyrolysis.dat', names, W, condensed=cfg.get('table') == 'condensed')
+        cfg = dict(cfg, qrad=0.0 if cfg.get('refused') else gsi_initial_state(cfg)[0])
     Tw, mdot = expected_wall_state(cfg)
     T_init = cfg.get('T_init', Tw)
 
