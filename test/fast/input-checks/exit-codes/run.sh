@@ -43,12 +43,11 @@
 #  and one that names a variable fewer than it writes puts the density of
 #  C(gr) under dt (without Spalart-Allmaras).
 #
-#  turbulence = SAcomp. Its compressibility correction takes c from
-#  c^2 f(c) = 25 Omega nu_t / a, a number against a speed, so its result
-#  depends on the units: on the state of the soot runs with
-#  Spalart-Allmaras and no soot, which runs to the end with SA, the run must
-#  stop at set-up with exit code 1 to 128 and the message, and write no
-#  diagnostic output.
+#  turbulence = SAcomp (Spalart-Allmaras with the compressibility correction
+#  of Paciorri and Sabetta): on the state of the soot runs with
+#  Spalart-Allmaras and no soot, the run ends normally like the one with SA
+#  and its diagnostic output names every variable it writes, rhoNuTilde
+#  among them.
 #
 #  Error stops. Each case below breaks the Sod tube in one way: a run that
 #  diverges (CFL 20; stop inside the OpenMP loop of the state update), an
@@ -409,28 +408,18 @@ rm -f OUTPUT/diagnostic-*.tec
 # the references without soot: plain for the soot run, sa-plain (Spalart-Allmaras) for the sa run
 soot_run plain
 soot_run sa-plain
-for kind in sa soot; do
+for kind in sa sacomp soot; do
   soot_run $kind
   rc=$(cat "OUTPUT/soot-$kind.rc")
   [[ $rc -eq 0 ]]
   check $? "$kind: the run ends normally (exit status $rc)"
   names="rho rhou rhov rhow rhoe rho*Np"
+  [[ $kind == sacomp ]] && names="rho rhou rhov rhow rhoe"   # sacomp: the state of sa-plain, no soot (soot_run)
   ref=OUTPUT/diagnostic-plain.tec
-  [[ $kind == sa ]] && names="$names rhoNuTilde" && ref=OUTPUT/diagnostic-sa-plain.tec
+  [[ $kind == sa || $kind == sacomp ]] && names="$names rhoNuTilde" && ref=OUTPUT/diagnostic-sa-plain.tec
   python3 -B make_case.py diagnostic-check "OUTPUT/diagnostic-$kind.tec" "$ref" $names dt beta
   check $? "$kind: the diagnostic output names every variable it writes, dt under dt"
 done
-
-echo "-- turbulence = SAcomp stops at set-up --"
-soot_run sacomp
-rc=$(cat OUTPUT/soot-sacomp.rc)
-SACOMP='turbulence = SAcomp: its compressibility correction solves'
-if [[ $rc -ge 1 && $rc -le 128 && ! -f OUTPUT/diagnostic-sacomp.tec ]] && grep -a -q -- "$SACOMP" OUTPUT/soot-sacomp.log; then
-  echo "  [ok  ] sacomp: exit code $rc, \"$SACOMP\""
-else
-  echo "  [FAIL] sacomp: exit code $rc (required 1 to 128, no diagnostic output), message \"$SACOMP\" $(grep -a -q -- "$SACOMP" OUTPUT/soot-sacomp.log && echo found || echo missing) (see OUTPUT/soot-sacomp.log)"
-  fail=1
-fi
 
 # write_case <tag> <physics lines> [other sections]: the Sod tube and its input.ini
 write_case() {

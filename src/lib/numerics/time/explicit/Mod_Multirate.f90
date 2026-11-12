@@ -457,7 +457,8 @@ contains
     ! sst-dilatation-dissipation included. Wilcox2006 has no evaluation of its sources in the stages. The rotation and curvature correction (SA-RC,
     ! SST-RC) reads terms that Compute_RC_Terms computes for the whole domain inside the block routine, which the cell-wise
     ! copies do not compute: with max-level 0 the stages call the block routine, with max-level > 0 the run is rejected.
-    ! SAcomp the set-up of MOSE refuses before this check. The production of SA-R and the dilatation part of the
+    ! SAcomp (the compressibility correction of SA) is not among them: the cell-wise copy calls the correction, but the
+    ! stages are not tested with it, and the run is rejected. The production of SA-R and the dilatation part of the
     ! compressible production of SST can be a sink outside the bound of the stiffness that the step takes (it bounds the
     ! destruction only), as in the single-rate step (docs, Turbulence models)
     rans_kind = 0
@@ -477,7 +478,7 @@ contains
                     'its rotation and curvature terms are a field of the whole domain (Compute_RC_Terms), which the '// &
                     'cell-wise sources of the stages of a level do not compute')
       ! assertions: options that only model names outside the registry switch on (QCR, blowing correction, Reynolds
-      ! stresses), or that the set-up of MOSE refuses before this check (SAcomp)
+      ! stresses); SAcomp is rejected by the select case above
       if (obj_rans%SAcomp .or. obj_rans%QCR2000 .or. obj_rans%RSM .or. obj_rans%blowing_corr) &
         call Reject('turbulence model', 'the options of the turbulence model (compressibility correction, QCR, blowing '// &
                     'correction, Reynolds stresses) are not supported')

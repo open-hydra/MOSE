@@ -263,9 +263,12 @@ contains
   end function fv2
 
 
-  ! Compressibility correction Paciorri-Sabetta https://doi.org/10.2514/2.3967
-  ! Not reached: turbulence = SAcomp stops at set-up (Assign_Setup), since staux, a speed, is set against the number
-  ! c^2 f(c), which makes the result depend on the units
+  ! Compressibility correction of Paciorri and Sabetta, J. Spacecraft Rockets 40(3), 2003, https://doi.org/10.2514/2.3967:
+  ! the production is multiplied by f1(Mc) f2(Mc) (eqs. 5, 6, 10), with the local estimate Mc of the convective Mach
+  ! number from Mc^2 f2(Mc) = nu_t |omega| / (4 tau_i a^2) (eq. 12), tau_i = 0.01 the incompressible shear-stress ratio of
+  ! the model (so the constant 25), nu_t = nu~ fv1 the eddy viscosity, a the local speed of sound: both sides are numbers.
+  ! Newton on c^2 f2(c) - staux (func), from c = 1, derivative by central differences. The paper fits mixing layers; it
+  ! warns that the correction alters compressible boundary layers at high Mach number, and gives no switch.
   subroutine Compressibility_Correction ( nit, rho, chi, rhoi, p, Rgas, om, prod )
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -275,12 +278,14 @@ contains
     real(R8), intent(inout) :: prod
     real(R8) :: sound, c_mach, staux, err, deltamach
     real(R8) :: aux_num, aux_den, c_plus, c_minus, res, f_cor1, f_cor2, f_cor
-    
+    integer :: it
+
     sound = f_ss ( rhoi, p, rho, Rgas )
     c_mach = 1.d0
-    staux = 25.d0*(om*nit*fv1(chi))/sound
+    staux = 25.d0*(om*nit*fv1(chi))/sound**2
     err = 1.d0
-    do while (err>tolerance)
+    it = 0
+    do while (err>tolerance .and. it < 100)   ! c^2 f2(c) grows with c: one root; the cap guards a step of zero length
       deltamach=.1d0*c_mach
       aux_num=func(c_mach,staux)*2.*deltamach
       c_plus=c_mach+deltamach
@@ -289,6 +294,7 @@ contains
       res=aux_num/aux_den
       err=dabs(res)
       c_mach=c_mach-res
+      it = it + 1
     end do
     ! correction function
     f_cor1=0.6d0*(1.d0/(1.d0+9.d0*(c_mach)**6.))+0.4d0

@@ -140,11 +140,6 @@ contains
     ! Species diffusion model
     check = Schmidt_Error()
     if (len(check) > 0) obj_transport%error_message = check
-    ! SAcomp: Compressibility_Correction (Lib_Spalart) takes c from c^2 f(c) = 25 Omega nu~ fv1 / a, a number against a
-    ! speed, so the factor it gives the production depends on the units: the set-up refuses the model (Stop_Simulation)
-    if (model == 2 .and. obj_rans%SAcomp) obj_rans%error_message = '[ERROR] turbulence = SAcomp: its '// &
-      'compressibility correction solves c^2 f(c) = 25 Omega nu_t / a, a number against a speed, so the result '// &
-      'depends on the units. Use SA or another turbulence model.'
     ! Turbulence sources in time-accurate runs: explicit, whatever point-implicit says. A warning recalls it when input.ini
     ! sets point-implicit to true; a run that leaves the key out takes its default, which the warning does not concern.
     ! The warning of the rotation-curvature correction (-RC) in time-accurate runs is written by Print_Warnings (Wrap_Setup)
