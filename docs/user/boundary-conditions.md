@@ -366,7 +366,7 @@ stress `tauX`, `tauY`, `tauZ` is the traction of the gas on the wall, $\boldsymb
 $\mathbf{n}$ the unit normal into the gas (along the flow under an attached boundary layer); the heat flux `qw` is
 positive into the gas, as `q_wall` (a `301` wall writes its `q_wall`, a `503` wall that melts minus the heat its surface
 absorbs, conducted and radiated, the other walls the heat they conduct into the gas); the mass flux `mdot` of the walls
-`503`–`505` is positive into the gas, the mass the surface blows in.
+`503`–`506` is positive into the gas, the mass the surface blows in.
 
 ### Physical Models
 
@@ -387,10 +387,18 @@ Walls interacting with the flow.  See [Gas–Surface Interaction](../theory/gsi.
 | `503` | Melting            | `cp_wall, T_wall, Ti_wall, dh_wall, q_rad, eps_wall, [massf_1 … massf_ns]` |
 | `504` | Pyrolysis          | `pyro_id, q_rad, eps_wall, [massf_1 … massf_ns]`                           |
 | `505` | Surface reactions  | `reac_id, q_rad`                                                           |
-| `506` | Surface reactions and pyrolysis | `pyro_id, reac_id, q_rad, eps_wall, [massf_1 … massf_ns]`     |
+| `506` | Pyrolysing ablator | `pyro_id, reac_id, phi, h_v0, q_rad, eps_wall`                             |
 
-MOSE does not apply type `506`: a record of type `506` stops the run at set-up, with the line of `bc.txt`, the record and
-its type; `504` and `505` are the pyrolysis and the surface reactions alone.
+Type `506` is the pyrolysing ablator ([theory](../theory/gsi.md#pyrolysing-ablator-bc-506)): the surface reactions of `505`
+plus the gas of the virgin material blown through the char, `phi` times the char mass flux, with the composition of table
+`pyro_id` of `INPUT/<prefix>pyrolysis.dat` (written by ATLAS GPB) at the pressure of the boundary cell and the wall
+temperature; `h_v0` enters the energy balance of every `506` record. The file is read only when a record has `phi` > 0.
+The run stops at set-up, with the line of `bc.txt`, the record and the value, on a line that is not six values (a line
+of type `506` of an ATLAS before this boundary condition held the ids, `q_rad`, `eps_wall` and mass fractions: with two
+species it holds six numbers and is read as `phi = q_rad`, `h_v0 = eps_wall`: regenerate `bc.txt`), on `reac_id` other
+than 1, on `phi` < 0, on `pyro_id` < 0, on `pyro_id` < 1 with `phi` > 0, beyond the tables of the file, or naming a table with a
+condensed-carbon column, and when the file cannot be read. `phi` has no upper bound (it is above 1 when the char keeps less than half the density of the virgin material); the
+boundary-condition builder of ATLAS stops on `phi` < 0 as well, on the value of the section and on every value of a `phi-file`.
 
 
 | Field       | Description                                                                                       |
@@ -399,7 +407,7 @@ its type; `504` and `505` are the pyrolysis and the surface reactions alone.
 | `n`         | Pressure exponent of the law                                                                      |
 | `p_ref`     | Reference pressure of the law [Pa], positive                                                      |
 | `T_af`      | Adiabatic flame temperature of the propellant [K], the **total** temperature of the products: they enter with the total enthalpy \(h(T_\mathrm{af})\) of the tables of the gas per unit mass, that of the propellant, at the static temperature \(T\) of \(h(T) + u^2/2 = h(T_\mathrm{af})\) (\(u\) their velocity through the face, the mass flux over \(p/(RT)\); \(T_\mathrm{af} - T = u^2/(2c_p)\), millikelvin at the mass fluxes of a grain), with their composition; it must lie on the tables, from their lowest temperature above 0 K to one kelvin below their last row, where their interpolation ends |
-| `mode`      | `1`: a wall that blows the products in (the blowing wall of 503–505); `2`: an inflow, the face applied as the mass-flux inlet `404` at the static temperature of total `T_af` along the face normal, with the mass flux of the law |
+| `mode`      | `1`: a wall that blows the products in (the blowing wall of 503–506); `2`: an inflow, the face applied as the mass-flux inlet `404` at the static temperature of total `T_af` along the face normal, with the mass flux of the law |
 | `turb_k`    | Mode 2: the turbulence values of the injected gas, specific, as on the line of an inlet (\(\tilde\nu\); \(k\), \(\omega\); …) |
 | `cp_wall`   | Specific heat of the solid [J/(kg·K)]                                                             |
 | `T_wall`    | Melting temperature [K] (type `503`: prescribed, not solved)                                      |
@@ -407,14 +415,16 @@ its type; `504` and `505` are the pyrolysis and the surface reactions alone.
 | `dh_wall`   | Latent heat of melting [J/kg]                                                                     |
 | `q_rad`     | Radiative heat flux absorbed by the surface [W/m²]                                                |
 | `eps_wall`  | Wall emissivity — **parsed, not used**                                                            |
-| `pyro_id`   | Pyrolysis model: `1` = HTPB, `2` = HDPE, `3` = PP                                                 |
+| `pyro_id`   | `504`: pyrolysis model, `1` = HTPB, `2` = HDPE, `3` = PP; `506`: the table of `INPUT/<prefix>pyrolysis.dat` (from 1) of the gas blown, read when `phi` > 0 (0 with `phi` = 0) |
 | `reac_id`   | Surface reaction mechanism: `1` = carbon (Bradley)                                                |
+| `phi`       | `506`: the ratio of the pyrolysis-gas to the char mass flux, `mdot_pg/mdot_ch` = ρ_virgin/ρ_char − 1, 0 or positive |
+| `h_v0`      | `506`: the enthalpy of the virgin material at its undisturbed temperature [J/kg], on the datum of the tables of the gas (that of `thermo.dat`) |
 | `massf_s`   | Composition of the material leaving the surface (one value per species)                           |
 
 !!! note
     The SRM grain `502` runs under either `equations`: under `euler` its flux carries
     the mass, the momentum and the enthalpy of the products, without stress and
-    conduction. The types `503`–`505` require a viscous run (`equations = navier-stokes`):
+    conduction. The types `503`–`506` require a viscous run (`equations = navier-stokes`):
     under `equations = euler` the face is applied as a plain slip wall, and no
     ablation takes place.  The same fallback — an impermeable wall — is used
     whenever the flow cannot sustain the process; see
@@ -425,7 +435,7 @@ its type; `504` and `505` are the pyrolysis and the surface reactions alone.
     the turbulence values of a smooth wall: $\tilde\nu = 0$ (Spalart–Allmaras),
     $k = 0$ and the wall value of $\omega$ (SST, Wilcox 2006), whose distance is
     the wall distance of the cell. The grain of mode 1 is a wall for the wall distance of
-    the turbulence models, as the walls `301`, `302` and `503`–`505`. The ghost
+    the turbulence models, as the walls `301`, `302` and `503`–`506`. The ghost
     cells behind the grain take these wall values, as behind a wall; a grain that
     does not burn is a wall at the flame temperature.
 
@@ -445,7 +455,7 @@ its type; `504` and `505` are the pyrolysis and the surface reactions alone.
     its turbulence values.
 
 !!! warning
-    Type `505` requires a thermodynamic table containing O₂, CO₂, CO, H₂O, H₂,
+    Types `505` and `506` require a thermodynamic table containing O₂, CO₂, CO, H₂O, H₂,
     OH, O and H.
 
 !!! tip

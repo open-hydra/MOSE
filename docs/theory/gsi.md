@@ -401,6 +401,53 @@ $$
 
 The net mass flux is the **sum of the species sources**, which is exactly the carbon removed from the surface: the oxidizers consumed carry negative $\omega_s$, the products positive, and the difference is the eroded solid. The surface energy term is the enthalpy flux of that species exchange evaluated at the wall temperature, so an exothermic reaction set heats the surface and feeds back into the wall-temperature solution.
 
+### Pyrolysing ablator (BC 506)
+
+A charring ablator (a carbon-phenolic insert, say) is modelled at its surface as the carbon wall of the heterogeneous
+reactions above plus the gas of the pyrolysing virgin material, which percolates through the char and is blown into the
+boundary layer (Rotondi, PhD thesis, §2.4.2–2.4.5). With the char mass flux $\dot m_{ch}$ of the reactions and the
+pyrolysis-gas mass flux $\dot m_{pg}$, the surface mass and species balances are (eqs. 2.100, 2.101, 2.115)
+
+$$
+\dot m_w = \dot m_{ch} + \dot m_{pg},
+\qquad
+\dot m_{pg} = \phi\,\dot m_{ch},
+\qquad
+\phi = \frac{\rho_v}{\rho_{ch}} - 1,
+\qquad
+\omega_s = \omega_{ch,s} + \dot m_{pg}\,y_{pg,s}(p_w, T_w):
+$$
+
+in steady state the material between the virgin and the char densities leaves as pyrolysis gas, whose composition
+$y_{pg}$ is the equilibrium of the elemental makeup of the virgin material at the wall pressure and temperature, read
+from a table (`INPUT/<prefix>pyrolysis.dat`, written by ATLAS GPB, read by FLINT `FLINT_Lib_PyrolysisGas`: bilinear in
+$(p, T)$, clamped to its range; a species of the gas absent from the table gets 0). Its enthalpy is
+$h_{pg} = \sum_s y_{pg,s}\,h_s(T_w)$ (eq. 2.116). The solid conducts in steady state, so the heat it takes from the
+surface is $q_{cond} = \dot m_{ch} h_{ch} + \dot m_{pg} h_{pg} - (\dot m_{ch} + \dot m_{pg})\,h_{v,0}$ (eq. 2.95),
+$h_{v,0}$ the enthalpy of the virgin material at its undisturbed temperature on the datum of the gas tables, and the
+surface energy balance (eq. 2.96) is solved for $T_w$ as for the reactions, with the heat the surface absorbs
+
+$$
+q_{\mathrm{surf}} = \sum_s \omega_s\,h_s(T_w) - \dot m_w\,h_{v,0}
+= q_{ch} + \dot m_{pg}\,h_{pg} - (\dot m_{ch} + \dot m_{pg})\,h_{v,0}.
+$$
+
+The table is read again at every trial temperature of the balance, at the pressure of the boundary cell (the wall
+pressure of the boundary-layer assumption). With $\phi = 0$ no pyrolysis gas is blown and the table is not read, but the
+virgin-material term stays, $-\dot m_{ch} h_{v,0}$; with $h_{v,0} = 0$ too, BC 506 is BC 505 bit for bit. The erosion
+rate follows from the total mass flux of the wall output, $\dot r = \dot m_w/\rho_v$ (eq. 2.91).
+
+Differences from the original implementation of this model (a bit-for-bit comparison with it is not a test): the secant
+of the wall temperature takes 20 iterations with a perturbation of $10^{-4}$ (there 10 and $10^{-3}$); the wall pressure
+is part of the GSI flux, with no separate reflective flux; RANS runs take the blowing-wall treatment; any face may be the
+wall (there the fourth only); $q_{\mathrm{rad}}$ is prescribed, without re-radiation; the virgin-material term
+$-\dot m_w h_{v,0}$ enters the balance of every record, also with $\phi = 0$ (there only when $\phi \neq 0$), and
+$h_{v,0}$ is an input of the record (there fixed at $-8.57\cdot10^5$ J/kg); the interpolation of the table is
+bilinear; the table is in Pa and names its species; its default treatment is gas-only equilibrium (the elements of the
+makeup all leave as gas), the treatment of the thesis (graphite allowed to form and removed, the gas renormalised) is
+the `strip` treatment of the generator. Not modelled: an imposed wall temperature or conduction flux instead of steady
+conduction, soot in the blown gas (the `condensed` treatment, refused by the wall), $\dot m_{pg}$ from a solid solver.
+
 ---
 
 ## Coupling to the gas phase
@@ -457,6 +504,7 @@ The implemented GSI capability can therefore be summarized as:
 | Polymer pyrolysis                         |                 ✓                 |
 | Temperature-dependent regression laws     |                 ✓                 |
 | Heterogeneous carbon reactions            |                 ✓                 |
+| Pyrolysing ablator: char reactions and blown pyrolysis gas, steady conduction | ✓ |
 | Multi-species gas coupling                |                 ✓                 |
 | Surface-generated mass flux               |                 ✓                 |
 | Species injection from the surface        |                 ✓                 |
@@ -473,7 +521,8 @@ The implemented GSI capability can therefore be summarized as:
 ## Modelling scope and limitations
 
 * **The solid is thermally thin in the model sense.** There is no in-depth conduction solver: the solid is characterised by a bulk temperature $T_i$ and a specific heat, and the sensible term $c_s(T_w-T_i)$ stands in for the whole thermal history. Transients in which the heat soak into the solid matters are outside the model.
-* **No char layer.** Pyrolysis products are released at the surface; a porous char through which gas percolates is not represented.
+* **No char layer.** Pyrolysis products are released at the surface; a porous char through which gas percolates is not represented. The pyrolysing ablator (506) takes the char and the pyrolysis gas into its surface balances, with steady conduction in the solid, not an in-depth solution.
+* **Reynolds-stress turbulence at a reacting wall.** With the SSG/LRR Reynolds-stress model a wall 505 or 506 is not covered: no test runs it, and the blowing-wall treatment of its turbulence wall values was not checked for that model.
 * **Radiative input is prescribed.** $q_{\mathrm{rad}}$ is a constant per boundary, not coupled to a radiation solution or to the local gas state.
 * **Pyrolysis constants are compiled in**, and the pyrolysis gas composition is prescribed rather than derived from a decomposition mechanism.
 * **Grain combustion is a prescribed-rate model.** Flame temperature, burn-rate law and product composition are all inputs; the propellant flame is not resolved, and the burn rate responds only to pressure — erosive burning, the enhancement of the rate by cross-flow over the grain, is not represented.
@@ -482,7 +531,7 @@ The implemented GSI capability can therefore be summarized as:
 
 The melting and pyrolysis boundary conditions are verified against a closed-form solution on a blown-column configuration, in both face orientations, together with the inert-surface fallback: see [2D Ablating Wall](../vv/2D-ablating-wall.md).
 
-The grain-combustion boundary condition is verified on the same configuration, against Saint-Robert's law and the flame temperature it imposes. The surface-reaction model is not covered by the verification suite.
+The grain-combustion boundary condition is verified on the same configuration, against Saint-Robert's law and the flame temperature it imposes. The surface reactions (505) and the pyrolysing ablator (506) are verified on the same column by the relations of the wall model at the state the solver reached (the column has no steady state: the reactions consume its oxidisers), together with the identity of 506 without pyrolysis and 505, and by the unit checks `GSIBradley` and `GSIAblator`.
 
 ## References
 

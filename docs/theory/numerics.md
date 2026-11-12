@@ -585,7 +585,7 @@ use the inverse-mean metric, as chimera faces do with every option: across a lar
 cell-size jump at a block interface, the mean makes the normal gradient so steep
 that the explicit diffusion becomes unstable.
 
-At a wall face (301, 302, and 503–505 when they do not ablate) the gradient
+At a wall face (301, 302, and 503–506 when they do not ablate) the gradient
 takes the difference between the cell and the wall value across the face.
 With `stencil` it also takes the differences of the wall values along the
 wall, between the neighbouring wall faces of the same block face and type
@@ -611,7 +611,7 @@ as in [13] (Eq. 3.57–3.59) and in OpenFOAM (OpenFOAM-dev, commit dfa6c7e,
 `fvPatch.C`), has the error of `mean` given below.
 With `mean`, and for the quantities whose wall value is not
 known along the wall (the temperature of 301 walls and of the surface models
-of 503–505), the derivatives along the wall are zero and the metric is that of
+of 503–506), the derivatives along the wall are zero and the metric is that of
 the wall cell: on a cell skewed by θ the normal gradient is then wrong by
 $(\partial\phi_w/\partial s)\tan\theta$, which refinement does not reduce.
 The turbulence variables take no difference of their wall values along the

@@ -1464,7 +1464,7 @@ preconditioned variables, implicit residual smoothing, the shock detector
 (`shock-detector`, also implied by `HLLC+Tramel`, `HLLC+Chen`, `HLLE++`, `AUSM+M`), chemistry,
 soot, the rotating frame, multigrid sequences, steady (local time step) runs,
 the CFL ramp, chimera, coupled (103), SRM-grain boundaries in mode 1 (502, a wall that blows the products in; a
-grain in mode 2, an inflow, runs as the mass-flux inlet 404) and gas-surface-interaction (503-505) boundaries,
+grain in mode 2, an inflow, runs as the mass-flux inlet 404) and gas-surface-interaction (503-506) boundaries,
 rotational periodicity in 3-D (the 2-D
 axisymmetric wedge is supported, with levels too), and
 programs that pass a non-empty per-stage external function, boundary types without a multirate
@@ -1473,7 +1473,7 @@ cfl above 1 or, in Navier–Stokes runs, a vnn above 1/2
 (see [Non-local CFL condition](#non-local-cfl-condition)), and a restart
 (`newrun = false`) with `levels = fixed` (the map is not written with the
 solution) or with `fixed-macro-step` (a multiple of the smallest local step of
-the first macro step of the run).  The boundary types `409`, `501` and `506`,
+the first macro step of the run).  The boundary types `409` and `501`,
 which MOSE does not apply, stop every run earlier, at the reading of `bc.txt`.
 With `levels = fixed` and a `fixed-macro-step` above the step of the map the run goes on with the finest cells beyond
 their limit, which it reports (see [Levels and macro step](#levels-and-macro-step)).  With `nonlocal-cfl = redo` and

@@ -153,6 +153,25 @@ $\sum_s \omega_s h_s(T_w) = q_\mathrm{rad} + q_\mathrm{cond}$ holds within $10^{
 reported one; the blowing is directed away from the wall and the pressure uniform. The values at the end of the run are
 in the output of `verify.py` (the drift from $T_0$ and $\dot m(T_0)$ is printed there).
 
+### Pyrolysing ablator (506)
+
+The `ablator` configurations run 506 on the column of `carbon`, in `gsi/<config>/`. `build_case.py` writes the table
+`INPUT/pyrolysis.dat` (`gsi_models.write_pyrolysis_table`: the water-gas shift of 1 CO + 1 H2O + 0.5 H2 at six states on
+2 pressures × 3 temperatures, every row with the elements of that mixture):
+
+| Case | $\phi$ | $h_{v,0}$ [J/kg] | $q_\mathrm{rad}$ [W/m²] | Face | Check |
+|---|---|---|---|:---:|---|
+| `ablator` | 0.25 | −8.44 × 10⁵ | 11345.04 | 3 | the relations of the wall model at the state reached, $\dot m = (1+\phi)\dot m_{ch}$ with the table read at $(p_w, T_w)$ |
+| `ablator-top` | 0.25 | −8.44 × 10⁵ | 11345.04 | 4 | the same |
+| `ablator-phi0` | 0 | 0 | 11445.13 | 3 | `field.tec` and `wall.tec` byte for byte those of `carbon` (one thread) |
+| `ablator-hv0` | 0 | −8.44 × 10⁵ | 12150.29 | 3 | the relations; its wall file differs from that of `carbon` (the control of the comparison above) |
+
+$q_\mathrm{rad}$ moves by $-\dot m_{ch}(T_0)\,h_{v,0} = 705.16$ W/m² from `carbon` to `ablator-hv0`: the closed form of the
+virgin-material term at the initial state. Three more configurations must stop at set-up with their message:
+`ablator-nofile` (no table file), `ablator-pyro2` (`pyro_id = 2`, one table), `ablator-cond` (a table with a
+condensed-carbon column). The element balance of the blown gas and the pressure of the lookup are checked by the unit
+check `GSIAblator`.
+
 ### Inert surface
 
 The `melting-inert` configuration removes the radiative input and starts the gas

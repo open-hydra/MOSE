@@ -965,7 +965,7 @@ $c_{w1} f_w (\tilde\nu/d)^2$ (a factor $\cos^2\theta$: 0.97, 0.88, 0.75,
 $\omega_w = 60\nu/(\beta_1 d_1^2)$ of SST. That distance is exact only on
 meshes orthogonal to the wall, with the cell centres above the face centres.
 
-- Each face of a wall boundary (types 103, 104, 301, 302, 502 in its mode 1, 503–505) is the bilinear
+- Each face of a wall boundary (types 103, 104, 301, 302, 502 in its mode 1, 503–506) is the bilinear
   surface through its four nodes, the face of the cells
   ([Cell volume](numerics.md#cell-volume)):
   $\mathbf{x}(s,t) = \mathbf{x}_1 + s\mathbf{a} + t\mathbf{b} + st\mathbf{T}$,
