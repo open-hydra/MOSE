@@ -29,7 +29,7 @@ an appropriate solver for your simulation.
 | $M$ | Mach number $v_n / a$ |
 | $H_0$ | Total specific enthalpy |
 | $\dot{m}$ | Interface mass flux per unit area |
-| $M_{co}$ | Low-Mach cutoff Mach (shared dissipation floor, input `riemann-options-Mco`) |
+| $M_{co}$ | Low-Mach cutoff Mach (shared dissipation floor) |
 
 Subscripts $L$ and $R$ denote left and right states; subscript $\frac{1}{2}$
 denotes the interface value.
@@ -80,7 +80,7 @@ production all-speed work use **AUSM+M** below.
 
 An improved AUSM-family all-speed scheme (Chen, Cai, Xue, Wang & Yan, *Applied
 Mathematical Modelling* 77, 2020). It fixes the two weaknesses of AUSM+-up — the
-`Kp/fa` stagnation time-step restriction and carbuncle at high Mach — with three
+$K_p/f_a$ stagnation time-step restriction and carbuncle at high Mach — with three
 ingredients:
 
 - **Pressure-diffusion mass flux** whose denominator has **no Mach number**
@@ -213,7 +213,7 @@ $$\tilde{v}_n = \frac{w\,v_{n,L} + v_{n,R}}{w + 1}, \quad
 
 with $\tilde{H}$, $\tilde{T}$ and $\tilde{R}$ the Roe averages of the total enthalpy, the temperature and the gas
 constant, and $\tilde{c}_v$ and $\tilde{e}$ the averages of the specific heats and of the internal energies of the
-species (`roe_averages` in `Lib_Riemann_HLL.f90`). For a single calorically perfect gas this is the sound speed of
+species. For a single calorically perfect gas this is the sound speed of
 Batten et al. (their p. 1563), $\tilde{c}^2 = (\gamma - 1)\bigl(\tilde{H} - \tfrac{1}{2}|\tilde{\mathbf{v}}|^2\bigr)$.
 
 The zero is not in Batten's eq. (51), $S_L = \min(v_{n,L} - a_L,\;\tilde{v}_n - \tilde{a})$,
@@ -279,7 +279,7 @@ $$
 
 ### HLLC-PC
 
-HLLC with the signal speeds of the preconditioned system (`Riemann_HLLCprec` in `Lib_Riemann_HLL.f90`):
+HLLC with the signal speeds of the preconditioned system:
 
 $$
 S_{L,R} = v^\ast \mp c^\ast,\qquad
@@ -291,8 +291,11 @@ $$
 taken on the left (right) state and on the average of the two with the weights $\sqrt\rho$, and bounded by
 zero, before the star states of HLLC. $U_r$ is the reference velocity of the Weiss–Smith preconditioning, at most
 $a$ ([Time Integration](time-integration.md#reference-velocity-of-the-preconditioning)); where $U_r = a$ the
-speeds are $v_n \mp a$. The solver needs `integration-variables = prec`, without which MOSE stops at set-up,
-and preconditioned runs are steady.
+speeds are $v_n \mp a$. The solver goes with the preconditioned update, which serves steady runs. It is the only flux that takes $U_r$: with it the dissipation scales with $U_r$, so
+the pressure of a flow at Mach number $M$ fluctuates by $O(M^2)$, the incompressible limit, where a flux scaled with $a$
+gives $O(M)$ ([Time Integration](time-integration.md#preconditioned-update)). Keep the floor fraction $\varepsilon$ below
+the Mach number of the flow (about $M/10$): the floor $\varepsilon a$ of $U_r$ otherwise brings back the dissipation of
+a speed of sound.
 
 ### HLLC+Chen (Chen et al., 2020)
 
@@ -346,7 +349,7 @@ $$\mathbf{F}_{\frac{1}{2}} = \beta\,\mathbf{F}_{\text{HLLC}} + (1-\beta)\,\mathb
 | Smooth flow (no shock) | 1 | HLLC | Sharp contact waves, lower dissipation |
 | Shock / discontinuity | 0 | HLLE | Maximum dissipation, unconditionally stable |
 
-With the sensor of Tramel, which HLLC+Tramel takes unless `shock-detector` names another, $\beta$ has only
+With the sensor of Tramel, which HLLC+Tramel takes unless another sensor is chosen, $\beta$ has only
 these two values ([Shock Detection for Hybrid Solvers](#shock-detection-for-hybrid-solvers)).
 
 **Use cases:**  
@@ -362,8 +365,8 @@ Tramel's improved variant of HLLE for better shear-layer resolution.
 
 **Key modification:**
 
-For the contact and shear waves HLLE++ takes the Roe eigenvalue $|\tilde{v}_n|$ itself
-(`riemann_HLLEpp` in `Lib_Riemann_HLL.f90`), blended with the HLLE eigenvalue as below.
+For the contact and shear waves HLLE++ takes the Roe eigenvalue $|\tilde{v}_n|$ itself,
+blended with the HLLE eigenvalue as below.
 This change preserves **Eulerian shear waves** (pure tangential velocity jumps)
 that would otherwise be artificially diffused by standard HLLE.
 
@@ -385,7 +388,7 @@ For acoustic eigenvalues, Harten–Hyman entropy correction is applied.
 
 ### Rotated HLLC / HLLE
 
-`riemann_HLLCHLLE` (`Lib_Riemann_HLL.f90`) is in the source code; `riemann-solver` does not accept it.
+Described for reference: MOSE does not offer this flux.
 
 Alternative hybrid approach using a **frame rotation** aligned with the local
 velocity-difference direction.
@@ -451,7 +454,7 @@ $$
 applied **only** to the two acoustic characteristics. Eigenvalues, eigenvectors, and the entropy/shear wave strengths are **unchanged**. This removes the $\mathcal{O}(1/M)$ momentum dissipation while leaving density, shear, and energy dissipation at their correct level.
 
 A floor $\phi = \max(M_{co}, \min(1,\tilde M))$ is retained, set by the shared
-low-Mach cutoff Mach $M_{co}$ (input `riemann-options-Mco`): without it
+low-Mach cutoff Mach $M_{co}$: without it
 $\phi \to 0$ at stagnation points removes the acoustic pressure–velocity coupling
 and re-introduces odd–even (checkerboard) modes. See
 [Low-Mach Cutoff Mach](#low-mach-cutoff-mach-m_co) for how to choose it.
@@ -484,7 +487,7 @@ $$
 $$
 
 so $\delta\to 0$ ($\mathbf P\to\mathbf I$) recovers the standard Roe flux for
-$M\ge 1$. The floor $M_{co}$ (input `riemann-options-Mco`) is the **same**
+$M\ge 1$. The floor $M_{co}$ is the **same**
 cutoff Mach used by the other low-Mach solvers; here it prevents the
 $\delta=1/\mu-1\to\infty$ singularity of the preconditioner at stagnation.
 
@@ -560,7 +563,7 @@ $$
 
 HLLC+Tramel blends its two fluxes, and HLLE++ its eigenvalues, with the parameter $\beta \in [0,1]$ of the
 [shock detector](numerics.md#shock-detection), computed from the pressures of the cell and of its six neighbours.
-With the Jameson-type sensor of Tramel, which both take unless `shock-detector` names another, $\beta$ is 1, to
+With the Jameson-type sensor of Tramel, which both take unless another sensor is chosen, $\beta$ is 1, to
 within $2\cdot10^{-7}$, where the sensor value is below $1/\Delta = 0.05$, and 0 elsewhere:
 
 | $\beta$ | Region Type | Solver Behavior |
@@ -576,8 +579,7 @@ making hybrid solvers like HLLC+Tramel ideal for general-purpose simulations.
 ## Low-Mach Cutoff Mach $M_{co}$
 
 All of MOSE's low-Mach-capable solvers (LMRoe, MiczekRoe, HLLC+Chen, AUSM+M)
-share a single tuning parameter, the **cutoff Mach** $M_{co}$, set through the
-input key `riemann-options-Mco`. This section explains what it does and how to
+share a single tuning parameter, the **cutoff Mach** $M_{co}$. This section explains what it does and how to
 choose it.
 
 ### Why a floor is needed
@@ -682,7 +684,7 @@ HLLC+Tramel balances accuracy, robustness, and cost.
 | **Mixed subsonic/transonic** | HLLC+Tramel, AUSM+M | HLLC+Tramel adaptive; AUSM+M all-speed |
 | **Boundary layers + shocks** | HLLC+Tramel, HLLC+Chen | shock-aware; HLLC+Chen preserves shear |
 | **Very low Mach, time-accurate** | **LMRoe**, SLAU2, HLLC+Chen | flux-only low-Mach fix; time-accurate |
-| **Very low Mach, steady** | HLLC-PC, MiczekRoe, LMRoe | preconditioned / low-Mach; clean convergence |
+| **Very low Mach, steady** | HLLC-PC (with the preconditioned update), MiczekRoe, LMRoe | preconditioned / low-Mach; clean convergence |
 | **Vortex / acoustic-near-field preservation** | LMRoe, HLLC+Chen | removes the $\mathcal{O}(1/M)$ momentum dissipation |
 | **Unsteady shock interaction** | HLLC+Tramel | Shock detection tracks transients |
 | **Emergency (solver divergence)** | HLLE, LLF | Maximum stability; accept extra diffusion |

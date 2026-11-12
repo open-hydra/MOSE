@@ -45,7 +45,9 @@ contains
     call reg%add( trim(section), 'time-accurate', obj_time_scheme%time_accurate, '.false.', 'Time accurate switch', 'logical', .true., KEY_FIXED )
 
     ! New state
-    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'cons', 'Integration variables (cons/prim/prec)', 'cons, prim, prec', .false., KEY_FIXED )
+    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'cons', &
+          'Integration variables: cons, prim (linearised primitive update) or prec (Weiss-Smith '// &
+          'preconditioning; steady runs, with HLLC-PC)', 'cons, prim, prec', .false., KEY_FIXED )
 
 
     ! Implicit residual smoothing --------------------------
@@ -65,12 +67,18 @@ contains
     obj_prec%warning_message = 'none'
     obj_prec%error_message   = 'none'
     obj_prec%enabled         = .false.
-    call reg%add( trim(section), 'preconditioning-Uref', obj_prec%Ur_ref, '0.0', 'Reference velocity for preconditioning', '>= 0', .false., KEY_TAKEN )
-    call reg%add( trim(section), 'preconditioning-Mach', obj_prec%Mach_target, '0.0', 'Mach target for preconditioning', '>= 0', .false., KEY_TAKEN )
-    call reg%add( trim(section), 'preconditioning-eps-min', obj_prec%eps_min, '0.05', 'Low-Mach cutoff for Ur', 'in (0, 1)', .false., KEY_TAKEN )
-    call reg%add( trim(section), 'preconditioning-Ur-min', obj_prec%Ur_min, '0.0', 'Floor on Ur [m/s]', '>= 0', .false., KEY_TAKEN )
-    call reg%add( trim(section), 'preconditioning-Ur-factor', obj_prec%Ur_factor, '1.0', 'Weiss-Smith multiplicative factor', '> 0', .false., KEY_TAKEN )
-    call reg%add( trim(section), 'preconditioning-Ur-smooth', obj_prec%n_smooth_Ur, '0', 'Ur max-smoothing passes', '>= 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-Uref', obj_prec%Ur_ref, '0.0', &
+          'Uniform Ur [m/s], a where the flow speed exceeds it, no viscous floor; 0: not used', '>= 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-Mach', obj_prec%Mach_target, '0.0', &
+          'Ur that gives this preconditioned Mach number, a where the flow is faster; 0: not used', '>= 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-eps-min', obj_prec%eps_min, '0.05', &
+          'Floor of Ur as a fraction of a: keep it below the Mach number of the flow (about M/10)', 'in (0, 1)', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-Ur-min', obj_prec%Ur_min, '0.0', &
+          'Floor on Ur [m/s], in every mode', '>= 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-Ur-factor', obj_prec%Ur_factor, '1.0', &
+          'Ur = factor times the flow speed in the default (Weiss-Smith) mode', '> 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'preconditioning-Ur-smooth', obj_prec%n_smooth_Ur, '0', &
+          'Passes of max-smoothing of Ur over the face neighbours', '>= 0', .false., KEY_TAKEN )
 
     !! ------------------------------------------------------
     !! ------------------------------------------------------

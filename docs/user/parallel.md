@@ -203,7 +203,7 @@ The measured parallel efficiency is:
 |   240 |     3 |    `12 × 20` |               87.1% |
 
 <figure>
-  {% include "user/images/scaling-strong.svg" %}
+  --8<-- "docs/user/images/scaling-strong.svg"
 </figure>
 
 The results demonstrate that MOSE maintains high parallel efficiency as the problem is distributed across multiple cores and nodes, provided that the MPI/OpenMP configuration preserves socket locality.
@@ -227,7 +227,7 @@ For the reference benchmark:
 |    80 |  67.4% | 77.0% |  88.0% |
 
 <figure>
-  {% include "user/images/scaling-modes.svg" %}
+  --8<-- "docs/user/images/scaling-modes.svg"
 </figure>
 
 Up to approximately one socket, the three execution models perform similarly. Beyond one socket, the hybrid configuration becomes preferable because it combines MPI-based domain decomposition with OpenMP parallelism inside each socket.

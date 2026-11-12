@@ -61,7 +61,7 @@ blocks in two colours (on iface the face is not plane, as $z$ is moved with the
 kink):
 
 <figure>
-  {% include "vv/images/mms3d-grids.svg" %}
+  --8<-- "docs/vv/images/mms3d-grids.svg"
 </figure>
 
 **Normalised $L_2$ error (%) of the full form**
@@ -93,15 +93,15 @@ finest pair the $L_2$ orders are 0.99 to 1.52 on zigzag and 1.70 to 2.46 on
 iface.
 
 <figure>
-  {% include "vv/images/mms3d-zigzag.svg" %}
+  --8<-- "docs/vv/images/mms3d-zigzag.svg"
 </figure>
 
 <figure>
-  {% include "vv/images/mms3d-iface.svg" %}
+  --8<-- "docs/vv/images/mms3d-iface.svg"
 </figure>
 
 <figure>
-  {% include "vv/images/mms3d-iface-walls.svg" %}
+  --8<-- "docs/vv/images/mms3d-iface-walls.svg"
 </figure>
 
 ## Running the case

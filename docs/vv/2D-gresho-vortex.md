@@ -84,7 +84,7 @@ across the three reference Mach numbers (columns). A perfectly preserved vortex
 reproduces the same ring pattern at every Mach number.
 
 <figure>
-  {% include "vv/images/gresho_mach_matrix.svg" %}
+  --8<-- "docs/vv/images/gresho_mach_matrix.svg"
 </figure>
 
 - **HLLC (baseline)** preserves the vortex acceptably at $M_{\rm ref}=0.1$ and
@@ -101,7 +101,7 @@ The tangential velocity along the horizontal centreline ($y = 0.5$), compared to
 the exact triangular profile:
 
 <figure>
-  {% include "vv/images/gresho_profiles_by_mach.svg" %}
+  --8<-- "docs/vv/images/gresho_profiles_by_mach.svg"
 </figure>
 
 At $M_{\rm ref}=0.001$ the HLLC profile is strongly clipped (peak well below
@@ -132,13 +132,13 @@ low-Mach schemes also keep density variations below $\sim 0.1\%$ and reproduce
 the expected $\mathrm{d}p/p_0 \sim M^2$ pressure scaling, confirming a clean
 incompressible-limit behaviour.
 
-### Effect of the cutoff Mach number$
+### Effect of the cutoff Mach number
 
 The cutoff Mach has a **two-sided** optimum, illustrated by sweeping $M_{co}$ for
 LMRoe at the hardest case $M_{\rm ref}=10^{-3}$:
 
 <figure>
-  {% include "vv/images/gresho_lmroe_sweep.svg" %}
+  --8<-- "docs/vv/images/gresho_lmroe_sweep.svg"
 </figure>
 
 | $M_{co}$ | Peak $u_\phi$ decay | KE change | $L_2(u_\phi)$ | Behaviour |

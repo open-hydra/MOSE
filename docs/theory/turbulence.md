@@ -1,8 +1,7 @@
 # Turbulence Modelling
 
 MOSE provides Reynolds-Averaged Navier–Stokes (RANS) closures for
-turbulent flows, selected at run time via the `turbulence` key in the
-`[MOSE-Physics]` section of the input file.  The eddy-viscosity models
+turbulent flows.  The eddy-viscosity models
 described in detail below range from the one-equation Spalart–Allmaras
 model (with several variants) to the two-equation Menter SST and
 Wilcox 2006 $k$–$\omega$ models; beyond them, the
@@ -25,9 +24,9 @@ where $S_{ij} = \tfrac{1}{2}(\partial v_i / \partial x_j + \partial v_j / \parti
 is the mean strain-rate tensor, $\mu_t$ is the eddy (turbulent) viscosity,
 and $k$ is the turbulence kinetic energy.  The isotropic term
 $-\tfrac{2}{3}\rho k\,\delta_{ij}$ is left out of the stress of the momentum
-and energy equations unless `k-energy-coupling = true`, with which the
+and energy equations unless the energy coupling is on, with which the
 two-equation models (SST, Wilcox 2006) include it (see
-[Energy coupling](#energy-coupling-k-energy-coupling)); SA has no $k$.
+[Energy coupling](#energy-coupling)); SA has no $k$.
 
 ---
 
@@ -38,7 +37,7 @@ two-equation models (SST, Wilcox 2006) include it (see
 The SA model solves a single transport equation for the modified
 turbulent viscosity $\tilde\nu$. MOSE takes the model without the $f_{t2}$
 term, SA-noft2 in the naming of the NASA Turbulence Modeling Resource, whose
-standard SA has it, with $c_{t3} = 1.2$; `SA-R` and `SA-RC` apply their
+standard SA has it, with $c_{t3} = 1.2$; SA-R and SA-RC apply their
 corrections to this model (SA-noft2-R and SA-noft2-RC in that naming). The
 equation is
 
@@ -124,15 +123,15 @@ $$
 \tilde\nu_\text{wall} = 0
 $$
 
-on the viscous walls and on the grain of a solid rocket motor (types `301`, `302`, `502` in its mode 1,
-`503`–`505`); the wall distance $y$ is measured from them and from the walls coupled to another
-solver (`103`, `104`). A slip wall (type `300`, which is also the symmetry plane) follows the
+on the viscous walls, on the grain of a solid rocket motor that blows its products in through a wall,
+and on the gas–surface interaction walls; the wall distance $y$ is measured from them and from the walls
+coupled to another solver. A slip wall (in MOSE the same boundary as the symmetry plane) follows the
 standard model: the ghost cell copies the cell, a zero normal derivative of $\tilde\nu$, and the
 slip wall is not a wall for the distance («the free-slip wall points are not included in the search
 when $d$ is computed», P. R. Spalart, S. R. Allmaras,
 *La Recherche Aérospatiale* 1994(1), p. 21). Allmaras, Johnson and Spalart (ICCFD7-1902, §3.3)
 propose instead $\tilde\nu = 0$ on slip walls and their inclusion in the distance, as distinct
-from symmetry planes; MOSE, whose type `300` serves both, does not make that change.
+from symmetry planes; MOSE, whose one boundary serves both, does not make that change.
 
 Negative values are clipped: after every stage MOSE keeps $\rho\tilde\nu \ge 10^{-10}$ (the
 realizability floor) and counts the cell updates in which a stage made it negative
@@ -142,8 +141,8 @@ residuals»; MOSE does not implement SA-neg.
 
 ### Rough walls — SA-rough
 
-A wall face with a sand-grain roughness height $k_s > 0$ (the `k_rough` field of
-the [wall BCs](../user/boundary-conditions.md#viscous-walls)) switches on the
+A wall face with a sand-grain roughness height $k_s > 0$ (see the
+[wall BCs](../user/boundary-conditions.md#viscous-walls)) switches on the
 Boeing extension of Aupoix & Spalart (2003). Each cell takes the $k_s$ of its
 nearest wall face, and the model changes in three places.
 
@@ -187,7 +186,7 @@ smooth code path bit for bit.
 
 ### SA Variants
 
-#### SAcomp — Compressibility Correction
+#### Compressibility Correction
 
 Paciorri–Sabetta correction that scales the production term with a
 function of the turbulent stress ratio:
@@ -199,20 +198,19 @@ $$
 Activated when compressibility effects on turbulence are significant
 (high-speed boundary layers, mixing layers).
 
-!!! warning "Stopped at set-up"
-    A run with `turbulence = SAcomp` stops at set-up. The correction takes
+!!! warning "Not available"
+    MOSE does not offer this correction. It takes
     $c$ from $c^2 f(c) = 25\,\Omega\,\tilde\nu f_{v1}/a$, with
     $f(c) = 0.44/(1 + 14c^5) + 0.56$, and multiplies the production by
     $f_1(c)\,f(c)$, with $f_1(c) = 0.6/(1 + 9c^6) + 0.4$: the left side is a
     number and the right side a speed, so the factor depends on the unit of
     length. For $\Omega = 10^3$ 1/s, $\nu_t = 10^{-3}$ m²/s and $a = 340$ m/s
-    it is 0.99 with lengths in metres and 0.22 with lengths in millimetres.
-    The correction (the code cites doi:10.2514/2.3967) is not available: use
-    `SA` or another model.
+    it is 0.99 with lengths in metres and 0.22 with lengths in millimetres
+    (doi:10.2514/2.3967).
 
 #### SA-R — Rotation Correction
 
-`turbulence = SA-R` replaces $\tilde S$ in the production by $\tilde S + C_\text{rot}\min(0,\,S - \Omega)$,
+SA-R replaces $\tilde S$ in the production by $\tilde S + C_\text{rot}\min(0,\,S - \Omega)$,
 with the strain-rate magnitude $S = \sqrt{2\,S_{ij}\,S_{ij}}$:
 
 $$
@@ -259,23 +257,22 @@ MOSE evaluates the Lagrangian derivative $DS_{ij}/Dt = \partial S_{ij}/\partial 
 S_{ij}/\partial x_k$ with its convective part only. Without the time term the correction holds for
 steady flows only: «Without the time term, the model is not correct in a time-dependent flowfield»
 (NASA Turbulence Modeling Resource, Spalart–Allmaras page, SA-RC). Time-accurate runs with the
-correction print a warning at start-up.
+correction are outside its validity.
 
 MOSE takes $\partial S_{ij}/\partial x_k$ with central differences of the velocity gradients
-$G = \nabla\mathbf{u}$ of the cell and of its neighbours (`Compute_Velocity_Gradient`,
-`Compute_RC_Terms`), mapped to Cartesian components with a cell metric. Next to a block face the
+$G = \nabla\mathbf{u}$ of the cell and of its neighbours, mapped to Cartesian components with a cell metric. Next to a block face the
 neighbour is the first ghost cell, and the difference is right when the ghost cell holds the value
 of a definite cell and the metric takes the position of that same cell: for $S_{ij}$ linear in
-space the difference is then exact (with `diffusive-metric = stencil`, the metric of the
+space the difference is then exact (with the stencil metric, the metric of the
 differences of these positions: [Cell gradients of the source terms](#cell-gradients-of-the-source-terms)).
 
-- Behind a face between blocks (`101`) or of a periodic pair (`201`) the ghost cell holds $G$ of the
-  cell across, the source cell of the record (from another MPI rank by message), and the metric
+- Behind a face between blocks or of a periodic pair the ghost cell holds $G$ of the
+  cell across (from another MPI rank by message), and the metric
   takes its centre, plus the translation of a periodic pair. $G$ is a tensor in Cartesian
   components: it is copied whatever the orientation of the two blocks. The cell next to the face
   then takes the central difference of the undivided mesh, and the result does not depend on how
   the mesh is divided into blocks or among ranks.
-- Behind a face of rotational periodicity (`200`), the ghost cell holds $R\,G\,R^{\mathsf T}$, $G$ of
+- Behind a face of rotational periodicity, the ghost cell holds $R\,G\,R^{\mathsf T}$, $G$ of
   the image cell that the velocity takes there, turned by the same rotation $R$ about $x$: a flow
   invariant under the turn, $\mathbf{u}(R\mathbf{x}) = R\,\mathbf{u}(\mathbf{x})$, has
   $G(R\mathbf{x}) = R\,G(\mathbf{x})\,R^{\mathsf T}$. On a 3-D sector the image is the cell next to the
@@ -298,26 +295,26 @@ MOSE implements the **SST-2003** version of the model (Menter, Kuntz &
 Langtry [3]; the original model is Menter 1994 [2]) as specified by the NASA
 Turbulence Modeling Resource [8]: eddy viscosity built from the strain
 invariant $S$, production limiter $10\,\beta^\ast\rho\,\omega k$ in both
-equations, and the 2003 constants.  Two options select the remaining
-details; the last two columns give the TMR name of each variant:
+equations, and the 2003 constants.  Two choices set the remaining
+details, the form of the production and the energy coupling; the last two columns give the TMR name of each variant:
 
-| `sst-production` | Production $P$ | `k-energy-coupling = false` (default) | `k-energy-coupling = true` |
+| Production | $P$ | Without energy coupling (default) | With energy coupling |
 |---|---|---|---|
-| `incompressible` (default) | $\mu_t S^2$ | SST-2003m | SST-2003s |
-| `compressible` | $\tau_{ij}\,\partial u_i/\partial x_j$ (exact), arranged as in OpenFOAM's `kOmegaSST` | none | none |
+| incompressible (default) | $\mu_t S^2$ | SST-2003m | SST-2003s |
+| compressible | $\tau_{ij}\,\partial u_i/\partial x_j$ (exact), arranged as in OpenFOAM's `kOmegaSST` | none | none |
 
 The suffix records the approximations [8]: without the
-[energy coupling](#energy-coupling-k-energy-coupling) the
+[energy coupling](#energy-coupling) the
 $-\tfrac23\rho k\,\delta_{ij}$ part of $\tau_{ij}$ is left out of the
 momentum and energy equations ("m", "e"); "m" and "s" approximate the production
 by $\mu_t S^2$, which TMR describes as exact for incompressible flow and
 "typically considered a very good approximation, except perhaps for very high
 Mach number flows"; SST-2003e and SST-2003 take the exact production and limit
-all of it.  With `compressible` the limiter acts on the deviatoric part of $P$
+all of it.  With the compressible production the limiter acts on the deviatoric part of $P$
 only, and the $\omega$ equation takes the dilatation term
 $-\tfrac23\gamma\rho\omega\,\nabla\!\cdot\!\mathbf{v}$, as in OpenFOAM: these two
-variants have no TMR name (see [below](#compressible-production-sst-production)).
-`turbulence = SST-RC` adds the
+variants have no TMR name (see [below](#compressible-production)).
+SST-RC adds the
 [rotation/curvature correction](#rotationcurvature-correction-sst-rc).
 
 ### Transport equations
@@ -365,11 +362,11 @@ This prevents unbounded growth of $k$ in stagnation regions.
     forms $P_\omega$ from the limited value; this matches the reference SST-2003
     codes (e.g. SU2's default `V2003`).
 
-### Compressible production (`sst-production`)
+### Compressible production
 
 The production above is the SST-2003m form $\mu_t S^2$, which drops the
-dilatation terms of $P = \tau_{ij}\,\partial u_i/\partial x_j$.  With
-`sst-production = compressible` (default `incompressible`) MOSE keeps them, with
+dilatation terms of $P = \tau_{ij}\,\partial u_i/\partial x_j$.  The
+compressible production (not the default) keeps them, with
 $\tau_{ij} = \mu_t\bigl(2S_{ij} - \tfrac23\,\nabla\!\cdot\!\mathbf{v}\,\delta_{ij}\bigr) - \tfrac23\,\rho k\,\delta_{ij}$:
 
 $$
@@ -392,7 +389,7 @@ limited value as the production of $\omega$, whose term in $\rho k\,\nabla\!\cdo
 limiter, is $-\tfrac23\gamma\rho(k/\nu_t)\,\nabla\!\cdot\!\mathbf{v}$.  The two
 arrangements coincide where $\nabla\!\cdot\!\mathbf{v} = 0$, and elsewhere where the
 production of neither reaches the limiter and $a_1\omega \ge S F_2$, so that
-$k/\nu_t = \omega$.  With the default `k-energy-coupling = false` the
+$k/\nu_t = \omega$.  Without the energy coupling (the default) the
 $-\tfrac23\rho k\,\delta_{ij}$ part of $\tau_{ij}$ enters the production but not the
 momentum and energy equations, as in TMR's "e" variants.  In attached, nearly
 incompressible boundary layers the compressible and the incompressible productions
@@ -404,7 +401,7 @@ a separation bubble about 16% longer and a slower recovery of $C_f$.
 
 ### Rotation/curvature correction (SST-RC)
 
-`turbulence = SST-RC` sensitizes the model to streamline curvature and system
+SST-RC sensitizes the model to streamline curvature and system
 rotation with the Spalart–Shur correction as adapted to SST by Smirnov and
 Menter [10] (TMR SST-RC [8], here on the SST-2003 variants of the table above).  The production $P$ of
 both equations is multiplied by
@@ -424,13 +421,13 @@ $$
 with $c_{r1} = 1$, $c_{r2} = 2$, $c_{r3} = 1$, $S = \sqrt{2S_{ij}S_{ij}}$,
 $\Omega = \sqrt{2\Omega_{ij}\Omega_{ij}}$.  $f_{r1}$ multiplies $P$ before the
 production limiter, so it reaches the $\omega$ equation through the limited
-$P$; with `sst-production = compressible` it multiplies the deviatoric part of
+$P$; with the compressible production it multiplies the deviatoric part of
 $P$, and the dilatation terms, added after the limiter, are not multiplied.  In
 simple shear $r^\ast = 1$ and $\tilde r = 0$, so $f_{r1} = 1$ and the
 model reduces to SST.
 
-Implementation notes: $r^\ast$ and the numerator of $\tilde r$ are shared with
-SA-RC (`Lib_SpalartShur`).  $DS_{ij}/Dt$ is its steady convective part
+Implementation notes: $r^\ast$ and the numerator of $\tilde r$ are those of
+SA-RC.  $DS_{ij}/Dt$ is its steady convective part
 $\mathbf{u}\!\cdot\!\nabla S_{ij}$; in a [rotating frame](rotating-frame.md)
 the frame enters through the absolute vorticity in $\Omega_{ik}$ and $\Omega$,
 but the frame-rotation term $(\epsilon_{imn}S_{jn} + \epsilon_{jmn}S_{in})\,\Omega^\text{rot}_m$
@@ -486,16 +483,16 @@ k_\text{wall} = 0, \qquad
 $$
 
 with $y_c$ the wall distance of the wall-adjacent cell centre and $\nu_w$ the
-laminar viscosity at the wall.  `omega-wall-bc` selects $C$:
+laminar viscosity at the wall.  $C$ takes one of two values:
 
-- `practical` (default): $C = 10 \times 6/\beta_1 = 800$, Menter's
+- practical (default): $C = 10 \times 6/\beta_1 = 800$, Menter's
   over-specification of the near-wall limit, robust on meshes that do not
   resolve the viscous sublayer;
-- `asymptotic`: $C = 6/\beta_1 = 80$, the viscous-sublayer solution
+- asymptotic: $C = 6/\beta_1 = 80$, the viscous-sublayer solution
   $\omega = 6\nu/(\beta_1 y^2)$ evaluated at $y_c$, for wall-resolved meshes.
 
-The wall flux of the walls that blow (`504` and `505` while they ablate, a `502` grain while it
-burns) takes $C = 800$ with either value.
+The wall flux of the walls that blow (pyrolysis and surface-reaction walls while they ablate, a solid
+propellant grain while it burns) takes $C = 800$ with either value.
 
 MOSE imposes $\omega_\text{wall}$ on the wall **face** (ghost value
 $2\,\omega_\text{wall} - \omega_P$) and solves the $\omega$ equation in the
@@ -511,7 +508,7 @@ Either value grows as $1/y_c^2$ under grid refinement, which is the origin of th
 near-wall stiffness handled by the [numerical treatment of the source
 terms](#numerical-treatment-of-the-source-terms).
 
-### Energy coupling (`k-energy-coupling`)
+### Energy coupling
 
 The compressible RANS equations [11] carry the turbulent kinetic energy in two
 places: the total energy, $E = e + \tfrac12 u_iu_i + k$, and the Boussinesq
@@ -519,7 +516,7 @@ Reynolds stress,
 $\tau_{ij} = 2\mu_t\bigl(S_{ij} - \tfrac13\nabla\!\cdot\!\mathbf{v}\,\delta_{ij}\bigr) - \tfrac23\rho k\,\delta_{ij}$.
 By default MOSE drops both (the TMR "m"/"e" variants): its energy is that of the
 mean flow, $E_m = e + \tfrac12 u_iu_i$, and the $-\tfrac23\rho k$ term is not in
-the stress.  With `k-energy-coupling = true` (two-equation models: SST and
+the stress.  With the energy coupling (two-equation models: SST and
 Wilcox 2006) MOSE keeps both:
 
 - the stress of the momentum and energy equations includes
@@ -563,7 +560,7 @@ $k = 0$ and the term vanishes.
 The Wilcox (2006) model [4, 12] with the exact production
 $P = \tau_{ij}\,\partial u_i/\partial x_j$ and the optional TMR $k$-equation
 limiter (below): TMR's Wilcox2006-klim, in its "e" form (Wilcox2006-klim-e) unless
-[`k-energy-coupling`](#energy-coupling-k-energy-coupling) is on [8].
+the [energy coupling](#energy-coupling) is on [8].
 
 ### Model constants
 
@@ -609,12 +606,12 @@ $\chi_\omega$ is zero in 2-D holds. In 2-D flows the product $W_{ij}W_{jk}\hat S
 
 ### Wall boundary conditions
 
-$k_\text{wall} = 0$. With `omega-wall-bc = asymptotic` the wall takes the near-wall limit of the $\omega$ equation of the
+$k_\text{wall} = 0$. With the asymptotic condition the wall takes the near-wall limit of the $\omega$ equation of the
 model, $\omega_\text{wall} = 6\nu/(\beta_0 y^2)$ with $\beta_0 = 0.0708$ (NASA Turbulence Modeling Resource, Wilcox 2006
-page), that is $84.7\,\nu/y^2$, $y$ the distance of the centre of the wall cell from the wall. With `practical`, the default,
+page), that is $84.7\,\nu/y^2$, $y$ the distance of the centre of the wall cell from the wall. With the practical one, the default,
 it takes Menter's condition of the [SST section](#wall-boundary-conditions), $800\,\nu/y^2$ with the $\beta_1$ of SST,
-as the same page advises for this model. The wall flux of the walls that blow (`504` and `505` while they ablate, a `502`
-grain while it burns) takes $800\,\nu/y^2$ with either value.
+as the same page advises for this model. The wall flux of the walls that blow (pyrolysis and surface-reaction walls while
+they ablate, a solid propellant grain while it burns) takes $800\,\nu/y^2$ with either value.
 
 ### Cross-diffusion *(conditional)*
 
@@ -650,15 +647,15 @@ model captures secondary flows and the effects of streamline curvature and
 rotation that the eddy-viscosity models miss, at the cost of the additional
 equations.
 
-MOSE follows the specification of the NASA Turbulence Modeling Resource [16].
-The `turbulence` key selects the variant:
+MOSE follows the specification of the NASA Turbulence Modeling Resource [16],
+in four variants:
 
-| `turbulence` | TMR name | Diffusion of the stresses | Length-scale correction |
-|---|---|---|---|
-| `SSGLRR` | SSGLRR-RSM-w2012 | generalized gradient | no |
-| `SSGLRR-SD` | SSGLRR-RSM-w2012-SD | simple (eddy viscosity) | no |
-| `SSGLRR-w2019` | SSGLRR-RSM-w2019 | generalized gradient | yes |
-| `SSGLRR-w2019-SD` | SSGLRR-RSM-w2019-SD | simple (eddy viscosity) | yes |
+| TMR name | Diffusion of the stresses | Length-scale correction |
+|---|---|---|
+| SSGLRR-RSM-w2012 | generalized gradient | no |
+| SSGLRR-RSM-w2012-SD | simple (eddy viscosity) | no |
+| SSGLRR-RSM-w2019 | generalized gradient | yes |
+| SSGLRR-RSM-w2019-SD | simple (eddy viscosity) | yes |
 
 ### Transport equations
 
@@ -694,7 +691,7 @@ $$
 $$
 
 The diffusion is the generalized gradient model of Daly & Harlow [17], or, with
-the `-SD` suffix, a simple gradient model built on $\mu_t = \rho k/\omega$:
+the -SD suffix, a simple gradient model built on $\mu_t = \rho k/\omega$:
 
 $$
 \rho D_{ij} = \frac{\partial}{\partial x_k}\!\left[
@@ -742,7 +739,7 @@ with $C_2^\text{LRR} = 0.52$.
 
 ### Length-scale correction (w2019)
 
-The `-w2019` variants [18] multiply the destruction of $\omega$ by
+The w2019 variants [18] multiply the destruction of $\omega$ by
 $1 - F^\text{(LSC)}$, which removes it where the turbulent length scale exceeds
 that of the log layer, near stagnation and reattachment points:
 
@@ -766,10 +763,10 @@ $$
 $$
 
 and the turbulent heat and species fluxes are gradient models with
-$\mu_t = \rho k/\omega$ and the turbulent Prandtl and Schmidt numbers `Prt` and
-`Sct` (TMR uses $Pr_t = 0.9$).  The same $\mu_t$ enters the time-step limit.
+$\mu_t = \rho k/\omega$ and the turbulent Prandtl and Schmidt numbers $Pr_t$ and
+$Sc_t$ (TMR uses $Pr_t = 0.9$).  The same $\mu_t$ enters the time-step limit.
 
-The energy is treated as with [`k-energy-coupling`](#energy-coupling-k-energy-coupling),
+The energy is treated as with the [energy coupling](#energy-coupling),
 which the Reynolds-stress model always has: MOSE advances the mean-flow energy
 $E_m = e + \tfrac12 u_iu_i$, whose equation is the total-energy equation of
 TMR [11] minus the $k$ equation (half the trace of the stress equations).  The
@@ -789,8 +786,8 @@ and the dissipated $k$ comes back as heat.
 
 **Walls.**  $R_{ij} = 0$ and
 $\omega_\text{wall} = C\,\nu_w/y_c^2$, imposed on the wall face exactly as for
-[SST](#wall-boundary-conditions); `omega-wall-bc` selects $C$, and the default
-`practical` ($C = 800$) is the condition of TMR.  The wall stress is the
+[SST](#wall-boundary-conditions), with the same two values of $C$; the default,
+practical ($C = 800$), is the condition of TMR.  The wall stress is the
 molecular one.  On blowing (ablating) walls the stresses are zero as well.
 
 **Symmetry planes.**  The ghost cell holds the mirror image of the stress
@@ -803,14 +800,10 @@ orientation.
 
 **Inlets and initial conditions.**  ATLAS gives the three normal stresses one
 value (isotropic turbulence, $R_{11} = R_{22} = R_{33} = \tfrac23 k$) and sets
-the shear stresses to $10^{-8}$; with $\omega$ this fixes the state.  In the
-`[ICB-Block*]` sections the keys are `Rij` (specific, m²/s²) or `rhoRij`, with
-`omega` or `rhoOmega`; in a boundary section they are `Rij` and `omega`, both
-specific, which MOSE multiplies by the inlet density as it does `k` and
-`nuTilde` (the density-weighted `rhoRij` is an `[ICB-Block*]` key only, and a
-boundary section carrying it is refused).  The initial-condition and
-solution files carry the density-weighted bands
-`ru'u' rv'v' rw'w' ru'v' ru'w' rv'w' rhoOmega`.  The freestream values follow
+the shear stresses to $10^{-8}$; with $\omega$ this fixes the state.  At an
+inlet the specific values are multiplied by the inlet density, as for the
+two-equation models ([Initial Conditions](../user/initial-conditions.md#required-variables)
+gives the input keys).  The freestream values follow
 the [same rule](#freestream-and-inlet-values-k-omega-tildenu) as for the
 two-equation models, with $R_{ii} = \tfrac23 k_\infty$.
 
@@ -821,8 +814,8 @@ $\rho R_{ij}n_j u_i$, is taken from the boundary cell.  Without it the pressure
 jumps by $\rho R_{nn}$ in the cells next to an open boundary.
 
 **Axisymmetric and rotationally periodic faces.**  The stress tensor turns
-with the ghost cell, as the velocity does, in the inviscid flux of the faces of
-type `200` and in their viscous flux (`BC_Rotational_Periodic_Visc`), whose
+with the ghost cell, as the velocity does, in the inviscid flux of these faces
+and in their viscous flux, whose
 stress includes $-\rho R_{ij}$ of the face: on the two side faces of an
 axisymmetric wedge the azimuthal normal stress $\rho R_{\theta\theta}$ thus
 enters the radial momentum balance with the viscous hoop stress.
@@ -856,29 +849,12 @@ non-linear correction to the Boussinesq stress rather than a standalone
 model. It adds a quadratic dependence on the rotation tensor to the modelled
 stress, improving the prediction of anisotropy-driven secondary flows
 (corner flows, square ducts) while reusing the eddy viscosity of the
-underlying model. The code takes it as a suffix of the model name
-(`-QCR2000`), but `turbulence` does not accept such a name (its
-allowed values are listed in the [registry](../user/registry.md)), so no run
-uses it; the test `QCR2000Stress` checks the stress against the definition.
+underlying model. MOSE does not offer it as a model choice; its stress is
+checked against the definition by the tests.
 
 ---
 
 ## General RANS Features
-
-### Procedure-pointer architecture
-
-All turbulence models in MOSE are accessed through **function pointers**
-defined in `Mod_RANS`:
-
-| Pointer | Purpose |
-|---------|---------|
-| `Eddy_Viscosity` | Compute $\mu_t$ from model variables |
-| `RANS_Diffusive_Flux` | Turbulent diffusion terms for $k$, $\omega$, $\tilde\nu$, $R_{ij}$ |
-| `Stress_Vector` | Viscous + Reynolds stress on a face |
-| `RANS_Set_Wall_Values` | Set turbulence BC at walls |
-| `RANS_Extrapolate_Wall` | Ghost-cell value of the RANS variables at walls, $2Z_\text{wall} - Z_\text{cell}$ |
-
-This design allows switching models at run time without recompilation.
 
 ### Wall ghost cells of the turbulence variables
 
@@ -893,24 +869,25 @@ with the wall values of the models above, here of the specific variables $Z = \t
 (the ghost value of $\rho Z$ is that times the density of the ghost cell). It is the rule of CFL3D,
 «the actual wall boundary conditions for the turbulence quantities (unlike the primitive variables)
 are applied at ghost cells» (S. L. Krist, R. T. Biedron, C. L. Rumsey, *CFL3D User's Manual
-(Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). `Fill_Ghost_Cell` sets these
+(Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). MOSE sets these
 values once per stage, from the wall values of the wall flux routines (the same wall state), with
-the other ghost values of the wall ([Numerics](numerics.md), *Ghost Cells of Walls and 400 Faces*):
+the other ghost values of the wall ([Numerics](numerics.md), *Ghost Cells of Walls and Extrapolation Faces*):
 the fluxes through the first interior faces and the source terms read the same ghost cells, at every
 stage. The source terms read
 them in the gradients of the wall cells: the $c_{b2}$ term of SA and its term
 $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of SST, the
 cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of the wall
-cell sees $\partial\tilde\nu/\partial y = a$ (part 5 of `MMSResiduals`); a ghost cell that copied the cell
-would give $a/2$. An SRM grain (`502`) of mode 1 takes the
+cell sees $\partial\tilde\nu/\partial y = a$ (manufactured-solution tests); a ghost cell that copied the cell
+would give $a/2$. A solid propellant grain that blows its products in through a wall takes the
 same rule for its turbulence variables, with the wall values of its flux: those of the blowing wall while
-it burns, of the wall at the flame temperature when it does not; a grain of mode 2 is an inlet (`404`).
+it burns, of the wall at the flame temperature when it does not; a grain modelled as an inflow is a
+mass-flux inlet.
 
 ### Cell gradients of the source terms
 
 The source terms take, in every cell, the central differences of the values along the three index
 directions and map them to Cartesian components with a cell metric. With
-`diffusive-metric = stencil` the metric is $M_s = (J_c^{T})^{-1}$ with
+the stencil metric it is $M_s = (J_c^{T})^{-1}$ with
 $J_c^{T}(:,d) = (\mathbf{x}_{c+e_d} - \mathbf{x}_{c-e_d})/2$, the same central differences of the
 cell centres (the mean of the eight nodes): the gradient of a linear field is exact on stretched,
 skewed and non-smooth cells (along an index direction with one cell, the edge of the cell and no
@@ -922,25 +899,23 @@ The ghost cells sit where their value is right: those of the fluxes, at the posi
 of the face metric ([Numerics](numerics.md)); behind a wall the position of the class of the
 quantity, one metric per group: the velocity, the density (whose ghost value follows the temperature:
 exact where the pressure and the composition do not vary across the wall cell), the turbulence
-variables (a metric of their own only next to `503`–`505`, where the velocity is extrapolated and they
-take their wall value). Behind a zero-gradient face (0, 401-407, 420), whose ghost cell copies the
+variables (a metric of their own only next to gas–surface interaction walls, where the velocity is
+extrapolated and they take their wall value). Behind a zero-gradient face (unused faces, and the inlets
+and outlets but the velocity inlet), whose ghost cell copies the
 cell, the position is the cell itself, so the difference across the boundary cell is one-sided. The
 strain gradient of SA-RC takes, behind the faces between blocks and of a turned sector, the position
 of the cell whose velocity gradient the ghost cell holds, and the cell itself behind the other faces
 (see SA-RC above).
-The metrics are computed once at setup (`Cell_Source_Metrics`) and chosen in one place
-(`Source_Metrics`) by the source terms of SA, SA-RC, SST, Wilcox 2006 and SSG/LRR and by the eddy
-viscosity of the output. With `mean` the metric is that of the cell:
+The metrics are computed once at setup and serve the source terms of SA, SA-RC, SST, Wilcox 2006 and
+SSG/LRR and the eddy viscosity of the output. With the mean metric it is that of the cell:
 the central difference across a cell next to a jump of size $r$ is then wrong by $(r-1)/4$, on a
-skewed wall cell a copied density takes a normal gradient it does not have (part 5 of `MMSResiduals`),
+skewed wall cell a copied density takes a normal gradient it does not have (manufactured-solution tests),
 and next to a zero-gradient face the normal component is half the one-sided difference.
 
 ### Blowing / wall-suction correction
 
-The code has a wall value of $\omega$ for walls that inject or suck gas
-(`SST_Blowing_Correction`, used by SST and Wilcox 2006), which the suffix
-`-blowcorr` of the model name selects; `turbulence` does not accept such a
-name, so no run uses it.
+A wall value of $\omega$ for walls that inject or suck gas, for SST and Wilcox 2006, is
+implemented but not offered as a model choice.
 
 ### Wall distance
 
@@ -965,7 +940,8 @@ $c_{w1} f_w (\tilde\nu/d)^2$ (a factor $\cos^2\theta$: 0.97, 0.88, 0.75,
 $\omega_w = 60\nu/(\beta_1 d_1^2)$ of SST. That distance is exact only on
 meshes orthogonal to the wall, with the cell centres above the face centres.
 
-- Each face of a wall boundary (types 103, 104, 301, 302, 502 in its mode 1, 503–506) is the bilinear
+- Each face of a wall boundary (viscous walls, coupled walls, a grain that blows through a wall, gas–surface
+  interaction walls) is the bilinear
   surface through its four nodes, the face of the cells
   ([Cell volume](numerics.md#cell-volume)):
   $\mathbf{x}(s,t) = \mathbf{x}_1 + s\mathbf{a} + t\mathbf{b} + st\mathbf{T}$,
@@ -978,7 +954,7 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   ([Code Structure](../development/structure.md#wall-distance) gives the
   algorithm). The four triangles of a twisted face would be wrong by up to
   $(|\mathbf{T}|/16)/y$, 6 % on a unit face twisted by 0.1 at the height 0.1.
-- On a 2-D axisymmetric wedge (BC 200) the distance is measured in the
+- On a 2-D axisymmetric wedge the distance is measured in the
   meridional plane $(x, r)$, $r = \sqrt{y^2+z^2}$, from the cell centre to the
   wall curve. This is the distance to the wall surface of revolution, and it
   does not depend on the angle of the wedge. A wall on the faces of the wedge
@@ -990,9 +966,9 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
 - The distance and the face that gives it do not depend on the threads or on
   the ranks.
 - Across periodic boundaries the wall goes on: the distance is the minimum over
-  the periodic images of the wall too. A periodic connection (type 201) gives
+  the periodic images of the wall too. A periodic connection gives
   the translation from its source face to its own face, and on a 3-D mesh
-  without sectors so does a block closed in $k$ by type `200` (its last node
+  without sectors so does a block closed in $k$ by rotational periodicity (its last node
   plane is the first one translated). The images are the integer combinations of
   these translations (along $x$ on an axisymmetric wedge). The two sides of a
   periodic boundary match only to the round-off of the coordinates in the mesh
@@ -1001,11 +977,11 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
   boundaries are the same, as in the type of the mesh. The thickness of a
   cell across a periodic face is the distance from the centre of the face to
   the centre of the opposite face of the cell, along the normal of the face;
-  for a block closed in $k$ by type `200`, the move of its nodes per cell in
+  for a block closed in $k$ by rotational periodicity, the move of its nodes per cell in
   $k$. The round-off of a coordinate grows with its size, so a tolerance
   relative to the size of the coordinates would depend on where the mesh
   lies; relative to the cells it does not. On a 3-D mesh whose
-  sectors are closed by the rotational periodicity (type `200` on faces 5–6)
+  sectors are closed by the rotational periodicity (on faces 5–6)
   the images are also the turns by multiples of the sector angle about the
   $x$ axis, up to half a turn either way. A channel periodic in $x$ and turned by
   30 degrees about $z$ gives translations that differ by 1.1e-4 of its cells with
@@ -1018,8 +994,6 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
 - Each cell takes the sand-grain roughness $k_s$ of the face that gives the
   minimum distance; between faces at the same distance, the first one in the
   boundary file.
-
-Tests `MeshGeometry`/`WallDistance` and `BilinearDistance`.
 
 ---
 
@@ -1051,29 +1025,13 @@ $k_\infty = 2.47\times10^{-4}$ m² s⁻², $\omega_\infty = 1216$ s⁻¹.
 Values of $\omega_\infty$ orders of magnitude below the $\mu_t/\mu$ estimate are
 a frequent cause of $k$ runaway.
 
-**Inputs and files.**  The turbulence keys of ATLAS come in pairs, a specific one
-and a density-weighted one, under the names of the
-[NASA Turbulence Modeling Resource](https://tmbwg.github.io/turbmodels/): `nuTilde` $= \tilde\nu$ and `rhoNuTilde` $= \rho\tilde\nu$, `k` and
-`rhoK` $= \rho k$, `omega` and `rhoOmega` $= \rho\omega$.  $\tilde\nu$ is the
-variable the Spalart-Allmaras model transports, not the eddy viscosity
-$\mu_t = \rho\tilde\nu f_{v1}$, which is not an input and is written as `mut`
-(`sol-variables = transport`).  The specific values are those
-TMR and OpenFOAM give, and the same ones serve the initial condition
-(`[ICB-Block*]`) and the inflow (`[inflow]`).  MOSE solves for the
-density-weighted variables $\rho\tilde\nu$, $\rho k$, $\rho\omega$:
-
-- the initial condition: ATLAS ICB multiplies the specific keys `nuTilde`, `k`, `omega`
-  by the density of each cell (it also takes the density-weighted keys `rhoNuTilde`,
-  `rhoK`, `rhoOmega`, written as given);
-- the inlet: the boundary takes the specific `nuTilde`, `k`, `omega` only, and MOSE
-  multiplies the `bc.txt` values by the density of the inlet state;
-- the IC, restart and solution files all carry the density-weighted variables
-  under the names of the density-weighted keys: `rhoNuTilde`, `rhoK`, `rhoOmega` (divide
-  by $\rho$ to read $\tilde\nu$, $k$ and $\omega$).  MOSE reads them by position
-  and, in an ASCII file, checks the names
-  ([Initial Conditions](../user/initial-conditions.md#required-variables)).
-
-For the example above: `k = 2.4699e-4`, `omega = 1215.8`.
+**Specific and density-weighted values.**  The values above are specific, as TMR and
+OpenFOAM give them; $\tilde\nu$ is the variable the Spalart–Allmaras model transports,
+not the eddy viscosity $\mu_t = \rho\tilde\nu f_{v1}$.  MOSE solves for the
+density-weighted variables $\rho\tilde\nu$, $\rho k$, $\rho\omega$: the specific values of an
+inlet are multiplied by the density of the inlet state, and those of the initial condition by
+the density of each cell.  The input keys and file variables are in
+[Initial Conditions](../user/initial-conditions.md#required-variables).
 
 ---
 
@@ -1099,7 +1057,7 @@ stiffness in two different ways.
 
 ### Steady runs: point-implicit factor
 
-With `point-implicit = .true.` (the default) the increment of each turbulence equation is divided
+With the point-implicit factor (the default) the increment of each turbulence equation is divided
 by $1 + \Delta t\,d$, with the local time step $\Delta t$ of the cell:
 
 $$
@@ -1116,10 +1074,10 @@ implicit operator of a delta form, it leaves the steady state where the residual
 converged solution is that of $F + S = 0$, whatever the time step, and the factor only lets
 steady runs keep the mean-flow CFL near walls. The residuals of $\tilde\nu$, $k$ and $\omega$ printed during
 the run (the change of the variable over the step) are scaled by the same factor, so near walls they
-are smaller than without it; the convergence check `res-threshold` uses the density residual and is
+are smaller than without it; the convergence check uses the density residual and is
 not affected.
 
-With [`k-energy-coupling = true`](#energy-coupling-k-energy-coupling) the energy of the mean flow has
+With the [energy coupling](#energy-coupling) the energy of the mean flow has
 the sink $-S_k$ of the $k$ equation, whose derivative with respect to $\rho k$ is $+\beta^\ast\omega$, so
 the factor is that of the two equations together: the implicit operator of the $k$ and energy rows
 is $D = \begin{pmatrix} 1 + \Delta t\,\beta^\ast\omega & 0 \\ -\Delta t\,\beta^\ast\omega & 1 \end{pmatrix}$, and the
@@ -1137,22 +1095,15 @@ The Reynolds-stress model SSG/LRR, always in this energy form, takes one factor 
 stress equations, with the rate $d$ of the table, and its own for $\omega$; its energy row is treated in the same way,
 with $\rho k = \tfrac12(\rho R_{11} + \rho R_{22} + \rho R_{33})$ and $S_k$ half the trace of the stress sources.
 
-```ini
-[MOSE-Turbulence]
-point-implicit = .true.   ; (default) point-implicit factor on the turbulence increment, steady runs
-```
-
 ### Time-accurate runs: explicit sources
 
-In time-accurate runs the factor is not applied, whatever `point-implicit` says; when `input.ini`
-sets `point-implicit = .true.`, a warning at start-up recalls it (a run that leaves the key out
-takes the default and gets no warning). Since $(F + S)/(1 + \Delta t\,d) = (F + S)(1 - \Delta t\,d) + O(\Delta t^2)$, the factor
+In time-accurate runs the factor is not applied. Since $(F + S)/(1 + \Delta t\,d) = (F + S)(1 - \Delta t\,d) + O(\Delta t^2)$, the factor
 would make the turbulence equations, and the mean flow through $\mu_t$, first-order accurate in
 time. With the $k$–$\omega$ models the error of the factor would not even vanish when the mesh and the
 step are refined together, as in an explicit run, whose global step goes as $h^2$ in the wall cells: in
-the first cell $\omega \approx 6\nu/(\beta_1 y^2)$ gives $\Delta t\,d \approx 24.7$ `vnn` at every level (7.4 at
-`vnn = 0.3`, a factor of 0.12), and the next two cells stay of order one. With Spalart–Allmaras
-$\Delta t\,d \approx 1.64\,f_w\,y_1^+$ at `vnn = 0.3` ($y_1^+$ the height of the first cell in wall units): it
+the first cell $\omega \approx 6\nu/(\beta_1 y^2)$ gives $\Delta t\,d \approx 24.7$ VNN at every level (7.4 at
+VNN = 0.3, a factor of 0.12), and the next two cells stay of order one. With Spalart–Allmaras
+$\Delta t\,d \approx 1.64\,f_w\,y_1^+$ at VNN = 0.3 ($y_1^+$ the height of the first cell in wall units): it
 vanishes as the mesh is refined, but is of order one at the usual heights.
 The sources are explicit, like the fluxes, and the local time step of each cell
 ([Time Integration](time-integration.md#local-time-step)) includes a bound of their stiffness:
@@ -1188,12 +1139,11 @@ meshes, above all with SST, the step is smaller than the convective and diffusiv
 
 The bound covers the destruction only. Three sinks stay outside it: the cross-diffusion of SST,
 $2(1-F_1)\,\rho\,\sigma_{\omega 2}\,\nabla k\cdot\nabla\omega/\omega$, negative where $\nabla
-k\cdot\nabla\omega < 0$ (Wilcox 2006 switches its cross-diffusion off there); with `sst-production =
-compressible`, the dilatation part of the production of SST, $-\tfrac23\rho k\,\nabla\cdot\mathbf{u}$
+k\cdot\nabla\omega < 0$ (Wilcox 2006 switches its cross-diffusion off there); with the compressible
+production, the dilatation part of the production of SST, $-\tfrac23\rho k\,\nabla\cdot\mathbf{u}$
 and $-\tfrac23\gamma\rho\omega\,\nabla\cdot\mathbf{u}$, negative where the flow expands; and the
 production of SA-R and SA-RC, which can be negative («the SA-RC production term can be negative»,
-NASA Turbulence Modeling Resource). Like the transport, they can make a stage negative, and the count
-at the end of the run shows it.
+NASA Turbulence Modeling Resource). Like the transport, they can make a stage negative.
 
 The convex combination keeps the bound of the forward-Euler stage only where that bound holds on the
 state each stage starts from: Shu and Osher assume that the forward-Euler step keeps the property,
@@ -1208,25 +1158,19 @@ $\hat d$. An
 impulsive start of a $k$–$\omega$ model from a state far from the wall value of $\omega$ goes beyond
 that: during the first step the wall condition raises $\omega$ in the wall cells by orders of
 magnitude, and with the full step the explicit destruction overshoots ($\omega < 0$, then the floor
-and a very large $\mu_t$). Start such runs with the CFL ramp (`cfl-rise-threshold`).
+and a very large $\mu_t$). Start such runs with the
+[CFL ramp](time-integration.md#global-time-step).
 
-At the end of a RANS run in which a stage made $\tilde\nu$, $k$ or $\omega$ negative before the
-realizability floor, MOSE prints how many cell updates had such a stage; a run in which none did
-prints no such line:
-
-```text
- Turbulence variables below zero after a stage (set to the floor): <n>
-```
-
-In a steady run the count covers the whole run: the start, and the fronts of $k$ that the fluxes
+MOSE counts the cell updates in which a stage made $\tilde\nu$, $k$ or $\omega$ negative before the
+realizability floor ([Running MOSE](../user/using.md#logging-and-diagnostics)). In a steady run the count covers the whole run: the start, and the fronts of $k$ that the fluxes
 push below zero where $k$ is about zero, which can last to the last iteration; it is a total, which
 convergence does not bring back to zero. The transport keeps the turbulence variables non-negative,
 with every limiter but van Albada, when at every stage the Courant number of the flow leaving each
 cell is at most 1/2 ([Time Integration](time-integration.md#local-time-step)); a front can go below
-zero with a larger step (a `cfl` above 0.5, such as the 0.8 suggested with RK3, or the faster waves at captured shocks),
+zero with a larger step (a CFL above 0.5, such as the 0.8 suggested with RK3, or the faster waves at captured shocks),
 through the sources, in the first cell next to a wall, whose bound is lower, and next to faces whose
-ghost cells extrapolate the cells (types `408` and `502`), and with `irs-variables = all`, whose smoothing mixes the
-updates of neighbouring cells. The residuals of `residual-history.dat` are the change of
+ghost cells extrapolate the cells (the velocity inlet, the solid propellant grain), and with residual smoothing of
+every equation, which mixes the updates of neighbouring cells. The residuals of the residual history are the change of
 each variable over a step ([Stopping criteria](../user/using.md#stopping-criteria)): a variable
 that the floor holds at its value in a cell from one step to the next adds nothing there to its
 residual, so these fronts do not show in the residual history, and the count is their trace.

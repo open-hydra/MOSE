@@ -42,9 +42,9 @@ of each hexahedral cell. The numerical algorithm consists of the following steps
   computed at each face with a 10-point stencil and mapped to Cartesian
   coordinates using the face metric tensor.
 
-Faces of type `200` join the two $k$ faces of one block, turned about the $x$
+Rotationally periodic faces join the two $k$ faces of one block, turned about the $x$
 axis or translated (see
-[Rotational Periodicity and Axisymmetric Wedge](#rotational-periodicity-and-axisymmetric-wedge-type-200)).
+[Rotational Periodicity and Axisymmetric Wedge](#rotational-periodicity-and-axisymmetric-wedge)).
 
 ### Cell volume
 
@@ -86,14 +86,13 @@ stored in absolute value. A cell whose volume has not the sign of the
 determinant at its centre is turned over somewhere and stops the run at setup
 (below). The volume is computed from differences of the nodes, so its rounding
 is that of the size of the cell, not that of its coordinates; the compiler must
-keep the order of these differences (test `VolatileOrder`).
+keep the order of these differences.
 
 ### Checks of the cells at setup
 
 A cell whose determinant is zero to $10^{-12}$ of the product of its edge lengths
-stops the run at setup, with its block and cell. So does a cell folded at
-one of its corners, or turned against its block, with its block, cell and corner
-node: a cell is the image of the unit cube by the trilinear map of its eight
+stops the run at setup. So does a cell folded at
+one of its corners, or turned against its block: a cell is the image of the unit cube by the trilinear map of its eight
 nodes, and at a corner the Jacobian of that map is
 $J = \mathbf{e}_i\cdot(\mathbf{e}_j\times\mathbf{e}_k)$, with
 $\mathbf{e}_i, \mathbf{e}_j, \mathbf{e}_k$ the three edges from that corner along
@@ -113,9 +112,7 @@ are a necessary condition only; a cell whose volume (above) has not the
 sign of the determinant at its centre is turned over somewhere, and stops the
 run at setup as well ($\det J$ has the sign of the block in every point of a
 cell that is not turned over, and so has its integral). These checks run on every
-multigrid level too, whose nodes are every other node of the level above: the stop of
-the corners names the level, the other stops give the block and the cell of that
-level. Behind a face of zero
+multigrid level too, whose nodes are every other node of the level above. Behind a face of zero
 area (an axis) the ghost cells are the reflection of the first cell through the
 axis, whose determinant has the opposite sign by construction: their sign is
 not checked (a wall on such a face stops, see *Gradient Computation for
@@ -172,7 +169,7 @@ $$
    cell take the same slope, except at the boundary faces below, which take a
    slope of their own. Minmod never exceeds the bounds and does not take them.
    The faces of symmetry planes and walls, whose ghost cell is the mirror
-   image of the cell, and of the supersonic inflow of `405` and `420`, whose
+   image of the cell, and of the supersonic inflows (supersonic inlet, choked nozzle), whose
    ghost cell holds the inflow state and whose slopes are differences of index,
    take the bounds of a line of equal cells, 2 and 2: the limiter's own slope,
    which keeps their face value between the cell and the ghost cell.
@@ -220,11 +217,11 @@ each cell and take the flux at the face centre, keep the second order
 [18, Sec. III, VII.C and X].
 
 At the first interior face the slope behind the first cell, $s_0$ or $s_2$,
-takes the ghost cell of the boundary face. Behind a zero-gradient face (`0`,
-`401`–`407`, `420`) the ghost value is that of the first cell: that slope is
+takes the ghost cell of the boundary face. Behind a zero-gradient face (unused
+faces, and the inlets and outlets but the velocity inlet) the ghost value is that of the first cell: that slope is
 zero, and every limiter gives zero with a zero argument, so the reconstruction
 of the first interior face is of first order on the side of the first cell.
-Behind a mapped face (`410`) the ghost cell is the first cell mirrored through
+Behind a face with an assigned state the ghost cell is the first cell mirrored through
 the face (see *Gradient Computation for Diffusive Fluxes*): it has the length
 of the first cell across the face, which is then the spacing $\Delta l_0$ (or
 $\Delta l_2$) of the slope behind the first cell, and its centre lies that far
@@ -235,11 +232,8 @@ $(\rho\phi)$ is $\phi_1$ times that of the density.
 
 !!! note "Choosing the reconstruction"
 
-    `space-reconstruction = MUSCL` limits the slopes with the function
-    named by `flux-limiter` (see [Flux Limiters](#flux-limiters)); if
-    `flux-limiter` is omitted, van Leer is used and a warning is printed.
-    `space-reconstruction = first-order` sets every slope to zero
-    (donor-cell); a `flux-limiter` given with it is ignored, with a warning.
+    MUSCL limits the slopes with one of the [flux limiters](#flux-limiters), van Leer
+    by default; the first-order reconstruction sets every slope to zero (donor-cell).
 
 ---
 
@@ -318,7 +312,7 @@ advection is then TVD for Courant numbers up to 1/2 [15]:
 | Superbee | Lowest | $C^0$ |
 
 <figure>
-  {% include "theory/images/sweby.svg" %}
+  --8<-- "docs/theory/images/sweby.svg"
 </figure>
 
 ---
@@ -327,7 +321,7 @@ advection is then TVD for Courant numbers up to 1/2 [15]:
 
 Near strong shocks the MUSCL reconstruction can produce oscillations even with TVD limiters. MOSE uses a Jameson-type pressure sensor to detect shocks and degrade to first order in their vicinity.
 
-The key `shock-detector` of `input.ini` turns on the sensor below (`Tramel`) or that of Chen (`Chen`); without it, HLLC+Tramel and HLLE++ take the sensor below, HLLC+Chen and AUSM+M that of Chen, and the other Riemann solvers none ($\beta = 1$).
+Two sensors are available, the one below (Tramel) and that of Chen. HLLC+Tramel and HLLE++ take the sensor below, HLLC+Chen and AUSM+M that of Chen, and the other Riemann solvers none ($\beta = 1$) unless a sensor is chosen.
 
 ### Sensor formulation
 
@@ -349,7 +343,7 @@ $$
 
 ### Blending function
 
-The sensor (`Tramel`) gives $\beta$ with the threshold $\Delta = 20$, a constant of the code:
+The Tramel sensor gives $\beta$ with the threshold $\Delta = 20$, a fixed constant:
 
 $$
 \beta =
@@ -409,16 +403,15 @@ viscous flux that needs it, and the wedge rotates the cell. The solver reads
 only the length across the face, in the MUSCL reconstruction, and that is the
 length of the first cell whatever the edges along the face: their sign is not
 checked. The cells and the first layer of ghost cells behind chimera faces are
-checked at setup (*Checks of the cells at setup*, above). `diffusive-metric` in
-`[MOSE-Numerics]` selects the face metric:
+checked at setup (*Checks of the cells at setup*, above). The face metric is one of:
 
-| `diffusive-metric` | Face metric | |
+| Face metric | | |
 |---|---|---|
-| `stencil` (default) | $M_f = \left(J_f^{T}\right)^{-1}$, $J_f^{T} = \left[D_a\mathbf{x},\ D_b\mathbf{x},\ D_c\mathbf{x}\right]$ | the same differences of the cell centres as of the field: exact for a linear field on any mesh (at the symmetry faces and the faces of type `200` for the linear fields that they allow), except at the chimera faces (`102`), and at the symmetry faces with one cell across them, the walls `502` and the walls `503`–`505` while they ablate, which take the metric of the cell |
-| (inverse-mean, not a value of the key) | $M_f = \left[\tfrac12\left(A_L + A_R\right)\right]^{-T}$ | the face-normal edge is the centre-to-centre vector: exact for a linear field on any stretching normal to the face; taken by the chimera faces (`102`) whatever the key, and with `mean` by the faces between blocks and of type `200` |
-| `mean` | $M_f = \tfrac12\left(M_L + M_R\right)$ | faster; biased on stretched meshes |
+| stencil (default) | $M_f = \left(J_f^{T}\right)^{-1}$, $J_f^{T} = \left[D_a\mathbf{x},\ D_b\mathbf{x},\ D_c\mathbf{x}\right]$ | the same differences of the cell centres as of the field: exact for a linear field on any mesh (at the symmetry and rotationally periodic faces for the linear fields that they allow), except at the chimera faces, and at the symmetry faces with one cell across them, the solid propellant grain and the ablating gas–surface walls, which take the metric of the cell |
+| inverse-mean (not a choice of its own) | $M_f = \left[\tfrac12\left(A_L + A_R\right)\right]^{-T}$ | the face-normal edge is the centre-to-centre vector: exact for a linear field on any stretching normal to the face; taken by the chimera faces always, and with the mean metric by the faces between blocks and the rotationally periodic faces |
+| mean | $M_f = \tfrac12\left(M_L + M_R\right)$ | faster; biased on stretched meshes |
 
-With `stencil`, the columns of $J_f^{T}$ are the differences of the cell
+With the stencil metric, the columns of $J_f^{T}$ are the differences of the cell
 centres (the mean of the eight nodes) that $D_a\phi$, $D_b\phi$ and $D_c\phi$
 take of the field. For a linear field $\phi = \phi_0 + \mathbf{g}\cdot\mathbf{x}$
 every difference is $D\phi = J_f\,\mathbf{g}$, so the face gradient is
@@ -427,7 +420,7 @@ faces between blocks: the difference approximations of the field and of the
 coordinates must be the same [8]. Vinokur states the rule for the gradient of a
 potential (p. 26) and writes the face gradient of the viscous terms on the same
 values as here, Eq. (90)–(91), with metrics from averaged areas and volumes,
-Eq. (93)–(94), as in the cross-derivative terms of CFL3D [12]; `stencil`
+Eq. (93)–(94), as in the cross-derivative terms of CFL3D [12]; the stencil metric
 applies the rule to that stencil. Its component along the centre-to-centre
 vector is the difference of the two cell values over their distance, as in the
 face-tangent and node-averaging schemes [9, 10], with the derivatives along the
@@ -438,7 +431,7 @@ are exactly 1/4 there. Where the tangential differences of the stencil lie in
 the plane of the face, its split of the face area vector is the over-relaxed
 one of [13]. Exactness for linear fields does not certify accuracy on curved,
 highly stretched cells [14]; that case is not measured here. One effect of the
-off-face position of the tangential derivatives is measured (test `MMSResiduals`):
+off-face position of the tangential derivatives is measured (manufactured-solution tests):
 on a wedge whose cells grow along $r$ by a ratio $q$, the axial viscous force of
 Homann's flow converges at first order on the first rows next to the axis, as
 the derivative of $u_r$ along $x$ at the
@@ -460,22 +453,22 @@ divided by $\cos^2(\delta/2)$: the error of order $\delta^2$ of the azimuthal
 derivatives (see *Axisymmetric wedge* below). The ghost cells in the stencil take the
 position at which their value is right for a linear field:
 
-- faces between blocks (`101`, `201`): the centre of the cell across, plus the
+- faces between blocks (direct and periodic connections): the centre of the cell across, plus the
   translation of a periodic pair;
-- walls (`301`, `302`, `503`–`505`, and `103`, `104`, coupled to another
-  solver) and `400` faces: the position of the class
+- walls (adiabatic or heat-flux, isothermal, gas–surface interaction, and the walls coupled to another
+  solver) and extrapolation faces: the position of the class
   of each quantity, $2\mathbf{x}_f - \mathbf{x}_1$ for the quantities with a
   wall value and $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$ for the
-  extrapolated ones (see *Ghost Cells of Walls and 400 Faces* below); a face
+  extrapolated ones (see *Ghost Cells of Walls and Extrapolation Faces* below); a face
   with such a ghost cell in its stencil takes one metric per group of
   quantities (species and scalars, temperature, velocity, turbulence
   variables);
-- faces whose ghost value is $3u_1 - 3u_2 + u_3$ (`408` and the other types not
+- faces whose ghost value is $3u_1 - 3u_2 + u_3$ (the velocity inlet and the other boundaries not
   listed here): $3\mathbf{x}_1 - 3\mathbf{x}_2 + \mathbf{x}_3$
   ($2\mathbf{x}_1 - \mathbf{x}_2$, or $\mathbf{x}_1$, in a block with two
   cells, or one, across the face; there the value reads the ghost cell of the
   opposite face, so value and position agree only with three cells or more);
-  chimera (`102`) faces take the same position, an approximation, since their
+  chimera faces take the same position, an approximation, since their
   values come from donor cells; the tangential differences of their faces take
   as neighbours of a ghost cell along the face the ghost cells of the
   neighbouring faces, and beyond the edges of the block face the row of its
@@ -484,7 +477,7 @@ position at which their value is right for a linear field:
   interior face takes the distance $l_0 = \Delta l_1$ of the ghost cell instead,
   so on cells stretched across these faces the slope behind the face is scaled
   by a factor of order one, which the limiter bounds;
-- mapped faces (`410`): the file gives the state of the cell across the face,
+- faces with an assigned state: the file gives the state of the cell across the face,
   taken as the ghost cell, the first cell mirrored through the face; the
   quantities of the file sit at its centre, $2\mathbf{x}_f - \mathbf{x}_1$, and
   the turbulence variables, which the file does not give (the values of the
@@ -494,11 +487,11 @@ position at which their value is right for a linear field:
   its gradient. Where the cells of the solver that wrote the file have another
   width across the face, its values sit at half that width from the face, and
   the derivatives across the first row carry the error of that difference;
-- zero-gradient faces (`0`, `401`–`407`, `420`): the cell itself;
-- symmetry (`300`): the mirror image of the cell across the face; on a face of
+- zero-gradient faces (unused faces, and the inlets and outlets but the velocity inlet): the cell itself;
+- symmetry: the mirror image of the cell across the face; on a face of
   zero area (an axis at $r = 0$) the cell itself, since the ghost value there is
   a copy of the cell, and the viscous flux of that face is zero;
-- the $k$ faces of a wedge or of a 3-D sector (`200`): the source of the ghost
+- the rotationally periodic $k$ faces of a wedge or of a 3-D sector: the source of the ghost
   cell, the cell at the other end of the block (on a wedge the cell itself),
   rotated by the angle of the wedge or sector; on a translated sector (no angle)
   the cell at the other end translated by the period, as across a periodic pair: plus the
@@ -523,7 +516,7 @@ condition forbids ($\mathbf{g}\cdot\mathbf{n}$, $G - RGR$, $\mathbf{g}\cdot\math
 it stays on the faces next to the boundary, and it vanishes as the solution
 satisfies the condition. Behind the other faces between blocks and the
 zero-gradient faces the gradient is exact for every linear field; behind walls
-and `400` faces for the linear fields of the next section; behind mapped faces
+and extrapolation faces for the linear fields of the next section; behind mapped faces
 for the linear fields whose values in the file are those at the centre of the
 ghost cell. Behind the faces whose ghost value is $3u_1 - 3u_2 + u_3$ it is
 exact for every linear velocity, but for the mass fractions, the temperature and
@@ -540,30 +533,29 @@ $M_f$ is computed once at setup and stored on every face of the blocks of each
 rank, 27 values per cell (the mesh does not move); the cell centres come from
 the nodes, which every rank holds, so no message is needed. Where a face or a
 cell is degenerate, the differences of its stencil can stop spanning the space
-and the metric is not defined there: the run stops at setup with a message that
-names the block, the cell and the face, a declared limit of `stencil`
-(`mean` does not need this metric, but a viscous run with it stops on a
+and the metric is not defined there: the run stops at setup, a declared limit of the stencil metric
+(the mean metric does not need it, but a viscous run with it stops on a
 3-D mesh at a boundary face of zero area, below). A wall on faces of zero area,
 as on
 the axis of a 3-D mesh around it (a polar line), stops too: its gradient is not
-defined there, and the axis takes the symmetry condition (`300`). With `300` on
+defined there, and the axis takes the symmetry condition. With symmetry on
 the axis the polar line runs, and the face gradients next to it are exact for
-linear fields. With `mean` a viscous run on a 3-D mesh with a
+linear fields. With the mean metric a viscous run on a 3-D mesh with a
 boundary face of zero area, as on a polar line with the axis exactly at $r = 0$,
-stops at setup and names `stencil`: next to the axis
+stops at setup: next to the axis
 the viscous force of the first row of cells grows as the mesh is refined (a
 linear field, whose force is zero).
 
-With the axis nodes exactly at $r = 0$ the polar line runs with `stencil`, but
+With the axis nodes exactly at $r = 0$ the polar line runs with the stencil metric, but
 the solution next to the axis is of first order. On smooth fields the residual
 of the two rows of cells next to the axis does not converge as the mesh is
 refined: its viscous part grows as $1/h$ and its convective part does not
-decrease. With `mean` the viscous residual of the cells next
-to a symmetry plane (`300`) that bounds a sector of a polar mesh does not
+decrease. With the mean metric the viscous residual of the cells next
+to a symmetry plane that bounds a sector of a polar mesh does not
 converge either: on smooth fields that the plane allows it stays of order one as
-the mesh is refined, while with `stencil` those cells converge as the others.
+the mesh is refined, while with the stencil metric those cells converge as the others.
 
-In one dimension $M = 1/h$, so `mean` divides the difference across the face by
+In one dimension $M = 1/h$, so the mean metric divides the difference across the face by
 the mean of $1/h$ instead of the centre-to-centre distance. With a cell-size
 ratio $r = h_R/h_L$ it overstates the face-normal gradient, and so the viscous,
 conductive and diffusive fluxes, by
@@ -574,20 +566,20 @@ $$
 $$
 
 This bias does not decrease with grid refinement at a fixed growth ratio, and it
-is present in the converged steady solution. `mean` is adequate where adjacent
+is present in the converged steady solution. The mean metric is adequate where adjacent
 cells grow by about 1.2 or less; boundary-layer meshes often grow faster near
 the wall.
 
-With `stencil`, a face between blocks takes one face gradient with its stencil
+With the stencil metric, a face between blocks takes one face gradient with its stencil
 metric, as an interior face, and a symmetry face the gradient between the cell
-and its mirror image. With `mean`, block-connection faces
-use the inverse-mean metric, as chimera faces do with every option: across a large
+and its mirror image. With the mean metric, block-connection faces
+use the inverse-mean metric, as chimera faces do always: across a large
 cell-size jump at a block interface, the mean makes the normal gradient so steep
 that the explicit diffusion becomes unstable.
 
-At a wall face (301, 302, and 503–506 when they do not ablate) the gradient
-takes the difference between the cell and the wall value across the face.
-With `stencil` it also takes the differences of the wall values along the
+At a wall face (adiabatic or heat-flux, isothermal, and gas–surface interaction walls when they do not
+ablate) the gradient takes the difference between the cell and the wall value across the face.
+With the stencil metric it also takes the differences of the wall values along the
 wall, between the neighbouring wall faces of the same block face and type
 (central, or one-sided where the wall ends or goes on in another block face,
 whose faces it does not take: exact there for a linear wall value, first order
@@ -595,7 +587,7 @@ for a curved one), with the metric of the same differences of the positions:
 the vector from the face centre (the mean of its four nodes) to the cell centre
 across the face, the differences of the face centres along it. For a linear
 field whose wall values are its values at the face centres the wall gradient
-is exact: the temperature of a 302 wall that
+is exact: the temperature of an isothermal wall that
 varies along the wall, the velocity of a no-slip wall on cells of any shape.
 The wall temperatures of two neighbouring records are differenced as they are
 given: a jump between them enters the derivative along the wall at the faces
@@ -608,14 +600,14 @@ the boundary diamond of [11] (a value at the midpoint of the boundary edge and
 values along the edge), there at the vertices of the edge and here at the
 neighbouring face centres. A boundary face that keeps only the normal distance,
 as in [13] (Eq. 3.57–3.59) and in OpenFOAM (OpenFOAM-dev, commit dfa6c7e,
-`fvPatch.C`), has the error of `mean` given below.
-With `mean`, and for the quantities whose wall value is not
-known along the wall (the temperature of 301 walls and of the surface models
-of 503–506), the derivatives along the wall are zero and the metric is that of
+`fvPatch.C`), has the error of the mean metric given below.
+With the mean metric, and for the quantities whose wall value is not
+known along the wall (the temperature of adiabatic or heat-flux walls and of the gas–surface
+interaction models), the derivatives along the wall are zero and the metric is that of
 the wall cell: on a cell skewed by θ the normal gradient is then wrong by
 $(\partial\phi_w/\partial s)\tan\theta$, which refinement does not reduce.
 The turbulence variables take no difference of their wall values along the
-wall, with every option: their wall values are uniform along a smooth wall
+wall, with every metric: their wall values are uniform along a smooth wall
 (zero for $\tilde\nu$ of Spalart–Allmaras, for $k$ and for the Reynolds
 stresses), but not those of $\omega$ of the $k$–$\omega$ models and of
 SSG/LRR, $C\mu_l/d^2$ with $d$ the distance of the cell centre from
@@ -623,15 +615,15 @@ the wall, which follow the height of the first cell, nor that of $\tilde\nu$
 on a rough wall, taken from the value of the cell. Their derivative along the
 wall is left out, with the error above on skewed cells.
 
-A 301 or 302 wall of a stationary face of a rotating frame moves in the frame
+A no-slip wall at rest in the laboratory, in a rotating frame, moves in the frame
 with $\mathbf{u}_w = -\boldsymbol{\Omega}\times(\mathbf{x}-\mathbf{x}_o)$
 ($\mathbf{x}_o$ the origin of the frame), a velocity linear in $\mathbf{x}$
-with the constant gradient $-[\boldsymbol{\Omega}\times]$. With every option
+with the constant gradient $-[\boldsymbol{\Omega}\times]$. With every metric
 the wall gradient takes the differences of $\mathbf{u}_w$ along the position
 differences of its metric, the columns of $M^{-1}$: those of the wall stencil
-above with `stencil`, the edges of the wall cell with
-`mean`. The part of $\mathbf{u}_w$ in the wall gradient is then exact with
-`stencil` on cells of any shape, and with `mean` on
+above with the stencil metric, the edges of the wall cell with
+the mean metric. The part of $\mathbf{u}_w$ in the wall gradient is then exact with
+the stencil metric on cells of any shape, and with the mean metric on
 parallelepiped cells, where the metric of the wall cell is exact; the rest is
 that of a wall at rest. Without these differences the wall stress would be
 wrong by the order of $\mu\,|\boldsymbol{\Omega}|$ with every metric and on
@@ -643,17 +635,17 @@ the value of a cell at the centre of the cell (the mean of its eight nodes),
 the wall velocity at the centre of the wall face (the mean of its four nodes).
 A change of either position has to be made in the metric too.
 
-**Chimera faces (`102`).** The first layer of ghost cells behind a chimera face is the
+**Chimera faces.** The first layer of ghost cells behind a chimera face is the
 ghost cell of the face, whose metric enters its viscous flux: a first layer that
 turns over (index lines that spread apart sharply across the first cell, above)
 or whose determinant is not that of the first cell in sign and to $10^{-12}$ in
-size stops the run at setup, with its block, cell and face; the remedy is the
+size stops the run at setup; the remedy is the
 mesh, with index lines that change smoothly across the first two node layers at
-that face. The ghost values of a chimera face (`102`) come from the donor cells and weights that the tool which
-wrote `bc.txt` computed for its own ghost cells; the face metric of their
-viscous flux takes these linear ones, so where the tool builds its ghost cells
+that face. The ghost values of a chimera face come from the donor cells and weights that the overset
+pre-processor computed for its own ghost cells; the face metric of their
+viscous flux takes these linear ones, so where the pre-processor builds its ghost cells
 otherwise (on cells stretched across the face) the normal gradient is taken over
-a distance that differs by as much (no test with `102` faces).
+a distance that differs by as much (no test with chimera faces).
 The viscous flux of a chimera face is the mean of two fluxes: one with the
 central differences along the face of the row of the cell, one with those of
 the row of the ghost cells, filled from the donors. With a stress linear in the
@@ -669,21 +661,21 @@ ghost cell turned by the wedge angle, as those of a cell are; across a block
 one cell wide in another direction they are the ghost cell itself.
 
 !!! note "Tangential derivatives"
-    With `mean` the tangential derivatives on a face are
+    With the mean metric the tangential derivatives on a face are
     central differences over two cells, divided by the cell's own tangential
     edge. With stretching in a tangential direction they carry the same
-    $(1+r)^2/(4r)$ factor, which `mean` does not correct. In a thin boundary
+    $(1+r)^2/(4r)$ factor, which the mean metric does not correct. In a thin boundary
     layer this enters only through the streamwise variation of the shear on
     faces normal to the flow, so its effect is much smaller than that of the
-    face-normal gradient. `stencil` divides them by the difference of the
+    face-normal gradient. The stencil metric divides them by the difference of the
     centres they span, and has no such factor.
 
 ---
 
-## Ghost Cells of Walls and 400 Faces
+## Ghost Cells of Walls and Extrapolation Faces
 
-Behind a viscous wall (`301`, `302`, `503`–`505`, and the walls `103` and `104`
-coupled to another solver) and an extrapolation face (`400`) the two layers of ghost cells are filled once per stage, before the
+Behind a viscous wall (adiabatic or heat-flux, isothermal, gas–surface interaction, and the walls
+coupled to another solver) and an extrapolation face the two layers of ghost cells are filled once per stage, before the
 fluxes, and the viscous fluxes, the MUSCL reconstruction and the source terms
 of the turbulence models read the same values. Extrapolated are the quantities
 whose differences the viscous fluxes and the sources take, the mass fractions
@@ -695,9 +687,9 @@ wall cell and in the next one across the face:
 
 | Class | Quantities | First ghost cell | Position of its value |
 |---|---|---|---|
-| wall value | velocity at `103`, `104`, `301` and `302` (zero, or the wall velocity of a stationary face of a rotating frame); the turbulence variables at the walls ($k$, $R_{ij}$, $\tilde\nu$ on a smooth wall: zero; $\omega$, $\tilde\nu$ on a rough wall: the wall value of the model) | $2q_w - q_1$ | $2\mathbf{x}_f - \mathbf{x}_1$ |
-| wall temperature | $T$ at `302` | $\max(2T_w - T_1,\ T_w/2)$ | $2\mathbf{x}_f - \mathbf{x}_1$ |
-| extrapolated | $Y_s$, $p$; $T$ at `103`, `104`, `301`, `400`, `503`–`505`; the velocity at `400` and `503`–`505`; turbulence and scalars at `400`, scalars at the walls | $q_1 + \psi(q_1 - q_2)$ | $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$ |
+| wall value | velocity at the coupled, adiabatic or heat-flux and isothermal walls (zero, or the wall velocity of a wall at rest in a rotating frame); the turbulence variables at the walls ($k$, $R_{ij}$, $\tilde\nu$ on a smooth wall: zero; $\omega$, $\tilde\nu$ on a rough wall: the wall value of the model) | $2q_w - q_1$ | $2\mathbf{x}_f - \mathbf{x}_1$ |
+| wall temperature | $T$ at isothermal walls | $\max(2T_w - T_1,\ T_w/2)$ | $2\mathbf{x}_f - \mathbf{x}_1$ |
+| extrapolated | $Y_s$, $p$; $T$ at coupled, adiabatic or heat-flux and gas–surface walls and at extrapolation faces; the velocity at extrapolation faces and gas–surface walls; turbulence and scalars at extrapolation faces, scalars at the walls | $q_1 + \psi(q_1 - q_2)$ | $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$ |
 
 $\mathbf{x}_f$ is the centre of the face (the mean of its four nodes) and
 $s = l_0/l_1$ the ratio of the distances of the MUSCL reconstruction at the
@@ -708,14 +700,14 @@ $s = 2\Delta l_1/(\Delta l_1 + \Delta l_2)$, 1 on uniform cells. $\psi \le s$ is
 the largest value that keeps each species, the pressure, the temperature and
 each scalar within $[q_1/2,\ 2q_1]$; the species are then normalised to sum
 one; the velocity is not limited ($\psi = s$). The wall values of the turbulence
-variables are those of the wall fluxes, from the same wall state (`302`: $T_w$;
-`301`: the wall temperature estimated from the heat flux;
-`503`–`505`, whose surface model sets the wall state at every call, and the
-coupled walls `103` and `104`, whose viscous flux the other solver gives: the
+variables are those of the wall fluxes, from the same wall state (isothermal: $T_w$;
+adiabatic or heat-flux: the wall temperature estimated from the heat flux;
+gas–surface walls, whose surface model sets the wall state at every call, and the
+coupled walls, whose viscous flux the other solver gives: the
 state of the wall cell, as an adiabatic wall). With one cell across the face the
 extrapolated quantities are copied (position $\mathbf{x}_1$). In an inviscid
 run the walls carry no wall values and every quantity is extrapolated, as
-behind a `400` face. The second layer takes $2q_w - q_2$,
+behind an extrapolation face. The second layer takes $2q_w - q_2$,
 $\max(2T_w - T_2,\ T_w/2)$ and $q_1 + 2\psi_2(q_1 - q_2)$; no flux reads it.
 
 Properties, for every mesh and in 3-D, with the hypotheses written:
@@ -738,16 +730,16 @@ Properties, for every mesh and in 3-D, with the hypotheses written:
   the position of the table: for the extrapolated class for every linear field,
   for the other two for the linear fields that take the wall value at the face
   centres (zero velocity on the wall, $T(\mathbf{x}_f) = T_w$ of each face).
-  With these positions in the face metrics (`stencil`) the face gradients next
-  to walls and `400` faces are exact for those fields, whatever the density:
+  With these positions in the face metrics (stencil) the face gradients next
+  to walls and extrapolation faces are exact for those fields, whatever the density:
   the quantities differenced are extrapolated themselves. So is the MUSCL
   reconstruction at the first interior face along a straight grid line: both
   positions are $l_0 = \Delta l_1$ from $\mathbf{x}_1$, the distance it assumes.
   The density gradient of the source terms takes the position of the
-  temperature. At `301`, `400` and `503`–`505` the pressure, the composition
+  temperature. At adiabatic or heat-flux walls, extrapolation faces and gas–surface walls the pressure, the composition
   and the temperature all sit at $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$,
   so the density of the ghost cell is that of the field there, exact for linear
-  $p$, $Y_s$ and $T$ where no limit acts, with no further hypothesis. At `302`
+  $p$, $Y_s$ and $T$ where no limit acts, with no further hypothesis. At isothermal walls
   the temperature sits at $2\mathbf{x}_f - \mathbf{x}_1$, $\Delta l_1$ from
   $\mathbf{x}_1$ along the edge across the face of the wall cell, and the
   pressure and the composition at $\mathbf{x}_1 + s(\mathbf{x}_1 - \mathbf{x}_2)$,
@@ -764,18 +756,12 @@ Properties, for every mesh and in 3-D, with the hypotheses written:
 Where a limit acts the ghost value is no longer the value of the field at its
 position, and the gradients next to the face are first order there: it happens
 only where a quantity changes by more than a factor two between the first two
-cells, or where the first cell is 1.5 times hotter than a `302` wall. At the
-end of a run in which either acted, one line reports the ghost fills in which
-each did (one of the two counts can be zero); a run in which neither acted
-prints no such line:
-
-```
- Ghost cells of walls and 400 faces, fills with the extrapolation cut: <n>, with the 302 temperature at T_w/2: <m>
-```
+cells, or where the first cell is 1.5 times hotter than an isothermal wall; the run reports how often
+either acted.
 
 Declared limits:
 
-- `503`–`505`: the velocity and the temperature are extrapolated (the surface
+- gas–surface interaction walls: the velocity and the temperature are extrapolated (the surface
   may blow, its state is set at every call of its routine) and the wall values
   of the turbulence variables are those of an adiabatic wall at the state of
   the cell: exact for $k$, $R_{ij}$ and $\tilde\nu$ (zero), while that of
@@ -785,27 +771,28 @@ Declared limits:
   source terms (the gradient of $\omega$ in the cross-diffusion of SST,
   $\nabla k\cdot\nabla\omega$) and the limited MUSCL reconstruction of the
   first face, while the wall flux keeps the state of the surface; the wall flux
-  of `504` and `505` while they ablate takes the value of a wall that blows,
+  of the pyrolysis and surface-reaction walls while they ablate takes the value of a wall that blows,
   $\omega_\text{wall} = 800\,\nu_w/y_c^2$ ($y_c$ the wall distance of the centre
-  of the wall cell) for SST and Wilcox 2006 with either value of
-  `omega-wall-bc`, so that with `asymptotic` it is $800/80$ (SST) or
+  of the wall cell) for SST and Wilcox 2006 with either
+  [wall condition of $\omega$](turbulence.md#wall-boundary-conditions), so that with the asymptotic one it is $800/80$ (SST) or
   $800/84.7$ (Wilcox 2006) times that of the ghost cell on top of this factor;
-- the coupled walls `103` and `104` take, as `503`–`505`, the wall values of the
+- the coupled walls take, as the gas–surface walls, the wall values of the
   turbulence variables of an adiabatic wall at the state of the cell, with the
   same factor for $\omega$, $T_s$ the temperature of the coupled surface; their
   viscous flux comes from the other solver;
-- the temperature of a `301` wall is extrapolated (consistent, exact for every
+- the temperature of an adiabatic or heat-flux wall is extrapolated (consistent, exact for every
   linear field) rather than set from the heat flux;
-- the SRM grain (`502`, mode 1; a grain of mode 2 is an inlet `404`) and the other types keep the extrapolation
+- the solid propellant grain as a wall that blows its products in (as an inflow it is a mass-flux inlet)
+  and the other boundaries keep the extrapolation
   $3q_1 - 3q_2 + q_3$ of the primitives; in a RANS run the turbulence variables
-  of a `502` grain take their wall values instead, $2\phi_w - \phi_l$ at
+  of the grain take their wall values instead, $2\phi_w - \phi_l$ at
   $2\mathbf{x}_f - \mathbf{x}_1$ as behind a wall, with the wall values of the
   flux of the grain (the blowing wall while it burns, the wall at the flame
   temperature when it does not).
 
-## Rotational Periodicity and Axisymmetric Wedge (Type 200)
+## Rotational Periodicity and Axisymmetric Wedge
 
-Type 200 on the $k$ faces closes a mesh that turns about the $x$ axis: an
+Rotational periodicity on the $k$ faces closes a mesh that turns about the $x$ axis: an
 axisymmetric wedge (one cell in $k$) or a 3-D sector (several). The flow
 beyond face 5 is the flow next to face 6 turned back by the angle $\delta$
 of the wedge or sector, and the flow beyond face 6 the flow next to face 5
@@ -821,12 +808,10 @@ $$
 
 $u$ and the scalars do not change under a turn about $x$, and are copied.
 The ghost cells and the fluxes of these faces take $\cos\delta$ and
-$\sin\delta$ computed once, with $\delta$, when the mesh is read. The record
-of a face of type 200 names no other block: a block closed by type 200 holds
-the whole wedge or sector in $k$, a column of cells with type 200 on one of
-its $k$ faces has it on the other, and a record of type 200 that does not fit
-this stops the run at setup (see the note on type 200 in
-[Boundary Conditions](../user/boundary-conditions.md#euler-boundaries)).
+$\sin\delta$ computed once, with $\delta$, when the mesh is read. A rotationally
+periodic face joins a block to itself: a block closed so holds the whole wedge or
+sector in $k$, and a column of cells with the condition on one of its $k$ faces
+has it on the other ([Boundary Conditions](../user/boundary-conditions.md#euler-boundaries)).
 
 MOSE finds the wedge and the sector from the nodes (the rule is in the note
 *Mesh type* of [Using MOSE](../user/using.md#case-directory-structure)): the
@@ -843,8 +828,8 @@ turn (4.2 times at 270 degrees).
 ### Axisymmetric wedge
 
 A 2-D axisymmetric case is a wedge of the 3-D mesh: one cell in $k$, whose two
-$k$ faces lie in the meridional planes $\theta = \mp\delta/2$ and carry the
-boundary type `200`. MOSE integrates the 3-D equations on the wedge; there are
+$k$ faces lie in the meridional planes $\theta = \mp\delta/2$ and are rotationally
+periodic. MOSE integrates the 3-D equations on the wedge; there are
 no axisymmetric source terms. The ghost cell across each wedge face is the cell
 itself rotated by $\mp\delta$ about the $x$ axis, so every face flux follows
 from the state of the cell:
@@ -854,14 +839,14 @@ from the state of the cell:
   $+p/r$ and the centrifugal terms of the axisymmetric equations;
 - viscous: the flux of a face between the cell and its rotated image, with the
   stencil of an interior face (the $i$ and $j$ neighbours of the image rotated
-  in the same way) and, with `diffusive-metric = stencil`, the face metric of
+  in the same way) and, with the stencil metric, the face metric of
   the same differences of the positions, the row of the image the row of the
   cell turned (exact for the linear fields that the rotation allows, see the 3-D
-  sector below); with `mean`, the inverse-mean face metric of
+  sector below); with the mean metric, the inverse-mean face metric of
   the cell and its image. Both are computed once at setup (they depend on the
   mesh only).
 
-On a planar 2-D mesh (faces 5 and 6 parallel, no wedge angle) type `200` makes
+On a planar 2-D mesh (faces 5 and 6 parallel, no wedge angle) the condition makes
 the image the cell itself, and the fluxes of the two faces cancel.
 
 For an axisymmetric field the mass, energy and scalar fluxes of the two faces
@@ -889,17 +874,17 @@ $2.5\times10^{-5}$ for $\delta = 1^\circ$). Keep the wedge thin.
 
 Put the axis nodes at a small radius, as MOSE's meshes do ($10^{-6}\,\Delta r$):
 a viscous run on a wedge whose axis is exactly at $r = 0$ stops at setup, with
-every `diffusive-metric`. On such an axis the faces have zero area and no
-normal, so their ghost cells copy the cells. With `mean` the
+every face metric. On such an axis the faces have zero area and no
+normal, so their ghost cells copy the cells. With the mean metric the
 wedge faces and the faces $i$ of the first row of cells take the derivative in
 $r$ across the axis with the ghost cell one cell away and would see half of
 $\partial u_r/\partial r$: an error of the hoop stress of those cells that
 refinement does not reduce ($1/6$ of $2\mu u_r/r^2$ in Homann's flow, on 32 and
-64 cells). With `stencil` the copy sits at the cell and the faces take the
+64 cells). With the stencil metric the copy sits at the cell and the faces take the
 difference on one side of it: in Homann's flow, linear in $r$, the first row
 gets the hoop stress of a small axis radius, so the error of $1/6$ is gone; a
 field that is not linear in $r$ stays farther from the result of the small
-radius (test `MMSResiduals`). The stop stays with every metric, a declared
+radius (manufactured-solution tests). The stop stays with every metric, a declared
 limit: the axis at $r = 0$ is not treated completely (ghost cells beyond the
 axis, not copies).
 
@@ -919,7 +904,7 @@ cells, whose inner nodes are on the axis or at a small radius, the centroid
 lies at two thirds of the height of the cell from the axis and the cell centre
 at one half, at every refinement. There the operators that take the cell
 centres are not exact for a linear field given by its cell means: with uniform
-radial spacing and `stencil`, the radial gradient at the faces between the
+radial spacing and the stencil metric, the radial gradient at the faces between the
 first and the second row is $1/9$ too small ($1/45$ between the second and the
 third), the cell gradient of the turbulence sources of the first row is off by
 $1/9$, and the term $u_r/r$ of the hoop stress is $1/3$ too large in the first
@@ -955,13 +940,13 @@ momentum of the first row of cells, at $r \approx \Delta r/2$, it is a damping
 $(2\mu+\lambda)\,u_r/r^2 \approx \tfrac{16}{3}\,\mu\,u_r/\Delta r^2$ ($\mu$ with
 the eddy viscosity), with couplings to the neighbours through $\lambda\,\nabla\cdot\mathbf{u}$.
 The local time step includes them ([Time Integration](time-integration.md#local-time-step)),
-so the `vnn` limits of the rule hold next to the axis too; without them, at a
-Prandtl number of 10, the first rows broke down at the `vnn` the rule declares
-stable (test `WedgeAxisStep`).
+so the VNN limits of the rule hold next to the axis too; without them, at a
+Prandtl number of 10, the first rows broke down at the VNN the rule declares
+stable.
 
 ### 3-D sector
 
-On a 3-D sector (type `200` with more than one cell in $k$) faces 5 and 6
+On a 3-D sector (rotational periodicity with more than one cell in $k$) faces 5 and 6
 make one interior face of the whole annulus, computed once, by the record of
 face 6, for the inviscid and for the viscous flux. The image beyond face 6 is
 the cell next to face 5 turned forward by $R$, the turn about $x$ by the sector
@@ -974,7 +959,7 @@ flux with its momentum turned back, $R^{\mathsf T}F$: mass, energy, species,
 turbulence variables, axial momentum and angular momentum about $x$ are
 conserved. A translated sector (faces 5 and 6 parallel) is the same with
 $R = I$. The viscous face of the wedge and of the sector takes, with
-`diffusive-metric = stencil`, the metric of the same differences of the
+the stencil metric, the metric of the same differences of the
 positions as the gradient takes of the values: across the face the image, at
 the position of its ghost cell, minus the cell; along the face the differences
 of the row of the cell and of the row of the image, which are those of the row
@@ -983,31 +968,31 @@ the source, behind a wall too, turned with it). A linear field that the
 periodicity allows, $\mathbf{u}(R\mathbf{x}) = R\,\mathbf{u}(\mathbf{x})$, is so
 exact at these faces on any mesh; where a wall ghost cell enters the row of the
 cell or of the source, the face takes one metric per group of quantities, as an
-interior face. With `mean` the face takes the inverse of the
+interior face. With the mean metric the face takes the inverse of the
 mean of the inverse metrics of the cell and of its image, whose columns along
 the face are the mean edges of the two cells, not the differences of the
 centres: where the cell size grows along the face by a ratio $q$ the
 derivatives along the face carry the factor $(1+q)^2/(4q)$ of the note
 *Tangential derivatives* above, a relative error of $(q-1)^2/(4q)$
 ($8.3\times10^{-3}$ at $q = 1.2$), and in the first row next to an axis with
-symmetry (`300`), whose ghost cell is the mirror image of the cell, $(3+q)/4$, a
+symmetry, whose ghost cell is the mirror image of the cell, $(3+q)/4$, a
 relative error of $(q-1)/4$ ($5\times10^{-2}$ at $q = 1.2$); refinement at a fixed
 ratio does not reduce them. For $u_r = U r$, whose viscous force is zero, the
 radial viscous force of a cell of the wedge is, with the inverse-mean metric on
 every face, that relative error times the hoop term $\tau_{\theta\theta}/r$ on top of the error
-of order $\delta^2$ above, and with `stencil` that error alone,
-$\sin^2(\delta/2)$ of the hoop term in every cell (test `MMSResiduals`).
+of order $\delta^2$ above, and with the stencil metric that error alone,
+$\sin^2(\delta/2)$ of the hoop term in every cell (manufactured-solution tests).
 A viscous run on a sector whose axis nodes are
 exactly at $r = 0$ stops at setup, as on the wedge, with every
-`diffusive-metric`: behind faces of zero area the ghost cells copy the cells,
-and with `mean` the periodic faces of the first row of cells
+face metric: behind faces of zero area the ghost cells copy the cells,
+and with the mean metric the periodic faces of the first row of cells
 would see half of $\partial u_r/\partial r$ ($1/6$ of the hoop term in Homann's
-flow; with `stencil` the error of a small axis radius, next to the periodic faces
+flow; with the stencil metric the error of a small axis radius, next to the periodic faces
 too). Put the axis nodes at a small radius.
 
 ## Faces Between Blocks
 
-A face shared by two blocks (block connection `101`, periodic connection `201`)
+A face shared by two blocks (a block connection or a periodic connection)
 has one flux, computed once and given to both cells with opposite signs, as an
 interior face. Of the two boundary records of the face, the one of the cell on
 the low-index side (whose face is 2, 4 or 6 while the other is 1, 3 or 5)
@@ -1017,7 +1002,7 @@ the preconditioning reference velocity $U_r$ of both cells (the ghost cell
 carries that of the other block). When the two faces have the same parity, as
 where blocks meet with their index directions permuted, the record with the
 smaller (block, face, $k$, $j$, $i$) computes it, so that the result does not
-depend on the order of the records in `bc.txt`. The face therefore conserves
+depend on the order in which the boundary faces are listed. The face therefore conserves
 mass, momentum and energy exactly whatever the Riemann solver, the shock sensor
 and the preconditioning, on any number of MPI ranks; between ranks the other
 cell's share travels in one more message per Runge–Kutta stage.
@@ -1027,7 +1012,7 @@ face in the unsplit mesh when three conditions hold: the index directions of
 the two blocks agree across the face; the two blocks store the nodes of the
 common face with the same bits (the ghost cell takes its geometry from the
 nodes of the other block, so nodes that differ in the last digits give a
-slightly different face); and `preconditioning-Ur-smooth = 0`. This is an
+slightly different face); and $U_r$ is not smoothed. This is an
 identity of the fluxes, not of the solution: in 2-D and 3-D a cell next to the
 cut adds the flux of the face between blocks after those of its interior faces,
 so its sum is taken in another order than in the unsplit mesh and the two
@@ -1035,22 +1020,22 @@ solutions differ at round-off. Only in 1-D, where a cell sums two face fluxes,
 is the solution of an inviscid run on the split mesh the same bit for bit (the
 viscous flux of a face between blocks has its own stencil, below).
 
-With `preconditioning-Ur-smooth` greater than 0 the max-dilation of $U_r$ in a
+With smoothing passes of $U_r$ the max-dilation of $U_r$ in a
 cell next to a face between blocks also sees the cell across the face, through
 the ghost cell, with its value at the start of the stage. In the unsplit mesh
 the smoothing sees the new value of the neighbour, so with the smoothing on a
 split mesh does not give the fluxes of the unsplit one bit for bit.
 
-With `diffusive-metric = stencil` the viscous flux of a face between blocks is
+With the stencil metric the viscous flux of a face between blocks is
 that of an interior face: one face gradient, from the cell, the ghost cell and
 their tangential neighbours (those of the ghost cell are cells of the other
-block, `bc%Pg(:,3:6)`), with the stencil face metric. With
-`mean` it uses its own stencil (two gradients, each with the tangential
+block), with the stencil face metric. With
+the mean metric it uses its own stencil (two gradients, each with the tangential
 differences of one of the two cells, and the mean of their fluxes) and the
 inverse-mean face metric.
 
 The ghost cells and the neighbours along the face of those of the faces
-between blocks (`bc%Pg`) are filled at every Runge–Kutta stage, before the
+between blocks are filled at every Runge–Kutta stage, before the
 fluxes, from the state of that stage, in an order such that every value the
 fluxes read is that of the stage, with any number of threads and ranks, under
 five conditions:
@@ -1059,10 +1044,10 @@ five conditions:
    that face;
 2. every block with a face whose ghost values are extrapolated
    ($3u_1 - 3u_2 + u_3$) has at least three cells across it;
-3. `bc.txt` has one record for every cell face of the boundary;
-4. there is no chimera (`102`) nor mapped (`410`) face;
-5. the tangential steps $(d_{11}, d_{12})$ and $(d_{21}, d_{22})$ of every
-   `101` and `201` record are unit steps along one index.
+3. every cell face of the boundary has its own boundary record;
+4. there is no chimera face nor face with an assigned state;
+5. the tangential index steps of every block and periodic connection are unit steps
+   along one index.
 
 The first is checked at setup: a connection whose source block has one cell
 across its face stops the run. The others are not checked: where one does not

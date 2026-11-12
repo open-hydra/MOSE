@@ -52,11 +52,11 @@ The test reads no probe: `verify.py` takes the post-shock total quantities in th
 MOSE solutions compared across four Riemann solvers: contours of the density of the flow field divided by its value in the cell with indices 0 and 0 (no colour scale), and the density along the cylinder wall in kg/m³:
 
 <figure>
-  {% include "vv/images/HC-fields.svg" %}
+  --8<-- "docs/vv/images/HC-fields.svg"
 </figure>
 
 <figure>
-  {% include "vv/images/HC-slice.svg" %}
+  --8<-- "docs/vv/images/HC-slice.svg"
 </figure>
 
 All Riemann solvers capture the fundamental shock structure, but exhibit varying levels of accuracy in preserving a smooth post-shock region. In particular, the HLLC solver shows significant oscillations in the shock layer, while HLLC+Tramel and HLLE provide smoother solutions. The SLAU solver demonstrates an intermediate behavior with moderate oscillations.

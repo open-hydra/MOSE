@@ -1,7 +1,10 @@
 build
 bin
 CMakePresets.json
+
+# Documentation site (zensical build) and Zensical's cache
 site
+.cache
 
 OUTPUT
 .ID

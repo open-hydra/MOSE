@@ -111,7 +111,7 @@ Inverse transformation ($\mathbf{U} \to \mathbf{P}$): Recovering primitive varia
    Newton–Raphson iterations with the implicit relation:
    $$T^{(k+1)} = T^{(k)} + \frac{e - e(T^{(k)})}{c_v(T^{(k)})}$$
    where $e(T)$ and $c_v(T)$ are from NASA polynomial fits.  
-   Iterate until $|e(T^{(k)}) - e| < 10^{-6}\,|e|$, with at most 20 iterations (`cons2prim` of FLINT).
+   Iterate until $|e(T^{(k)}) - e| < 10^{-6}\,|e|$, with at most 20 iterations.
    
 5. Compute pressure:  
    From the ideal-gas equation of state,
