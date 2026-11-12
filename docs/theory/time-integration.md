@@ -214,26 +214,78 @@ At each RK stage $k$ the full update sequence is:
 5. Recover primitives: $\mathbf{P}^{(k)} = \text{cons2prim}(\mathbf{U}^{(k)})$
 6. Enforce realizability (positive densities and pressures)
 
-An alternative **primitive-variable update** path is available, where
-the residual is scaled and applied directly in primitive space.  This
-path is faster per step but less conservative.
+Steps 2–5 can advance one of three sets of variables:
+
+- Conservative (the default): the steps above.
+- Primitive: the residual of each cell is turned into the increment of the primitive variables (partial densities,
+  velocity, pressure) by the chain rule, linearised about the state at the start of the stage, and added to them. The
+  mass, momentum and energy of a cell then change by the residual only to first order in the increment: a step does not
+  conserve them exactly.
+- Preconditioned: as the primitive update, with the Weiss–Smith preconditioning (below). It changes the transient, so
+  it serves steady runs only.
+
+### Preconditioned update
+
+The preconditioned update solves, at each stage and in every cell,
+
+$$
+\Gamma\,\Delta\mathbf Q = -\frac{\Delta t}{V}\,\mathbf R,\qquad
+\mathbf Q = (p,\ u,\ v,\ w,\ T,\ Y_1, \dots, Y_{N-1}),
+$$
+
+where $\mathbf R$ is the residual of the conservative variables and $\Gamma$ is the matrix of Weiss and Smith [19]: the
+Jacobian $\partial\mathbf U/\partial\mathbf Q$ in which $\rho_p = (\partial\rho/\partial p)_T = 1/(RT)$ is replaced by
+
+$$
+\Theta = \frac{1}{U_r^2} - \frac{\rho_T}{\rho\,c_p} = \frac{1}{U_r^2} + \frac{1}{c_p T},
+$$
+
+with $U_r$ the reference velocity of the cell (below). The rows of $\Gamma\,\Delta\mathbf Q$ are the changes of the
+total density, $\Delta\rho^\ast = \Theta\,\Delta p + \rho_T\,\Delta T + \sum_i (\partial\rho/\partial Y_i)\,\Delta Y_i$,
+of the momentum, $\mathbf v\,\Delta\rho^\ast + \rho\,\Delta\mathbf v$, of the energy,
+$H\,\Delta\rho^\ast + \rho\,(c_p\,\Delta T + \sum_i h_i\,\Delta Y_i + \mathbf v\cdot\Delta\mathbf v) - \Delta p$, and of the
+species, $Y_i\,\Delta\rho^\ast + \rho\,\Delta Y_i$. MOSE solves this system in closed form, then converts $\Delta\mathbf Q$ to
+the primitive variables with the physical equation of state. Where $U_r = a$, $\Theta = \rho_p$ (for a thermally perfect
+gas $1/a^2 + 1/(c_pT) = 1/(RT)$) and the update is the primitive one. Below $a$ the pressure moves faster than the
+density: the acoustic waves of the preconditioned system travel at about $U_r$, close to the flow speed, so at low Mach
+number all the waves of a cell have speeds of one order and the local time step is set by the flow, not by the speed of
+sound. The turbulence, soot and passive-scalar variables are not preconditioned: they take their residual as in the
+primitive update.
+
+Preconditioning changes the path of a steady run, not the steady state of a given flux. Only the HLLC-PC flux takes
+$U_r$ ([Riemann solvers](riemann-solvers.md#hllc-pc)), and it is the one that keeps the low-Mach accuracy: its
+dissipation scales with $U_r$ instead of $a$, so the pressure fluctuations of a flow at Mach number $M$ are of order
+$M^2$, the incompressible limit, instead of order $M$. With another flux the preconditioned update meets a dissipation
+scaled with $a$ and a time step scaled with $U_r$: on the [low-Mach cylinder](../vv/2D-low-mach-cylinder.md) at Mach
+0.01 the preconditioned update with the HLLC flux diverges. The preconditioned update is paired with HLLC-PC.
 
 ### Reference velocity of the preconditioning
 
-With `integration-variables = prec` the update of a stage, the local time step (below) and the flux `HLLC-PC` take in
-every cell the reference velocity $U_r$ of the Weiss–Smith preconditioning. It is computed after the update of each
+The preconditioned update of a stage, the local time step (below) and the HLLC-PC flux take in every cell the reference
+velocity $U_r$ of the Weiss–Smith preconditioning, the same value in the three. It is computed after the update of each
 stage from the new state of the cell, and the ghost cells of the faces between blocks receive it with the state at the
-start of the next stage. By default $U_r = \varepsilon a$ for $|\mathbf v| < \varepsilon a$, $a$ for
-$|\mathbf v| \ge a$ and $f\,|\mathbf v|$ otherwise ($\varepsilon$ = `preconditioning-eps-min`, $f$ =
-`preconditioning-Ur-factor`), then raised to the viscous floor
+start of the next stage. It is defined in one of three ways, with a floor fraction $\varepsilon$ of the speed of sound and
+a factor $f$ on the flow speed:
+
+| Mode | $U_r$ | Viscous floor |
+|---|---|---|
+| Uniform, with a reference speed $U_\text{ref}$ | $U_\text{ref}$ where $\lvert\mathbf v\rvert \le U_\text{ref}$, $a$ elsewhere | no |
+| Target Mach number $M_t$ | the $U_r$ whose preconditioned Mach number $\lvert\mathbf v\rvert(1-\alpha)/\sqrt{\alpha^2\lvert\mathbf v\rvert^2+U_r^2}$ equals $M_t$, kept within $[\varepsilon a, a]$; $a$ where the flow is faster than the target | yes |
+| Weiss–Smith (default) | $\varepsilon a$ for $\lvert\mathbf v\rvert < \varepsilon a$, $a$ for $\lvert\mathbf v\rvert \ge a$, $f\,\lvert\mathbf v\rvert$ otherwise | yes |
+
+$\alpha = \tfrac12(1 - U_r^2/a^2)$. A lower bound $U_{\min}$ can then raise $U_r$ in every mode, and $n$ smoothing passes
+give each cell the largest $U_r$ of itself and its six face neighbours, $n$ times.
+$\varepsilon$ sets how far the preconditioning reaches: at Mach numbers below $\varepsilon$ the floor $\varepsilon a$
+holds $U_r$ above the flow speed, and the dissipation of HLLC-PC grows back towards that of a speed of sound; the
+default, 0.05, suits flows down to about Mach 0.05. For a flow at Mach number $M$, take $\varepsilon$ about $M/10$.
+The viscous floor is
 
 $$
 U_{\text{visc}} = \max\Bigl( \frac{\mu + \mu_t}{\rho\,\Delta_{\min}},\;
 \frac{k + \mu_t\,c_p/\text{Pr}_t}{\rho\,c_p\,\Delta_{\min}} \Bigr),
 $$
 
-with $\Delta_{\min}$ the smallest width of the cell, and to `preconditioning-Ur-min`
-(`preconditioning-Uref` and `preconditioning-Mach` select the other modes). With a RANS model $\mu_t$ is the eddy
+with $\Delta_{\min}$ the smallest width of the cell. With a RANS model $\mu_t$ is the eddy
 viscosity of the model with the velocity gradient of the cell: SST takes $\mu_t = \rho a_1 k/\max(a_1\omega, S F_2)$
 and Wilcox 2006 $\mu_t = \rho k/\hat\omega$, $\hat\omega = \max\bigl(\omega, C_{\lim}\sqrt{2\bar S_{ij}\bar
 S_{ij}/\beta^*}\bigr)$, so the strain rate lowers it; Spalart–Allmaras does not use the gradient. The gradient is
@@ -436,7 +488,8 @@ cells extrapolate the cells, $3q_1 - 3q_2 + q_3$ (the velocity inlet, and the fl
 propellant grain that blows its products in through a wall), positivity is not guaranteed. With moving shocks and Heun
 keep CFL at 0.5–0.7. With preconditioning,
 $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$ is replaced by the preconditioned eigenvalue
-$\bigl(u_n (1-\alpha) + c^\ast\bigr)|\nabla\xi_d|$.
+$\bigl(u_n (1-\alpha) + c^\ast\bigr)|\nabla\xi_d|$, with $u_n$ the velocity normal to the $d$ faces,
+$\alpha = \tfrac12(1 - U_r^2/a^2)$ and $c^\ast = \sqrt{\alpha^2 u_n^2 + U_r^2}$.
 
 The local time step takes the wave speeds of the cell alone. With a stationary shock captured on one face, the fastest
 wave that the HLLC flux lets into a cell on the slow side of the shock exceeds the cell's own $|u_n| + a$ by up to 1.47
@@ -2200,3 +2253,5 @@ in the remainder of the downstream face.  Each face between levels then gives it
 17. E. Hairer, G. Wanner, the code DOPRI5, `WORK(2)`, the safety factor in step size prediction, 0.9 by default; and PETSc
    [14], the default `safety = 0.9` of `TSAdaptCreate` in `src/ts/adapt/interface/tsadapt.c`.
 18. SeisSol, `docs/local-timestepping.rst` (the maximum difference property), https://github.com/SeisSol/SeisSol, commit a526776.
+19. J. M. Weiss, W. A. Smith, "Preconditioning applied to variable and constant density flows," *AIAA J.*, 33(11),
+   2050–2057, 1995, doi:10.2514/3.12946.

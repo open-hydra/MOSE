@@ -23,6 +23,7 @@ This section documents the Verification & Validation (V&V) test suite for MOSE. 
 | [Oblique Shock](2D-oblique-shock.md) | 2D | 4.0 | Oblique shock, post-shock instabilities | Analytical | HLLC, HLLC+, HLLE, SLAU | oblique shock theory |
 | [Hypersonic Cylinder](2D-hypersonic-cylinder.md) | 2D | 8.1 | Bow shock, carbuncle | Analytical | HLLC, HLLC+, HLLE, SLAU | normal shock theory |
 | [Gresho Vortex](2D-gresho-vortex.md) | 2D | 0.1–0.001 | Low-Mach accuracy, steady vortex | Analytical (steady solution) | HLLC, LMRoe, AUSM+M | Gresho (1990), Miczek (2015) |
+| [Low-Mach Cylinder](2D-low-mach-cylinder.md) | 2D | 0.01, 0.001 | Weiss–Smith preconditioning: the incompressible limit, steady | Potential flow; Mach independence | HLLC-PC (prec), HLLC | Weiss & Smith (1995), Guillard & Viozat (1999) |
 | [Rocket Nozzle](2D-nozzle.md) | 2D | transonic–supersonic | Multi-species frozen expansion | CEA 1D reference | HLLC | CEA/NASA |
 | [Planar Nozzle on Grid Families](2D-planar-nozzle-grids.md) | 2D | subsonic–supersonic | Turbulent nozzle flow on grid families that differ in the direction and smoothness of their grid lines | Mirror symmetry; grid families on three levels | HLLC (SA, SST) | quasi-1D isentropic flow |
 | [Laminar Flat Plate](2D-flat-plate-laminar.md) | 2D | 0.2 | Laminar boundary layer, viscous effects | Blasius similarity | HLLC | Blasius (1908) |
