@@ -3,7 +3,7 @@
 #  Start-up of a nozzle with the multirate integrator: a quasi-1D convergent-divergent nozzle (case mr1d-nozzle-su of
 #  gen_mr_cases.py, 371 cells) whose inlet total pressure rises from 1e5 to 2.6e5 Pa in 8 ms against an outlet at 1e5 Pa.
 #  The flow starts and chokes; the shock that forms in the divergent moves down it across a face between levels. The
-#  test has one form, in the validation tier (a few minutes).
+#  test has one form (CTest Multirate.Nozzle, a few minutes).
 #  dt_min(0) from one step on the one-level path; dt0 = (t_fin/10)/M with M the smallest multiple of 32 such that
 #  dt0 <= 0.45 dt_min(0) (dt_min falls to about 0.5 dt_min(0) as the flow speeds up through the throat). Six runs on the
 #  multirate path, the level map rebuilt at every macro step, ten solutions at t_k = k t_fin/10:

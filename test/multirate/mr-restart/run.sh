@@ -3,7 +3,7 @@
 #  Multirate: exact restart and exact output instants.
 #  Every run writes vtk raw and its residual at every macro step (res-diter = 1). A "split" run makes the first part
 #  with newrun = true, then restarts in the same directory (newrun = false, from OUTPUT/field.vtm) and makes the rest;
-#  its OUTPUT tree must be identical byte by byte to that of the run in one go (test/fast/restart/check_restart_vtk.py:
+#  its OUTPUT tree must be identical byte by byte to that of the run in one go (test/checks/restart/check_restart_vtk.py:
 #  numbered solutions, final solution, residual history), and neither may have an empty residual history.
 #   R    mr1d-sod, mr2d-box-4b and the Spalart-Allmaras plate mr2d-plate-sa, multirate (max-level 3, safety 2) and the
 #        one-level path (max-level 0, safety 1), levels recomputed at every macro step, solutions every 30 macro
@@ -30,7 +30,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; cd "$HERE"
 source ../mr-common/lib.sh
-CHECK=../../fast/restart/check_restart_vtk.py
+CHECK=../../checks/restart/check_restart_vtk.py
 rm -rf cases runs
 mr_cases cases mr1d-sod mr2d-box-4b mr2d-plate-sa mr2d-shock mr1d-blast || { echo "mr-restart: FAIL - cannot build the cases"; exit 1; }
 status=0
@@ -145,7 +145,7 @@ EOF
   python3 -B - "$d/full/OUTPUT" "$dto" "$tt" "$first" <<'EOF' || status=1
 import sys
 from pathlib import Path
-sys.path.insert(0, '../../fast/restart/restart-counters')
+sys.path.insert(0, '../../checks/restart/restart-counters')
 from vtk_time import time_of
 out, dto, tt, first = Path(sys.argv[1]), float(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4])
 num = sorted(out.glob('field[0-9]*.vtm'), key=lambda p: int(p.stem[5:]))

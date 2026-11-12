@@ -14,18 +14,20 @@
 #     none is) on the three grids from the uniform field, 300 000 iterations
 #     each, a numbered solution every 20 000 (long: the four models take about
 #     51 h at one thread in a TESTING build, SSGLRR 15 h of it; use -p);
-#   testfast (short form, for CTest): for each model, a restart of 5000
-#     iterations from the converged 35x25 solution of the full form
-#     (reference/field-35x25-<model>.tec), in RUN/<model>-35x25-short;
+#   testfast [model ...] (short form, for CTest): for each model named (all four when
+#     none is), a restart of 5000 iterations from the converged 35x25 solution of
+#     the full form (reference/field-35x25-<model>.tec), in RUN/<model>-35x25-short;
 #   solve <model> <grid>: one run of the full form.
-#   verify.py reads RUN/form.txt, which this script writes, and checks the form.
+#   verify.py reads RUN/form.txt, which this script writes, and checks the form;
+#   verify.py --short <model> ... checks the short-form runs of those models, and
+#   verify.py --reference the criteria of the V&V page from the stored results.
 #===============================================================================
 function print_usage {
   echo
   echo "Tasks"
   echo " test [model ...]      -->     full form: the models named (default SA, SST, Wilcox2006, SSGLRR) on"
   echo "                               35x25, 69x49, 137x97, from the uniform field"
-  echo " testfast              -->     short form: each model restarted from reference/field-35x25-<model>.tec"
+  echo " testfast [model ...]  -->     short form: each model restarted from reference/field-35x25-<model>.tec"
   echo " solve <model> <grid>  -->     one run of the full form, e.g. solve SA 35x25"
   echo
   echo "Solver options"
@@ -86,8 +88,11 @@ if [[ $1 == solve || $1 == test || $1 == testfast ]]; then
   if [[ "$MASTER" -nt "$LOCAL" ]]; then cp $MASTER $LOCAL; fi
   status=0
   if [[ $1 == testfast ]]; then
+    shift
+    for MODEL in "$@"; do [[ " $MODELS " == *" $MODEL "* ]] || print_usage; done
+    [[ $# -gt 0 ]] && MODELS="$*"
     ITER=${ITER:-$ITER_SHORT}
-    echo "testfast $ITER" > RUN/form.txt
+    echo "testfast $ITER $MODELS" > RUN/form.txt
     for MODEL in $MODELS; do
       one_run $MODEL 35x25 RUN/$MODEL-35x25-short $ITER 1000000000 false || status=1
     done

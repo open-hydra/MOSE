@@ -35,10 +35,10 @@ working from a fork: some automation does not run on forks (see
 
 ## Before you open the pull request
 
-Run the fast tests locally:
+Run the light tests locally (seconds):
 
 ```bash
-ctest --test-dir build -L fast --output-on-failure
+ctest --test-dir build -L light --output-on-failure
 ```
 
 Better, enable the pre-push hook once and let it run that tier for you on
@@ -66,7 +66,7 @@ for what belongs in each tier.
 - [ ] Compiles with `-std=f2008 -Wall -Wextra` without new warnings
 - [ ] No line exceeds 132 characters
 - [ ] New subroutines declare `implicit none` and argument intents
-- [ ] `ctest -L fast` passes
+- [ ] `ctest -L "light|medium" -j4` passes (what a pull request runs)
 - [ ] New functionality has at least one test case
 - [ ] Documentation updated if user-facing behaviour changed
 - [ ] Commit messages use imperative mood ("Add ...", not "Added ...")

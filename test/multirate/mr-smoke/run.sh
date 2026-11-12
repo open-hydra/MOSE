@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Multirate smoke test (fast tier, a few seconds): six checks of the multirate integrator, the first five on the 1-D
+#  Multirate smoke test (a few seconds): six checks of the multirate integrator, the first five on the 1-D
 #  cases of gen_mr_cases.py (284 cells in bands of 10 / 4 / 1.6 / 0.64 / 1.6 / 4 / 10 mm):
 #   1. one level (max-level 0, safety 1) is the single-rate Heun step: the acoustic wave, 20 steps, fields and residual
 #      history identical byte by byte;
@@ -15,15 +15,15 @@
 #      negative pressure) and no solution;
 #   6. the lines of the gas entering through 400 faces, which the boundary fluxes print at the stages of the
 #      single-rate step, come at the stages of the multirate: a 1-D tube of 8 cells with 400 ends and the gas entering
-#      through face 1 at 0.5 a (the case count of test/fast/boundary-conditions/extrapolation-400/entering_gas.py),
+#      through face 1 at 0.5 a (the case count of test/checks/boundary-conditions/extrapolation-400/entering_gas.py),
 #      20 Heun steps at first order; one level gives the lines and the end line of the single-rate step word for
 #      word: one line (iteration 1, faces: 1) and 40 flux evaluations, one a stage.
-#  The complete checks are the validation entries MultirateIdentity, MultirateConservation and MultirateInput.
+#  The complete checks are the tests Multirate.OneLevel, Multirate.Conservation and Multirate.Reject.
 #===============================================================================
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; cd "$HERE"
 source ../mr-common/lib.sh
-CHECK=../../fast/restart/check_restart_vtk.py
+CHECK=../../checks/restart/check_restart_vtk.py
 rm -rf cases runs
 mr_cases cases mr1d-acu mr1d-sod || { echo "mr-smoke: FAIL - cannot build the cases"; exit 1; }
 status=0
@@ -104,7 +104,7 @@ else
 fi
 
 # 6. the lines of the gas entering through 400 faces at the stages: one level against the single-rate step
-EG=$HERE/../../fast/boundary-conditions/extrapolation-400/entering_gas.py
+EG=$HERE/../../checks/boundary-conditions/extrapolation-400/entering_gas.py
 d=runs/enter400
 ok=1
 for m in sr mr; do

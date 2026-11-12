@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #===============================================================================
 #  Preconditioning: inviscid flow past a cylinder at low Mach number
-#  (validation tier)
 #
 #  The case of make_case.py: an O-grid of 96 x 48 cells, the free stream of air
 #  at p = 1e5 Pa, T = 300 K, first-order steady runs of 3000 iterations

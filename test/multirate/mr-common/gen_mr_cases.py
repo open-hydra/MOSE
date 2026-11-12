@@ -92,7 +92,7 @@ connections 101, periodic 201 across the periodic ends, records ordered by block
   mr1d-402       1D duct, x from the inlet: 40 cells of 0.64 mm, 20 of 1.6 mm, 20 of 4 mm, 30 of 10 mm; inlet 402 at
                  i = 1 (T0 = 300 K, p0(t) = 1.2e5 Pa (1 + 0.1 sin(2 pi t / Tp)), Tp = 6.4e-5 s, table p0.dat in the
                  case directory, read from the run directory), outlet 406 at 1e5 Pa; uniform initial state = the steady
-                 isentropic state of p0 = 1.2e5 Pa (as test/fast/time-integration/time-control); y faces slip
+                 isentropic state of p0 = 1.2e5 Pa (as test/checks/time-integration/time-control); y faces slip
                  walls, z faces null (0)
   mr1d-410       the same duct with the inlet 410: assigned state of a right-running acoustic wave of relative amplitude
                  0.1 on the steady state, rho (1 + 0.1 s / gamma), u + 0.1 c s / gamma, p (1 + 0.1 s), s = sin(2 pi t / Tp),
@@ -963,7 +963,7 @@ def turb_plate_case(d, air, model, PI, PJ):
 
 
 # wall channel of the test TimeIntegration/TurbulenceSources
-# (test/fast/time-integration/turbulence-sources/make_case.py): 2-D,
+# (test/checks/time-integration/turbulence-sources/make_case.py): 2-D,
 # periodic along the flow (4 cells of 1 mm, connection 201 on itself), adiabatic no-slip wall (301) at y = 0, symmetry
 # (300) at the top, null k faces (0), slab 1 mm; air of test/common/Air-viscous at 300 K and 1e5 Pa, u = U tanh(y/delta_u),
 # no force that drives it: the wall slows the flow down and the turbulence variables relax. Constants of that file.

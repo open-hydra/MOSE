@@ -36,7 +36,7 @@ This section documents the Verification & Validation (V&V) test suite for MOSE. 
 
 ## Running the tests
 
-Most test cases under `test/` hold a `verify.py` (some a `check.py` or a `compare.py`) that reads the solver output, compares it with the reference and draws the figures; `test/TESTING-PLAN.md` lists the verifier and the criterion of every case.
+Most test cases under `test/` hold a `verify.py` (some a `check.py` or a `compare.py`) that reads the solver output, compares it with the reference and draws the figures; `test/TESTING-PLAN.md` lists the tests, what each one checks, and the cases that no test runs.
 
 ```bash
 cd test/1D/<TestName>

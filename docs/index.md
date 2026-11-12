@@ -16,7 +16,7 @@ hide:
 <p class="mose-hero__lead">Open-source solver for compressible flows on multi-block structured grids, from shock
 tubes to turbulent reacting flows.</p>
 
-<p class="mose-hero__cmd"><span>$</span> ./MOSE.sh solve -p 4</p>
+<p class="mose-hero__cmd"><span>$</span> ./MOSE.sh -p 4 solve</p>
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
 [Verification](vv/index.md){ .md-button .mose-hero__ghost }

@@ -3,7 +3,7 @@
 #  One flux per face between blocks across MPI ranks, whatever the order of
 #  bc.txt (needs-mpi tier)
 #
-#  The 2-D case of test/fast/connections/connection-order: two blocks cut at y = 0.5 with
+#  The 2-D case of test/checks/connections/connection-order: two blocks cut at y = 0.5 with
 #  their index directions permuted across the cut (face 4 of one block with
 #  face 2 of the other, two faces of the same parity), Navier-Stokes with
 #  HLLC+Tramel and a shock leaving the cut. With each block on its own rank
@@ -19,7 +19,7 @@ cd "$HERE"
 MASTER=../../../bin/MOSE
 LOCAL=./bin/MOSE
 VISC=../../common/Air-viscous
-CASE=../../fast/connections/connection-order/make_case.py
+CASE=../../checks/connections/connection-order/make_case.py
 MPIEXEC=${MOSE_MPIEXEC:-mpiexec}
 NPFLAG=${MOSE_MPIEXEC_NUMPROC_FLAG:--n}
 

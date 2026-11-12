@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #===============================================================================
 #  Right-hand sides on constructed fields: Spalart-Allmaras and the viscous
-#  stress of the axisymmetric wedge (fast tier)
+#  stress of the axisymmetric wedge
 #
 #  1. Variable density: a constructed periodic field at rest with variable
 #     temperature and nu~ and no wall (make_case.py): one explicit Euler step

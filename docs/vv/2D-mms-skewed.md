@@ -79,7 +79,7 @@ table `test/2D/viscous/mms/INPUT/transport.dat` (the values of ATLAS GPB with `m
 
 ## Results
 
-- **Short form** (`MMSViscousSkewed`, validation tier of CTest): passes its
+- **Short form** (`MMSViscousSkewed`, a medium test of CTest): passes its
   checks on every case: the four on the case with walls, checks 1, 2 and 4 on
   the two periodic ones.
 - **Full form** (`./MOSE.sh test`): the refinement study of the three cases on
