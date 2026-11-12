@@ -17,6 +17,8 @@
 !> delta_ij enters the stress of the momentum and energy equations (Stress_Vector_2eq) and the
 !> k-equation source is removed from the mean-flow energy. The TMR name is then SST-2003s with the
 !> incompressible production; the compressible one is not TMR SST-2003, which limits all of P as SST-2003e does.
+!> sst-dilatation-dissipation = wilcox | zeman multiplies beta* by 1 + xi F(Mt) and takes beta - beta* xi F(Mt)
+!> (Rumsey, NASA/TM-2009-215705, eqs. 40-43; see SST_Blk).
 !> turbulence = SST-RC multiplies P (with compressible production, its deviatoric part) by the
 !> Spalart-Shur rotation/curvature function fr1 of Smirnov & Menter (2009), TMR SST-RC, here on the SST-2003 variants above.
 !>
@@ -29,6 +31,8 @@
 !>   Smirnov, P. E., Menter, F. R., "Sensitization of the SST Turbulence Model to Rotation and
 !>     Curvature by Applying the Spalart-Shur Correction Term", J. Turbomach. 131(4), 2009,
 !>     041010, doi:10.1115/1.3070573 (SST-RC).
+!>   Rumsey, C. L., "Compressibility Considerations for k-omega Turbulence Models in Hypersonic Boundary
+!>     Layer Applications", NASA/TM-2009-215705, 2009 (dilatation dissipation, Wilcox and Zeman forms).
 !>   NASA TMR, "Implementing Turbulence Models into the Compressible RANS Equations",
 !>     https://tmbwg.github.io/turbmodels/implementrans.html (k-energy-coupling).
 !>   Wilcox, D. C., Turbulence Modeling for CFD, 3rd ed., DCW Industries, 2006, ch. 5
@@ -53,6 +57,10 @@ module MOSE_Lib_SST
   cr1 = 1.d0, &
   cr2 = 2.d0, &
   cr3 = 1.d0
+
+  ! Dilatation dissipation (sst-dilatation-dissipation, SST_Blk): Wilcox (Rumsey, NASA/TM-2009-215705, eqs. 40-42) and
+  ! Zeman (eq. 43)
+  real(R8), parameter, private :: dd_xi_w = 2d0, dd_Mt0_w = 0.25d0, dd_xi_z = 0.75d0, dd_Mt0_z = 0.2d0, dd_L_z = 0.66d0
 
   !> C of the asymptotic omega wall condition, omega_wall = C nu/d**2: the limit 6/beta_1 of the omega equation as y -> 0,
   !> where the blending of the model is 1 (NASA Turbulence Modeling Resource, SST page)
@@ -101,7 +109,7 @@ contains
                      domain % blk(b) % dtlocal,      &
                      domain % blk(b) % dim,          &
                      SpalartShur, k_energy_coupling, &
-                     point_implicit, obj_rans%sst_compressible )
+                     point_implicit, obj_rans%sst_compressible, obj_rans%sst_dd )
 
     end do
 
@@ -109,7 +117,7 @@ contains
 
 
   subroutine SST_Blk ( Prim, Res, M, Mt, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, &
-                       point_implicit, compressible )
+                       point_implicit, compressible, dd )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -118,6 +126,7 @@ contains
     implicit none
     integer, intent(in) :: n(3)
     logical, intent(in) :: SpalartShur, k_energy_coupling, point_implicit, compressible
+    integer, intent(in) :: dd   ! dilatation dissipation: 0 none, 1 Wilcox, 2 Zeman (sst-dilatation-dissipation)
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
@@ -132,10 +141,11 @@ contains
     real(R8) :: rho, Rgas, mil, kap, ome, dist, Gradvel(3,3), Divel, Sij(3,3), S, Wij(3,3), diag, mi_t, F(2)
     real(R8) :: vort(3), O, D, rtilde, frot, fr1
     real(R8) :: Tij(3,3), Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2), fk, fw
+    real(R8) :: Mach_t, Fdd, beta_star_c, beta_c
 
     !$omp do collapse (3) private ( rho, Rgas, mil, kap, ome, dist, Gradvel, Divel, Sij, S, Wij, diag, mi_t, F ), &
     !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj ), &
-    !$omp private ( vort, O, D, rtilde, frot, fr1 )
+    !$omp private ( vort, O, D, rtilde, frot, fr1, Mach_t, Fdd, beta_star_c, beta_c )
     
     do k = 1, n(3)
     do j = 1, n(2)
@@ -219,9 +229,27 @@ contains
       dkDotdw = Dot_Product ( Grad(1,:), Grad(2,:) )
       Diff = 2d0*(1d0-F(1))*rho*sigma_w2/ome*dkDotdw
 
+      ! Dilatation dissipation (sst-dilatation-dissipation; Rumsey, NASA/TM-2009-215705, eqs. 40-43): the destruction
+      ! coefficients become beta* (1 + xi F(Mt)) and beta - beta* xi F(Mt), Mt = sqrt(2k)/a the turbulent Mach number.
+      !   Wilcox (free shear layers): F = (Mt^2 - Mt0^2) H(Mt - Mt0), xi = 2, Mt0 = 0.25
+      !   Zeman (boundary layers):    F = (1 - exp(-((Mt - Mt0)/L)^2)) H(Mt - Mt0), xi = 0.75, Mt0 = 0.2, L = 0.66
+      ! beta - beta* xi F is floored at 0 (Wilcox: Mt > 0.65, beyond the Mt of boundary and shear layers): a negative
+      ! beta would feed omega. With none, Fdd = 0 and the coefficients are beta* and beta exactly.
+      Fdd = 0d0
+      if ( dd > 0 ) then
+        Mach_t = sqrt ( 2d0 * kap ) / f_ss ( Prim(1:nsc,i,j,k), Prim(np,i,j,k), rho, Rgas )
+        if ( dd == 1 ) then
+          if ( Mach_t > dd_Mt0_w ) Fdd = dd_xi_w * ( Mach_t**2 - dd_Mt0_w**2 )
+        else
+          if ( Mach_t > dd_Mt0_z ) Fdd = dd_xi_z * ( 1d0 - exp ( -((Mach_t - dd_Mt0_z) / dd_L_z)**2 ) )
+        end if
+      end if
+      beta_star_c = beta_star * ( 1d0 + Fdd )
+      beta_c = max ( beta - beta_star * Fdd, 0d0 )
+
       ! Dissipation term
-      Diss(1) = beta_star*rho*kap*ome
-      Diss(2) = beta*rho*ome**2
+      Diss(1) = beta_star_c*rho*kap*ome
+      Diss(2) = beta_c*rho*ome**2
 
       ! Source terms
       Source(1) = Prod(1) - Diss(1)
@@ -243,8 +271,8 @@ contains
       ! Without the factor (fk = 1) the line does not run
       fk = 1d0 ; fw = 1d0
       if ( point_implicit ) then
-        fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
-        fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
+        fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star_c * ome )
+        fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta_c * ome )
         if ( k_energy_coupling ) Res(np,i,j,k) = Res(np,i,j,k) + ( 1d0 - fk ) * Res(nt,i,j,k)
         Res(nt,  i,j,k) = Res(nt,  i,j,k) * fk
         Res(nt+1,i,j,k) = Res(nt+1,i,j,k) * fw

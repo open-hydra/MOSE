@@ -413,6 +413,41 @@ shock feet, reattachment) the dilatation terms amplify $k$ more than $\omega$
 [shock/boundary-layer interaction](../vv/2D-swbli.md) the incompressible form gives
 a separation bubble about 16% longer and a slower recovery of $C_f$.
 
+### Dilatation dissipation (`sst-dilatation-dissipation`)
+
+A compressibility correction of the dissipation, for the reduced growth of
+compressible shear layers (Rumsey, NASA/TM-2009-215705, eqs. 40–43, after
+Wilcox and Zeman). The destruction coefficients of $k$ and $\omega$ become
+
+$$
+\beta^\ast_c = \beta^\ast\,[1 + \xi^\ast F(M_T)], \qquad
+\beta_c = \beta - \beta^\ast\,\xi^\ast F(M_T), \qquad
+M_T = \frac{\sqrt{2k}}{a},
+$$
+
+with $M_T$ the turbulent Mach number and $a$ the local speed of sound.
+`sst-dilatation-dissipation` (default `none`) selects $F$:
+
+| Value | $F(M_T)$ | Constants | Meant for |
+|---|---|---|---|
+| `wilcox` | $(M_T^2 - M_{T0}^2)\,\mathcal H(M_T - M_{T0})$ | $\xi^\ast = 2$, $M_{T0} = 0.25$ | jets and mixing layers (Sarkar/Zeman/Wilcox family) |
+| `zeman` | $\bigl[1 - \exp(-((M_T - M_{T0})/\Lambda)^2)\bigr]\,\mathcal H(M_T - M_{T0})$ | $\xi^\ast = 0.75$, $M_{T0} = 0.2$, $\Lambda = 0.66$ | boundary layers (milder) |
+
+Both raise the dissipation of $k$ and lower that of $\omega$ where $M_T$ is
+above the threshold: less eddy viscosity, a shear layer that spreads more
+slowly. Rumsey's survey: the Wilcox form gives the measured trend of mixing
+layers and over-corrects high-Mach boundary layers (skin friction too low);
+the Zeman form improves cold-wall hypersonic skin friction and is too weak
+for free shear layers. In a boundary layer $M_T$ stays below 0.25 up to
+about Mach 4 (his Fig. 7b), so the Wilcox form leaves it alone there.
+
+MOSE floors $\beta_c$ at 0 (not in the papers): with the Wilcox constants
+$\beta_c$ would turn negative for $M_T > 0.65$ and feed $\omega$. The
+point-implicit factors of steady runs take $\beta^\ast_c$ and $\beta_c$.
+With `none` the coefficients are $\beta^\ast$ and $\beta$ exactly. The
+option acts on `SST` and `SST-RC`, not on `Wilcox2006`; the multirate integrator
+carries it too (its cell-wise copy of the SST sources, checked by `verify_copies.py`).
+
 ### Rotation/curvature correction (SST-RC)
 
 SST-RC sensitizes the model to streamline curvature and system

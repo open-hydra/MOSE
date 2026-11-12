@@ -350,12 +350,14 @@ module MOSE_Config_Types_m
     logical :: point_implicit  ! Point-implicit factor on the increment of the turbulence equations (steady runs)
     character(len=llen) :: omega_wall_bc  ! omega wall condition: 'practical' or 'asymptotic'
     character(len=llen) :: sst_production ! SST production: 'incompressible' or 'compressible'
+    character(len=llen) :: sst_dilatation_dissipation ! SST dilatation dissipation: 'none', 'wilcox' or 'zeman'
     ! Useful variables
     logical :: RSM  ! Reynolds-stress model: the stresses are transported (set by Setup_RANS_Model)
     logical :: SD   ! SSGLRR with simple diffusion (set by Setup_RANS_Model)
     logical :: LSC  ! SSGLRR with the length-scale correction, w2019 (set by Setup_RANS_Model)
     real(R8) :: omega_wall_coef  ! coefficient C in omega_wall = C*mi_l/dist**2 (set by Setup_RANS_Model)
     logical :: sst_compressible  ! SST production with the dilatation terms (set by Setup_RANS_Model)
+    integer :: sst_dd = 0        ! SST dilatation dissipation: 0 none, 1 Wilcox, 2 Zeman (set by Setup_RANS_Model)
   end type rans_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------

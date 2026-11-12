@@ -453,8 +453,8 @@ contains
     enddo
     ! turbulence: the stages evaluate the sources of the Spalart-Allmaras (SA, and SA-R with the rotation correction of its
     ! production) and SST models: with one level the block routine of the single-rate stage (RANS_Source_Terms), with
-    ! more levels the cell-wise copies of SA_Source_Blk and SST_Blk, k-energy-coupling and both forms of sst-production
-    ! included. Wilcox2006 has no evaluation of its sources in the stages. The rotation and curvature correction (SA-RC,
+    ! more levels the cell-wise copies of SA_Source_Blk and SST_Blk, k-energy-coupling, both forms of sst-production and
+    ! sst-dilatation-dissipation included. Wilcox2006 has no evaluation of its sources in the stages. The rotation and curvature correction (SA-RC,
     ! SST-RC) reads terms that Compute_RC_Terms computes for the whole domain inside the block routine, which the cell-wise
     ! copies do not compute: with max-level 0 the stages call the block routine, with max-level > 0 the run is rejected.
     ! SAcomp (the compressibility correction of SA) is not among them: the cell-wise copy calls the correction, but the
@@ -2882,7 +2882,7 @@ contains
       call SST_Source_Cell ( blk % P, blk % r, Mi, Mt, blk % vol, blk % yn, blk % vel_gradient, &
                              blk % rc_term1, blk % rc_term2, blk % dtlocal, blk % dim, &
                              obj_rans%SpalartShur, obj_rans%k_energy_coupling, point_implicit, &
-                             obj_rans%sst_compressible, i, j, k )
+                             obj_rans%sst_compressible, obj_rans%sst_dd, i, j, k )
     end select
 
   end subroutine Source_Cell
@@ -3064,7 +3064,7 @@ contains
   !> constants with the original statement by statement (verify_copies.py); compiled in another context, the copy may
   !> differ from the loop in the last bit, so the one-level stage calls the block routine.
   subroutine SST_Source_Cell ( Prim, Res, M, Mt, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, &
-                               k_energy_coupling, point_implicit, compressible, i, j, k )
+                               k_energy_coupling, point_implicit, compressible, dd, i, j, k )
     use MOSE_Base_Types_m
     use MOSE_Global_m
     use FLINT_Lib_Thermodynamic
@@ -3088,8 +3088,10 @@ contains
   cr1 = 1.d0, &
   cr2 = 2.d0, &
   cr3 = 1.d0
+    real(R8), parameter :: dd_xi_w = 2d0, dd_Mt0_w = 0.25d0, dd_xi_z = 0.75d0, dd_Mt0_z = 0.2d0, dd_L_z = 0.66d0
     integer, intent(in) :: n(3), i, j, k
     logical, intent(in) :: SpalartShur, k_energy_coupling, point_implicit, compressible
+    integer, intent(in) :: dd   ! dilatation dissipation: 0 none, 1 Wilcox, 2 Zeman (sst-dilatation-dissipation)
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
@@ -3103,6 +3105,7 @@ contains
     real(R8) :: rho, Rgas, mil, kap, ome, dist, Gradvel(3,3), Divel, Sij(3,3), S, Wij(3,3), mi_t, F(2)
     real(R8) :: vort(3), O, D, rtilde, frot, fr1
     real(R8) :: Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2), fk, fw
+    real(R8) :: Mach_t, Fdd, beta_star_c, beta_c
 
       ! Local variables
 
@@ -3184,9 +3187,27 @@ contains
       dkDotdw = Dot_Product ( Grad(1,:), Grad(2,:) )
       Diff = 2d0*(1d0-F(1))*rho*sigma_w2/ome*dkDotdw
 
+      ! Dilatation dissipation (sst-dilatation-dissipation; Rumsey, NASA/TM-2009-215705, eqs. 40-43): the destruction
+      ! coefficients become beta* (1 + xi F(Mt)) and beta - beta* xi F(Mt), Mt = sqrt(2k)/a the turbulent Mach number.
+      !   Wilcox (free shear layers): F = (Mt^2 - Mt0^2) H(Mt - Mt0), xi = 2, Mt0 = 0.25
+      !   Zeman (boundary layers):    F = (1 - exp(-((Mt - Mt0)/L)^2)) H(Mt - Mt0), xi = 0.75, Mt0 = 0.2, L = 0.66
+      ! beta - beta* xi F is floored at 0 (Wilcox: Mt > 0.65, beyond the Mt of boundary and shear layers): a negative
+      ! beta would feed omega. With none, Fdd = 0 and the coefficients are beta* and beta exactly.
+      Fdd = 0d0
+      if ( dd > 0 ) then
+        Mach_t = sqrt ( 2d0 * kap ) / f_ss ( Prim(1:nsc,i,j,k), Prim(np,i,j,k), rho, Rgas )
+        if ( dd == 1 ) then
+          if ( Mach_t > dd_Mt0_w ) Fdd = dd_xi_w * ( Mach_t**2 - dd_Mt0_w**2 )
+        else
+          if ( Mach_t > dd_Mt0_z ) Fdd = dd_xi_z * ( 1d0 - exp ( -((Mach_t - dd_Mt0_z) / dd_L_z)**2 ) )
+        end if
+      end if
+      beta_star_c = beta_star * ( 1d0 + Fdd )
+      beta_c = max ( beta - beta_star * Fdd, 0d0 )
+
       ! Dissipation term
-      Diss(1) = beta_star*rho*kap*ome
-      Diss(2) = beta*rho*ome**2
+      Diss(1) = beta_star_c*rho*kap*ome
+      Diss(2) = beta_c*rho*ome**2
 
       ! Source terms
       Source(1) = Prod(1) - Diss(1)
@@ -3208,8 +3229,8 @@ contains
       ! Without the factor (fk = 1) the line does not run
       fk = 1d0 ; fw = 1d0
       if ( point_implicit ) then
-        fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
-        fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
+        fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star_c * ome )
+        fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta_c * ome )
         if ( k_energy_coupling ) Res(np,i,j,k) = Res(np,i,j,k) + ( 1d0 - fk ) * Res(nt,i,j,k)
         Res(nt,  i,j,k) = Res(nt,  i,j,k) * fk
         Res(nt+1,i,j,k) = Res(nt+1,i,j,k) * fw

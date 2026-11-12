@@ -216,7 +216,7 @@ the run at set-up or at its first macro step with a message
 and, with `max-level` > 0, `SA-RC` and `SST-RC`, whose rotation and curvature terms are a field of the whole domain that
 the cell-wise sources of a level do not compute, and `SAcomp`, whose compressibility correction the stages do not
 evaluate (the single-rate integrator runs it); `SA`,
-`SA-R`, `SST`, `k-energy-coupling` and both forms of `sst-production` run.  An SRM grain (`502`) runs in mode 2, an
+`SA-R`, `SST`, `k-energy-coupling`, both forms of `sst-production` and `sst-dilatation-dissipation` run.  An SRM grain (`502`) runs in mode 2, an
 inflow, and stops the run in mode 1, a wall that blows the products in.  The boundary types `409`, `501` and `506`,
 which MOSE does not apply, stop every run at
 the reading of `bc.txt` ([Boundary Conditions](boundary-conditions.md)).  With `SA`, `SA-R` or `SST` the local step includes a bound of the stiffness of the turbulence
