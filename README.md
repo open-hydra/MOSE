@@ -87,7 +87,7 @@ MOSE/
 │   ├── 1D/            #   1-D test problems
 │   ├── 2D/            #   2-D test problems
 │   └── ...
-├── docs/              # MkDocs documentation source
+├── docs/              # documentation source (Zensical, mkdocs.yml)
 ├── cmake/             # CMake modules
 ├── install.sh         # Build helper script
 └── CMakeLists.txt

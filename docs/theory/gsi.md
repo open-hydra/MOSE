@@ -146,7 +146,7 @@ $$
 
 Thus the implemented melting model represents **phase-change-driven ablation**: the wall temperature is prescribed and the recession/mass flux follows from the energy balance.
 
-**Input parameters** (BC 503 data line): $c_s$, $T_m$, $T_i$, $\Delta h_m$, $q_{\mathrm{rad}}$, $\varepsilon_w$, $Y_{1\ldots N_s}$. All material properties are supplied per boundary, so the model is not tied to a particular wax — any material characterised by a melting point, a latent heat and a solid specific heat can be used.
+**Model parameters**: $c_s$, $T_m$, $T_i$, $\Delta h_m$, $q_{\mathrm{rad}}$, $\varepsilon_w$, $Y_{1\ldots N_s}$. All material properties are given per boundary, so the model is not tied to a particular wax — any material characterised by a melting point, a latent heat and a solid specific heat can be used.
 
 !!! warning "Liquefying fuels: melt flux is not the full regression rate"
     Paraffin-based hybrid fuels regress three to four times faster than classical polymers because the low-viscosity melt layer becomes unstable and sheds droplets into the gas stream — the *entrainment* mechanism. The model above supplies only the mass gasified by the surface energy balance; entrainment of liquid is **not** modelled. For a liquefying fuel the predicted regression rate is therefore a lower bound, and the model is best read as the thermal part of the problem.
@@ -294,27 +294,25 @@ T_w = T_{\mathrm{af}},
 \omega_s = \dot m\,Y_{s,\mathrm{af}}.
 $$
 
-| Symbol | Input | Description |
-|---|---|---|
-| $T_{\mathrm{af}}$ | `T_af` | adiabatic flame temperature of the propellant, imposed as the wall temperature |
-| $a$ | `a` | burn-rate coefficient, as a **mass flux** in kg/(m²·s) |
-| $n$ | `n` | pressure exponent |
-| $p_{\mathrm{ref}}$ | `p_ref` | reference pressure at which $a$ is quoted |
-| $Y_{s,\mathrm{af}}$ | `[massf_1 … massf_ns]` | mass fractions of the combustion products |
+| Symbol | Description |
+|---|---|
+| $T_{\mathrm{af}}$ | adiabatic flame temperature of the propellant, imposed as the wall temperature |
+| $a$ | burn-rate coefficient, as a **mass flux** in kg/(m²·s) |
+| $n$ | pressure exponent |
+| $p_{\mathrm{ref}}$ | reference pressure at which $a$ is quoted |
+| $Y_{s,\mathrm{af}}$ | mass fractions of the combustion products |
 
 !!! warning "The coefficient is a mass flux, not a linear rate"
-    Burn-rate data is normally tabulated as a *linear* rate $\dot r = a_r\,p^n$ in mm/s. The input expected here is $a = \rho_p\,a_r$, evaluated at $p_{\mathrm{ref}}$ and expressed in kg/(m²·s). The grain density is **not** applied internally — `rho_grain` is read from the data line but never used — so supplying a linear coefficient underestimates the injected mass by three orders of magnitude.
+    Burn-rate data is normally tabulated as a *linear* rate $\dot r = a_r\,p^n$ in mm/s. The coefficient of the model is $a = \rho_p\,a_r$, evaluated at $p_{\mathrm{ref}}$ and expressed in kg/(m²·s). The grain density is **not** applied by the model, so a linear coefficient in its place underestimates the injected mass by three orders of magnitude.
 
 Unlike the gasifying surfaces, whose wall composition is inherited from the adjacent cell under the boundary-layer assumption, the grain surface imposes the **product composition** on the wall state, and the wall transport properties used for the conductive flux are evaluated from it. This is the physically right choice here: the gas at a burning grain surface *is* the flame product mixture.
 
 !!! note "Enthalpy of the injected products"
     The energy flux returns to the gas the enthalpy the products carry,
     $\dot m\,h_{\mathrm{af}}$ with $h_{\mathrm{af}} = \sum_s Y_{s,\mathrm{af}}\,h_s(T_{\mathrm{af}})$,
-    evaluated against the thermodynamic tables at the flame temperature. It is *not*
-    read from the boundary-condition file: earlier versions took it from an ATLAS
-    field that was later dropped, leaving it at zero and injecting the propellant gas
-    cold — the dominant term in the surface energy flux, silently absent. Deriving it
-    from $T_{\mathrm{af}}$ and the product composition removes the input entirely.
+    evaluated against the thermodynamic tables at the flame temperature: it follows
+    from $T_{\mathrm{af}}$ and the product composition, and is the dominant term of the
+    surface energy flux.
 
 ---
 

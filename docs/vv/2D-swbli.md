@@ -11,7 +11,7 @@ The case is treated in three stages, in the order in which the questions arise:
 **References**: Schulein experimental dataset (as distributed with this case), Wind-US and SU2 reference solutions, and an OpenFOAM companion case (`test/2D/viscous/swbli/{SA,SST}/OPENFOAM`). Every MOSE and OpenFOAM wall solution shown on this page is stored in `test/2D/viscous/swbli/{SA,SST}/reference`, with the inputs and the procedure to reproduce it in the case README.
 
 <figure>
-  {% include "vv/images/SWBLI-field.svg" %}
+  --8<-- "docs/vv/images/SWBLI-field.svg"
 </figure>
 
 ---
@@ -84,7 +84,7 @@ The published reference solutions come from different codes, on different meshes
 
 Two entries need a note.
 
-- **SST production.** "SST" names a family of models. MOSE's default production is $\mu_t S^2$ (NASA TMR's SST-2003m); OpenFOAM's `kOmegaSST` keeps the dilatation terms of $\tau_{ij}\,\partial u_i/\partial x_j$. MOSE carries both, and runs the compressible one here so that the two codes solve the same equations ([Compressible production](../theory/turbulence.md#compressible-production-sst-production)).
+- **SST production.** "SST" names a family of models. MOSE's default production is $\mu_t S^2$ (NASA TMR's SST-2003m); OpenFOAM's `kOmegaSST` keeps the dilatation terms of $\tau_{ij}\,\partial u_i/\partial x_j$. MOSE carries both, and runs the compressible one here so that the two codes solve the same equations ([Compressible production](../theory/turbulence.md#compressible-production)).
 - **$\omega$ wall condition.** On this wall-resolved mesh ($y^+ \approx 0.3$) both codes use the asymptotic value $6\nu_w/(\beta_1 y_c^2) = 80\,\nu_w/y_c^2$, with $y_c$ the wall distance of the first cell centre. MOSE imposes it on the wall **face** and solves the wall-adjacent cell; OpenFOAM's standard `omegaWallFunction` would instead **fix** the wall-adjacent cell to that value. The OpenFOAM case therefore replaces it with a `codedFixedValue` that applies MOSE's face condition ([Wall boundary conditions](../theory/turbulence.md#wall-boundary-conditions)).
 
 Both codes take the Eucken conductivity that OpenFOAM's Sutherland transport implies, $\kappa = \mu\,C_v(1.32 + 1.77\,R/C_v)$, i.e. $Pr = 0.69$, so the thermal transport matches as well. With these settings the two codes solve the same equations on the same grid, and only the discretisation differs.
@@ -94,7 +94,7 @@ Both solutions are converged in the sense that matters: separation and reattachm
 ### Wall pressure
 
 <figure>
-  {% include "vv/images/SWBLI-pw-sst-openfoam.svg" %}
+  --8<-- "docs/vv/images/SWBLI-pw-sst-openfoam.svg"
   Wall pressure $p_w / p_\infty$, SST. MOSE (orange) and OpenFOAM (aqua).
 </figure>
 
@@ -105,12 +105,12 @@ The pressure field also carries the shock system. The incident shock arrives at 
 ### Skin friction
 
 <figure>
-  {% include "vv/images/SWBLI-cf-sa-openfoam.svg" %}
+  --8<-- "docs/vv/images/SWBLI-cf-sa-openfoam.svg"
   $C_f$ , SA model.
 </figure>
 
 <figure>
-  {% include "vv/images/SWBLI-cf-sst-openfoam.svg" %}
+  --8<-- "docs/vv/images/SWBLI-cf-sst-openfoam.svg"
   $C_f$, SST model.
 </figure>
 
@@ -195,12 +195,12 @@ For SA the four codes agree within 5.3-7.4 mm. For SST, MOSE and OpenFOAM solvin
 With the numerics verified, the solution is compared with the reference data. MOSE and OpenFOAM are shown in the verification configuration (SST: compressible production, asymptotic $\omega$ wall condition on the wall face). The [NPARC Alliance archive](https://www.grc.nasa.gov/www/wind/valid/m5swbli/m5swbli.html) of this case gives the Wind-US models as SPALART and SST, without their variants. The SU2 curves are the SA-neg and SST-2003m solutions of the [SU2 validation study](https://su2code.github.io/vandv/swbli/) of this case, whose mesh script is `test/2D/viscous/swbli/SST/reference/su2mesh.geo`; the SU2 files hold only $x$ and $C_f$.
 
 <figure>
-  {% include "vv/images/SWBLI-cf-sst-validation.svg" %}
+  --8<-- "docs/vv/images/SWBLI-cf-sst-validation.svg"
   Skin friction $C_f$, SST model: MOSE (orange) and OpenFOAM (aqua) against Schulein (circles) and Wind-US (blue).
 </figure>
 
 <figure>
-  {% include "vv/images/SWBLI-cf-sa-validation.svg" %}
+  --8<-- "docs/vv/images/SWBLI-cf-sa-validation.svg"
   Skin friction $C_f$, SA model: MOSE (orange) and OpenFOAM (aqua) against Schulein (circles) and Wind-US (blue).
 </figure>
 
@@ -216,7 +216,7 @@ On a wall-resolved mesh the $\omega$ wall condition (SST) can take two forms, an
 - **Menter practical**, $60\nu/(\beta_1 y^2) = 800\,\nu/y^2$ - ten times larger by construction, a robustness device for meshes that do *not* resolve the sublayer; it damps near-wall turbulence more than the resolved limit warrants.
 
 <figure>
-  {% include "vv/images/SWBLI-cf-sst-omegaBC-mose.svg" %}
+  --8<-- "docs/vv/images/SWBLI-cf-sst-omegaBC-mose.svg"
   Effect of the $\omega$ wall condition in MOSE: two runs on the same grid with the verification setup identical except for the wall condition.
 </figure>
 
@@ -228,13 +228,13 @@ On this resolved mesh the asymptotic form is the theoretically correct condition
 
 ## Effect of the SST production form in MOSE
 
-MOSE carries two forms of the SST production term through the `sst-production` input option ([Compressible production](../theory/turbulence.md#compressible-production-sst-production)):
+MOSE carries two forms of the SST production term through the `sst-production` input option ([Compressible production](../theory/turbulence.md#compressible-production)):
 
 - **Incompressible** (default), $P_k = \mu_t S^2$ - NASA TMR's SST-2003m, which drops the dilatation terms.
 - **Compressible**, $P_k = \tau_{ij}\,\partial u_i/\partial x_j$ - the exact production, which keeps $-\tfrac23\mu_t(\nabla\!\cdot\!\mathbf{v})^2$ and $-\tfrac23\rho k\,\nabla\!\cdot\!\mathbf{v}$, with the dilatation terms arranged as in OpenFOAM's `kOmegaSST`: the limiter $10\,\beta^\ast\rho\,\omega k$ acts on the deviatoric part $\mu_t[S^2 - \tfrac23(\nabla\!\cdot\!\mathbf{v})^2]$ only, and $-\tfrac23\rho k\,\nabla\!\cdot\!\mathbf{v}$ ($k$ equation) and $-\tfrac23\gamma\rho\omega\,\nabla\!\cdot\!\mathbf{v}$ ($\omega$ equation) are added outside it. NASA TMR's SST-2003e limits the whole production and takes $\gamma/\nu_t$ times the limited value as the production of $\omega$, whose term in $\rho k\,\nabla\!\cdot\!\mathbf{v}$, below the limiter, is $-\tfrac23\gamma\rho(k/\nu_t)\,\nabla\!\cdot\!\mathbf{v}$. MOSE's compressible form and TMR's SST-2003e coincide where $\nabla\!\cdot\!\mathbf{v} = 0$, and elsewhere where the production of neither reaches the limiter and $\mu_t = \rho k/\omega$ ($a_1\omega \ge S F_2$).
 
 <figure>
-  {% include "vv/images/SWBLI-cf-sst-production-mose.svg" %}
+  --8<-- "docs/vv/images/SWBLI-cf-sst-production-mose.svg"
   Effect of the SST production form in MOSE: two runs on the same grid with the verification setup identical except for the production term.
 </figure>
 

@@ -115,11 +115,11 @@ Temperature and CH$_4$ mass-fraction profiles at $t = 50, 100, 150, 200$ ms.
 Solid lines are MOSE; open circles are the Cantera low-Mach reference.
 
 <figure>
-  {% include "vv/images/diffusion_T.svg" %}
+  --8<-- "docs/vv/images/diffusion_T.svg"
 </figure>
 
 <figure>
-  {% include "vv/images/diffusion_CH4.svg" %}
+  --8<-- "docs/vv/images/diffusion_CH4.svg"
 </figure>
 
 The reference markers sit on the MOSE curves at every time and every location —

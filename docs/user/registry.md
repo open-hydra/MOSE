@@ -54,16 +54,16 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 | vnn | 0.3 | > 0 |  no | taken | Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62; at most 0.5 in a Navier-Stokes run with the multirate integrator on ([MOSE-Multirate] enabled = .true., max-level > 0 and nonlocal-cfl = redo, levels = recompute and no fixed-macro-step)) |
 | cfl-rise-threshold | 0 | >= 0 |  no | taken | CFL rise threshold |
 | time-accurate | .false. | logical | yes | fixed | Time accurate switch |
-| integration-variables | cons | cons, prim, prec |  no | fixed | Integration variables (cons/prim/prec) |
+| integration-variables | cons | cons, prim, prec |  no | fixed | Integration variables: cons, prim (linearised primitive update) or prec (Weiss-Smith preconditioning; steady runs, with HLLC-PC) |
 | irs | .false. | logical |  no | taken | Implicit Residual Smoothing (steady runs only; a run started without it cannot switch it on) |
 | irs-beta | 0.0 | >= 0 |  no | taken | IRS beta parameter (> 0 also enables IRS; steady runs only) |
 | irs-variables | flow | flow, all |  no | taken | Residuals smoothed by IRS: flow (species, momentum, energy) or all (also the RANS, soot and passive-scalar equations; for Spalart-Allmaras: the k-omega models diverge with all) |
-| preconditioning-Uref | 0.0 | >= 0 |  no | taken | Reference velocity for preconditioning |
-| preconditioning-Mach | 0.0 | >= 0 |  no | taken | Mach target for preconditioning |
-| preconditioning-eps-min | 0.05 | in (0, 1) |  no | taken | Low-Mach cutoff for Ur |
-| preconditioning-Ur-min | 0.0 | >= 0 |  no | taken | Floor on Ur [m/s] |
-| preconditioning-Ur-factor | 1.0 | > 0 |  no | taken | Weiss-Smith multiplicative factor |
-| preconditioning-Ur-smooth | 0 | >= 0 |  no | taken | Ur max-smoothing passes |
+| preconditioning-Uref | 0.0 | >= 0 |  no | taken | Uniform Ur [m/s], a where the flow speed exceeds it, no viscous floor; 0: not used |
+| preconditioning-Mach | 0.0 | >= 0 |  no | taken | Ur that gives this preconditioned Mach number, a where the flow is faster; 0: not used |
+| preconditioning-eps-min | 0.05 | in (0, 1) |  no | taken | Floor of Ur as a fraction of a: keep it below the Mach number of the flow (about M/10) |
+| preconditioning-Ur-min | 0.0 | >= 0 |  no | taken | Floor on Ur [m/s], in every mode |
+| preconditioning-Ur-factor | 1.0 | > 0 |  no | taken | Ur = factor times the flow speed in the default (Weiss-Smith) mode |
+| preconditioning-Ur-smooth | 0 | >= 0 |  no | taken | Passes of max-smoothing of Ur over the face neighbours |
 | space-reconstruction |  | MUSCL, first-order | yes | fixed | Space reconstruction method |
 | flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | fixed | Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order) |
 | diffusive-metric | stencil | stencil, mean |  no | fixed | Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the k faces of type 200 for the linear fields that they allow) except at the chimera faces (102), which take the inverse of the mean of the inverse metrics of the two cells with every value, and at the symmetry faces with one cell across them, the walls 502 and the walls 503-505 while they ablate, which take the metric of the cell; mean takes the mean of the two metrics (the faces between blocks and of type 200 the inverse of the mean of the inverse metrics), overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r and does not converge next to a symmetry plane (300) that bounds a sector of a polar mesh |

@@ -194,29 +194,29 @@ uncertainty $U$, CFL3D and the second code on the five grids of the TMR. Right: 
 on the three grids, CFL3D and the second code on the 545 × 385 grid.
 
 <figure>
-  {% include "vv/images/flat-plate-tmr-sa.svg" %}
+  --8<-- "docs/vv/images/flat-plate-tmr-sa.svg"
   Spalart–Allmaras
 </figure>
 
 <figure>
-  {% include "vv/images/flat-plate-tmr-sst.svg" %}
+  --8<-- "docs/vv/images/flat-plate-tmr-sst.svg"
   SST (TMR data: SST-Vm)
 </figure>
 
 <figure>
-  {% include "vv/images/flat-plate-tmr-wilcox2006.svg" %}
+  --8<-- "docs/vv/images/flat-plate-tmr-wilcox2006.svg"
   Wilcox 2006 (TMR data: Wilcox2006-klim-m)
 </figure>
 
 <figure>
-  {% include "vv/images/flat-plate-tmr-ssglrr.svg" %}
+  --8<-- "docs/vv/images/flat-plate-tmr-ssglrr.svg"
   SSG/LRR-ω (TMR data: SSGLRR-RSM-w2012, CFL3D and TAU)
 </figure>
 
 ### SSG/LRR-ω: velocity profile and Reynolds stresses
 
 <figure>
-  {% include "vv/images/flat-plate-tmr-ssglrr-profile.svg" %}
+  --8<-- "docs/vv/images/flat-plate-tmr-ssglrr-profile.svg"
   SSG/LRR-ω on the 137 × 97 grid, the column of cells nearest x = 0.97008 (x = 0.951). Left: u⁺ against
   CFL3D on the 545 × 385 grid at x = 0.97008. Right: the Reynolds stresses in wall units.
 </figure>

@@ -4,8 +4,6 @@
 
 MOSE computes species mass source terms for chemically reacting flows using finite-rate kinetics, accounting for elementary, three-body, and pressure-dependent reactions. The kinetics framework is provided by the [FLINT](https://github.com/MarcoGrossi92/FLINT) library and supports both general (runtime-loaded) and mechanism-specific (hard-coded) evaluation routines.
 
-With `chemistry = finite-rate` the reaction mechanism comes from `INPUT/chemistry-info.txt` (its name, the reactions and their types) and its rate tables (`INPUT/chemistry-*.dat`), with the phase prefix in a multi-phase run. Without `chemistry-info.txt` MOSE stops at the start with a message that names the file: FLINT then reads no rate table, and it answers every evaluation of the source terms with its bail-out value, which is not a rate. With `frozen` and `equilibrium` the file is not needed.
-
 ---
 
 ## Mathematical Formulation
@@ -150,21 +148,12 @@ The four Troe parameters ($a$, $T^*$, $T^{**}$, $T^{***}$) are fitted to experim
 
 The species production rates form a stiff system of ordinary differential equations that must be integrated at each grid cell during operator-split time advancement. MOSE uses the stiff ODE solvers provided by the [OSLO](https://github.com/MarcoGrossi92/OSLO) library:
 
-`ode-solver` of `[MOSE-Chemistry]` selects one of the twenty integrators of OSLO (see the
-[registry](../user/registry.md#mose-chemistry)); the default is `H-radau5`, the Radau IIA method of order 5.
-`cvode` needs OSLO built with SUNDIALS, and `H-dopri5` is explicit, for non-stiff mechanisms only.
+OSLO offers twenty integrators; the default is the Radau IIA method of order 5 of Hairer and Wanner. The explicit
+Dormand–Prince method suits non-stiff mechanisms only.
 
-Each cell integrates its chemistry step from its own state. An integration that the integrator reports as failed
-(a negative return code; with `dodesol` any code but 0), for instance when it needs more steps than `ode-max-steps`
-allows (a bound that the integrators of Hairer and of FATODE take; `cvode` and `dodesol` do not take it) or when it
-refuses its tolerances, does not reach the end of the step: the cell keeps its state, and MOSE stops the
-run at the end of the chemistry of that step, on every thread and every MPI rank together, before any flux reads the
-cell, with exit code 1 and the line `STOP: chemistry integration error (see above)`. One message comes before it:
-the integrator, its return code and what its documentation says the code means, the block (and the grid level in a
-multigrid run), the cell, the chemistry step, the temperature, the pressure and the density of the cell, and the rank
-in an MPI run. Among the cells whose integration failed in the step, the message gives the one of the smallest
-block, then k, j and i, so that it is the same with any number of threads and ranks. No solution of that step is
-written.
+Each cell integrates its chemistry step from its own state. An integration that fails (too many steps, or tolerances
+the integrator refuses) does not reach the end of the step: the cell keeps its state and the run stops before any flux
+reads it ([Running MOSE](../user/using.md#logging-and-diagnostics)).
 
 ---
 

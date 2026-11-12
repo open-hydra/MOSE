@@ -81,7 +81,7 @@ $$
 Being $C^\infty$ and periodic, the field is represented exactly at the domain edges by the periodic connectivity, so **no boundary error contaminates the order study** — the measured error is purely interior truncation error.
 
 <figure>
-  {% include "vv/images/mms-solution.svg" %}
+  --8<-- "docs/vv/images/mms-solution.svg"
   Manufactured solutions
 </figure>
 
@@ -156,7 +156,7 @@ Every variable converges at close to second order in both norms, confirming that
 the full viscous MUSCL/RK3 discretisation is second-order accurate.
 
 <figure>
-  {% include "vv/images/mms.svg" %}
+  --8<-- "docs/vv/images/mms.svg"
 </figure>
 
 ## References

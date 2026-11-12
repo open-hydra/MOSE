@@ -92,7 +92,7 @@ table `test/2D/viscous/mms/INPUT/transport.dat` (the values of ATLAS GPB with `m
 The coarsest grid of each family, the two blocks in two colours:
 
 <figure>
-  {% include "vv/images/mms-skewed-grids.svg" %}
+  --8<-- "docs/vv/images/mms-skewed-grids.svg"
 </figure>
 
 **Normalised $L_2$ error (%) of the full form**
@@ -118,15 +118,15 @@ pair the $L_2$ orders are 0.97 to 1.10 on zigzag, as the note at the top of the
 page explains, and 1.42 to 2.43 on iface.
 
 <figure>
-  {% include "vv/images/mms-skewed-zigzag.svg" %}
+  --8<-- "docs/vv/images/mms-skewed-zigzag.svg"
 </figure>
 
 <figure>
-  {% include "vv/images/mms-skewed-iface.svg" %}
+  --8<-- "docs/vv/images/mms-skewed-iface.svg"
 </figure>
 
 <figure>
-  {% include "vv/images/mms-skewed-iface-walls.svg" %}
+  --8<-- "docs/vv/images/mms-skewed-iface-walls.svg"
 </figure>
 
 ## Running the case

@@ -176,6 +176,22 @@ graph TB
 
 ---
 
+## Documentation
+
+The site is built with [Zensical](https://zensical.org) from `docs/` and `mkdocs.yml`:
+
+```bash
+pip install -r requirements-docs.txt
+zensical serve            # preview at http://localhost:8000
+zensical build --strict   # what CI checks: fails on a broken link or anchor
+```
+
+Write links relative to the page: a link that starts with `/` would leave the published
+site, and CI refuses it. A figure goes inline with a snippet,
+`--8<-- "docs/<path>.svg"`, inside a `<figure>`, so it follows the light and dark themes.
+`docs/user/registry.md` is written by `./bin/DocGen`, and the figure of the home page by
+`docs/images/home-hero.py`.
+
 ## Pull Request Checklist
 
 Before submitting a PR, please verify:

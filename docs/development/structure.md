@@ -12,7 +12,7 @@ MOSE/
 ├── CMakeLists.txt          # Top-level CMake build
 ├── CMakePresets.json        # Developer presets (compilers, paths)
 ├── install.sh               # Build / compile / update helper
-├── mkdocs.yml               # Documentation site configuration
+├── mkdocs.yml               # Documentation site configuration (Zensical)
 │
 ├── src/
 │   ├── app/                 # Executables
@@ -49,7 +49,7 @@ MOSE/
 │   ├── 3D/                  # 3-D cases
 │   └── common/              # Shared thermodynamic databases
 │
-├── docs/                    # MkDocs documentation source
+├── docs/                    # This documentation (Zensical, mkdocs.yml)
 ├── cmake/                   # CMake modules (flags, OpenMP, etc.)
 ├── bin/                     # Built executables (MOSE, DocGen)
 └── build/                   # Build artefacts
