@@ -76,6 +76,18 @@ contains
       error stop ( 'Error: sst-production must be "incompressible" or "compressible".' )
     end select
 
+    ! SST dilatation dissipation (Lib_SST, SST_Blk): none, Wilcox (free shear layers) or Zeman (boundary layers)
+    select case ( trim(obj_rans%sst_dilatation_dissipation) )
+    case ( 'none' )
+      obj_rans%sst_dd = 0
+    case ( 'wilcox' )
+      obj_rans%sst_dd = 1
+    case ( 'zeman' )
+      obj_rans%sst_dd = 2
+    case default
+      error stop ( 'Error: sst-dilatation-dissipation must be "none", "wilcox" or "zeman".' )
+    end select
+
     obj_rans%description = 'RANS model: '//trim(obj_rans%model)
 
     ! Setting RANS or NS model

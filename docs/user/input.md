@@ -215,7 +215,7 @@ the run at set-up or at its first macro step with a message
 `[MOSE-Multirate] <item>` and a non-zero exit code: among them `Wilcox2006`, whose sources the stages do not evaluate,
 and, with `max-level` > 0, `SA-RC` and `SST-RC`, whose rotation and curvature terms are a field of the whole domain that
 the cell-wise sources of a level do not compute (`SAcomp` the set-up of MOSE refuses for both integrators); `SA`,
-`SA-R`, `SST`, `k-energy-coupling` and both forms of `sst-production` run.  An SRM grain (`502`) runs in mode 2, an
+`SA-R`, `SST`, `k-energy-coupling`, both forms of `sst-production` and `sst-dilatation-dissipation` run.  An SRM grain (`502`) runs in mode 2, an
 inflow, and stops the run in mode 1, a wall that blows the products in.  The boundary types `409`, `501` and `506`,
 which MOSE does not apply, stop every run at
 the reading of `bc.txt` ([Boundary Conditions](boundary-conditions.md)).  With `SA`, `SA-R` or `SST` the local step includes a bound of the stiffness of the turbulence
