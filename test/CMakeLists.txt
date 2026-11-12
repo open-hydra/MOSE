@@ -404,6 +404,9 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # the set-up warnings say so.
 # Implicit residual smoothing is a steady-state accelerator: a time-accurate
 # run that asks for it (irs = true or irs-beta > 0) is refused at set-up.
+# Preconditioning: integration-variables = prec in a time-accurate run, and
+# HLLC-PC without prec, are refused at set-up; a steady prec run with HLLC-PC
+# passes it.
 # Block-to-rank assignment from the map that decomposition-map names in INPUT/,
 # on one rank: a map with every block on rank 0, also one written by the mesh
 # decomposer (MDB) itself, gives the bits of the run without it; maps that do
@@ -424,7 +427,7 @@ mose_add_fast_script(OutputFiles fast/output-files "fast;implementation;1D;2D")
 # Riemann solver, schmidt with more than one species and no diffusion table)
 # are made again on the values read.
 mose_add_parts_script(InputChecks fast/input-checks
-    PARTS limiter-defaults irs-time-accurate decomposition-map
+    PARTS limiter-defaults irs-time-accurate prec-scope decomposition-map
     LABELS fast implementation numerics 1D 2D)
 mose_add_parts_script(ExitCodes fast/input-checks
     PARTS exit-codes LABELS validation implementation numerics 1D 2D)
@@ -460,6 +463,17 @@ mose_add_fast_script(PointImplicitSteady 2D/viscous/point-implicit-steady "valid
 # Validation tier: eight runs of 2000 iterations, 155 s of CPU at one thread on
 # a loaded machine (163 s of wall time), hence a TIMEOUT of its own.
 mose_add_fast_script(WedgeAxisStep 2D/viscous/wedge-axis-step "validation;numerics;2D")
+
+# Preconditioning: inviscid flow past a cylinder at Mach 0.01 and 0.001, first
+# order, steady (test/2D/euler/low-mach-cylinder). integration-variables = prec
+# with HLLC-PC converges (the residual falls by two orders), and its Cp field
+# is the same at the two Mach numbers within 2e-3 (the incompressible limit),
+# within 0.3 of potential flow on the front half; cons with HLLC is off by
+# more than 1 in Cp.
+add_test(NAME Preconditioning COMMAND bash -c "./run.sh"
+         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/test/2D/euler/low-mach-cylinder")
+set_tests_properties(Preconditioning PROPERTIES
+    LABELS "validation;numerics;2D" TIMEOUT 900 ENVIRONMENT "${_MOSE_TEST_ENV}")
 if(TEST WedgeAxisStep)
     set_tests_properties(WedgeAxisStep PROPERTIES TIMEOUT 600)
 endif()
@@ -592,6 +606,17 @@ set_tests_properties(RemoteBlocks PROPERTIES LABELS "fast;implementation;unit" T
 add_fortran_executable(muscl_face_bounds_check unit/muscl_face_bounds_check.f90)
 add_test(NAME MusclFaceBounds COMMAND muscl_face_bounds_check 1 18014398509481984 3)
 set_tests_properties(MusclFaceBounds PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
+
+# Preconditioning (PrecTransform): a unit check of the update of
+# integration-variables = prec and prim (Compute_Prim_Residual): the increment
+# of the primitive variables solves Gamma dQ = dU with the Weiss-Smith matrix
+# (Theta = 1/Ur^2 + 1/(cp T); rho_p with prim), for one and three species and
+# Ur from a to 1e-4 a; at Ur = a prec gives the increment of prim. And the
+# reference velocity comp_Ur in its three modes (default, preconditioning-Uref,
+# preconditioning-Mach) with the viscous floor and preconditioning-Ur-min.
+add_fortran_executable(prec_transform_check unit/prec_transform_check.f90)
+add_test(NAME PrecTransform COMMAND prec_transform_check)
+set_tests_properties(PrecTransform PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
 
 # ===========================================================================
 #  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON

@@ -301,6 +301,8 @@ The [Theory Guide](../theory/index.md) names the methods and their parameters; t
 | Method (Theory Guide) | Key | Section |
 |---|---|---|
 | Time scheme: forward Euler, Heun, SSP-RK3 | `time-scheme = euler`, `RK2`, `RK3` (required) | `[MOSE-Numerics]` |
+| Conservative, primitive or preconditioned update | `integration-variables = cons`, `prim`, `prec` | `[MOSE-Numerics]` |
+| Preconditioning: $U_\text{ref}$, target Mach $M_t$, floor $\varepsilon$, factor $f$, $U_{\min}$, smoothing passes $n$ | `preconditioning-Uref`, `-Mach`, `-eps-min`, `-Ur-factor`, `-Ur-min`, `-Ur-smooth` | `[MOSE-Numerics]` |
 | CFL, VNN; CFL ramp over $N$ iterations | `cfl`, `vnn`; `cfl-rise-threshold` | `[MOSE-Numerics]` |
 | Reconstruction (MUSCL, first order) and limiter | `space-reconstruction`, `flux-limiter` | `[MOSE-Numerics]` |
 | Riemann solver; low-Mach cutoff $M_{co}$ | `riemann-solver`; `riemann-options-Mco` | `[MOSE-Numerics]` |
@@ -322,6 +324,11 @@ Notes on these keys:
 
 - `time-scheme` is required: a run without it stops at set-up with `[ERROR] Required parameter not set: time-scheme`.
   The Default column of the registry lists `euler` for it, a placeholder that a required key never uses.
+- `integration-variables = prec` is for steady runs: a time-accurate run with it stops at set-up. `HLLC-PC` needs
+  `prec`, and stops at set-up without it. `prec` with another flux keeps a dissipation scaled with the speed of sound:
+  with `HLLC` the low-Mach cylinder at Mach 0.01 diverges. The modes of $U_r$ take, in this order, `preconditioning-Uref`
+  > 0, then `preconditioning-Mach` > 0, then neither (Weiss–Smith); take `preconditioning-eps-min` about a tenth of the
+  Mach number of the flow ([Time Integration](../theory/time-integration.md#reference-velocity-of-the-preconditioning)).
 - `space-reconstruction = MUSCL` without `flux-limiter` takes van Leer, with a warning; a `flux-limiter` given with
   `first-order` is ignored, with a warning.
 - Without `shock-detector`, `HLLC+Tramel` and `HLLE++` take the Tramel sensor, `HLLC+Chen` and `AUSM+M` that of Chen,
