@@ -81,5 +81,12 @@ continuity check covers every cell precisely because that is now gone.
 
 ## Surface reactions (BC 505)
 
-Not covered here: `GSI_Carbon_Bradley` needs the CO / CO2 / OH / O / H2O / H2 / H
-species set, and no thermodynamic table in `test/common` provides it.
+`carbon`, `carbon-top` and `carbon-o2` run in `gsi/<config>/` on the gas `test/common/CHO-N2-viscous` (the eight
+species of `GSI_Carbon_Bradley` and N2): a column of N2 with H2O and CO2 at 1800 K (endothermic reactions, `q_rad > 0`)
+on both faces, and one of N2 with O2 at 1500 K (exothermic, `q_rad < 0`). `q_rad` is the heat the reactions absorb at the
+initial state, so the balance starts with its root at T0. The reactions consume the oxidisers of the wall cell and the
+products displace them: this column has no steady state, and `verify.py` checks the relations of the wall model at the
+state the solver reached — the rates of `gsi_models.py` (an independent copy of `Lib_GSI.f90`, with the enthalpies of the
+committed `thermo.dat` interpolated as FLINT does) give the reported `mdot` within 1e-11, the surface energy balance
+`q(Tw) = q_rad + q_conv` holds within 1e-11, and its root in `Tw` is the reported one — plus the direction of the blowing
+and a uniform pressure. The drift from the initial state is printed.

@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `AblatingWall` covers the surface reactions of a carbon wall (`505`): three columns on the gas
+  `test/common/CHO-N2-viscous`, N2 with H2O and CO2 at 1800 K on both ends and N2 with O2 at 1500 K, checked by the
+  relations of the wall model at the state reached (the rates of an independent Python copy within 1e-11, the surface
+  energy balance and its root within 1e-11). The surface reactions had no test that ran them. `test/common/CHO-N2-viscous`:
+  the eight species of the surface reactions and N2, written by ATLAS GPB, for the tests of these walls.
 - The key `turbulence` of `[MOSE-Physics]` selects the SSG/LRR-ω Reynolds-stress model of the NASA Turbulence Modeling
   Resource, in four variants: `SSGLRR` (TMR SSGLRR-RSM-w2012), `SSGLRR-SD` (simple diffusion), `SSGLRR-w2019` (with the
   length-scale correction of Eisfeld and Rumsey) and `SSGLRR-w2019-SD`. `Lib_SSGLRR` held the model, but the registry

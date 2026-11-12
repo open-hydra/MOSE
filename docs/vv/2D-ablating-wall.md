@@ -132,6 +132,27 @@ The temperature check is what pins the enthalpy of the injected products: if the
 grain injected its combustion products cold, the column would settle near 485 K
 instead of 1500 K, and the blowing speed would fall by a factor of four.
 
+### Surface reactions of a carbon wall (505)
+
+The `carbon` configurations run the surface reactions of `GSI_Carbon_Bradley` on the gas `test/common/CHO-N2-viscous`
+(O2, O, OH, H, H2, H2O, CO, CO2 and N2), in `gsi/<config>/`, 1000 iterations:
+
+| Case | Gas (mass fractions) | $T_0$ [K] | $q_\mathrm{rad}$ [W/m²] | $\dot m(T_0)$ [kg/m²s] | Face |
+|---|---|---|---|---|:---:|
+| `carbon` | N2 0.8, H2O 0.1, CO2 0.1 | 1800 | 11445.13 (endothermic) | 8.354923 × 10⁻⁴ | 3 |
+| `carbon-top` | the same | 1800 | 11445.13 | 8.354923 × 10⁻⁴ | 4 |
+| `carbon-o2` | N2 0.98, O2 0.02 | 1500 | −5488.90 (exothermic) | 7.166338 × 10⁻⁴ | 3 |
+
+$q_\mathrm{rad}$ is the heat the reactions absorb at the initial state, so the balance starts with its root at $T_0$.
+The reactions consume the oxidisers of the wall cell and the blown products displace them: unlike the columns above,
+this one has **no steady state**. `verify.py` checks the relations of the wall model at the state the solver reached,
+with the wall temperature and pressure of `wall.tec` and the partial densities of the wall cell: the rates of an
+independent copy of the model (`gsi_models.py`) give the reported $\dot m$ within $10^{-11}$ (the 15 printed digits,
+times the sensitivity $E/\mathcal R T_w \le 24$ of the rates), the surface energy balance
+$\sum_s \omega_s h_s(T_w) = q_\mathrm{rad} + q_\mathrm{cond}$ holds within $10^{-11}$, and its root in $T_w$ is the
+reported one; the blowing is directed away from the wall and the pressure uniform. The values at the end of the run are
+in the output of `verify.py` (the drift from $T_0$ and $\dot m(T_0)$ is printed there).
+
 ### Inert surface
 
 The `melting-inert` configuration removes the radiative input and starts the gas
