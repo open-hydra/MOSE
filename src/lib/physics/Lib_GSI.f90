@@ -138,7 +138,8 @@ contains
 
     dotm_H2O = kH2O * sqrt(pi(iH2O))
     dotm_CO2 = kCO2 * sqrt(pi(iCO2))
-    dotm_O2  = (Y_term*k5*pi(iO2))/(1.0d0 + k6*pi(iO2)*Y_term) + k7*pi(iO2)*(1d0-Y_term)
+    ! Two-site form of Nagle and Strickland-Constable: x k5 p/(1 + k6 p) + (1 - x) k7 p, x = Y_term (docs/theory/gsi.md)
+    dotm_O2  = (Y_term*k5*pi(iO2))/(1.0d0 + k6*pi(iO2)) + k7*pi(iO2)*(1d0-Y_term)
     dotm_OH  = kOH*pi(iOH)
     dotm_O   = kO*pi(iO)
     ! Compute source terms

@@ -593,6 +593,14 @@ add_fortran_executable(muscl_face_bounds_check unit/muscl_face_bounds_check.f90)
 add_test(NAME MusclFaceBounds COMMAND muscl_face_bounds_check 1 18014398509481984 3)
 set_tests_properties(MusclFaceBounds PROPERTIES LABELS "fast;numerics;unit" TIMEOUT 60)
 
+# Surface reactions of a carbon wall (GSIBradley): a unit check of GSI_Carbon_Bradley on nine species in another order
+# than the model's: the O2 rate against the two-site form of Nagle and Strickland-Constable at three wall temperatures
+# and O2 pressures (an independent evaluation, within 1e-12), the net mass flux and the reaction heat, every other
+# source 0; and a gas without O2, whose sources stay finite (no division by pO2 = 0).
+add_fortran_executable(gsi_bradley_check unit/gsi_bradley_check.f90)
+add_test(NAME GSIBradley COMMAND gsi_bradley_check)
+set_tests_properties(GSIBradley PROPERTIES LABELS "fast;physics;unit" TIMEOUT 60)
+
 # ===========================================================================
 #  MPI tier (needs-mpi): registered only in builds with USE_MPI=ON
 #  Each test generates its own small multi-block case and launches the solver

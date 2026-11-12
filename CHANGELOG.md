@@ -461,6 +461,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The O2 rate of the surface reactions of a carbon wall (`505`) is the two-site form of Nagle and Strickland-Constable,
+  x k5 p/(1 + k6 p) + (1 - x) k7 p, that `docs/theory/gsi.md` gives: the code had 1 + k6 p x in the denominator, which
+  multiplied the saturating term by (1 + k6 p)/(1 + k6 p x) and overstated the rate 4.69 times at 3000 K and 1 atm of O2,
+  3.42 at 2500 K and 0.1 atm, 1.40 at 2000 K and 0.01 atm, 1.0000 at pO2 1e-4 atm above 2500 K. Eq. (7) of Bianchi and
+  Nasuti (J. Propuls. Power 29(3), 2013), which prints 1 + k6 x, is a misprint by the paper's own Fig. 1a. The other rates
+  do not change. Unit check `GSIBradley`.
 - The wall state of a burning SRM grain (`502`) takes the gas constant of the composition the grain imposes: it took that
   of the gas of the boundary cell, so that its density, and with it the blowing velocity, its momentum and kinetic energy,
   were off by R(cell)/R(products) wherever the cell held another gas (a chamber not yet filled with the products, a

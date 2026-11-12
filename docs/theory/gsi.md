@@ -376,7 +376,7 @@ $$
 \chi=\frac{1}{1+\dfrac{k_8}{k_7\,p_{\mathrm{O_2}}}}
 $$
 
-where $\chi$ is the fraction of the surface covered by the more reactive site type. The first term saturates at high $p_{\mathrm{O_2}}$ (site-limited); the second stays linear.
+where $\chi$ is the fraction of the surface covered by the more reactive site type. The first term saturates at high $p_{\mathrm{O_2}}$ (site-limited); the second stays linear. Bianchi and Nasuti (J. Propuls. Power 29(3), 2013, eq. 7) print $1+k_6\,\chi$ in the denominator; their own Fig. 1a, at 1 atm, follows the form above within about 0.1 % from 1000 to 4000 K and lies up to a factor 4.7 below the printed form (at 3000 K): the print is a misprint. MOSE had $1+k_6\,p_{\mathrm{O_2}}\,\chi$ in the denominator from September 2026 until this correction (`CHANGELOG.md`).
 
 | Coefficient | Expression | Note |
 |---|---|---|
