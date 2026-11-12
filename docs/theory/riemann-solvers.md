@@ -291,11 +291,8 @@ $$
 taken on the left (right) state and on the average of the two with the weights $\sqrt\rho$, and bounded by
 zero, before the star states of HLLC. $U_r$ is the reference velocity of the Weiss–Smith preconditioning, at most
 $a$ ([Time Integration](time-integration.md#reference-velocity-of-the-preconditioning)); where $U_r = a$ the
-speeds are $v_n \mp a$. The solver goes with the preconditioned update, which serves steady runs. It is the only flux that takes $U_r$: with it the dissipation scales with $U_r$, so
-the pressure of a flow at Mach number $M$ fluctuates by $O(M^2)$, the incompressible limit, where a flux scaled with $a$
-gives $O(M)$ ([Time Integration](time-integration.md#preconditioned-update)). Keep the floor fraction $\varepsilon$ below
-the Mach number of the flow (about $M/10$): the floor $\varepsilon a$ of $U_r$ otherwise brings back the dissipation of
-a speed of sound.
+speeds are $v_n \mp a$. The solver needs `integration-variables = prec`, without which MOSE stops at set-up,
+and preconditioned runs are steady.
 
 ### HLLC+Chen (Chen et al., 2020)
 
@@ -684,7 +681,7 @@ HLLC+Tramel balances accuracy, robustness, and cost.
 | **Mixed subsonic/transonic** | HLLC+Tramel, AUSM+M | HLLC+Tramel adaptive; AUSM+M all-speed |
 | **Boundary layers + shocks** | HLLC+Tramel, HLLC+Chen | shock-aware; HLLC+Chen preserves shear |
 | **Very low Mach, time-accurate** | **LMRoe**, SLAU2, HLLC+Chen | flux-only low-Mach fix; time-accurate |
-| **Very low Mach, steady** | HLLC-PC (with the preconditioned update), MiczekRoe, LMRoe | preconditioned / low-Mach; clean convergence |
+| **Very low Mach, steady** | HLLC-PC, MiczekRoe, LMRoe | preconditioned / low-Mach; clean convergence |
 | **Vortex / acoustic-near-field preservation** | LMRoe, HLLC+Chen | removes the $\mathcal{O}(1/M)$ momentum dissipation |
 | **Unsteady shock interaction** | HLLC+Tramel | Shock detection tracks transients |
 | **Emergency (solver divergence)** | HLLE, LLF | Maximum stability; accept extra diffusion |
