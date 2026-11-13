@@ -6,6 +6,26 @@ the governing equations of compressible multi-species flow, the
 finite-volume spatial discretization, Riemann solvers, time-integration
 schemes, turbulence closures, and the thermochemistry framework.
 
+## How this guide is organised
+
+The pages of this guide explain what each part of MOSE does and why: the idea, the main equations and the values the solver
+uses. Where a topic has a longer derivation, a proof or a body of evidence behind it, that material is in a separate **deep
+dive**, linked from the page that needs it. Read the overview first; go to a deep dive when you want to check or extend the
+argument.
+
+| Deep dive | Backs | What it holds |
+|-----------|-------|---------------|
+| [Mesh Geometry and Block Interfaces](numerics-geometry.md) | [Spatial Discretization](numerics.md) | Cell volume, the checks of the cells, the flux of a face between blocks |
+| [Face Gradients and Metrics](numerics-gradients.md) | [Spatial Discretization](numerics.md) | The stencil and the face metric of the viscous fluxes, ghost-cell metrics, chimera faces |
+| [Ghost Cells at Walls and Extrapolation Faces](numerics-ghost-cells.md) | [Spatial Discretization](numerics.md) | The extrapolation rules of each boundary type |
+| [Axisymmetric Wedge and 3-D Sector](numerics-wedge.md) | [Spatial Discretization](numerics.md) | Rotational periodicity, the wedge terms, the sector |
+| [Local Time Step](local-time-step.md) | [Time Integration](time-integration.md#local-time-step) | Where the limits of the time step come from, their proof, and the evidence near the axis, with the limiter and at shocks |
+| [Multirate Method](multirate-method.md) | [Multirate Time Stepping](multirate.md) | The construction of levels and macro step, the non-local CFL condition, the recursion, boundaries, turbulence and MPI |
+| [Multirate Analysis](multirate-analysis.md) | [Multirate Time Stepping](multirate.md) | Proofs of the order, stability and monotonicity |
+| [Turbulence Model Variants](turbulence-variants.md) | [Turbulence Modelling](turbulence.md) | SA variants; SST compressible production, dilatation dissipation, rotation-curvature correction, energy coupling |
+| [Turbulence Numerical Treatment](turbulence-numerics.md) | [Turbulence Modelling](turbulence.md) | Wall ghost cells, cell gradients, wall distance, advance of the source terms |
+| [Surface Models in Detail](gsi-models.md) | [Gas–Surface Interaction](gsi.md) | Energy and mass balances of pyrolysis, solid propellant, surface reactions and the pyrolysing ablator |
+
 <div class="grid cards" markdown>
 
 -   :material-math-integral:{ .lg .middle } __Governing Equations__
@@ -40,11 +60,19 @@ schemes, turbulence closures, and the thermochemistry framework.
 
     [:octicons-arrow-right-24: Riemann solvers](riemann-solvers.md)
 
+-   :material-arrow-expand-horizontal:{ .lg .middle } __Boundary Conditions__
+
+    ---
+
+    The state imposed by outlets, inlets at total conditions and the choked nozzle, and the directions of one cell
+
+    [:octicons-arrow-right-24: Boundary conditions](boundary-conditions.md)
+
 -   :material-timer-outline:{ .lg .middle } __Time Integration__
 
     ---
 
-    SSP Runge–Kutta, CFL/VNN stability, Strang splitting, implicit residual smoothing, multigrid
+    SSP Runge–Kutta, CFL/VNN stability, Strang splitting, implicit residual smoothing, multigrid, multirate local time stepping
 
     [:octicons-arrow-right-24: Time integration](time-integration.md)
 
@@ -103,7 +131,8 @@ pipeline can be summarised as follows:
 | **Governing system** | Multi-species Euler / Navier–Stokes | [Governing Equations](governing-equations.md) |
 | **Spatial discretization** | Cell-centred FVM + MUSCL-limited reconstruction | [Spatial Discretization](numerics.md) |
 | **Interface fluxes** | 14 Riemann solvers (AUSM, HLL, Roe, SLAU, Godunov, Lax–Friedrichs) | [Riemann Solvers](riemann-solvers.md) |
-| **Time marching** | 3-stage SSP RK3, IRS, multigrid | [Time Integration](time-integration.md) |
+| **Boundaries** | Outlets, inlets at total conditions, choked nozzle | [Boundary Conditions](boundary-conditions.md) |
+| **Time marching** | 3-stage SSP RK3, IRS, multigrid, multirate local time stepping | [Time Integration](time-integration.md), [Multirate](multirate.md) |
 | **Turbulence closure** | SA, SST $k$–$\omega$, Wilcox 2006 $k$–$\omega$ | [Turbulence Modelling](turbulence.md) |
 | **Thermochemistry** | Ideal-gas mixture, NASA polynomials | [Thermodynamics](thermo.md) |
 | **Chemistry** | Finite-rate (Arrhenius/Troe) or equilibrium (CEA) | [Kinetics](kinetics.md), [Equilibrium](equilibrium.md) |
