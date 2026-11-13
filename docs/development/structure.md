@@ -41,8 +41,7 @@ MOSE/
 │   ├── FLINT/               # Thermochemistry library (release checked out by the configure)
 │   ├── ORION/               # Structured-grid I/O library (release checked out by the configure)
 │   ├── OSLO/                # ODE solvers, required by FLINT (release checked out by the configure)
-│   └── third_party/         # Git submodules
-│       └── FiNeR/           # INI file parser
+│   └── FiNeR/               # INI file parser (Git submodule, pinned)
 │
 ├── test/                    # Validation test suite
 │   ├── 1D/                  # 1-D shock tube cases
@@ -67,11 +66,11 @@ MOSE/
 | `FLINT` | Thermochemistry (release 2.0 or a later 2.x) |
 | `ORION` | Structured multi-block grid I/O (release 2.1 or a later 2.x) |
 | `OSLO` | ODE solvers, required by FLINT (release 1.1 or a later 1.x) |
-| `FiNeR` | INI file parser (submodule) |
+| `FiNeR` | INI file parser (submodule `lib/FiNeR`, v2.3.0) |
 
 ORION, OSLO and FLINT are required by release range with `semver_dependency` (`cmake/SemVerDeps.cmake`): the configure
 checks the newest release that satisfies the range out in `lib/` and records it in `deps.lock` (see
-[Installation](../getting-started/installation.md#orion-oslo-and-flint)).
+[Installation](../getting-started/installation.md#orion-oslo-and-flint) and [Versioning](versioning.md)).
 
 Optional compile-time dependencies are enabled via CMake flags; see [Key CMake options](#key-cmake-options) in the Build System section.
 `ExactPack` (Python) is used only for V&V post-processing and is never linked at compile time.
@@ -475,7 +474,9 @@ External library paths are set via CMake cache variables or the
 | `FETCHCONTENT_SOURCE_DIR_FLINT` | empty: the release, in `lib/FLINT/` | FLINT thermochemistry |
 | `FETCHCONTENT_SOURCE_DIR_OSLO` | empty: the release, in `lib/OSLO/` | OSLO ODE solvers |
 | `SEMVER_UPDATE` | `OFF` | `ALL`: select the newest releases of the three again, once |
-| `FINER_PATH` | `lib/third_party/FiNeR/` | FiNeR INI parser |
+| `FETCHCONTENT_SOURCE_DIR_FINER` | empty: the submodule `lib/FiNeR/` | FiNeR INI parser |
+| `MOSE_FINER_DEPS` | `FREE` | FiNeR's own libraries: `FREE` (their default branches) or `BACKUP` (the releases MOSE is tested with) |
+| `MOSE_PIN_CHECK` | `FATAL_ERROR` | a library that is not the release MOSE requires: `FATAL_ERROR` or `WARNING` |
 
 ---
 

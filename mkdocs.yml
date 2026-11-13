@@ -157,6 +157,7 @@ nav:
     - Code Structure: development/structure.md
     - Testing: development/testing.md
     - Contributing: development/contributing.md
+    - Versioning: development/versioning.md
     - Performance Notes: development/performance_notes.md
 
   - About:

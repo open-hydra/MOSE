@@ -38,8 +38,8 @@ cd MOSE
 # 2. Build in debug mode
 ./install.sh build --compilers=gnu
 
-# 3. (Optional) Update submodules to latest
-./install.sh update --remote
+# 3. (Optional) Sync the submodule lib/FiNeR to the commit MOSE records
+./install.sh update
 
 # 4. Iterative recompilation
 ./install.sh compile

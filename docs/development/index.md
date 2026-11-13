@@ -34,4 +34,13 @@ the testing infrastructure.
 
     [:octicons-arrow-right-24: Contributing](contributing.md)
 
+-   :material-tag-outline:{ .lg .middle } __Versioning__
+
+    ---
+
+    The releases MOSE requires of its libraries, which release a build
+    gets, and how a release is made
+
+    [:octicons-arrow-right-24: Versioning](versioning.md)
+
 </div>
