@@ -294,7 +294,7 @@ At run time `Assign_Setup` reads `turbulence` from the input file and, in
 ### Wall distance
 
 `Wall_Distance_Blk` (`numerics/space/Lib_Metrics.f90`) gives every cell its distance to the wall surface
-that [Turbulence](../theory/turbulence.md#wall-distance) defines, with `Bilinear_Face_Distance` for the
+that [Turbulence](../theory/turbulence-numerics.md#wall-distance) defines, with `Bilinear_Face_Distance` for the
 certified minimum and `Wall_Images` for the periodic images; $\mathbf{x}(s,t)$, $\mathbf{a}$, $\mathbf{b}$ and the
 twist $\mathbf{T}$ of a wall face are those of that page. The distance to a wall face is its minimum over the face,
 in one of two ways:
@@ -329,7 +329,7 @@ in one of two ways:
   corner are plane or are treated the same way. The coordinates of the face
   relative to its first corner pass through `VOLATILE` variables, so that the
   compiler cannot rewrite them in terms of the coordinates themselves (as
-  for the [cell volume](../theory/numerics.md#cell-volume)).
+  for the [cell volume](../theory/numerics-geometry.md#cell-volume)).
 - A k-d tree over the face centres, with the radius of each face, finds the
   nearest face: the distance is computed only for the faces whose centre lies
   within the best distance found so far plus their radius. When some face takes

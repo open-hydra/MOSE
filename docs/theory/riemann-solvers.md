@@ -293,7 +293,9 @@ zero, before the star states of HLLC. $U_r$ is the reference velocity of the Wei
 $a$ ([Time Integration](time-integration.md#reference-velocity-of-the-preconditioning)); where $U_r = a$ the
 speeds are $v_n \mp a$. The solver goes with the preconditioned update, which serves steady runs. It is the only flux that takes $U_r$: with it the dissipation scales with $U_r$, so
 the pressure of a flow at Mach number $M$ fluctuates by $O(M^2)$, the incompressible limit, where a flux scaled with $a$
-gives $O(M)$ ([Time Integration](time-integration.md#preconditioned-update)). Keep the floor fraction $\varepsilon$ below
+gives $O(M)$ ([Time Integration](time-integration.md#preconditioned-update)).
+
+Keep the floor fraction $\varepsilon$ below
 the Mach number of the flow (about $M/10$): the floor $\varepsilon a$ of $U_r$ otherwise brings back the dissipation of
 a speed of sound.
 
