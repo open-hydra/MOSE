@@ -41,9 +41,13 @@ where the components are:
 | Species densities | $\rho_s$ ($s=1,\ldots,N_s$) | Partial mass density of each species |
 | Velocity | $u, v, w$ | Cartesian velocity components |
 | Pressure | $p$ | Thermodynamic pressure |
-| Soot variable | $f_\text{soot}$ | Soot volume fraction or total soot density (optional) |
-| Passive scalar | $f_\text{pass}$ | Inert tracer field for mixing studies (optional) |
+| Soot variable | $f_\text{soot}$ | Soot volume fraction or total soot density (optional, under development) |
+| Passive scalar | $f_\text{pass}$ | Inert tracer field for mixing studies (optional, under development) |
 | RANS variables | $\mathbf{q}_\text{rans}$ | Turbulence model variables (optional) |
+
+!!! warning "Under development"
+    The soot and passive-scalar transport is under development. The soot models are not validated and no test covers
+    them; passive scalars have no input key yet.
 
 **Soot Model Variables (if active):**
   
@@ -216,6 +220,6 @@ turbulence, and soot formation. These are summarized below:
 |--------|-------------------|----------|
 | Chemical kinetics | Species partial densities $\rho_s$ | Strang operator splitting; finite-rate or equilibrium chemistry |
 | Turbulence | RANS variables $k, \omega, \tilde{\nu}$, etc. | Explicit source in spatial residual; wall-bounded corrections |
-| Soot transport | Soot volume fraction $f_\text{soot}$ | Explicit source; includes nucleation, surface reactions, coagulation |
+| Soot transport (under development) | Soot volume fraction $f_\text{soot}$ | Explicit source; includes nucleation, surface reactions, coagulation |
 
 ---

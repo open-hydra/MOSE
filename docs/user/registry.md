@@ -104,7 +104,7 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 | equations |  | euler , navier-stokes | yes | fixed | Gas dynamics equations |
 | turbulence | none | SA, SA-R, SA-RC, SAcomp, SST, SST-RC, Wilcox2006, SSGLRR, SSGLRR-SD, SSGLRR-w2019, SSGLRR-w2019-SD, none |  no | fixed | RANS turbulence model |
 | chemistry | frozen | frozen, finite-rate, equilibrium |  no | fixed | Chemistry model |
-| soot-generation | none | LL91, LIN, none |  no | fixed | Soot generation model |
+| soot-generation | none | LL91, LIN, none |  no | fixed | Soot generation model (under development: not validated) |
 | rotational-frame | none | rigid-body, none |  no | fixed | Rotational frame model |
 | schmidt | 0.0 | >= 0 |  no | taken | Laminar Schmidt number |
 | prandtl | 0.0 | >= 0 |  no | taken | Laminar Prandtl number |

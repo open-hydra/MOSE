@@ -19,7 +19,7 @@ MOSE is an open-source compressible flow solver for the Euler and Navier–Stoke
 - **Compressible Euler & Navier–Stokes** — steady-state and time-accurate computations on multi-block structured grids.
 - **High-order numerics** — MUSCL reconstruction with multiple flux limiters and Riemann solvers.
 - **Turbulence modeling** — RANS closures: Spalart–Allmaras (with rotation/curvature corrections), Menter SST, Wilcox k-ω 2006, SSGLRR, QCR2000.
-- **Finite-rate chemistry & soot** — multi-species reacting flows with finite-rate kinetics or chemical equilibrium (NASA CEA). Soot formation models included.
+- **Finite-rate & equilibrium chemistry** — multi-species reacting flows with finite-rate kinetics or chemical equilibrium (NASA CEA).
 - **Parallel execution** — shared-memory parallelism via OpenMP; MPI support for distributed-memory runs.
 - **Flexible I/O** — solution output in Tecplot (ASCII and binary) and VTK formats. Point probes for time-history recording. Restart capability.
 

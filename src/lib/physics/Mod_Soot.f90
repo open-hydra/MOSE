@@ -15,6 +15,9 @@ contains
     implicit none
     integer :: i
 
+    obj_soot%warning_message = 'none'
+    obj_soot%error_message   = 'none'
+
     if (trim(obj_soot%model) == 'none') then
       obj_soot%enabled = .false.
       obj_soot%description = 'Soot model disabled'
@@ -29,11 +32,14 @@ contains
       obj_soot%LIN = .true.
       obj_soot%description = 'Linear model for soot formation and oxidation'
     else
-      obj_soot%error_message = 'Unknown soot model: '//trim(obj_soot%model)
+      obj_soot%error_message = '[ERROR] Unknown soot model: '//trim(obj_soot%model)
     end if
-    
+
     nsoot = 0
     if (.not.obj_soot%enabled) return
+
+    obj_soot%warning_message = '[WARNING] The soot models (soot-generation = LL91, LIN) are under development: '// &
+      'they are not validated and no test covers them. Do not rely on their results.'
 
     ! inizializzo
     i_O2   = -1
@@ -68,7 +74,16 @@ contains
     else
       nsoot = 1
     end if
-    
+
+    ! Species the rates and the sources read: without them the indices are -1 and the source terms read out of bounds
+    if (i_C2H2 == -1 .or. i_O2 == -1) then
+      obj_soot%error_message = '[ERROR] soot-generation = '//trim(obj_soot%model)// &
+        ' needs the species C2H2 and O2 in the thermodynamic data'
+    else if (nsoot == 1 .and. (i_H2 == -1 .or. i_CO == -1)) then
+      obj_soot%error_message = '[ERROR] soot-generation = '//trim(obj_soot%model)// &
+        ' with the species C(gr) needs the species H2 and CO in the thermodynamic data'
+    end if
+
   end subroutine Setup_Soot
 
 
@@ -200,19 +215,36 @@ contains
     ! Constants / model parameters
     real(R8), parameter :: CT = 0.55_R8        ! thermophoretic coeff
     ! Local
-    real(R8) :: Ys, Nvol, Thermo
-    
-    ! Retrieve soot scalars
-    Ys   = prim(i_CS)/rho ! adim
-    Nvol = prim(nc  )     ! [#/m^3]
+    real(R8) :: Ys, Nvol, Thermo, Fmass
 
-    ! Molecular diffusive flux of soot is already computed
-    ! Thermophoretic mass flux:
+    ! Retrieve soot scalars: with the species C(gr) (nsoot = 1) the soot mass is that species, whose molecular
+    ! diffusive flux is already in flux(i_CS); otherwise (nsoot = 2) it is the variable nc, which has no molecular flux
+    if (nsoot == 1) then
+      Ys   = prim(i_CS)/rho ! adim
+      Nvol = prim(nc  )     ! [#/m^3]
+    else
+      Ys   = prim(nc  )/rho ! adim
+      Nvol = prim(nc+1)     ! [#/m^3]
+    end if
+
+    ! Thermophoretic mass flux, from the molecular viscosity only (the drift is a molecular effect, not a turbulent one)
     Thermo = -CT * (mu * Ys) * dot_product(T_gradient, normal)/T * area ! [kg/s]
-    flux(i_CS) = flux(i_CS) + Thermo
+    if (nsoot == 1) then
+      flux(i_CS) = flux(i_CS) + Thermo
+      Fmass = flux(i_CS)
+    else
+      flux(nc) = flux(nc) + Thermo
+      Fmass = flux(nc)
+    end if
 
-    ! Equivalent flux on Nv
-    if (Ys>1.0e-10_R8) flux(nc  ) = flux(i_CS)/(rho*Ys/Nvol)
+    ! Equivalent flux on the number density: the mass flux over the mass of a particle, rho*Ys/Nvol
+    if (Ys>1.0e-10_R8) then
+      if (nsoot == 1) then
+        flux(nc  ) = Fmass*Nvol/(rho*Ys)
+      else
+        flux(nc+1) = Fmass*Nvol/(rho*Ys)
+      end if
+    end if
 
   end subroutine Soot_Diffusive_Flux
 

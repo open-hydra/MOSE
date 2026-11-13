@@ -250,7 +250,7 @@ contains
       call Soot_Diffusive_Flux ( flux=Flux, &
                                  prim=Prim, &
                                  T_gradient=Gradient(np,:), &
-                                 mu=mil+mie, &
+                                 mu=mil, &
                                  rho=rho, &
                                  T=T, &
                                  area=area, & 
