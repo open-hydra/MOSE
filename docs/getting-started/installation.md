@@ -18,7 +18,7 @@ Before attempting to build MOSE make sure your system provides the following ext
 
 ### ORION, OSLO and FLINT
 
-MOSE requires these three libraries by a range of releases, as FLINT and ATLAS do (`cmake/SemVerDeps.cmake`). The configure checks the release out in `lib/`.
+MOSE requires these three libraries by a range of releases, as FLINT, ATLAS and ICE do (`cmake/SemVerDeps.cmake`). The configure checks the release out in `lib/`.
 
 | Path         | Repository URL                                | Releases           | Purpose                                 |
 |--------------|-----------------------------------------------|--------------------|-----------------------------------------|
@@ -26,15 +26,17 @@ MOSE requires these three libraries by a range of releases, as FLINT and ATLAS d
 | `lib/OSLO`   | `https://github.com/MarcoGrossi92/OSLO.git`  | 1.1 or a later 1.x | ODE solvers library, required by FLINT  |
 | `lib/FLINT`  | `https://github.com/MarcoGrossi92/FLINT.git` | 2.0 or a later 2.x | Thermodynamic database utilities        |
 
-The first configure needs the network: it lists the tags of each library (`git ls-remote`, https) and clones the newest release that satisfies the range. `deps.lock`, in the source root and not tracked, keeps the releases selected: the next configures use them without the network (`-DFETCHCONTENT_FULLY_DISCONNECTED=ON` works then). `-DSEMVER_UPDATE=ALL` (`./install.sh build --update-deps`) selects the newest releases again; `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>` (`--include-orion|flint|oslo=<path>`) builds a local checkout instead. When a project embeds MOSE (Hydra), that project chooses the releases.
+The first configure needs the network: it lists the tags of each library (`git ls-remote`, https) and clones the newest release that satisfies the range. `deps.lock`, in the source root and not tracked, keeps the releases selected: the next configures use them without the network (`-DFETCHCONTENT_FULLY_DISCONNECTED=ON` works then). `-DSEMVER_UPDATE=ALL` (`./install.sh build --update-deps`) selects the newest releases again; `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>` (`--include-orion|flint|oslo=<path>`) builds a local checkout instead; a local checkout outside the range stops the configure (`-DMOSE_PIN_CHECK=WARNING` builds it on purpose). When a project embeds MOSE (Hydra), that project chooses the releases, and MOSE checks them against its ranges. See [Versioning](../development/versioning.md).
 
-### Git submodules
+### FiNeR
 
-The other dependencies are Git submodules.
+FiNeR is a Git submodule, pinned at one release.
 
-| Path                               | Repository URL                                        | Purpose                                  |
-|------------------------------------|-------------------------------------------------------|------------------------------------------|
-| `lib/third_party/FiNeR`            | `https://github.com/szaghi/FiNeR.git`                | INI file parser                      |
+| Path                               | Repository URL                                        | Release  | Purpose                                  |
+|------------------------------------|-------------------------------------------------------|----------|------------------------------------------|
+| `lib/FiNeR`                        | `https://github.com/szaghi/FiNeR.git`                 | v2.3.0   | INI file parser                          |
+
+The configure stops when `lib/FiNeR` is at another commit than the one MOSE records. FiNeR's own libraries (PENF, FACE, FLAP, BeFoR64 and StringiFor) are not tracked by MOSE: the configure clones them into `lib/FiNeR/src/third_party/`, as FiNeR's author does (`-DMOSE_FINER_DEPS=FREE`, the default: the default branch of each). If an upstream change breaks MOSE, `-DMOSE_FINER_DEPS=BACKUP` checks out the releases MOSE is tested with. `-DFETCHCONTENT_SOURCE_DIR_FINER=<path>` (`--include-finer=<path>`) builds an external FiNeR clone instead; it must be v2.3.0 and have its libraries in place.
 
 [ExactPack](https://github.com/lanl/ExactPack) is a pip dependency of the test
 suite only, installed from LANL's GitHub because it is not published on PyPI:
@@ -53,7 +55,7 @@ cd MOSE
 ```
 
 !!! note "An existing clone"
-    After pulling new commits into an existing clone, run `git submodule update --init --recursive`: CMake initializes a submodule that is missing, but does not update one that is checked out at an older commit. If FiNeR is older than v2.1.0, CMake stops and gives this command.
+    After pulling new commits into an existing clone, run `git submodule sync && git submodule update --init`: CMake initializes a submodule that is missing, but does not update one that is checked out at an older commit. If `lib/FiNeR` is not at the commit MOSE records, CMake stops and gives this command. FiNeR moved from `lib/third_party/FiNeR` to `lib/FiNeR`: the sync is what makes git know the new path, and the folder `lib/third_party` can be deleted.
 
     `lib/ORION` and `lib/FLINT` were submodules before they were taken by release: git leaves the two folders in place after that pull. The configure moves each one to its release when it is a detached checkout without changes, and otherwise stops and names the folder.
 
@@ -98,7 +100,7 @@ Options accepted by `build`
 * `--include-orion=PATH` – build a local ORION checkout instead of a release (`-DFETCHCONTENT_SOURCE_DIR_ORION`).
 * `--include-flint=PATH` – same for FLINT.
 * `--include-oslo=PATH` – same for OSLO.
-* `--include-finer=PATH` – use an external FiNeR tree instead of the submodule.
+* `--include-finer=PATH` – build an external FiNeR clone instead of the submodule `lib/FiNeR` (`-DFETCHCONTENT_SOURCE_DIR_FINER`).
 * `--update-deps` – select again the newest releases of ORION, OSLO and FLINT (`-DSEMVER_UPDATE=ALL`, this build only).
 
 The script sets up environment variables for the chosen compilers and then invokes CMake. After a successful build, a `CMakePresets.json` file is written in the source root so that subsequent compilations can reuse the configuration.
@@ -115,7 +117,7 @@ Re‑runs CMake using the previously generated preset and rebuilds the project w
 
 **`update` command**
 
-Synchronises the Git submodules (FiNeR and its libraries). By default it checks out the commit recorded in `.gitmodules`; passing `--remote` will fetch the latest commit from each remote branch.
+Synchronises the Git submodule `lib/FiNeR`. By default it checks out the commit MOSE records; passing `--remote` fetches the latest commit of its remote branch, which the configure then refuses, as FiNeR is pinned.
 
 ```bash
 ./install.sh update            # sync to recorded commit
@@ -129,7 +131,7 @@ If you prefer fine‑grained control, perform the configuration yourself. This i
 ```bash
 mkdir build && cd build
 # Fortran compiler: gfortran or ifx. USE_OPENMP: ON or OFF. Optional: USE_TECIO and
-# USE_CANTERA (need a C++ compiler), USE_SUNDIALS (needs a C compiler), FETCHCONTENT_SOURCE_DIR_<NAME>, FINER_PATH.
+# USE_CANTERA (need a C++ compiler), USE_SUNDIALS (needs a C compiler), FETCHCONTENT_SOURCE_DIR_<NAME> (ORION, OSLO, FLINT, FINER).
 cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_Fortran_COMPILER=gfortran \
@@ -140,7 +142,7 @@ cmake .. \
     -DFETCHCONTENT_SOURCE_DIR_ORION=/path/to/ORION \
     -DFETCHCONTENT_SOURCE_DIR_FLINT=/path/to/FLINT \
     -DFETCHCONTENT_SOURCE_DIR_OSLO=/path/to/OSLO \
-    -DFINER_PATH=/path/to/FiNeR
+    -DFETCHCONTENT_SOURCE_DIR_FINER=/path/to/FiNeR
 cmake --build . --parallel
 ```
 

@@ -182,6 +182,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Probes can record `mi_tilde`.
 - Test tiers `needs-mpi` (with a CI job) and `verification`; `MOSE_mms` wall fields; `ViscousOpenPatch`.
 - Preconditioning tests: `PrecTransform` (unit), `Preconditioning` (low-Mach cylinder), `InputChecks`/`PrecScope`.
+- A [Versioning](docs/development/versioning.md) page: the releases MOSE requires of its libraries, and how a build gets them.
 
 ### Changed
 
@@ -212,7 +213,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Steady outputs carry −iteration as their time.
   - Text formats write 17 digits.
 - ORION, OSLO and FLINT come by release range (`cmake/SemVerDeps.cmake`), fetched at configure: ORION 2.1, OSLO 1.1, FLINT 2.0 or a later release of the same major. OSLO 1.1 has no `dodesol`; ifx with OpenMP refuses FATODE's Rosenbrock solvers (`ros2`, `ros3`, `ros4`, `rodas3`, `rodas4`; use `H-rodas`).
-- FiNeR v2.3.0 with its dependencies as submodules (run `git submodule update --init --recursive`).
+- FiNeR v2.3.0 is the submodule `lib/FiNeR` (run `git submodule sync && git submodule update --init`); the configure
+  fetches its libraries, and stops when FiNeR is not the pinned commit.
+- A local ORION, OSLO or FLINT clone outside MOSE's ranges stops the configure (`-DMOSE_PIN_CHECK=WARNING` allows it).
 - CI:
   - Runs on Ubuntu 24.04 and on merge groups.
   - Checks out only the submodules it needs.
@@ -235,6 +238,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The submodules `lib/ORION` and `lib/FLINT`, the CMake variables `ORION_PATH` and `FLINT_PATH`, and `OSLO_PATH`, which
   `install.sh` handed to FLINT: `FETCHCONTENT_SOURCE_DIR_ORION`, `FETCHCONTENT_SOURCE_DIR_FLINT` and
   `FETCHCONTENT_SOURCE_DIR_OSLO` give a local checkout instead.
+- The submodules of `lib/third_party` and the CMake variables `FINER_PATH` and `FINER_DEPS_PATH`:
+  `FETCHCONTENT_SOURCE_DIR_FINER` (`--include-finer`) gives an external FiNeR.
 
 ### Fixed
 

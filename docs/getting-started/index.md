@@ -165,7 +165,7 @@ placed — see [Parallel Execution](../user/parallel.md).
 | [FLINT](https://github.com/MarcoGrossi92/FLINT) | Thermodynamic & chemical kinetics database | Release 2.0 or a later 2.x, fetched by the configure |
 | [ORION](https://github.com/MarcoGrossi92/ORION) | Multi-format I/O — Tecplot, VTK, Plot3D | Release 2.1 or a later 2.x, fetched by the configure |
 | [OSLO](https://github.com/MarcoGrossi92/OSLO) | Stiff ODE solver (chemistry integration) | Release 1.1 or a later 1.x, fetched by the configure |
-| [FiNeR](https://github.com/szaghi/FiNeR) | INI configuration file parser | Bundled submodule |
+| [FiNeR](https://github.com/szaghi/FiNeR) | INI configuration file parser | Submodule `lib/FiNeR`, v2.3.0 |
 
 ### Optional libraries
 

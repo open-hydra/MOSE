@@ -31,8 +31,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          # The submodules of MOSE (FiNeR and its five libraries), without
-          # recursion. The configure fetches the releases of ORION, OSLO and
+          # The submodule of MOSE (FiNeR), without recursion. The configure
+          # fetches FiNeR's libraries and the releases of ORION, OSLO and
           # FLINT over https (cmake/SemVerDeps.cmake), without their
           # submodules: Cantera (whose submodule Eigen is hosted on gitlab.com)
           # and SUNDIALS are built only with USE_CANTERA=ON or USE_SUNDIALS=ON.
