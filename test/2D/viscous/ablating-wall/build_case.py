@@ -24,8 +24,8 @@ Usage:  python3 build_case.py <config>
 import os
 import sys
 
-from gsi_models import (MELT, PYRO_ID, mdot_melting, mdot_pyrolysis,
-                        wall_temperature_radiative_equilibrium)
+from gsi_models import (MELT, PYRO_ID, RUNIV, PyrolysisTable, Thermo, ablator, mdot_melting, mdot_pyrolysis,
+                        read_phase, wall_temperature_radiative_equilibrium, write_pyrolysis_table)
 
 # --- discretisation ----------------------------------------------------------
 NX, NY = 4, 12
@@ -38,6 +38,7 @@ R_AIR  = 8314.46261815324 / 28.970418    # gas constant of the single-species ga
 # Boundary condition type codes (see src/lib/io/IO_BC.f90)
 BC_UNUSED, BC_SYMMETRY, BC_EXTRAPOLATION = 0, 300, 400
 BC_MELTING, BC_PYROLYSIS, BC_SRM = 503, 504, 502
+BC_REACTIONS, BC_ABLATOR = 505, 506
 
 # Solid propellant grain (BC 502): Saint-Robert's law in mass-flux form,
 #   mdot = a * (p/pRef)**n ,  a (the record's mdot_ref) in kg/(m2 s).
@@ -76,6 +77,29 @@ CONFIGS = {
     # orientations of the normal.
     'srm-inflow':     dict(bc=BC_SRM, wall_face=3, srm_mode=2),
     'srm-inflow-top': dict(bc=BC_SRM, wall_face=4, srm_mode=2),
+    # Surface reactions of a carbon wall (BC 505), on the gas of test/common/CHO-N2-viscous, which run.sh links in
+    # gsi/<config>/INPUT: N2 with H2O and CO2 at 1800 K, whose reactions absorb heat (q_rad > 0), on both ends; N2 with
+    # O2 at 1500 K, whose reaction releases it (q_rad < 0: the surface loses heat). y0: mass fractions. q_rad is the heat
+    # the surface absorbs at the initial state (gsi_initial_state), so that the balance has its root at T0 at the start.
+    'carbon':     dict(bc=BC_REACTIONS, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, wall_face=3),
+    'carbon-top': dict(bc=BC_REACTIONS, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, wall_face=4),
+    'carbon-o2':  dict(bc=BC_REACTIONS, T0=1500.0, y0={'N2': 0.98, 'O2': 0.02}, wall_face=3),
+    # The pyrolysing ablator (BC 506) on the column of 'carbon': with the table of gsi_models.write_pyrolysis_table
+    # (phi = 0.25, h_v0 = -8.44e5 J/kg) on both ends; with phi = 0 and h_v0 = 0, which must be 'carbon' byte for byte;
+    # with phi = 0 and h_v0 = -8.44e5 J/kg, the control of that comparison. Refused at set-up (run.sh refuse_gsi): no
+    # table file, pyro_id beyond the tables of the file, a table with a condensed-carbon column.
+    'ablator':        dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, phi=0.25, h_v0=-8.44e5,
+                           pyro_id=1, wall_face=3),
+    'ablator-top':    dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, phi=0.25, h_v0=-8.44e5,
+                           pyro_id=1, wall_face=4),
+    'ablator-phi0':   dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, wall_face=3),
+    'ablator-hv0':    dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, h_v0=-8.44e5, wall_face=3),
+    'ablator-nofile': dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, phi=0.25, pyro_id=1,
+                           table='none', refused=True, wall_face=3),
+    'ablator-pyro2':  dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, phi=0.25, pyro_id=2,
+                           refused=True, wall_face=3),
+    'ablator-cond':   dict(bc=BC_ABLATOR, T0=1800.0, y0={'N2': 0.8, 'H2O': 0.1, 'CO2': 0.1}, phi=0.25, pyro_id=1,
+                           table='condensed', refused=True, wall_face=3),
 }
 
 
@@ -84,6 +108,9 @@ def expected_wall_state(cfg):
     if cfg['bc'] == BC_SRM:
         Tw = SRM['Taf']
         mdot = SRM['a']          # pRef is the column pressure, so (p/pRef)**n = 1
+    elif cfg['bc'] in (BC_REACTIONS, BC_ABLATOR):
+        Tw = cfg['T0']
+        mdot = 0.0 if cfg.get('refused') else gsi_initial_state(cfg)[1]
     elif cfg['bc'] == BC_MELTING:
         Tw = cfg['Tw']
         mdot = 0.0 if cfg.get('inert') else mdot_melting(cfg['qrad'], Tw=Tw)
@@ -92,6 +119,25 @@ def expected_wall_state(cfg):
         Tw = wall_temperature_radiative_equilibrium(model, cfg['qrad'])
         mdot = mdot_pyrolysis(model, Tw)
     return Tw, mdot
+
+
+def gsi_gas(cfg):
+    """The gas of a 505/506 column (INPUT/phase.txt and INPUT/thermo.dat): names, molar masses, h_s(T), the mass
+    fractions y0 on the order of names, and their gas constant."""
+    names, W = read_phase('INPUT/phase.txt')
+    y = [cfg['y0'].get(s, 0.0) for s in names]
+    return names, W, Thermo('INPUT/thermo.dat'), y, sum(ys * RUNIV / w for ys, w in zip(y, W))
+
+
+def gsi_initial_state(cfg):
+    """q_rad and mdot of a 505/506 column at its initial state (T0, y0, P0, at rest): q_rad is the heat q(T0) that the
+    surface absorbs there, so that T0 is the root of the surface energy balance at the start (q_conv = 0)."""
+    names, W, h, y, R = gsi_gas(cfg)
+    rho = P0 / (R * cfg['T0'])
+    phi = cfg.get('phi', 0.0)
+    table = PyrolysisTable('INPUT/pyrolysis.dat', names) if phi > 0.0 else None
+    _, mdot, q = ablator([ys * rho for ys in y], cfg['T0'], P0, names, W, h, phi, cfg.get('h_v0', 0.0), table)
+    return q, mdot
 
 
 def write_mesh(path):
@@ -115,11 +161,13 @@ def write_mesh(path):
                 f.write(f' {v: .15E}\n')
 
 
-def write_ic(path, Tw):
-    """Uniform state at rest, isothermal at the wall temperature."""
+def write_ic(path, Tw, massf=None, R=R_AIR):
+    """Uniform state at rest, isothermal at the wall temperature; massf: the mass fractions of a gas of several species
+    (the 505/506 columns) of gas constant R."""
     ni, nj, nk = NX + 1, NY + 1, 2
     ncell = NX * NY * 1
-    rho = P0 / (R_AIR * Tw)
+    rho = P0 / (R * Tw)
+    massf = [1.0] if massf is None else massf
 
     xs = [LX * i / NX for i in range(ni)]
     ys = [LY * j / NY for j in range(nj)]
@@ -131,13 +179,14 @@ def write_ic(path, Tw):
                 x.append(xs[i]); y.append(ys[j]); z.append(zs[k])
 
     with open(path, 'w') as f:
-        f.write('VARIABLES = "x" "y" "z" "rho1" "u" "v" "w" "p"\n')
+        f.write('VARIABLES = "x" "y" "z" ' + ' '.join(f'"rho{k + 1}"' for k in range(len(massf))) +
+                ' "u" "v" "w" "p"\n')
         f.write(f'ZONE T="Block1", I={ni}, J={nj}, K={nk}, DATAPACKING=BLOCK, '
-                'VARLOCATION=([1-3]=NODAL,[4-8]=CELLCENTERED)\n')
+                f'VARLOCATION=([1-3]=NODAL,[4-{7 + len(massf)}]=CELLCENTERED)\n')
         for arr in (x, y, z):
             for v in arr:
                 f.write(f' {v: .15E}\n')
-        for value in (rho, 0.0, 0.0, 0.0, P0):     # rho1, u, v, w, p
+        for value in [rho * m for m in massf] + [0.0, 0.0, 0.0, P0]:     # rho1 .. rhoN, u, v, w, p
             for _ in range(ncell):
                 f.write(f' {value: .15E}\n')
 
@@ -180,6 +229,13 @@ def write_bc(path, cfg):
             p = (f"    {MELT['cp']:.17E},    {cfg['Tw']:.17E},    {MELT['Ti']:.17E},"
                  f"    {MELT['dh']:.17E},    {cfg['qrad']:.17E},    {0.0:.17E},"
                  f"    {1.0:.17E},")
+        elif cfg['bc'] == BC_REACTIONS:
+            # surface reaction id (1: Bradley), qrad, eps_wall, as ATLAS writes them (MOSE reads the first two)
+            p = f"    {1:d},    {cfg['qrad']:.17E},    {0.0:.17E},"
+        elif cfg['bc'] == BC_ABLATOR:
+            # pyrolysis-gas table id, surface reaction id (1: Bradley), phi, h_v0, qrad, eps_wall
+            p = (f"    {cfg.get('pyro_id', 0):d},    {1:d},    {cfg.get('phi', 0.0):.17E},"
+                 f"    {cfg.get('h_v0', 0.0):.17E},    {cfg['qrad']:.17E},    {0.0:.17E},")
         else:
             # pyrolysis model id, qrad, eps_wall, mass fractions(1:nsc)
             p = (f"    {cfg['gsi_id']:d},    {cfg['qrad']:.17E},    {0.0:.17E},"
@@ -210,17 +266,23 @@ def main():
     os.makedirs('INPUT', exist_ok=True)
     os.makedirs('OUTPUT', exist_ok=True)
 
+    massf, R_gas = None, R_AIR
+    if cfg['bc'] in (BC_REACTIONS, BC_ABLATOR):
+        names, W, _, massf, R_gas = gsi_gas(cfg)
+        if cfg.get('phi', 0.0) > 0.0 and cfg.get('table') != 'none':
+            write_pyrolysis_table('INPUT/pyrolysis.dat', names, W, condensed=cfg.get('table') == 'condensed')
+        cfg = dict(cfg, qrad=0.0 if cfg.get('refused') else gsi_initial_state(cfg)[0])
     Tw, mdot = expected_wall_state(cfg)
     T_init = cfg.get('T_init', Tw)
 
     write_mesh('MESH/mesh.tec')
-    write_ic('INPUT/ic.tec', T_init)
+    write_ic('INPUT/ic.tec', T_init, massf, R_gas)
     write_bc('INPUT/bc.txt', cfg)
 
     # Record the *configuration* only. verify.py re-derives the reference solution
     # from gsi_models itself, so the check never degenerates into comparing the
     # generator with itself.
-    rho = P0 / (R_AIR * Tw)
+    rho = P0 / (R_gas * Tw)
     with open('INPUT/case.txt', 'w') as f:
         f.write(f'config {name}\n')
         f.write(f'bc {cfg["bc"]}\n')
@@ -235,7 +297,11 @@ def main():
         f.write(f'T_init {T_init!r}\n')
         f.write(f'inert {int(cfg.get("inert", False))}\n')
         f.write(f'p {P0!r}\n')
-        f.write(f'R_gas {R_AIR!r}\n')
+        f.write(f'R_gas {R_gas!r}\n')
+        f.write(f'T0 {cfg.get("T0", 0.0)!r}\n')
+        f.write(f'phi {cfg.get("phi", 0.0)!r}\n')
+        f.write(f'h_v0 {cfg.get("h_v0", 0.0)!r}\n')
+        f.write('y0 ' + (' '.join(f'{s}={v!r}' for s, v in cfg['y0'].items()) if 'y0' in cfg else 'none') + '\n')
 
     print(f'{name}: Tw = {Tw:.4f} K, mdot = {mdot:.6f} kg/m2/s, '
           f'v_blow = {mdot / rho:.4f} m/s')

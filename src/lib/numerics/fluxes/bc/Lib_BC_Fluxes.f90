@@ -46,13 +46,13 @@ contains
 
 
   !> The walls: walls coupled to another solver (103, 104), prescribed heat flux (301), prescribed temperature (302),
-  !> gas-surface interaction (503-505).
+  !> gas-surface interaction (503-506).
   elemental logical function Is_Wall ( type )
     implicit none
     integer, intent(in) :: type
 
     select case ( type )
-      case ( 103, 104, 301, 302, 503, 504, 505 )
+      case ( 103, 104, 301, 302, 503, 504, 505, 506 )
         Is_Wall = .true.
       case default
         Is_Wall = .false.

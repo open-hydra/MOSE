@@ -182,6 +182,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Probes can record `mi_tilde`.
 - Test tiers `needs-mpi` (with a CI job) and `verification`; `MOSE_mms` wall fields; `ViscousOpenPatch`.
 - Preconditioning tests: `PrecTransform` (unit), `Preconditioning` (low-Mach cylinder), `InputChecks`/`PrecScope`.
+- Boundary condition `506`, the pyrolysing ablator: the surface reactions of `505` plus the pyrolysis gas blown at `phi` times the char mass flux, steady conduction.
+  - Line `pyro_id, reac_id, phi, h_v0, q_rad, eps_wall`; composition from `INPUT/<prefix>pyrolysis.dat` (ATLAS GPB), read by FLINT 2.1.
+  - With `phi = 0` and `h_v0 = 0` it is `505` bit for bit; a `506` line of an older ATLAS must be regenerated.
+- Tests of the reacting walls: `AblatingWall` runs `505` and `506` on the gas `test/common/CHO-N2-viscous`; unit checks `GSIBradley`, `GSIAblator`.
 
 ### Changed
 
@@ -204,7 +208,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Re-reads of `input.ini`: rules checked, fixed keys refused, all ranks take rank 0's text.
 - Invalid values in `input.ini` stop the run at set-up.
 - Set-up errors stop every rank before the initial condition is read.
-- Unsupported records (`409`, `501`, `506`) and inconsistent block connections stop the run at set-up.
+- Unsupported records (`409`, `501`) and inconsistent block connections stop the run at set-up.
 - Residual and torque sums are independent of threads and ranks.
 - Outputs:
   - `vtk raw` fields are raw binary.
@@ -944,6 +948,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `301` heat-flux sign on odd faces; `502` gas constant and turbulence ghosts.
   - Faces between blocks computed once (conservative).
   - Fluxes independent of the order of `bc.txt`.
+  - Surface reactions `505`: the O2 rate is the Nagle–Strickland-Constable form, 1 + k6 p in the denominator (was up to 4.7 times too high).
+  - Surface reactions `505`: a gas without one of their eight species stops at set-up; no division by zero without O2.
 - Ghost cells: wall and `400` fills bounded, linear node extrapolation, `410` values placed correctly, coupled walls `103`/`104`.
 - Rotating frame:
   - Stationary faces no longer hang; stationary-wall velocity in the outputs; wall-velocity derivatives and work.

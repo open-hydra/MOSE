@@ -18,7 +18,7 @@ module MOSE_Advanced_Types_m
     type(MOSE_tensor_3D_type), allocatable :: Ms(:,:,:)        ! Cell metric of the RANS source terms, diffusive-metric = stencil (velocity)
     type(MOSE_tensor_3D_type), allocatable :: Msc(:,:,:)       ! the same for the density
     type(MOSE_tensor_3D_type), allocatable :: Msa(:,:,:)       ! the same for the velocity gradients of SA-RC, with their ghost cells
-    type(MOSE_tensor_3D_type), allocatable :: Mst(:,:,:)       ! the same for the turbulence variables, where it is not Ms (503-505 walls)
+    type(MOSE_tensor_3D_type), allocatable :: Mst(:,:,:)       ! the same for the turbulence variables, where it is not Ms (503-506 walls)
     type(MOSE_vector_3D_type), allocatable :: dl(:,:,:)        ! Average cell length (in i/j/k direction). eg: dl%c(1) is sqrt(dx**2+dy**2+dz**2) of the cell in the i direction
     type(MOSE_d_metrics_type)              :: dir(3)           ! Direction object. Contains: i-faces, j-faces, k-faces; eg: dir(1)%face(i,j,k)%n
     real(R8), allocatable                  :: yn(:,:,:)        ! Nearest wall distance
@@ -76,7 +76,11 @@ module MOSE_Advanced_Types_m
     real(R8)                            :: Ti_wall  = 0.0_R8                 ! Material initial temperature      (GSI melting wall 503)
     real(R8)                            :: dh_wall  = 0.0_R8                 ! Material heat of fusion           (GSI melting wall 503)
     integer                             :: GSI_surf_reac_id = 0              ! GSI reactions ID                  (GSI 505/506)
-    integer                             :: GSI_pyro_model_id = 0             ! GSI pyrolysis model ID            (GSI 504/506)
+    integer                             :: GSI_pyro_model_id = 0             ! GSI pyrolysis model ID            (GSI 504)
+    integer                             :: pyro_table = 0                    ! pyro_id: table of pyrolysis.dat   (GSI 506)
+    real(R8)                            :: phi      = 0.0_R8                 ! mdot_pg/mdot_ch                   (GSI 506)
+    real(R8)                            :: h_v0     = 0.0_R8                 ! Virgin-material enthalpy [J/kg]   (GSI 506)
+    integer                             :: prop_line = 0                     ! Line of the property line in bc.txt (GSI 506)
     real(R8)                            :: aCoeff, n, pRef, Taf              ! SRM grain (BC 502): mdot_ref, n, p_ref, T_af
     logical                             :: srm_inflow = .false.              ! SRM grain of mode 2: applied as 404 (IO_BC)
     real(R8)                            :: psub     = 0.0_R8                 ! Nozzle subsonic  pressure     (nozzle BC 420)

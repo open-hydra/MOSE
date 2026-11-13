@@ -253,7 +253,7 @@ mose_test(Preconditioning
 mose_test(AblatingWall
     DIR 2D/viscous/ablating-wall
     KIND exact  LABELS physics 2D
-    DESC "ablation 503, 504 and SRM grain 502 against the closed form")
+    DESC "ablation 503, 504 and SRM grain 502 against the closed form, surface reactions 505 and pyrolysing ablator 506 by the relations of the wall model")
 mose_test(RSMDecay
     DIR 2D/viscous/rsm-decay
     KIND exact  LABELS physics 2D
@@ -426,6 +426,8 @@ add_fortran_executable(bilinear_distance_check unit/bilinear_distance_check.f90)
 add_fortran_executable(remote_blocks_check unit/remote_blocks_check.f90)
 add_fortran_executable(muscl_face_bounds_check unit/muscl_face_bounds_check.f90)
 add_fortran_executable(prec_transform_check unit/prec_transform_check.f90)
+add_fortran_executable(gsi_bradley_check unit/gsi_bradley_check.f90)
+add_fortran_executable(gsi_ablator_check unit/gsi_ablator_check.f90)
 
 mose_test(QCR2000Stress
     COMMAND qcr2000_check
@@ -459,6 +461,14 @@ mose_test(PrecTransform
     COMMAND prec_transform_check
     KIND unit  LABELS numerics unit
     DESC "Weiss-Smith update of prim and prec, and the reference velocity")
+mose_test(GSIBradley
+    COMMAND gsi_bradley_check
+    KIND unit  LABELS physics unit
+    DESC "surface reactions of a carbon wall (505, 506): O2 rate of Nagle and Strickland-Constable, no division by pO2 = 0")
+mose_test(GSIAblator
+    COMMAND gsi_ablator_check ${CMAKE_CURRENT_SOURCE_DIR}/unit/gsi_ablator_table.dat
+    KIND unit  LABELS physics unit
+    DESC "pyrolysing ablator (506): pyrolysis gas of the table, element balance, heat with h_v0")
 
 # ---------------------------------------------------------------------------
 #  Multirate integrator ([MOSE-Multirate]): one test per check of test/multirate/mr-<check>; the full forms are heavy
@@ -540,7 +550,7 @@ mose_test(Multirate.Positivity
 mose_test(Multirate.Reject
     DIR multirate/mr-reject  RUN "bash ./run.sh"
     KIND contract  LABELS multirate implementation 1D 2D 3D
-    DESC "34 configurations outside the scope are refused with their message")
+    DESC "35 configurations outside the scope are refused with their message")
 mose_test(Multirate.FixedStep
     DIR multirate/mr-fixedstep  RUN "bash ./run.sh"
     KIND contract  LABELS multirate implementation 1D 2D

@@ -23,10 +23,11 @@ import sys
 
 import numpy as np
 
-from gsi_models import (MELT, PYRO_ID, mdot_melting, mdot_pyrolysis,
-                        q_pyrolysis, wall_temperature_radiative_equilibrium)
+from gsi_models import (MELT, PYRO_ID, RUNIV, PyrolysisTable, Thermo, ablator, mdot_melting, mdot_pyrolysis,
+                        q_pyrolysis, read_phase, wall_temperature_balance, wall_temperature_radiative_equilibrium)
 
 BC_MELTING, BC_PYROLYSIS, BC_SRM = 503, 504, 502
+BC_REACTIONS, BC_ABLATOR = 505, 506
 
 failures = []
 checks = 0
@@ -167,6 +168,70 @@ def verify_srm(cfg, field, dims, wall_face):
     return 1 if failures else 0
 
 
+def verify_gsi_reactions(cfg, wall, field, dims, wall_face):
+    """Surface reactions of a carbon wall (BC 505) and the pyrolysing ablator (BC 506).
+
+    The reactions consume the oxidisers of the wall cell and their products displace them (the wall gas is the gas of
+    the cell), so this column has no steady state: the wall is checked by the exact relations of its model at the state
+    the solver reached, as the algebraic checks of the pyrolysing walls in main. With the reported Tw, the wall pressure
+    pw (that of the wall cell) and the partial densities of the wall cell, gsi_models evaluates, independently of the
+    solver, the rates of GSI_Carbon_Bradley and, with phi > 0, the bilinear lookup of INPUT/pyrolysis.dat at (pw, Tw):
+      mdot  = (1 + phi) mdot_ch(Tw)                                     within 1e-11
+      q(Tw) = sum_s omega_s h_s(Tw) - mdot h_v0 = q_rad + q_conv         within 1e-11 of the largest of the three
+    and solves q(T) = q_rad + q_conv for T, which must be the reported Tw within 1e-11 (this third check restates the
+    second as a temperature). OUTPUT/*.tec print 15 significant digits (E23.15 of ORION: up to 5e-15 of each value); a
+    rate moves by E/(R Tw) <= 24 times the relative change of Tw (H2O and CO2 at 1500 K) and q by (dq/dT) Tw/q <= 20 times
+    (planM probe_configs.out): a floor of at most 1.2e-13, measured at most 6.7e-15 (planM build/m5-ctest.log); 1e-11 keeps
+    two decades above it. The balance is the one the solver closed at the reported Tw, with q_conv = k grad T as the wall
+    file reports it (computed, not adjusted): a residual left by the 20 secant steps shows here. The closed form of the
+    initial state (Tw = T0, the mdot of y0 at P0) is
+    printed: the column drifts from it as the oxidisers are consumed (no check)."""
+    names, W = read_phase('INPUT/phase.txt')
+    h = Thermo('INPUT/thermo.dat')
+    phi, h_v0, qrad = float(cfg['phi']), float(cfg['h_v0']), float(cfg['qrad'])
+    table = PyrolysisTable('INPUT/pyrolysis.dat', names) if phi > 0.0 else None
+    I, J, K = dims
+    shape = (max(K - 1, 1), max(J - 1, 1), max(I - 1, 1))
+    jw = 0 if wall_face == 3 else -1
+    rho_s = [field[f'rho({k + 1})'].reshape(shape)[0, jw, :] for k in range(len(names))]
+    err_m = err_q = err_T = 0.0
+    for i in range(len(wall['Tw'])):                 # wall record i is the cell i of the wall row (IO_Wall: Is = i)
+        Tw, pw, md, qw = float(wall['Tw'][i]), float(wall['pw'][i]), float(wall['mdot'][i]), -float(wall['qw'][i])
+        rs = [float(r[i]) for r in rho_s]
+        R = sum(r * RUNIV / w for r, w in zip(rs, W)) / sum(rs)
+        roi = [r * (pw / (R * Tw)) / sum(rs) for r in rs]          # the wall gas: p and y of the cell, at Tw
+        _, m_ref, q_ref = ablator(roi, Tw, pw, names, W, h, phi, h_v0, table)
+        err_m = max(err_m, abs(md / m_ref - 1.0))
+        err_q = max(err_q, abs(q_ref - (qrad + qw)) / max(abs(q_ref), abs(qrad), abs(qw)))
+        f = lambda T: ablator([r * Tw / T for r in roi], T, pw, names, W, h, phi, h_v0, table)[2] - (qrad + qw)
+        err_T = max(err_T, abs(wall_temperature_balance(f, Tw, 0.05) / Tw - 1.0))
+    check('mdot = the rates of the model at the reported Tw and the wall-cell state' +
+          (' (1 + phi) mdot_ch' if phi > 0.0 else ''), err_m <= 1e-11, f'max rel {err_m:.2e} (tol 1e-11)')
+    check('q(Tw) = q_rad + q_conv (surface energy balance at the state reached)', err_q <= 1e-11,
+          f'max rel {err_q:.2e} (tol 1e-11)')
+    check('the root of q(T) = q_rad + q_conv is the reported Tw', err_T <= 1e-11, f'max rel {err_T:.2e} (tol 1e-11)')
+
+    v = field['v'].reshape(shape)
+    p = field['p'].reshape(shape)
+    expected_sign = 1.0 if wall_face == 3 else -1.0
+    check('blowing is directed away from the wall (wall cells)', np.all(np.sign(v[:, jw, :]) == expected_sign),
+          f'mean v = {float(np.mean(v[:, jw, :])):+.4g} m/s')
+    dp = np.ptp(p) / float(cfg['p'])
+    check('pressure stays uniform', dp < 5e-3, f'spread {dp:.2e}')
+
+    # the closed form of the initial state, for the record
+    y0 = dict((kv.split('=')[0], float(kv.split('=')[1])) for kv in cfg['y0'].split())
+    y = [y0.get(s, 0.0) for s in names]
+    T0, P0 = float(cfg['T0']), float(cfg['p'])
+    rho0 = P0 / (sum(ys * RUNIV / w for ys, w in zip(y, W)) * T0)
+    m0 = ablator([ys * rho0 for ys in y], T0, P0, names, W, h, phi, h_v0, table)[1]
+    print(f'   initial state (no check): Tw - T0 = {float(np.mean(wall["Tw"])) - T0:+.4e} K, '
+          f'mdot / mdot(T0, y0, p0) - 1 = {float(np.mean(wall["mdot"])) / m0 - 1.0:+.4e}')
+
+    print(f'   -> {checks - len(failures)}/{checks} checks passed')
+    return 1 if failures else 0
+
+
 def main():
     cfg = read_case()
     name = cfg['config']
@@ -217,6 +282,8 @@ def main():
     Tw, qw, mdot = float(np.mean(Tw_s)), float(np.mean(qw_s)), float(np.mean(md_s))
     check('blown mass flux is positive (mass leaves the solid)', mdot > 0.0,
           f'mdot = {mdot:+.6g} kg/m2/s')
+    if bc in (BC_REACTIONS, BC_ABLATOR):
+        return verify_gsi_reactions(cfg, wall, field, (I, J, K), wall_face)
 
     # ---- 2. analytic reference, derived here and not by the generator ---
     if bc == BC_MELTING:
