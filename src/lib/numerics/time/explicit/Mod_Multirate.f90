@@ -2578,6 +2578,7 @@ contains
       case (404) ! inlet: T + mass flux; an SRM grain of mode 2 (srm_inflow)
         if ( bc % srm_inflow ) then
           g = bc % aCoeff * ( domain % blk(Bm) % P(np,Im,Jm,Km) / bc % pRef ) ** bc % n
+          bc % g_srm = g   ! the gas mass flux of this face at this pressure, for the couplers (hydra-MI2)
           T0 = SRM_Static_Temperature ( bc % T0, g, domain % blk(Bm) % P(np,Im,Jm,Km), bc % ci(nrans+1:nrans+nsc) )
           call BC_Inlet_MassFlux_T ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), T0, g, 1d0, bc % alpha, bc % beta, &
                                      bc % ci(nrans+1:nrans+nsc), bc % ci(1:nrans), error, always_in = .true. )

@@ -592,6 +592,7 @@ contains
               if ( ios == 0 ) then
                 bc(i)%type = 404 ; bc(i)%srm_inflow = .true.
                 bc(i)%T0 = bc(i)%Taf ; bc(i)%mdot = bc(i)%aCoeff ; bc(i)%rel_fac = 1d0
+                bc(i)%g_srm = bc(i)%aCoeff      ! the flux at p_ref until the first flux evaluation sets the one at the cell's p
                 bc(i)%alpha = huge(1.0_R8) ; bc(i)%beta = huge(1.0_R8)      ! along the face normal (parse_dir_tok)
               end if
             end if

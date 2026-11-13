@@ -83,6 +83,9 @@ module MOSE_Advanced_Types_m
     integer                             :: prop_line = 0                     ! Line of the property line in bc.txt (GSI 506)
     real(R8)                            :: aCoeff, n, pRef, Taf              ! SRM grain (BC 502): mdot_ref, n, p_ref, T_af
     logical                             :: srm_inflow = .false.              ! SRM grain of mode 2: applied as 404 (IO_BC)
+    real(R8)                            :: g_srm = 0.0_R8                    ! SRM grain of mode 2: gas mass flux of the burn law at the
+                                                                             ! pressure of the boundary cell [kg/(m2 s)], set at every flux
+                                                                             ! evaluation (BC_Fluxes, BC_Flux_Record); mdot_ref until the first one (IO_BC)
     real(R8)                            :: psub     = 0.0_R8                 ! Nozzle subsonic  pressure     (nozzle BC 420)
     real(R8)                            :: psup     = 0.0_R8                 ! Nozzle supersonic pressure    (nozzle BC 420)
     real(R8)                            :: p_design   = 0.0_R8               ! Nozzle supersonic design exit pressure, set at set-up (nozzle BC 420)
