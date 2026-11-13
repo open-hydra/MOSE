@@ -2270,7 +2270,7 @@ contains
   !> turns the first layer, 5/3 times the second). Behind a chimera face (chimera true) the first layer must keep the
   !> sign and the size of the first cell (Compute_Metric_Tensor stops otherwise): its metric is the ghost metric of the
   !> viscous flux of chimera faces (BC_Connection_Visc), the one flux that reads the metric of an extrapolated ghost
-  !> cell. Behind the other faces no flux reads it: the walls (301, 302, 502-505) take the metric of the cell, or the
+  !> cell. Behind the other faces no flux reads it: the walls (301, 302, 502-506) take the metric of the cell, or the
   !> stencil of positions, the other faces carry no viscous flux that needs it, and the wedge (200) rotates the cell,
   !> exactly when its node planes lie at theta = -+delthe/2 (otherwise the ghost cell is flat and the check of its size
   !> stops the run). Of the ghost layers the solver then reads only the length across the face, in the MUSCL reconstruction
@@ -2840,14 +2840,14 @@ contains
 
   !> The walls of the wall distance: coupled to another solver (103, 104), heat flux (301), temperature (302), the SRM grain
   !> (502: a wall that blows gas in, with the wall values of a smooth wall for the turbulence variables), gas-surface
-  !> interaction (503-505).
+  !> interaction (503-506).
   function Is_Wall(type) result (ans)
       implicit none
       integer, intent(in) :: type
       logical :: ans
 
       select case (type)
-        case (103, 104, 301, 302, 502, 503, 504, 505)  ! wall BCs (multi-solver coupling, heat flux, T, SRM grain, GSI)
+        case (103, 104, 301, 302, 502, 503, 504, 505, 506)  ! wall BCs (multi-solver coupling, heat flux, T, SRM grain, GSI)
           ans = .true.
         case default
           ans = .false.

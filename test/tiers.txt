@@ -21,6 +21,8 @@ Connections.SectorRadial     light   0.1
 Connections.SectorViscous    light   1.9
 Conservation                 light   1.3
 Einfeldt91                   light   2.0
+GSIAblator                   light   -
+GSIBradley                   light   -
 FlatPlateTMR.Reference       light   1.3
 InputChecks.DecompositionMap light   2.3
 InputChecks.IRSTimeAccurate  light   0.3

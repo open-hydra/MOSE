@@ -101,7 +101,7 @@ contains
           call Ghost_Q2D_Mapped ( domain % bc(i), domain % blk(Bm), domain % time )
         case(0,401:407,420) ! inlet/outlet/extrapolation: zero-gradient
           call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
-        case(103,104,301,302,400,503:505) ! walls (103, 104: coupled to another solver) and extrapolation faces
+        case(103,104,301,302,400,503:506) ! walls (103, 104: coupled to another solver) and extrapolation faces
           call Ghost_Wall ( domain % bc(i), domain % blk(Bm) )
         case(502) ! SRM grain: extrapolation; in a RANS run the turbulence variables from the wall values of the grain
           call Ghost_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
@@ -733,7 +733,7 @@ contains
   end subroutine Fill_BC_Ghost_Q2D
 
 
-  !> Ghost cells of a wall (103, 104, 301, 302, 503-505) or of an extrapolation face (400), both layers
+  !> Ghost cells of a wall (103, 104, 301, 302, 503-506) or of an extrapolation face (400), both layers
   !> (docs/theory/numerics.md, "Ghost cells of walls and 400 faces"). The quantities whose differences the viscous fluxes
   !> and the turbulence sources take, Y_s, T, u and the specific turbulence and scalar variables phi = P/rho, are
   !> extrapolated, and the pressure; the ghost state follows from them, rho = p / (R(Y) T). A quantity with a wall value
@@ -823,7 +823,7 @@ contains
     end if
 
     ! Turbulence and scalar variables: the wall values of the turbulence variables, from the wall state of the wall
-    ! routines (302: BC_Wall_Temperature; 301: BC_Wall_Heat; 503-505, whose surface model sets the wall state at every
+    ! routines (302: BC_Wall_Temperature; 301: BC_Wall_Heat; 503-506, whose surface model sets the wall state at every
     ! call, and the coupled walls 103 and 104: the state of the cell, as an adiabatic wall)
     if ( wall .and. model == 2 ) then
       kr = 0d0

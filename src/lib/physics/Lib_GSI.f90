@@ -6,10 +6,10 @@ module MOSE_Lib_GSI
   implicit none
 
   private
-  public :: GSI_Initialize, GSI_Melting, GSI_Carbon_Bradley, GSI_HDPE, GSI_HTPB, GSI_PP
+  public :: GSI_Initialize, GSI_Melting, GSI_Carbon_Bradley, GSI_Char_Pyrolysis, GSI_HDPE, GSI_HTPB, GSI_PP
 
-  ! Species indices for GSI subroutines
-  integer :: iH, iC2H4, iOH, iCO, iCO2, iH2, iH2O, iO2, iO
+  ! Species indices for GSI subroutines (GSI_Initialize; 0: not a species of the gas)
+  integer :: iH = 0, iC2H4 = 0, iOH = 0, iCO = 0, iCO2 = 0, iH2 = 0, iH2O = 0, iO2 = 0, iO = 0
 
   ! ! Paraffin/Melting
   ! real(R8) :: T_i = 298.15d0             ! initial temperature of paraffin
@@ -47,14 +47,32 @@ module MOSE_Lib_GSI
 
 contains
 
-  subroutine GSI_Initialize(species_name)
+  subroutine GSI_Initialize(species_name, missing)
+    !< The indices of the species of the surface reactions in the gas of the run, by name. missing: the species of the
+    !< surface reactions of a carbon wall (GSI_Carbon_Bradley: O2, O, OH, H, H2, H2O, CO, CO2) that the gas does not have,
+    !< blank-separated, empty when it has them all; Setup_BC stops the run on them when a wall 505 or 506 needs them.
     implicit none
     character(len=*), dimension(:), intent(in) :: species_name
+    character(len=:), allocatable, intent(out), optional :: missing
     integer :: i
 
+    iH = 0 ; iC2H4 = 0 ; iOH = 0 ; iCO = 0 ; iCO2 = 0 ; iH2 = 0 ; iH2O = 0 ; iO2 = 0 ; iO = 0
     do i = 1, nsc
       call name2index( trim(adjustl(species_name(i))), i )
     end do
+
+    if ( present(missing) ) then
+      missing = ''
+      if ( iO2  == 0 ) missing = missing//' O2'
+      if ( iO   == 0 ) missing = missing//' O'
+      if ( iOH  == 0 ) missing = missing//' OH'
+      if ( iH   == 0 ) missing = missing//' H'
+      if ( iH2  == 0 ) missing = missing//' H2'
+      if ( iH2O == 0 ) missing = missing//' H2O'
+      if ( iCO  == 0 ) missing = missing//' CO'
+      if ( iCO2 == 0 ) missing = missing//' CO2'
+      missing = trim(adjustl(missing))
+    end if
 
   end subroutine GSI_Initialize
 
@@ -133,12 +151,18 @@ contains
     k7   = 5.35d-1*exp( -63.64d6/RuTw)  ! O2c
     k8   = 1.81d7 *exp(-406.10d6/RuTw)  ! O2d
 
-    ! Compute ybig term
-    Y_term = 1d0 / ( 1d0 + k8/(k7*pi(iO2)) )
+    ! Compute ybig term, the fraction of the reactive sites 1/(1 + k8/(k7 pO2)); without O2 its limit 0, without the
+    ! division by zero (the same value as in IEEE arithmetic, where k8/0 = Inf; a trap in the DEBUG build)
+    if ( k7*pi(iO2) /= 0d0 ) then
+      Y_term = 1d0 / ( 1d0 + k8/(k7*pi(iO2)) )
+    else
+      Y_term = 0d0
+    end if
 
     dotm_H2O = kH2O * sqrt(pi(iH2O))
     dotm_CO2 = kCO2 * sqrt(pi(iCO2))
-    dotm_O2  = (Y_term*k5*pi(iO2))/(1.0d0 + k6*pi(iO2)*Y_term) + k7*pi(iO2)*(1d0-Y_term)
+    ! Two-site form of Nagle and Strickland-Constable: x k5 p/(1 + k6 p) + (1 - x) k7 p, x = Y_term (docs/theory/gsi.md)
+    dotm_O2  = (Y_term*k5*pi(iO2))/(1.0d0 + k6*pi(iO2)) + k7*pi(iO2)*(1d0-Y_term)
     dotm_OH  = kOH*pi(iOH)
     dotm_O   = kO*pi(iO)
     ! Compute source terms
@@ -160,6 +184,47 @@ contains
     end do
 
   end subroutine GSI_Carbon_Bradley
+
+
+
+  subroutine GSI_Char_Pyrolysis ( roi, Tw, p, table, phi, h_v0, omegadot, q_pyro, mdot )
+    !< Pyrolysing ablator (BC 506; thesis eqs 2.100, 2.101, 2.96, 2.115, 2.116). The char of a carbon wall reacts with the
+    !< gas (GSI_Carbon_Bradley: omega_ch, mdot_ch) and the gas of the pyrolysing virgin material is blown through it,
+    !< mdot_pg = phi mdot_ch, with the equilibrium composition y_pg(p, Tw) of its table (FLINT_Lib_PyrolysisGas, read
+    !< only when phi > 0). The surface energy balance is that of steady conduction in the solid: the heat the surface
+    !< absorbs is the enthalpy the blown species carry at Tw less that of the virgin material they come from,
+    !<   omega = omega_ch + mdot_pg y_pg,  mdot = mdot_ch + mdot_pg,  q_pyro = sum_s omega_s h_s(Tw) - mdot h_v0,
+    !< i.e. q_ch + mdot_pg h_pg(Tw) - (mdot_ch + mdot_pg) h_v0. With phi = 0 omega and mdot are those of the surface
+    !< reactions, untouched, and q_pyro = q_ch - mdot_ch h_v0: with h_v0 = 0 too, the result of BC 505 bit for bit.
+    !< Magnitudes positive out of the solid, as every model here (GSI_Source orients them).
+    use FLINT_Lib_Thermodynamic, only: f_tabT, h_tab
+    use FLINT_Lib_PyrolysisGas,  only: pyrolysis_gas_composition
+    implicit none
+    real(R8), intent(in)    :: roi(nsc), Tw
+    real(R8), intent(in)    :: p              !< wall pressure of the table lookup (the boundary cell's) [Pa]
+    integer,  intent(in)    :: table          !< pyrolysis-gas table (1-based), read when phi > 0
+    real(R8), intent(in)    :: phi            !< mdot_pg / mdot_ch
+    real(R8), intent(in)    :: h_v0           !< enthalpy of the virgin material, on the datum of h_tab [J/kg]
+    real(R8), intent(inout) :: omegadot(nsc), q_pyro, mdot
+    real(R8) :: y_pg(nsc), mdot_pg
+    integer :: s
+
+    call GSI_Carbon_Bradley ( roi, Tw, omegadot, q_pyro, mdot )
+
+    if ( phi > 0d0 ) then
+      mdot_pg = phi * mdot
+      call pyrolysis_gas_composition ( table, p, Tw, y_pg )
+      omegadot = omegadot + mdot_pg * y_pg
+      mdot = mdot + mdot_pg
+      q_pyro = 0d0
+      do s = 1, nsc
+        q_pyro = q_pyro + omegadot(s)*f_tabT( Tw,s,h_tab )
+      end do
+    end if
+
+    q_pyro = q_pyro - mdot * h_v0
+
+  end subroutine GSI_Char_Pyrolysis
 
 
 

@@ -8,6 +8,9 @@ module MOSE_IO_BC
 
   ! BC type counters — populated by Read_BCfile, consumed by Print_BC_Summary
   integer :: nconnect, nwall, ngsi, nSRM, nSRMin, nio, nsym, nper, nchimera, ncoupled, next, nKaffs, nstate
+  integer :: nreac                          ! walls with the surface reactions of a carbon wall (505, 506)
+  integer :: n506                           ! walls of the pyrolysing ablator (506), at level 1
+  integer :: npyro                          ! records 506 with phi > 0, every level: INPUT/<prefix>pyrolysis.dat is read
   logical :: has_tdep_bc
 
   ! Empty fields of a property line. A null value of list-directed input (two commas with only blanks between) leaves
@@ -30,13 +33,15 @@ contains
     use MOSE_Advanced_Types_m
     use FLINT_Lib_Thermodynamic, only: species_names
     use MOSE_Config_Types_m,     only: obj_multigrid, obj_io_bc
-    use MOSE_Global_m,           only: model
+    use MOSE_Global_m,           only: model, MOSE_phase_prefix
     use MOSE_IO_BC_Q2D,          only: Setup_Q2D_BC_Data
     use MOSE_Lib_GSI,            only: GSI_Initialize
+    use MOSE_Mod_MPI,            only: mpi_stop_all
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain(obj_multigrid%MGL)
     ! Local
     integer :: m, error
+    character(len=:), allocatable :: missing   ! species of the surface reactions that the gas lacks (GSI_Initialize)
 
     do m = 1, obj_multigrid%MGL
 
@@ -71,10 +76,17 @@ contains
     end do
 
     !! Phase 3: Initialize BCs for specific models
-    ! GSI BCs
+    ! GSI BCs. The surface reactions of a carbon wall (505, 506: GSI_Carbon_Bradley) need their eight species in the gas:
+    ! without one of them the run stops here, on every rank (every rank reads the same phase.txt and bc.txt)
     if (ngsi > 0) then
-      call GSI_Initialize(species_names)
+      call GSI_Initialize(species_names, missing)
+      if ( nreac > 0 .and. len(missing) > 0 ) call mpi_stop_all ( '[ERROR] '//trim(MOSE_phase_prefix)//'bc.txt: the '// &
+        'surface reactions of the walls 505 and 506 (Bradley) need the species O2, O, OH, H, H2, H2O, CO and CO2 in the '// &
+        'gas (phase.txt); it has no '//missing )
     end if
+    ! The pyrolysis-gas tables of the walls 506 that blow it (phi > 0): INPUT/<prefix>pyrolysis.dat, read once here on every
+    ! rank, and only read afterwards (the boundary fluxes, in parallel)
+    if (npyro > 0) call Load_Pyrolysis_Tables ( domain )
 
   end subroutine Setup_BC
 
@@ -132,8 +144,8 @@ contains
       ! This list must stay in step with the property lines actually consumed by
       ! Read_BC below: if a type reads one there but is missing here, the scan
       ! mistakes its property line for a record and the whole file is rejected.
-      ! 501 and 506 keep their property line in this list, as the boundary-condition builder of ATLAS writes it, although
-      ! Read_BCfile stops on their record before reading it (Unapplied_Type): a file of that builder reaches that stop, not
+      ! 501 keeps its property line in this list, as the boundary-condition builder of ATLAS writes it, although
+      ! Read_BCfile stops on its record before reading it (Unapplied_Type): a file of that builder reaches that stop, not
       ! the error of the count.
       ! IDs with ONE property line:
       !   101/103 = connection | 201 = periodic | 301,302 = wall | 401-410,420 = inlet/outlet
@@ -212,6 +224,9 @@ contains
       nconnect = 0
       nwall    = 0
       ngsi     = 0
+      nreac    = 0
+      n506     = 0
+      npyro    = 0
       nSRM     = 0
       nSRMin   = 0
       nio      = 0
@@ -528,11 +543,11 @@ contains
           end if
 
         ! ─────────────────────────────────────────────────────────────────────
-        ! Types that MOSE does not apply: 409 (a forced outlet), 501 (a manifold) and 506 (surface reactions and
-        ! pyrolysis). No branch of the boundary fluxes applies them, so the face would get no flux: the run stops
-        ! here, at the line of the record, before its property line (Unapplied_Type). Check_BC counts the property
-        ! line of 501 and 506, as the boundary-condition builder of ATLAS writes them, so such a file reaches this stop.
-        case(409, 501, 506)
+        ! Types that MOSE does not apply: 409 (a forced outlet) and 501 (a manifold). No branch of the boundary fluxes
+        ! applies them, so the face would get no flux: the run stops here, at the line of the record, before its property
+        ! line (Unapplied_Type). Check_BC counts the property line of 501, as the boundary-condition builder of ATLAS
+        ! writes it, so such a file reaches this stop.
+        case(409, 501)
           call Unapplied_Type ( i, bc(i)%type, nline )
 
         ! ─────────────────────────────────────────────────────────────────────
@@ -621,12 +636,42 @@ contains
         case(505)
           if (level == 1) nwall  = nwall  + 1
           if (level == 1) ngsi   = ngsi   + 1
+          if (level == 1) nreac  = nreac  + 1
           obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
           bc(i)%qrad = EMPTY
           call Next_Line ( unitfile, pline, ios, nline )
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%GSI_surf_reac_id, bc(i)%qrad
           if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%qrad ], 'q_rad' )
+
+        ! ─────────────────────────────────────────────────────────────────────
+        ! GSI - Pyrolysing ablator: the surface reactions of the char (as 505) and the pyrolysis gas blown through it
+        ! Second line: pyro_id, reac_id, phi, h_v0, radiative flux, emissivity (docs/user/boundary-conditions.md)
+        !   pyro_id: the table of INPUT/<prefix>pyrolysis.dat (from 1) of the gas blown, read when phi > 0 (0 with phi = 0);
+        !   reac_id: 1, the surface reactions of Bradley; phi = mdot_pg/mdot_ch >= 0; h_v0: the enthalpy of the virgin
+        !   material on the datum of the gas tables [J/kg]; eps_wall: read, not applied (as 504). All six are required, and
+        !   Check_Ablator stops the run on a value out of its range and on a seventh value (the property line of type 506
+        !   of an ATLAS before this boundary condition: the two ids, q_rad, eps_wall and the mass fractions).
+        case(506)
+          if (level == 1) nwall  = nwall  + 1
+          if (level == 1) ngsi   = ngsi   + 1
+          if (level == 1) nreac  = nreac  + 1
+          if (level == 1) n506   = n506   + 1
+          obj_io_bc%viscous_flag( bc(i)%b , bc(i)%f ) = .true.
+          bc(i)%pyro_table = IEMPTY ; bc(i)%GSI_surf_reac_id = IEMPTY
+          bc(i)%phi = EMPTY ; bc(i)%h_v0 = EMPTY ; bc(i)%qrad = EMPTY ; bc(i)%eps_wall = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          bc(i)%prop_line = nline
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%pyro_table, bc(i)%GSI_surf_reac_id, bc(i)%phi, bc(i)%h_v0, &
+                                                     bc(i)%qrad, bc(i)%eps_wall
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%phi, bc(i)%h_v0, bc(i)%qrad, bc(i)%eps_wall ], &
+                                             'phi h_v0 q_rad eps_wall' )
+          if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, [ bc(i)%pyro_table, bc(i)%GSI_surf_reac_id ], &
+                                        'pyro_id reac_id' )
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%phi, bc(i)%h_v0, bc(i)%qrad, bc(i)%eps_wall ], &
+                                        'phi h_v0 q_rad eps_wall' )
+          if ( ios == 0 ) call Check_Ablator ( i, nline, bc(i), pline )
+          if ( ios == 0 .and. bc(i)%phi > 0d0 ) npyro = npyro + 1
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Coupled multi-solver wall
@@ -945,6 +990,7 @@ contains
     if (nconnect > 0) write(*,'(A,T35,I0)') '   Connection', nconnect
     if (nwall > 0) write(*,'(A,T35,I0)') '   Viscous wall', nwall
     if (ngsi > 0) write(*,'(A,T35,I0)') '   GSI (inc. wall)', ngsi
+    if (n506 > 0) write(*,'(A,T35,I0)') '   Pyrolysing ablator (506)', n506
     if (nio > 0) write(*,'(A,T35,I0)') '   Inflow/outflow', nio
     if (nsym > 0) write(*,'(A,T35,I0)') '   Symmetry', nsym
     if (nper > 0) write(*,'(A,T35,I0)') '   Periodicity', nper
@@ -1294,10 +1340,114 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
+  ! Check_Ablator: stop the run on the property line nline (line) of record n, of type 506 (rec), whose values are out of
+  !   their range (docs/user/boundary-conditions.md): a seventh value (the property line of type 506 of an ATLAS before
+  !   the pyrolysing ablator: the two ids, q_rad, eps_wall and mass fractions), reac_id other than 1 (the surface
+  !   reactions of Bradley), phi < 0, pyro_id < 0, or pyro_id < 1 with phi > 0 (the tables of INPUT/<prefix>pyrolysis.dat
+  !   count from 1; the last one is checked once the file is read, Load_Pyrolysis_Tables). Every rank reads every record,
+  !   so every rank stops on the same one.
+  subroutine Check_Ablator ( n, nline, rec, line )
+    use MOSE_Advanced_Types_m, only: MOSE_bc_type
+    use MOSE_Global_m,         only: MOSE_phase_prefix
+    use MOSE_Mod_MPI,          only: mpi_stop_all
+    implicit none
+    integer, intent(in)            :: n, nline
+    type(MOSE_bc_type), intent(in) :: rec
+    character(len=*), intent(in)   :: line
+    ! Local
+    real(R8) :: v(7)
+    integer  :: ios
+    character(len=160) :: head
+    character(len=400) :: msg
+
+    write(head,'(3A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type 506):'
+    msg = ''
+    read( line,*,iostat=ios ) v
+    if ( .not. is_iostat_end(ios) ) then
+      msg = trim(head)//' the line holds more than the six values pyro_id, reac_id, phi, h_v0, q_rad, eps_wall: a line '// &
+            'of type 506 of an older ATLAS, which wrote the ids, q_rad, eps_wall and mass fractions '// &
+            '(docs/user/boundary-conditions.md)'
+    else if ( rec % GSI_surf_reac_id /= 1 ) then
+      write(msg,'(2A,I0,A)') trim(head), ' reac_id is ', rec % GSI_surf_reac_id, &
+        ': the surface reactions of the wall 506 are those of Bradley, reac_id = 1'
+    else if ( rec % phi < 0d0 ) then
+      write(msg,'(2A,ES12.5,A)') trim(head), ' phi is ', rec % phi, ': the ratio phi = mdot_pg/mdot_ch is 0 or positive'
+    else if ( rec % pyro_table < 0 .or. ( rec % phi > 0d0 .and. rec % pyro_table < 1 ) ) then
+      write(msg,'(2A,I0,3A)') trim(head), ' pyro_id is ', rec % pyro_table, ': with phi > 0 the wall blows the gas of a '// &
+        'table of INPUT/', trim(MOSE_phase_prefix), 'pyrolysis.dat, from 1 (with phi = 0, 0 or a table)'
+    end if
+    if ( len_trim(msg) > 0 ) call mpi_stop_all ( trim(msg) )
+
+  end subroutine Check_Ablator
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Load_Pyrolysis_Tables: read INPUT/<prefix>pyrolysis.dat (FLINT_Lib_PyrolysisGas), the tables of the walls 506 that blow
+  !   the pyrolysis gas (phi > 0), print them (root), and check every such record of every multigrid level: its table
+  !   exists (pyro_id at most the number of tables) and has no condensed-carbon column (treatment condensed, for the
+  !   deferred soot evolution: the wall 506 blows the gas of a table whose rows sum to 1). Every rank reads the file and
+  !   stops on the same record (mpi_stop_all); the message names the boundary file of the level of the record.
+  subroutine Load_Pyrolysis_Tables ( domain )
+    use MOSE_Advanced_Types_m
+    use MOSE_Global_m,           only: MOSE_phase_prefix
+    use MOSE_Mod_MPI,            only: mpi_stop_all, mpi_is_root
+    use FLINT_Lib_Thermodynamic, only: species_names
+    use FLINT_Lib_PyrolysisGas,  only: read_pyrolysis_tables, pyrolysis_table_count, pyrolysis_table_info
+    use IR_Precision,            only: str
+    implicit none
+    type(MOSE_domain_type), intent(in) :: domain(:)
+    ! Local
+    integer  :: m, r, t, ntab
+    logical  :: cond
+    real(R8) :: pmin, pmax, Tmin, Tmax
+    character(len=64)  :: tname, treat, file_m
+    character(len=400) :: msg
+    character(len=:), allocatable :: pyro_file
+
+    pyro_file = 'INPUT/'//trim(MOSE_phase_prefix)//'pyrolysis.dat'
+    if ( read_pyrolysis_tables ( pyro_file, species_names ) /= 0 ) call mpi_stop_all ( '[ERROR] '//pyro_file// &
+      ': the pyrolysis-gas tables of the walls 506 with phi > 0 cannot be read (the message of FLINT above)' )
+    ntab = pyrolysis_table_count ()
+    if ( mpi_is_root ) then
+      write(*,*)
+      write(*,'(3A,I0,A)') ' Pyrolysis-gas tables: ', pyro_file, ', ', ntab, ' table(s)'
+      do t = 1, ntab
+        call pyrolysis_table_info ( t, tname, treat, cond, pmin, pmax, Tmin, Tmax )
+        write(*,'(3X,I0,5A,ES11.4,A,ES11.4,A,ES11.4,A,ES11.4,A)') t, ' ', trim(tname), ' (', trim(treat), '): p ', pmin, &
+          ' to ', pmax, ' Pa, T ', Tmin, ' to ', Tmax, ' K'
+      end do
+    end if
+    do m = 1, size(domain)
+      if ( m == 1 ) then
+        file_m = trim(MOSE_phase_prefix)//'bc.txt'
+      else
+        file_m = trim(MOSE_phase_prefix)//'bc'//trim(str(.true.,m))//'.txt'
+      end if
+      do r = 1, domain(m) % nbound
+        if ( domain(m) % bc(r) % type /= 506 ) cycle
+        if ( .not. ( domain(m) % bc(r) % phi > 0d0 ) ) cycle
+        t = domain(m) % bc(r) % pyro_table
+        msg = ''
+        if ( t > ntab ) then
+          write(msg,'(3A,I0,A,I0,A,I0,3A,I0,A)') '[ERROR] ', trim(file_m), ' line ', domain(m) % bc(r) % prop_line, &
+            ' (record ', r, ', type 506): pyro_id is ', t, ', but ', pyro_file, ' holds ', ntab, ' table(s)'
+        else
+          call pyrolysis_table_info ( t, tname, treat, cond, pmin, pmax, Tmin, Tmax )
+          if ( cond ) write(msg,'(3A,I0,A,I0,A,I0,7A)') '[ERROR] ', trim(file_m), ' line ', domain(m) % bc(r) % prop_line, &
+            ' (record ', r, ', type 506): table ', t, ' (', trim(tname), ') of ', pyro_file, &
+            ' has a condensed-carbon column (treatment ', trim(treat), &
+            '): the wall 506 blows the gas of a table of treatment gas-only or strip'
+        end if
+        if ( len_trim(msg) > 0 ) call mpi_stop_all ( trim(msg) )
+      end do
+    end do
+
+  end subroutine Load_Pyrolysis_Tables
+  !─────────────────────────────────────────────────────────────────────────────
   ! Unapplied_Type: stop the run on record n, of type btype, whose record line is line nline of the boundary file: a type
-  !   that MOSE does not apply, 409 (a forced outlet), 501 (a manifold) or 506 (surface reactions and pyrolysis), whose
-  !   face would get no flux (for another btype the message names no model). Every rank reads every record of the file, so
-  !   every rank stops on the same record (mpi_stop_all).
+  !   that MOSE does not apply, 409 (a forced outlet) or 501 (a manifold), whose face would get no flux (for another btype
+  !   the message names no model). Every rank reads every record of the file, so every rank stops on the same record
+  !   (mpi_stop_all).
   subroutine Unapplied_Type ( n, btype, nline )
     use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
@@ -1314,9 +1464,6 @@ contains
     case ( 501 )
       what   = 'a manifold'
       advice = 'join faces that match cell by cell with a block connection (101), or give the face an inlet or outlet type'
-    case ( 506 )
-      what   = 'surface reactions and pyrolysis'
-      advice = 'give the face type 504 (pyrolysis) or 505 (surface reactions)'
     case default
       what   = 'a type with no boundary flux'
       advice = 'give the face a type of the user guide (docs/user/boundary-conditions.md)'

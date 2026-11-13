@@ -21,7 +21,7 @@
 !>
 !> Positions: the centre of a cell is the mean of its eight nodes; the first layer of ghost cells takes the position at
 !> which its value is right for a linear field: the centre of the cell across a face between blocks (plus the translation of
-!> a periodic pair), behind a wall (103, 104, 301, 302, 503-505) 2 x_f - x1 (x_f the centre of the face) for the quantities with a
+!> a periodic pair), behind a wall (103, 104, 301, 302, 503-506) 2 x_f - x1 (x_f the centre of the face) for the quantities with a
 !> wall value and x1 + s (x1 - x2) for the extrapolated ones, behind a 400 face x1 + s (x1 - x2) (Ghost_Wall; s = l0/l1,
 !> x1 with one cell across the face), 3 x1 - 3 x2 + x3 behind the faces whose ghost value is 3 u1 - 3 u2 + u3
 !> (Ghost_Extrapolate: 408, 502, ...; 2 x1 - x2, or x1, in a block with two cells, or one, across the face; in a RANS run
@@ -309,7 +309,7 @@ contains
           xc(b) % x(:,Ig,Jg,Kg) = x1             ! a plane 2-D mesh, where these faces carry no viscous flux
         end if
 
-      case (103, 104, 301, 302, 400, 503:505)   ! walls and 400 (Ghost_Wall): x1 + s (x1 - x2) for the extrapolated
+      case (103, 104, 301, 302, 400, 503:506)   ! walls and 400 (Ghost_Wall): x1 + s (x1 - x2) for the extrapolated
         y = x1                                  ! quantities (x1 with one cell), 2 x_f - x1 for those with a wall value
         if ( nd >= 2 ) y = x1 + domain % bc(r) % sx * ( x1 - xc(b) % x(:,c2(1),c2(2),c2(3)) )
         xc(b) % xe(:,Ig,Jg,Kg) = y
@@ -391,7 +391,7 @@ contains
         Extrapolated_Groups = 3                  ! species, temperature (103, 104: the walls coupled to another solver)
       case (302)
         Extrapolated_Groups = 1                  ! species
-      case (502:505)
+      case (502:506)
         Extrapolated_Groups = 7                  ! species, temperature, velocity
       case default
         Extrapolated_Groups = ALL_EXTRAPOLATED   ! 400
@@ -925,7 +925,7 @@ contains
   end subroutine Rotational_Face_Metric
 
 
-  !> Wall faces with diffusive-metric = stencil (types 301, 302, and 503-505 when they do not ablate; not the coupled walls
+  !> Wall faces with diffusive-metric = stencil (types 301, 302, and 503-506 when they do not ablate; not the coupled walls
   !> 103 and 104, whose wall flux comes from the other solver, so that no wall routine takes their gradient): the face metric of
   !> the wall gradient and the tangential differences of the imposed wall temperature, stored in the record (bc%wstencil,
   !> wM, wdT) and used by BC_Wall_Temperature and BC_Wall_Heat. The difference across the face is the one of the wall
@@ -935,7 +935,7 @@ contains
   !> neighbour, the edge of the cell and no difference of the field. Exact for a linear field whose wall values
   !> are its values at the face centres: T_w of the 302 records, and the velocity, zero on the wall. The velocity of the
   !> stationary faces of a rotating frame, linear in x, is not stored here: the wall routines take its differences along
-  !> the columns of this metric from its gradient. Not here: the temperature of the 503-505 faces, which the surface
+  !> the columns of this metric from its gradient. Not here: the temperature of the 503-506 faces, which the surface
   !> model sets at every call.
   subroutine Wall_Face_Stencils ( domain, xc )
     use MOSE_Advanced_Types_m
@@ -1030,7 +1030,7 @@ contains
 
     logical function Is_Wall ( t )
       integer, intent(in) :: t
-      Is_Wall = ( t == 301 .or. t == 302 .or. t == 503 .or. t == 504 .or. t == 505 )
+      Is_Wall = ( t == 301 .or. t == 302 .or. t == 503 .or. t == 504 .or. t == 505 .or. t == 506 )
     end function Is_Wall
 
     !> modfm3 of Compute_Modfm: +2 on the faces 1, 3, 5 (the wall at the low index of the cell), -2 on 2, 4, 6.
@@ -1051,7 +1051,7 @@ contains
   !> for the state of its file and x_c for the turbulence variables (Ghost_Q2D_Mapped). One metric per group: the
   !> velocity (blk%Ms); the density, whose ghost value follows the temperature behind a wall (blk%Msc: exact where the
   !> pressure and the composition do not vary across the wall cell, as in a boundary layer); the turbulence variables
-  !> (blk%Mst, only on the blocks where their position is not that of the velocity: a 503-505 wall, a mapped face in a
+  !> (blk%Mst, only on the blocks where their position is not that of the velocity: a 503-506 wall, a mapped face in a
   !> RANS run). The velocity
   !> gradients of SA-RC (Compute_Velocity_Gradient): blk%Msa, behind the faces between blocks (101, 201) and of a sector
   !> turned about x (200) the position of the cell across, whose gradient the ghost cell holds (Connection_Ghost_Position,

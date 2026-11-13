@@ -27,6 +27,7 @@ contains
     use MOSE_Lib_BC_Fluxes_GSI_Melting
     use MOSE_Lib_BC_Fluxes_GSI_Pyrolysis
     use MOSE_Lib_BC_Fluxes_GSI_Reactions
+    use MOSE_Lib_BC_Fluxes_GSI_Char_Pyrolysis
     use MOSE_Lib_BC_Fluxes_GSI_SRM
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
@@ -265,7 +266,7 @@ contains
               endif
 
             ! ─────────────────────────────────────────────────────────────────
-            ! Gas-surface interaction walls (503-505).
+            ! Gas-surface interaction walls (503-506).
             !
             ! While the surface ablates, the GSI routine lays down the complete
             ! boundary flux -- wall pressure, the momentum and enthalpy convected in
@@ -317,8 +318,18 @@ contains
                   call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
               endif
 
-            ! case(506) ! GSI - surface reactions + pyrolysis
-            ! TODO: implement this case in the future
+            case(506) ! GSI - pyrolysing ablator: the surface reactions of the char and the pyrolysis gas blown through it
+              ablating = .false.
+              Tw_surface = 0d0
+              if (model>0) &
+                call BC_Wall_Char_Pyrolysis( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % GSI_surf_reac_id, &
+                                             domain % bc(i) % pyro_table, domain % bc(i) % phi, domain % bc(i) % h_v0, &
+                                             domain % bc(i) % qrad, ablating = ablating, T_surface = Tw_surface )
+              if (.not. ablating) then
+                call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+                if (model>0) &
+                  call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), Tw_surface, rec = domain % bc(i) )
+              endif
 
           end select
 

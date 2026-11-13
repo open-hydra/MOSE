@@ -201,6 +201,7 @@ The `test/common/` directory contains shared species databases:
 | `nondim-Air/` | Same mixture in non-dimensional form |
 | `Air-sutherland/` | Transport table of air: viscosity and conductivity |
 | `Air-viscous/` | One-species air: phase, thermodynamic and transport tables |
+| `CHO-N2-viscous/` | The eight species of the surface reactions of a carbon wall (O₂, O, OH, H, H₂, H₂O, CO, CO₂) and N₂: phase, thermodynamic (1..3000 K), transport and composition tables, written by ATLAS GPB (provenance in its `README.md`) |
 
 Test cases symlink to these files rather than duplicating them.
 

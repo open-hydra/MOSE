@@ -1,6 +1,7 @@
 module MOSE_Lib_BC_Fluxes_GSI_Core
   !< Shared machinery for the ablative wall boundary conditions: melting (BC 503),
-  !< pyrolysis (BC 504) and surface reactions (BC 505).
+  !< pyrolysis (BC 504), surface reactions (BC 505) and the pyrolysing ablator (BC 506: the surface reactions of BC 505
+  !< and the pyrolysis gas blown through the char, GSI_KIND_CHAR_PYROLYSIS).
   !<
   !< All three model a *blowing* wall, where a gas-surface interaction (GSI) model
   !< injects mass into the domain. They share the same three steps:
@@ -55,13 +56,21 @@ module MOSE_Lib_BC_Fluxes_GSI_Core
   public :: Wall_Gas_State, GSI_Source, Solve_Wall_Temperature, Ablation_Wall_Fluxes
   public :: Surface_Is_Ablating
   public :: BC_Wall_Ablation
-  public :: GSI_KIND_PYROLYSIS, GSI_KIND_REACTIONS
+  public :: GSI_KIND_PYROLYSIS, GSI_KIND_REACTIONS, GSI_KIND_CHAR_PYROLYSIS, gsi_pyrolysis_t
   public :: GSI_PYRO_HTPB, GSI_PYRO_HDPE, GSI_PYRO_PP, GSI_REAC_CARBON_BRADLEY
   public :: RANS_WALL_NO_BLOWING, RANS_WALL_BLOWING
 
   !> Family of gas-surface interaction model, selecting the GSI dispatch.
   integer, parameter :: GSI_KIND_PYROLYSIS = 1  !< Arrhenius pyrolysis of a solid fuel
   integer, parameter :: GSI_KIND_REACTIONS = 2  !< heterogeneous surface reactions
+  integer, parameter :: GSI_KIND_CHAR_PYROLYSIS = 3  !< surface reactions of a char and the pyrolysis gas blown through it
+
+  !> The data of a pyrolysing ablator wall (BC 506) that its gas-surface interaction takes (GSI_Char_Pyrolysis)
+  type :: gsi_pyrolysis_t
+    integer  :: table = 0     !< table of INPUT/<prefix>pyrolysis.dat (FLINT_Lib_PyrolysisGas), read when phi > 0
+    real(R8) :: phi   = 0d0   !< mdot_pg / mdot_ch
+    real(R8) :: h_v0  = 0d0   !< enthalpy of the virgin material, on the datum of the gas tables [J/kg]
+  end type gsi_pyrolysis_t
 
   !> Pyrolysis models, matching `bc % GSI_pyro_model_id`.
   integer, parameter :: GSI_PYRO_HTPB = 1
@@ -204,7 +213,7 @@ contains
   end subroutine Wall_Gas_State
 
 
-  subroutine GSI_Source ( gsi_kind, gsi_id, face, roi_wall, T_wall, omega, q_pyro, mdot, y_wall )
+  subroutine GSI_Source ( gsi_kind, gsi_id, face, roi_wall, T_wall, omega, q_pyro, mdot, y_wall, pyro, p_wall )
     !< Evaluate the selected gas-surface interaction model.
     !<
     !< The mass flux and the species source term are returned already signed with
@@ -220,6 +229,8 @@ contains
     real(R8), intent(out) :: q_pyro                !< heat absorbed by the surface
     real(R8), intent(out) :: mdot                  !< blown mass flux
     real(R8), intent(in), optional :: y_wall(nsc)  !< pyrolysis product mass fractions
+    type(gsi_pyrolysis_t), intent(in), optional :: pyro  !< the pyrolysing ablator (GSI_KIND_CHAR_PYROLYSIS)
+    real(R8), intent(in), optional :: p_wall       !< wall pressure, of the table lookup of the pyrolysing ablator
 
     ! Defined even if a model leaves one of them untouched.
     omega  = 0d0
@@ -242,6 +253,16 @@ contains
       case ( GSI_KIND_REACTIONS )
         select case ( gsi_id )
           case ( GSI_REAC_CARBON_BRADLEY ) ; call GSI_Carbon_Bradley ( roi_wall, T_wall, omega, q_pyro, mdot )
+          case default
+            error stop 'GSI_Source: unknown surface reaction model id'
+        end select
+
+      case ( GSI_KIND_CHAR_PYROLYSIS )
+        if ( .not. ( present(pyro) .and. present(p_wall) ) ) &
+          error stop 'GSI_Source: the pyrolysing ablator requires its data and the wall pressure'
+        select case ( gsi_id )
+          case ( GSI_REAC_CARBON_BRADLEY ) ; call GSI_Char_Pyrolysis ( roi_wall, T_wall, p_wall, pyro % table, pyro % phi, &
+                                                                      pyro % h_v0, omega, q_pyro, mdot )
           case default
             error stop 'GSI_Source: unknown surface reaction model id'
         end select
@@ -274,7 +295,7 @@ contains
 
   subroutine Solve_Wall_Temperature ( face, gsi_kind, gsi_id, Prim, rho, Rgas, T_cell, q_rad, &
                                       T_wall, rho_wall, roi_wall, mu_wall, k_wall, grad_T, &
-                                      q_conv, omega, q_pyro, mdot, y_wall )
+                                      q_conv, omega, q_pyro, mdot, y_wall, pyro )
     !< Find the wall temperature that closes the surface energy balance
     !< `q_conv - q_pyro - q_rad = 0`, by a secant iteration.
     !<
@@ -291,6 +312,7 @@ contains
     real(R8), intent(out) :: grad_T(3), q_conv
     real(R8), intent(out) :: omega(nsc), q_pyro, mdot
     real(R8), intent(in), optional :: y_wall(nsc)
+    type(gsi_pyrolysis_t), intent(in), optional :: pyro
     ! Local
     integer  :: iter
     real(R8) :: balance, balance_old, T_wall_old
@@ -341,7 +363,8 @@ contains
       call Wall_Gas_State ( face, Prim, rho, Rgas, T_cell, T_try, &
                             rho_wall, roi_wall, mu_wall, k_wall, grad_T, q_conv )
 
-      call GSI_Source ( gsi_kind, gsi_id, face, roi_wall, T_try, omega, q_pyro, mdot, y_wall )
+      ! p(wall) = p(cell): the pressure of the table lookup of the pyrolysing ablator
+      call GSI_Source ( gsi_kind, gsi_id, face, roi_wall, T_try, omega, q_pyro, mdot, y_wall, pyro, Prim(np) )
 
       balance = q_conv - q_pyro - q_rad
 
@@ -462,10 +485,10 @@ contains
 
 
   subroutine BC_Wall_Ablation ( Im, Jm, Km, Fm, Blk, gsi_kind, gsi_id, qrad, Ovar, y_wall, &
-                               ablating, T_surface )
+                               ablating, T_surface, pyro )
     !< Blowing wall whose temperature is set by the surface energy balance.
     !<
-    !< Backs both `BC_Wall_Pyrolysis` and `BC_Wall_Reactions`, which differ only in
+    !< Backs `BC_Wall_Pyrolysis`, `BC_Wall_Reactions` and `BC_Wall_Char_Pyrolysis`, which differ only in
     !< the gas-surface interaction model they select.
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
@@ -477,6 +500,7 @@ contains
     real(R8), intent(in), optional :: y_wall(nsc)  !< pyrolysis product mass fractions
     logical,  intent(out), optional :: ablating    !< .false. if the surface is inert
     real(R8), intent(out), optional :: T_surface   !< wall temperature, usable either way
+    type(gsi_pyrolysis_t), intent(in), optional :: pyro  !< the pyrolysing ablator (GSI_KIND_CHAR_PYROLYSIS)
     ! Local
     logical :: ablates
     type(wall_face_t) :: face
@@ -495,7 +519,7 @@ contains
 
     call Solve_Wall_Temperature ( face, gsi_kind, gsi_id, Prim, rho, Rgas, T_cell, q_rad, &
                                   T_wall, rho_wall, Prim_wall(1:nsc), mu_wall, k_wall, grad_T, &
-                                  q_conv, omega, q_pyro, mdot, y_wall )
+                                  q_conv, omega, q_pyro, mdot, y_wall, pyro )
 
     ! An inert surface gets no ablation flux at all: leave the residual untouched and
     ! report back, so the caller can close the face with an impermeable wall instead.
