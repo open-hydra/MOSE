@@ -13,7 +13,7 @@
 #  60 s with exit code 1 to 128 and its message (the ranks stop together, with
 #  MPI_FINALIZE). A rank that ends alone, with STOP and without MPI_FINALIZE,
 #  leaves the others to the launcher: the mpiexec of Intel MPI 2021.12 kills
-#  them and ends with exit code 255. The inputs come from ../../fast/input-checks/exit-codes/make_case.py
+#  them and ends with exit code 255. The inputs come from ../../checks/input-checks/exit-codes/make_case.py
 #  (the Sod ones); nothing else is stored here.
 #
 #  A value of the initial condition that is not finite must stop every rank,
@@ -69,7 +69,7 @@
 #
 #  A failed integration of the finite-rate chemistry on one rank must stop
 #  every rank: the Sod tube holding the gas of test/1D/Fer14 with its
-#  reaction mechanism (../../fast/input-checks/exit-codes/make_case.py fer14)
+#  reaction mechanism (../../checks/input-checks/exit-codes/make_case.py fer14)
 #  and a relative tolerance of the species of 1e-30, which the default
 #  integrator, H-radau5, refuses at every call, its one block on rank 1 (a
 #  decomposition map: rank 0 holds no block and idles), on 2 ranks with 2
@@ -81,7 +81,7 @@
 #  in its next exchange, and the run would hang until the time limit.
 #  Failed integrations on both ranks give one line, from the rank that holds
 #  the smallest block with a failed cell: the box of
-#  ../../fast/input-checks/exit-codes/make_case.py ignition, whose hot cells
+#  ../../checks/input-checks/exit-codes/make_case.py ignition, whose hot cells
 #  need more steps than ode-max-steps = 10 in both of its blocks, block 1 on
 #  rank 1 and block 2 on rank 0 (a decomposition map), on 2 ranks with 2
 #  threads each, must end within 60 s with exit code 1, the line of return
@@ -126,7 +126,7 @@ fi
 rm -f INPUT/*
 ln -sf "../$COMMON/phase.txt" INPUT/phase.txt
 ln -sf "../$COMMON/thermo.dat" INPUT/thermo.dat
-python3 -B ../../fast/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
+python3 -B ../../checks/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
 cat > input.ini <<EOI
 [MOSE-Parameters]
 iter-threshold = 50
@@ -197,10 +197,10 @@ EOI
 python3 -B ../write_map.py --layout 1x1 --cells 100 1 --owners list:1 > /dev/null || exit 1
 for tag in mpi-nan-ic mpi-inf-node; do
   if [[ $tag == mpi-nan-ic ]]; then
-    python3 -B ../../fast/input-checks/exit-codes/make_case.py nan "$SOD" || exit 1
+    python3 -B ../../checks/input-checks/exit-codes/make_case.py nan "$SOD" || exit 1
     place="variable 2 (u) of block 1, cell i, j, k = 50, 1, 1"
   else
-    python3 -B ../../fast/input-checks/exit-codes/make_case.py inf "$SOD" || exit 1
+    python3 -B ../../checks/input-checks/exit-codes/make_case.py inf "$SOD" || exit 1
     place="coordinate y of block 1, node i, j, k = 20, 1, 1"
   fi
   run2 $tag "holds a value that is not finite (NaN or infinity): $place" "initial condition error (see above)"
@@ -215,7 +215,7 @@ done
 rm -f INPUT/decomposition.map
 
 echo "-- the nodes of a file of faces of type 410 that are not those of the faces stop every rank (2 ranks, a block on each) --"
-python3 -B ../../fast/input-checks/exit-codes/make_case.py duct410 swapped || exit 1
+python3 -B ../../checks/input-checks/exit-codes/make_case.py duct410 swapped || exit 1
 cat > input.ini <<EOI
 [MOSE-Parameters]
 iter-threshold = 5
@@ -237,7 +237,7 @@ EOI
 run2 mpi-q2d-nodes "Q2D file q2d-side.dat, zone 1 (line 2): node I=1, J=1 of the zone, a corner of the face of record 205" \
   "[ERROR] Q2D file q2d-side.dat, zone 1 (line 2): node I=1, J=1 of the zone, a corner of the face of record 205"
 rm -f q2d-ends.dat q2d-jfaces.dat q2d-side.dat
-python3 -B ../../fast/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
+python3 -B ../../checks/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
 
 echo "-- a record of a type that MOSE does not apply stops every rank (2 ranks) --"
 sed -e '2s/ 400$/ 409/' INPUT/bc.txt > INPUT/bc-409.txt && mv INPUT/bc-409.txt INPUT/bc.txt
@@ -248,7 +248,7 @@ else
   echo "  [FAIL] mpi-unapplied, case generation: record 2 of the Sod tube is not of type 409"
   fail=1
 fi
-python3 -B ../../fast/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
+python3 -B ../../checks/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
 
 echo "-- a value out of its rule written in the input.ini of rank 0 stops every rank when it is read again with ini-error = stop" \
      "(2 ranks, two folders) --"
@@ -356,7 +356,7 @@ else
 fi
 
 echo "-- an initial condition that one rank alone cannot read stops every rank (2 ranks, two folders) --"
-python3 -B ../../fast/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
+python3 -B ../../checks/input-checks/exit-codes/make_case.py sod "$SOD" || exit 1
 mkdir -p "$M/ic"
 for d in A B; do
   rm -rf "$M/ic/$d"
@@ -415,7 +415,7 @@ rm -f INPUT/phase.txt INPUT/thermo.dat
 ln -sf "../$FER/phase.txt" INPUT/phase.txt; ln -sf "../$FER/thermo.dat" INPUT/thermo.dat
 ln -sf "../$FER/chemistry-info.txt" INPUT/chemistry-info.txt
 ln -sf "../$FER/chemistry-Arrhenius.dat" INPUT/chemistry-Arrhenius.dat
-python3 -B ../../fast/input-checks/exit-codes/make_case.py fer14 "$SOD" INPUT/phase.txt || exit 1
+python3 -B ../../checks/input-checks/exit-codes/make_case.py fer14 "$SOD" INPUT/phase.txt || exit 1
 cat > input.ini <<EOI
 [MOSE-Parameters]
 iter-threshold = 3
@@ -468,7 +468,7 @@ rm -f INPUT/decomposition.map
 
 echo "-- integrations of the finite-rate chemistry that need more steps than ode-max-steps on both ranks: one line, from the rank" \
      "of the smallest block (2 ranks, 2 threads each) --"
-python3 -B ../../fast/input-checks/exit-codes/make_case.py ignition INPUT/phase.txt || exit 1
+python3 -B ../../checks/input-checks/exit-codes/make_case.py ignition INPUT/phase.txt || exit 1
 cat > input.ini <<EOI
 [MOSE-Parameters]
 iter-threshold = 3
@@ -514,7 +514,7 @@ fi
 rm -f INPUT/decomposition.map
 
 echo "-- a rank that stops every rank with MPI_ABORT writes out its output first (one process without the launcher) --"
-python3 -B ../../fast/input-checks/exit-codes/make_case.py fer14 "$SOD" INPUT/phase.txt || exit 1
+python3 -B ../../checks/input-checks/exit-codes/make_case.py fer14 "$SOD" INPUT/phase.txt || exit 1
 cat > input.ini <<EOI
 [MOSE-Parameters]
 iter-threshold = 2

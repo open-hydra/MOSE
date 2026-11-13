@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Local time step next to the axis of an axisymmetric wedge (validation tier)
+#  Local time step next to the axis of an axisymmetric wedge
 #
 #  The viscous stress on the wedge faces adds to the cells next to the axis a
 #  hoop term, -(2 mu + lambda) u_r / (rho r^2), and couplings to the

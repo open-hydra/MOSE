@@ -13,9 +13,9 @@ if [[ ! -f "${BUILD_DIR}/Makefile" && ! -f "${BUILD_DIR}/build.ninja" ]]; then
     exit 0
 fi
 
-echo "[pre-push] Running fast CTest suite (ctest -L fast)..."
-if ctest --test-dir "${BUILD_DIR}" -L fast --output-on-failure --timeout 120; then
-    echo "[pre-push] All fast tests passed."
+echo "[pre-push] Running the light CTest tier (ctest -L light)..."
+if ctest --test-dir "${BUILD_DIR}" -L light --output-on-failure -j "$(nproc 2>/dev/null || echo 4)"; then
+    echo "[pre-push] All light tests passed."
 else
     echo "[pre-push] Tests FAILED — push aborted."
     exit 1

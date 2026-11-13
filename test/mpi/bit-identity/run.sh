@@ -19,7 +19,7 @@
 #    sa-unsteady  the same box, Spalart-Allmaras, time-accurate, RK3, 20 steps;
 #    star3        the mesh of ViscousLinearPatch with a point shared by three
 #                 blocks, star5 the one with a point shared by five blocks
-#                 (../../fast/viscous-patch/viscous-linear-patch/make_case.py: nodes moved
+#                 (../../checks/viscous-patch/viscous-linear-patch/make_case.py: nodes moved
 #                 at random, a linear velocity with shear and dilatation at
 #                 10 Pa, outer faces 400, symmetry planes in z): Navier-Stokes,
 #                 time-accurate, RK3, 40 steps, so the state around the shared
@@ -49,7 +49,7 @@ cd "$HERE"
 MASTER=../../../bin/MOSE
 LOCAL=./bin/MOSE
 COMMON=../../common/Air-viscous
-PATCH=../../fast/viscous-patch/viscous-linear-patch/make_case.py
+PATCH=../../checks/viscous-patch/viscous-linear-patch/make_case.py
 MPIEXEC=${MOSE_MPIEXEC:-mpiexec}
 NPFLAG=${MOSE_MPIEXEC_NUMPROC_FLAG:--n}
 LAYOUTS="1x4 2x1 4x1 2x2"

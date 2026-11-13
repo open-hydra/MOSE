@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Derive the manufactured-solution source terms of the fields periodic3d, wall2d
-and wall3d of src/app/mms.f90 (chosen there with MOSE_MMS_FIELD) and emit the
+and wall3d of test/unit/mms.f90 (chosen there with MOSE_MMS_FIELD) and emit the
 Fortran expressions of their source subroutines.
 
 Same gas and transport as mms_gen.py (the field periodic2d): calorically perfect

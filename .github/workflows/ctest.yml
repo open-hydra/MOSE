@@ -77,14 +77,24 @@ jobs:
       - name: Build
         run: cmake --build build --parallel $(nproc)
 
+      - name: Check the list of tests in the test plan
+        # test/TESTING-PLAN.md lists the tests; the list is generated from the registrations
+        run: python3 test/tools/inventory.py build --check
+
       - name: Run tests
-        # Exclude cases that need heavy/optional dependencies disabled in this build
-        # (Cantera, SUNDIALS, MPI) and the full forms of the verification cases
-        # (label verification), which run on request. See test/TESTING-PLAN.md
-        # for the tiering.
+        # The tiers light and medium, in parallel (each test runs at one thread); heavy runs locally.
+        # Excluded: tests that need an option this build does not have (Cantera, SUNDIALS, MPI).
+        # See test/TESTING-PLAN.md.
         run: >
-          ctest --test-dir build --output-on-failure --timeout 300
-          --label-exclude "needs-cantera|needs-sundials|needs-mpi|verification"
+          ctest --test-dir build --output-on-failure -j $(nproc)
+          --output-junit ${{ github.workspace }}/junit.xml
+          --label-regex "light|medium"
+          --label-exclude "needs-cantera|needs-sundials|needs-mpi"
+
+      - name: Times by tier
+        # The slowest tests and the tests outside their tier go to the summary of the job
+        if: always()
+        run: python3 test/tools/ctest_tiers.py report junit.xml --markdown >> "$GITHUB_STEP_SUMMARY"
 
   test-mpi:
     # gfortran with the MPI library of Ubuntu (Open MPI): the build with
@@ -137,5 +147,9 @@ jobs:
           OMPI_MCA_rmaps_base_oversubscribe: "1"
           PRTE_MCA_rmaps_default_mapping_policy: ":oversubscribe"
         run: >
-          ctest --test-dir build --output-on-failure --timeout 900
-          --label-regex needs-mpi --no-tests=error
+          ctest --test-dir build --output-on-failure --output-junit ${{ github.workspace }}/junit.xml
+          --label-regex needs-mpi --label-exclude heavy --no-tests=error
+
+      - name: Times by tier
+        if: always()
+        run: python3 test/tools/ctest_tiers.py report junit.xml --markdown >> "$GITHUB_STEP_SUMMARY"

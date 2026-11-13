@@ -3,7 +3,7 @@
 #          FILE: MOSE.sh
 #   DESCRIPTION: run the 2D viscous Method-of-Manufactured-Solutions order study (N2)
 #
-#   Uses the dedicated MOSE_mms driver (src/app/mms.f90), which injects the
+#   Uses the dedicated MOSE_mms driver (test/unit/mms.f90), which injects the
 #   analytic manufactured source term making a smooth periodic field an EXACT
 #   steady Navier-Stokes solution.  The meshes/ICs/BCs for each resolution are
 #   pre-generated and committed (INPUT/ic-<N>.tec, INPUT/bc-<N>.txt).  To
@@ -34,7 +34,8 @@ function print_usage {
 }
 
 MASTERDIR=../../../../
-MASTER=$MASTERDIR/bin/MOSE_mms
+# the driver is built with the checks of test/unit: <build>/test/MOSE_mms (the CTest tests pass MOSE_MMS_BIN)
+MASTER=${MOSE_MMS_BIN:-$MASTERDIR/build/test/MOSE_mms}
 LOCAL=./bin/MOSE_mms
 
 BG=0
@@ -61,6 +62,7 @@ if [[ $1 == solve || $1 == test || $1 == testfast ]]; then
   ulimit -s unlimited
   export KMP_STACKSIZE=100M
   export OMP_NUM_THREADS=$NTHREADS
+  [[ -x "$MASTER" ]] || { echo "MOSE.sh: $MASTER not found: build MOSE (the driver is built in build/test), or set MOSE_MMS_BIN"; exit 1; }
   if [[ "$MASTER" -nt "$LOCAL" ]]; then cp $MASTER $LOCAL; fi
 
   if [[ $1 == solve ]]; then

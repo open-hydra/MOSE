@@ -144,8 +144,9 @@ cmake .. \
 cmake --build . --parallel
 ```
 
-The build directory is `build/` in these examples. The static library is `build/src/lib/libMOSEL.a`; the executables (`MOSE`, `DocGen`, `MOSE_mms`) go to `bin/` of the source tree,
-whatever the build directory.
+The build directory is `build/` in these examples. The static library is `build/src/lib/libMOSEL.a`; the executables (`MOSE`, `DocGen`) go to `bin/` of the source tree,
+whatever the build directory; the programs of the test suite, the checks of `test/unit` and the
+manufactured-solution driver `MOSE_mms`, are built in `build/test/`.
 
 In a new build directory, an option that the command line does not set takes its default. With no `-D` option, `cmake ..`
 configures a RELEASE build with `USE_IPO` ON, `USE_OPENMP`, `USE_MPI` and `USE_CANTERA` OFF, and `USE_TECIO` and `USE_SUNDIALS`

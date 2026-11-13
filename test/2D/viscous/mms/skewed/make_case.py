@@ -19,7 +19,7 @@ The two blocks meet with permuted indices: zigzag, the second half turned by
 that its j face meets an i face (3D: a k face, with the index directions
 permuted and reversed).
 
-Fields (the manufactured fields of the MOSE_mms driver, src/app/mms.f90):
+Fields (the manufactured fields of the MOSE_mms driver, test/unit/mms.f90):
   periodic2d, periodic3d  periodic on every side (types 201);
   wall2d, wall3d          periodic in x (and z), walls at y = 0 (type 302,
                           T = T_w) and y = 1 (type 301, the exact wall heat
@@ -51,7 +51,7 @@ BC_CONN, BC_PER = 101, 201
 
 
 # --------------------------------------------------------------------------------------------------
-# Exact fields (the same as src/app/mms.f90 and mms_gen_fields.py)
+# Exact fields (the same as test/unit/mms.f90 and mms_gen_fields.py)
 # --------------------------------------------------------------------------------------------------
 def exact(field, x, y, z):
     """rho, u, v, w, p, T at the given points."""

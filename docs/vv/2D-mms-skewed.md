@@ -79,7 +79,7 @@ table `test/2D/viscous/mms/INPUT/transport.dat` (the values of ATLAS GPB with `m
 
 ## Results
 
-- **Short form** (`MMSViscousSkewed`, validation tier of CTest): passes its
+- **Short form** (`MMSViscousSkewed`, a medium test of CTest): passes its
   checks on every case: the four on the case with walls, checks 1, 2 and 4 on
   the two periodic ones.
 - **Full form** (`./MOSE.sh test`): the refinement study of the three cases on
@@ -137,8 +137,10 @@ cd test/2D/viscous/mms/skewed
 python verify.py
 ```
 
-The case runs `bin/MOSE_mms`, the variant of the solver that adds the analytic
-source at every Runge–Kutta stage.
+The case runs `MOSE_mms`, the variant of the solver that adds the analytic
+source at every Runge–Kutta stage. It is built with the test programs in
+`build/test/` (CTest passes its path; by hand, `MOSE.sh` takes `build/test/MOSE_mms`
+or the file named by `MOSE_MMS_BIN`).
 
 ## References
 

@@ -231,7 +231,7 @@ Then solve:
 
 ```bash
 ./MOSE.sh compile              # or copy an existing bin/MOSE
-./MOSE.sh solve -p 60          # 60 OpenMP threads; ~30 h for the full MG schedule
+./MOSE.sh -p 60 solve          # 60 OpenMP threads (the option goes before the task); ~30 h for the full MG schedule
 ```
 
 The boundary-condition files are committed, so ATLAS BCB does not need to run. They already encode everything in the [boundary conditions](#boundary-conditions) table - the profiled supersonic inlet, the sonic hydrogen porthole, the 300 K isothermal walls and the chimera overlap - which is why the physical settings are documented on this page rather than being readable from `input.ini`.

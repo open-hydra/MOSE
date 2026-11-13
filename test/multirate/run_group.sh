@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Runs a group of the checks of the multirate integrator, one after the other, each in its own directory
-#  (mr-<check>/run.sh). The validation and needs-mpi entries of the multirate integrator in test/CMakeLists.txt
-#  (MultirateIdentity, MultirateConservation, MultirateOrder, MultirateOrderInletsMoving, MultirateShocks,
-#  MultirateInput, MultirateHybrid) are groups of these checks; see test/TESTING-PLAN.md and docs/vv/multirate.md.
-#  Every check of the group runs, also after a failure; the group fails if one of them fails, and its last line names
-#  the checks that failed. Each check prints its own lines and its time in seconds.
+#  Runs several checks of the multirate integrator one after the other, each in its own directory
+#  (mr-<check>/run.sh), for a run from the source tree. In CTest every check is a test of its own, Multirate.<Check>
+#  (test/CMakeLists.txt); see test/TESTING-PLAN.md and docs/vv/multirate.md.
+#  Every check runs, also after a failure; the run fails if one of them fails, and its last line names the checks that
+#  failed. Each check prints its own lines and its time in seconds.
 #  Usage: ./run_group.sh GROUP CHECK...      e.g.  ./run_group.sh input reject fixedstep trace
 #===============================================================================
 set -uo pipefail

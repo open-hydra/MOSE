@@ -229,7 +229,7 @@ echo "    macro steps cut to land whose H a redo halved: ${nu:-?}"
 python3 -B - runs/blast100-land/OUTPUT "$DTO" "$TT" <<'EOF' || status=1
 import sys
 from pathlib import Path
-sys.path.insert(0, '../../fast/restart/restart-counters')
+sys.path.insert(0, '../../checks/restart/restart-counters')
 from vtk_time import time_of
 out, dto, tt = Path(sys.argv[1]), float(sys.argv[2]), float(sys.argv[3])
 num = sorted(out.glob('field[0-9]*.vtm'), key=lambda p: int(p.stem[5:]))
@@ -252,7 +252,7 @@ mr_run runs/blast100-end cases/mr1d-blast100 "${BASE[@]}" "MOSE-Parameters|time-
 python3 -B - runs/blast100-end/OUTPUT "$DTO" "$TE" <<'EOF' || status=1
 import sys
 from pathlib import Path
-sys.path.insert(0, '../../fast/restart/restart-counters')
+sys.path.insert(0, '../../checks/restart/restart-counters')
 from vtk_time import time_of
 out, dto, te = Path(sys.argv[1]), float(sys.argv[2]), float(sys.argv[3])
 num = sorted(out.glob('field[0-9]*.vtm'), key=lambda p: int(p.stem[5:]))

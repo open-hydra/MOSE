@@ -17,8 +17,8 @@ The manufactured field is a smooth, periodic solution on [0,1]^2 (om = 2*pi):
 
 It is made an EXACT *steady* solution of the compressible Navier-Stokes
 equations by the analytic source term injected by the MOSE_mms driver
-(src/app/mms.f90, generated + FD-checked by mms_gen.py).  These amplitudes MUST
-match src/app/mms.f90, mms_gen.py and verify.py.  With mu = 10 the Reynolds
+(test/unit/mms.f90, generated + FD-checked by mms_gen.py).  These amplitudes MUST
+match test/unit/mms.f90, mms_gen.py and verify.py.  With mu = 10 the Reynolds
 number is ~5, so the viscous terms are ~20 % of the convective ones and the
 viscous operator (gradients, metrics) is genuinely exercised -- which the
 inviscid isentropic vortex (N1) cannot do.  The low pressure level keeps the
@@ -43,7 +43,7 @@ for _p in [_here, *_here.parents]:
         break
 from ORION import ORION
 
-# --- manufactured-field parameters (must match src/app/mms.f90 & verify.py) --
+# --- manufactured-field parameters (must match test/unit/mms.f90 & verify.py) --
 OM = 2.0 * np.pi
 RHO0, ARHO = 1.0,   0.1
 U0,   AU   = 40.0,  8.0

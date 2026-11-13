@@ -12,7 +12,7 @@
 #  dt_min/64: last pair L1 >= 1.9 and interface Linf (floor 5 % of the global Linf) >= 1.8 (rho, u, p). Conservation after 200 macro steps
 #  (levels recomputed): mass, momentum, energy drift <= 1e-12. Stability over 2000 macro steps: the run completes and the
 #  final amplitude of p - p0 is <= 1.01 x the initial one. Every step stays below slab thickness / a.
-#  Two forms. Full (MR_FORM=full, label verification): the three cases as above. Short (the default, validation tier):
+#  Two forms. Full (MR_FORM=full, CTest Multirate.DeepFull): the three cases as above. Short (the default, Multirate.Deep):
 #  the order of mr1d-deep and mr1d-deep1 on the macro steps H0 and H0/2 against the reference step dt_min/16, as in the
 #  short form of mr-order, the conservation of the three cases and the stability of mr1d-deep; the order and the
 #  stability with 13 levels are in the full form only.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #===============================================================================
-#  Steady state with the point-implicit factor (validation tier)
+#  Steady state with the point-implicit factor
 #
 #  The steady state must not depend on the time step. A short hypersonic
 #  plate segment (make_case.py) with Spalart-Allmaras, with SST, and with SST

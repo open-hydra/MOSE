@@ -2,8 +2,8 @@
 #===============================================================================
 #  Multirate temporal order with levels. Levels fixed from the initial state with H0 = 2^L dt_min / 2; fixed macro steps
 #  up to T = 64 H0 against a single rate (max-level 0, safety 1) with a fixed step. Two forms:
-#  - short (the default, validation tier): the macro steps H0 and H0/2, the reference step dt_min/16;
-#  - full (MR_FORM=full, label verification): the macro steps H0, H0/2, H0/4 and H0/8, the reference step dt_min/64.
+#  - short (the default, CTest Multirate.Order): the macro steps H0 and H0/2, the reference step dt_min/16;
+#  - full (MR_FORM=full, CTest Multirate.OrderFull): the macro steps H0, H0/2, H0/4 and H0/8, the reference step dt_min/64.
 #  In both the reference step is a quarter of the finest sub-step of the run with the smallest H. Decided on the last
 #  pair of the form: L1 >= 1.9; interface Linf >= 1.8 (the cells within 4 cells of a face between levels, floor 5 % of
 #  the global Linf). Flux limiter: van Leer (MOSE has no unlimited MUSCL: without flux-limiter, MUSCL runs van Leer).

@@ -1,592 +1,303 @@
-# MOSE Testing Plan
+# MOSE tests
 
-Reference plan for expanding the MOSE test suite to cover **physics**, **numerics**,
-and **implementation**, plus a fast tier suitable for a `git push` pre-push hook
-running on GitHub's CI runner.
-
-> Status legend: ☐ not covered · ◐ partial (the item names what it does not cover) · ☑ covered
+What the tests check, how they are organised, and what is still missing.
+One ctest per case, per check, or per part of a check. Section 4 is generated from the registrations.
 
 ---
 
-## 1. State of play
+## 1. Run it
 
-- **All driving is through CTest** ([`test/CMakeLists.txt`](CMakeLists.txt)), with
-  tiers expressed as `LABELS`. The legacy `test/test.sh` runner has been removed —
-  cases run via `ctest` (whole suite but the full forms of the verification cases,
-  `-LE verification`, or `-L fast`) or directly per-case via each case's `MOSE.sh`.
-- **The pre-push hook** ([`.githooks/pre-push`](../.githooks/pre-push)) runs the fast
-  tier (`ctest -L fast`); **PR CI** ([`ctest.yml`](../.github/workflows/ctest.yml))
-  runs everything except the `needs-*` heavy-dependency labels and the `verification`
-  label and, in a second job (`test-mpi`), the `needs-mpi` tier.
-- **CI build is minimal** ([`.github/workflows/ctest.yml`](../.github/workflows/ctest.yml)):
-  `USE_MPI=OFF`, `USE_TECIO=OFF`, `USE_SUNDIALS=OFF`, `USE_CANTERA=OFF`; the second
-  job builds with `USE_MPI=ON` (gfortran and the Open MPI of Ubuntu).
+```bash
+ctest --test-dir build -L light              # pre-push hook: seconds
+ctest --test-dir build -L "light|medium" -j4 # what a pull request runs
+ctest --test-dir build -L heavy              # local, on request: minutes to days
+ctest --test-dir build -L identity           # by kind of check (section 3); also -L numerics, -L 2D, ...
+ctest --test-dir build -R TimeIntegration    # by name; a part is Area.Part
+```
 
-### Hard constraint for anything on GitHub's runner
-The minimal CI build means **no finite-rate chemistry, no equilibrium (Cantera/CEA),
-no binary Tecplot (TecIO)**, and MPI only in the second job. Every flame / reactive /
-equilibrium case is therefore off-limits for pre-push and PR CI — those belong in a
-nightly/local tier.
+| Where | Runs |
+|---|---|
+| pre-push hook (`.githooks/pre-push`) | light |
+| pull request, job `test` | light + medium, in parallel (`ctest -L "light\|medium" -LE needs-mpi -j$(nproc)`) |
+| pull request, job `test-mpi` (build with `USE_MPI=ON`) | the `needs-mpi` tests, without heavy |
+| nowhere on GitHub | heavy: run it by hand when a change calls for it |
+
+The CI build is `USE_MPI=OFF USE_TECIO=OFF USE_SUNDIALS=OFF USE_CANTERA=OFF`, gfortran. A label `needs-mpi`,
+`needs-cantera` or `needs-sundials` marks a test that only a build with that option can run; binary Tecplot is
+tested only in a build with TecIO.
 
 ---
 
-## 2. Coverage map (exercised vs. available)
+## 2. Tiers
 
-| Capability | Registered options | Tested today | Gap |
+A test has one tier, and the tier follows from its time on the CI runner at one thread:
+
+| Tier | A test takes | For |
+|---|---|---|
+| light | under 5 s | every push: the cheap guards |
+| medium | 5 s to 100 s | every pull request |
+| heavy | 100 s and more | convergence studies, long forms, anything that is too slow for a pull request |
+
+- The tier of each test is a line of [`tiers.txt`](tiers.txt): name, tier, seconds. CMake refuses a test that has no
+  line, and a line that names no test.
+- A test that straddles a boundary is split into parts (`Area.Part`), each with its own tier, as the 1-D Riemann
+  problems are separate tests.
+- The CI job prints the slowest tests and the tests outside their tier in its summary
+  (`tools/ctest_tiers.py report`); `tools/ctest_tiers.py update` rewrites `tiers.txt` from a run. A test moves only when
+  it is more than a factor of 1.5 outside its tier, because times vary by tens of percent.
+
+---
+
+## 3. What a test checks
+
+Almost every test here is *verification* (are the equations solved right: exact solutions, manufactured solutions,
+identities). No experiment is compared inside ctest; the experiments are among the cases of section 7.
+
+| Kind (label) | Passes when | Example |
+|---|---|---|
+| `exact` | the result matches a known solution: closed form, exact Riemann solver, manufactured field | `Sod79`, `MMSResiduals` |
+| `order` | the observed order of accuracy reaches the formal one on a family of grids or steps | `IsentropicVortex`, `Multirate.Order` |
+| `identity` | two runs that must be the same give the same bits (1 against 4 threads, one block against two, a restart) | `OpenMPEquiv`, `Restart` |
+| `invariant` | a conserved or preserved quantity stays so: mass, a free stream, a mirror symmetry | `Conservation` |
+| `robustness` | the run ends, stays finite and positive, at the limits of its parameters | `RiemannSmoke` |
+| `contract` | the input, the exit code, the message or the file format is what the documentation says | `InputChecks.ExitCodes` |
+| `unit` | one routine against its definition | `CellVolume` |
+| `reference` | the result stays within a tolerance of stored data of another code or an earlier converged run | `FlatPlateTMR.SA` |
+
+---
+
+## 4. The tests
+
+<!-- tests:begin (generated by test/tools/inventory.py from test/CMakeLists.txt and test/tiers.txt: do not edit) -->
+
+#### Light: under 5 s (53 tests, 70 s)
+
+| Test | Kind | Checks | s |
+|---|---|---|--:|
+| `Sod79` | exact | Sod tube against the exact solution | 1.4 |
+| `Einfeldt91` | exact | Einfeldt 1-2-0 tube against the exact solution (ExactPack) | 2.0 |
+| `Toro99` | exact | Toro tubes against the exact solution (ExactPack) | 2.4 |
+| `ShuOsher` | reference | Shu-Osher problem, N=200 against the N=1600 reference | 0.4 |
+| `ShuOsherConvergence` | order | Shu-Osher on N=200, 400, 800: monotone convergence | 4.5 |
+| `PrandtlMeyer` | exact | Prandtl-Meyer expansion against the analytic solution | 4.9 |
+| `FlatPlateTMR.Reference` | reference | criteria of the V&V page from the stored results (CFL3D, FUN3D, TAU) | 1.3 |
+| `RiemannSmoke` | robustness | every Riemann solver stays positive, shock sensor on | 1.7 |
+| `NumericsSmoke` | robustness | limiter, scheme, reconstruction and variable sweep stays positive | 1.6 |
+| `Conservation` | invariant | closed slip-wall box conserves mass to round-off | 1.3 |
+| `OpenMPEquiv` | identity | 1 against 4 threads, bit for bit: Sod tube and a chimera case | 1.2 |
+| `Restart` | identity | split run plus restart equals the straight run, every format, probes | 1.6 |
+| `Restart.Counters` | identity | a restart carries every counter: numbered outputs, histories, probes | 4.2 |
+| `TimeIntegration.TimeControl` | order | second order in time with a time-dependent inlet, time tables, stop rules | 3.2 |
+| `TimeIntegration.Quasi2DSymmetry` | invariant | symmetry faces of quasi-2-D and 1-D cases: round-off in w does not grow | 4.6 |
+| `BoundaryConditions.Inlets` | exact | inlets at total conditions, mass flux, normal velocity: fluxes against the face state | 1.6 |
+| `BoundaryConditions.Nozzle` | exact | choked nozzle 420: exit state below and above the shock pressures | 1.2 |
+| `BoundaryConditions.BCInput` | contract | property lines of bc.txt are read as written or refused | 4.6 |
+| `BoundaryConditions.RotatingFrame` | contract | stationary faces of the rotating frame are read and listed | 0.5 |
+| `BoundaryConditions.WallHeatSign` | exact | sign of the wall heat flux and of the wall stress | 0.7 |
+| `BoundaryConditions.Extrapolation400` | exact | extrapolation faces 400: flux of the cell state, report of the gas entering | 0.9 |
+| `BoundaryConditions.SupersonicInlet` | exact | supersonic inlet 405 with the flow direction normal | 1.0 |
+| `Connections.ChimeraFace` | exact | viscous stencil of chimera faces on a linear field | 0.4 |
+| `Connections.ConnectionFlux` | identity | faces between blocks: one block equals two, bit for bit, and conserves | 0.7 |
+| `Connections.ConnectionOrder` | identity | sorted and reversed connection records give the same bits | 0.4 |
+| `Connections.SectorRadial` | invariant | 3-D sector with rotational periodicity keeps a radial flow its own mirror image | 0.1 |
+| `Connections.SectorViscous` | exact | viscous flux across the rotational periodicity of a 3-D sector | 1.9 |
+| `InputChecks.LimiterDefaults` | contract | the declared limiter is the one that runs, set-up warnings say so | 0.2 |
+| `InputChecks.IRSTimeAccurate` | contract | residual smoothing is refused in time-accurate runs | 0.3 |
+| `InputChecks.PrecScope` | contract | prec refused in time-accurate runs, HLLC-PC refused without prec | 0.3 |
+| `InputChecks.DecompositionMap` | contract | block-to-rank map: valid maps keep the bits, bad maps are refused | 2.3 |
+| `MeshGeometry.WallDistance` | exact | wall distance of the turbulence models on constructed meshes | 3.3 |
+| `MeshGeometry.MeshType` | exact | type of the mesh told by its nodes | 1.7 |
+| `OutputFiles.WallOutput` | contract | wall files: extent, points, cell values, one file per wall face | 0.1 |
+| `OutputFiles.VtkNames` | contract | VTK outputs are well-formed XML with the right names and times | 0.4 |
+| `OutputFiles.VtkRawFormat` | contract | vtk raw solutions hold raw appended data | 0.2 |
+| `OutputFiles.WallOutputResidual` | invariant | wall output does not change the residual | 1.0 |
+| `OutputFiles.ProbePosition` | exact | probes given by position take the nearest cell | 0.1 |
+| `ViscousPatch.ViscousOpenPatch` | exact | patch test next to inlets and outlets | 2.5 |
+| `QCR2000Stress` | unit | QCR2000 constitutive relation | <0.1 |
+| `CellVolume` | unit | cell volume from the metric tensor | <0.1 |
+| `ReflectivePressure` | unit | face pressure of a reflective wall | <0.1 |
+| `VolatileOrder` | unit | rounding order of VOLATILE variables | <0.1 |
+| `BilinearDistance` | unit | wall distance to a bilinear face | <0.1 |
+| `RemoteBlocks` | unit | blocks held by an MPI rank | <0.1 |
+| `MusclFaceBounds` | unit | MUSCL face values stay between the neighbours | 0.3 |
+| `PrecTransform` | unit | Weiss-Smith update of prim and prec, and the reference velocity | <0.1 |
+| `GSIBradley` | unit | surface reactions of a carbon wall (505, 506): O2 rate of Nagle and Strickland-Constable, no division by pO2 = 0 | - |
+| `GSIAblator` | unit | pyrolysing ablator (506): pyrolysis gas of the table, element balance, heat with h_v0 | - |
+| `Multirate.Smoke` | identity | one level equals the single rate, conservation, restart, refusal at set-up | 1.6 |
+| `Multirate.Sod` | exact | Sod tube with levels rebuilt every macro step against the exact solution | 3.0 |
+| `Multirate.Positivity` | robustness | no negative nu~, k or omega after a stage with levels | 2.5 |
+| `Multirate.Trace` | exact | stage sequence of one macro step against the reference recursion | 0.4 |
+
+#### Medium: 5 s to 100 s (46 tests, 15 min)
+
+| Test | Kind | Checks | s |
+|---|---|---|--:|
+| `Noh87` | exact | Noh implosion against the exact solution (ExactPack) | 5.2 |
+| `IsentropicVortex` | order | isentropic vortex on 32, 64, 128 cells: order of accuracy | 60 |
+| `MMSViscousSkewed` | order | manufactured solutions on skewed two-block grids: order of accuracy | 49 |
+| `MMSViscous3D` | order | 3-D viscous manufactured solutions on two-block grids: order of accuracy | 10 |
+| `PlanarNozzleGrids` | invariant | planar nozzle on O and H grids stays mirror-symmetric | 38 |
+| `FlatPlateTMR.SA` | reference | TMR flat plate, Spalart-Allmaras: restart from the converged 35x25 solution keeps Cf and CD | 19 |
+| `FlatPlateTMR.SST` | reference | TMR flat plate, SST: restart from the converged 35x25 solution keeps Cf and CD | 23 |
+| `FlatPlateTMR.Wilcox2006` | reference | TMR flat plate, Wilcox 2006: restart from the converged 35x25 solution keeps Cf and CD | 20 |
+| `FlatPlateTMR.SSGLRR` | reference | TMR flat plate, SSG/LRR-omega: restart from the converged 35x25 solution keeps Cf and CD | 26 |
+| `MMSResiduals` | exact | RANS right-hand sides on manufactured fields (SA, SST, Wilcox 2006) | 6.4 |
+| `PointImplicitSteady` | invariant | steady state with the point-implicit factor does not depend on the time step | 26 |
+| `WedgeAxisStep` | robustness | local time step next to the axis of a wedge is stable at the largest vnn | 79 |
+| `Preconditioning` | exact | low-Mach cylinder, Mach 0.01 and 0.001: Cp Mach-independent, near potential flow | 36 |
+| `AblatingWall` | exact | ablation 503, 504 and SRM grain 502 against the closed form, surface reactions 505 and pyrolysing ablator 506 by the relations of the wall model | 11 |
+| `RSMDecay` | exact | SSG/LRR decay of isotropic turbulence against the closed form | 31 |
+| `TimeIntegration.LocalTimeStep` | robustness | local time step stable on square, skewed and cubic cells | 5.1 |
+| `TimeIntegration.TurbulenceSources` | order | turbulence sources in time-accurate runs: order and positivity at a wall | 5.2 |
+| `InputChecks.ExitCodes` | contract | error stops end with a non-zero exit code and their message | 13 |
+| `InputChecks.RuntimeInput` | contract | input.ini read again during a run: errors, fixed keys, warn and stop | 24 |
+| `ViscousPatch.ViscousLinearPatch` | exact | patch test of the viscous fluxes: linear fields on any mesh | 6.2 |
+| `ViscousPatch.ViscousWallPatch` | exact | patch test next to walls of prescribed temperature | 12 |
+| `Multirate.OneLevel` | identity | one level equals the single-rate step, bit for bit, on 33 configurations | 53 |
+| `Multirate.Threads` | identity | 1 against 3 and 4 threads, bit for bit | 60 |
+| `Multirate.Blocks` | identity | equal levels across block faces, one block equals three | 5.1 |
+| `Multirate.Halo` | exact | halo of every level against an independent construction | 7.2 |
+| `Multirate.Sym` | invariant | mirror symmetry of a centred pulse with levels | 20 |
+| `Multirate.Free` | invariant | free stream preserved on a curvilinear periodic mesh with levels | 7.1 |
+| `Multirate.Bc` | order | time-dependent inlets 402 and 410 on the finest level: order at the inlet | 17 |
+| `Multirate.Shock` | exact | planar shock through the faces between levels | 69 |
+| `Multirate.Rpost` | invariant | step taken against the step admitted on the new state | 7.4 |
+| `Multirate.Cfl4` | invariant | non-local CFL condition: certificate, interface margin, redo | 37 |
+| `Multirate.Reject` | contract | 35 configurations outside the scope are refused with their message | 46 |
+| `Multirate.FixedStep` | contract | fixed macro step and re-reading of the multirate keys | 8.3 |
+| `Multirate.Daru` | reference | Daru-Tenaud tube on 50x25 cells: multirate against the single rate | 65 |
+| `MPIRestart` | identity, MPI | exact restart on 2 ranks x 2 threads | - |
+| `MPIBoundaryRecords` | identity, MPI | boundary fluxes identical on any ranks x threads and any record order | - |
+| `MPIVertexStencil` | identity, MPI | viscous stencil at a vertex of four blocks: same bits on any layout | - |
+| `MPIBitIdentity` | identity, MPI | same output bits on 1x1, 1x4, 2x1, 4x1, 2x2 ranks x threads | - |
+| `MPIThreadFunnel` | contract, MPI | no MPI call from a thread other than the main one | - |
+| `MPIConnectionFlux` | identity, MPI | faces between ranks give the one-rank bits and conserve | - |
+| `MPIConnectionOrder` | identity, MPI | faces between ranks, sorted and reversed records: same bits | - |
+| `MPIDecompositionMap` | contract, MPI | block-to-rank map: valid maps are used, bad maps are refused | - |
+| `MPIExitCodes` | contract, MPI | an input error found by rank 0 stops every rank with exit code 1 | - |
+| `MPIRuntimeInput` | contract, MPI | input.ini read again during a run on several ranks | - |
+| `Multirate.Hybrid` | identity, MPI | multirate on MPI ranks and threads: same bits as 1x1, timers | - |
+| `Multirate.RestartHybrid` | identity, MPI | multirate exact restart on 2 ranks x 2 threads | - |
+
+#### Heavy: 100 s and more, local (13 tests, 18 min)
+
+| Test | Kind | Checks | s |
+|---|---|---|--:|
+| `MMSViscous` | order | viscous operator, manufactured solution: order of accuracy | 131 |
+| `MMSViscous3DFull` | order | full form of MMSViscous3D, the runs of the V&V page (18 h) | - |
+| `FlatPlateTMRFull` | reference | full form of the TMR flat plate: 4 models, 3 grids, 300000 iterations each (days) | - |
+| `Multirate.Conservation` | invariant | mass, momentum and energy conserved with levels, diffusive, turbulence, mixture | 154 |
+| `Multirate.Restart` | identity | exact restart and output instants with levels | 115 |
+| `Multirate.Order` | order | temporal order with levels: waves, vortex, plate, hot square, wall, SA, SST | 159 |
+| `Multirate.Deep` | order | 9 and 13 levels: order, conservation, 2000-step stability | 149 |
+| `Multirate.MovingLevels` | order | order with level boundaries moving with a simple wave | 146 |
+| `Multirate.Nozzle` | reference | nozzle start-up: moving shock across levels against the single rate | 239 |
+| `Multirate.OrderFull` | order | full form of Multirate.Order (about 1 h) | - |
+| `Multirate.DeepFull` | order | full form of Multirate.Deep, with the 13-level order (about 1 h) | - |
+| `Multirate.DaruMedium` | reference | Daru-Tenaud tube on 100x50 cells (about 20 min) | - |
+| `Multirate.DaruFull` | reference | Daru-Tenaud tube on 500x250 cells, as the reference (100 h) | - |
+
+<!-- tests:end -->
+
+---
+
+## 5. Coverage
+
+☑ covered · ◐ partly · ☐ not. "Tests" name the tests of section 4.
+
+### Numerics
+
+| Capability | | Tests | Missing |
 |---|---|---|---|
-| Equations | euler, navier-stokes | both | — |
-| Time scheme | euler, RK2, RK3 | all three: order in time of RK2 and RK3 with a time-dependent inlet (`TimeIntegration`/`TimeControl`) and with the turbulence sources (`TimeIntegration`/`TurbulenceSources`); positivity (no NaN, ρ and p > 0) with euler, RK2 and RK3 (`NumericsSmoke`) | no order check of forward Euler |
-| Integration vars | cons, prim, prec | cons, prim (`NumericsSmoke`); the update of prim and prec against the Weiss–Smith matrix, one and three species, Ur from a to 1e-4 a (`PrecTransform`); prec with HLLC-PC (`Connections`/`ConnectionFlux`, `TimeIntegration`/`LocalTimeStep`, `Preconditioning`: the incompressible limit of a low-Mach cylinder); prec refused in time-accurate runs (`InputChecks`/`PrecScope`) | no accuracy check of `prim`; prec with fluxes other than HLLC-PC |
-| Space recon | first-order, MUSCL | both (first-order: Noh87, LimiterDefaults) | — |
-| Limiters | vanleer, vanalbada, minmod, superbee, mc | all five: positivity (no NaN, ρ and p > 0) on the Sod tube (`NumericsSmoke`); face values between the values of the two cells of the face on lines of cells of any lengths, and the limiter's own slope on lines of equal cells (`MusclFaceBounds`, a unit check of the reconstruction); accuracy with vanleer (`IsentropicVortex`, observed order) and mc (`Sod79`, against the exact solution) | no accuracy check with vanalbada, minmod or superbee |
-| Riemann solvers | 15 | 13: 11 in `RiemannSmoke` (no NaN, ρ, p > 0), HLLC+Chen and HLLC-PC in `Connections`/`ConnectionFlux`, HLLC-PC also in `Preconditioning` | LMRoe only in the Gresho vortex, outside CTest; MiczekRoe in no test |
-| Low-Mach (Mco) | floor | HLLC+Chen and HLLC-PC in `Connections`/`ConnectionFlux` (two blocks against one, conservation); the Gresho vortex is outside CTest | no CTest check of low-Mach accuracy |
-| IRS / multigrid / CFL-ramp | yes | implicit only | no dedicated check |
-| Turbulence | SA(+R/RC/comp), SST, Wilcox2006, SSGLRR(+SD/w2019) | SA, SA-RC, SST, SST-RC and Wilcox2006 in checks of sources, right-hand sides and invariants (`TimeIntegration`/`TurbulenceSources`, `MMSResiduals`, `PointImplicitSteady`, `PlanarNozzleGrids`); SA, SST, Wilcox2006 and SSGLRR on the flat plate of the NASA TMR: the steady state on the 35x25 grid against the converged solution of the V&V page (`FlatPlateTMR`), the limit of three grids against CFL3D (`FlatPlateTMRFull`, on request); the four SSGLRR variants against the closed-form decay of isotropic turbulence on an axisymmetric wedge (`RSMDecay`) | the limit of the grids only in the full form, out of the PR CI; SA-R untested; SAcomp only in `ExitCodes` (it runs, as SA does); SSGLRR in a rotating frame and on a 3-D sector untested; the SSGLRR variants -SD, -w2019 not on the flat plate of the TMR in CTest |
-| Chemistry | frozen, finite-rate, equilibrium | finite-rate and equilibrium runs that must end, stop at set-up or keep the bits of a run without chemistry, and finite-rate runs whose integrator fails, which must stop with their message on every thread and rank (`ExitCodes`, `MPIExitCodes`; with MPI, equilibrium in `MPIVertexStencil`); the reactive cases are outside CTest | no CTest check of reactive results against a reference |
-| Multi-block | core feature | faces between blocks: one block against two and records sorted against reversed, bit for bit (`Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder`; with MPI `MPIConnectionFlux`, `MPIConnectionOrder`) | 3-D faces with permuted index directions, connections with multigrid and with RANS untested |
-| Ablative wall BCs (503/504/505), SRM grain (502) | melting, pyrolysis, surface reactions; the grain as a blowing wall and as an inflow | 503/504 and 502 (both modes) vs closed form (`AblatingWall`) | 505 needs a CO/CO2 thermo table |
-| Restart | core feature | every format bit for bit, counters included (`Restart`, `Restart`/`RestartCounters`, `MPIRestart`; `tecplot binary` with TecIO) | `MPIRestart` in `vtk raw` only |
-| I/O formats | tec ascii/bin, vtk ascii/raw | ascii; `vtk raw` files are well-formed XML with the right names, the field, wall and diagnostic outputs of a steady run carry minus the global iteration count as their time in `vtk raw`, `vtk ascii` and Tecplot ASCII (`OutputFiles`/`VtkNames`), and `vtk raw` files hold raw appended data (`OutputFiles`/`VtkRawFormat`) | round-trip untested |
-| Parallelism | OpenMP, MPI | 1 vs 4 threads (`OpenMPEquiv`); MPI ranks × threads bit-identical in the `needs-mpi` tier (`test/mpi/`) | MPI tier runs only in MPI builds: the second CI job, `test-mpi` (gfortran, Open MPI) |
-| 3D | full | order of accuracy of the viscous manufactured solutions on skewed two-block grids with walls (`MMSViscous3D`, `MMSViscous3DFull`); the 3-D parts of the fast and MPI tests | no inviscid 3-D case |
-
-Cases of [`docs/vv`](../docs/vv/index.md) count as tested in this map only when CTest runs them. For every case
-folder: its CTest test, which fails when the criterion fails, or outside CTest; the reference data; the criterion
-of the case; the result. A case in CTest has the result of its CTest test. A case outside CTest has the result of a
-run of its folder (its `MOSE.sh`, `input.ini` and script): *passes* or *fails*
-against its criterion, *runs* where it has none (the run ends with exit status 0):
-
-| Case (`test/`) | Page (`docs/vv/`) | CTest | Reference | Criterion | Result |
-|---|---|---|---|---|---|
-| `1D/Sod79` | `1D.md` | `Sod79` | analytic solution (Sod 1978) | `check.py` | CTest |
-| `1D/Ein91` | `1D.md` | `Einfeldt91` | analytic solution (ExactPack) | `verify.py` | CTest |
-| `1D/Noh87` | `1D.md` | `Noh87` | analytic solution (ExactPack) | `verify.py` | CTest |
-| `1D/Tor99` | `1D.md` | `Toro99` | analytic solution (ExactPack) | `verify.py` | CTest |
-| `1D/Shu-Osher` | `1D.md` | `ShuOsher`, `ShuOsherConvergence` | MOSE solution on N = 1600 (`reference/`) | `verify.py`, `convergence.py` (F8, P5) | CTest |
-| `2D/euler/prandtl-meyer` | — | `PrandtlMeyer` | analytic Prandtl–Meyer expansion | `check.py` | CTest |
-| `2D/euler/isentropic-vortex` | `2D-isentropic-vortex.md` | `IsentropicVortex` | exact solution | `verify.py` (N1) | CTest |
-| `2D/viscous/mms` | `2D-mms.md` | `MMSViscous` | manufactured solution | `verify.py` (N2) | CTest |
-| `2D/viscous/mms/skewed` | `2D-mms-skewed.md` | `MMSViscousSkewed` | manufactured solutions | `verify.py` (N2) | CTest |
-| `3D/viscous/mms` | `3D-mms.md` | `MMSViscous3D`, `MMSViscous3DFull` | manufactured solutions | `verify.py` (N2) | CTest |
-| `2D/viscous/planar-nozzle` | `2D-planar-nozzle-grids.md` | `PlanarNozzleGrids` | mirror symmetry of O and H grids | `verify.py` (N8) | CTest |
-| `2D/viscous/flat-plate-turbulent-tmr` | `2D-flat-plate-turbulent-tmr.md` | `FlatPlateTMR`, `FlatPlateTMRFull` | c_f of CFL3D and FUN3D (SSGLRR: CFL3D and TAU) on the five grids of the TMR (`reference/tmr/`); the converged MOSE solutions of the 35x25 grid (`reference/`) | `verify.py` | CTest |
-| `2D/viscous/ablating-wall` | `2D-ablating-wall.md` | `AblatingWall` | closed form of the wall state | `run.sh` (P1) | CTest |
-| `1D/Fer14` | `1D-fer14.md` | outside | digitized velocity and temperature profiles (`reference/*.csv`) | none: `verify.py` plots | runs |
-| `1D/diff1` | `1D-diffusion.md` | outside | Cantera (`reference/reference_unity_lewis.py`); MOSE fields in `reference/` | none: no verifier in the folder | runs |
-| `1D/diff2` | `1D-multicomponent-diffusion.md` | outside | Cantera (`reference/reference_multicomponent.py`); MOSE fields in `reference/` | none: no verifier in the folder | runs |
-| `1D/premixed-flame` | `1D-premixed-flame.md` | outside | Cantera free flame (`reference/flame_phi_1.0.csv`) | none: `verify.py` prints and plots | runs |
-| `2D/euler/chang-nozzle` | — | outside | Mach on the axis and at the wall (`reference/ref1.dat`, `ref2.dat`) | none: `verify.py` plots | runs |
-| `2D/euler/gresho-vortex` | `2D-gresho-vortex.md` | outside | the initial vortex, a steady solution | none: `verify.py` prints and plots | runs |
-| `2D/euler/hypersonic-cylinder` | `2D-hypersonic-cylinder.md` | outside | normal-shock relations at the stagnation line | none: `verify.py` prints and plots | runs |
-| `2D/euler/oblique-shock` | `2D-oblique-shock.md` | outside | oblique-shock relations | `verify.py`: p2/p1, T2/T1, ρ2/ρ1 and M2 within 1.5 % for each solver | fails: HLLC T2/T1 error 1.94 % and M2 error -3.21 % (threshold 1.5 %); HLLC+Tramel, HLLE and SLAU within 0.80 % |
-| `2D/euler/ramp-channel` | — | outside | oblique-shock relations | none: `verify.py` plots | runs |
-| `2D/euler/rocket-nozzle/frozen` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`) | none: `../verify.py` prints and plots, from the runs of the three configurations | runs |
-| `2D/euler/rocket-nozzle/finite-rate` | `2D-nozzle.md` | outside | `reference/field.tec` | `verify.py`: p, ρ, u, v and γ at the throat within a relative 1e-3 | passes |
-| `2D/euler/rocket-nozzle/equilibrium` | `2D-nozzle.md` | outside | CEA (`reference/CEA.out`) | none: `../verify.py` prints and plots, from the runs of the three configurations | runs |
-| `2D/euler/supersonic-forward-step` | `2D-woodward-colella.md` | outside | OpenFOAM solution (`reference/OpenFOAM/`) | none: `verify.py` prints L2 and L∞ differences | runs |
-| `2D/viscous/flat-plate-laminar` | `2D-flat-plate-laminar.md` | outside | Blasius solution, computed by `verify.py` | `verify.py` prints PASS for an RMS c_f error below 2.5 % at x ≥ 0.05 m; its exit code is 0 either way | passes: RMS c_f error 2.26 % |
-| `2D/viscous/swbli/SA` | `2D-swbli.md` | outside | Schülein experiment; SU2, Wind-US, OpenFOAM (`reference/`) | none: no verifier; its initial condition is a binary Tecplot file (TecIO) | runs |
-| `2D/viscous/swbli/SST` | `2D-swbli.md` | outside | as SA | as SA | runs |
-| `3D/coriolis-channel` | `rotating-frame.md` | outside | — | none: no verifier | runs |
-| `3D/pressure-centrifugal` | `rotating-frame.md` | outside | closed-form isentropic solution of the page | none: no verifier | runs |
-| `3D/hyshotII` | `3D-hyshotII.md` | outside | wall pressure of the experiment and of TAU with SA (`reference/`) | none: no verifier; it needs a build with TecIO, for its binary Tecplot mesh and initial condition (`ic-format = tecplot binary`), and an initial condition built with ATLAS ICB from the `[ICB-*]` sections of its `input.ini` (`INPUT/` holds none) | — |
-
----
-
-## 3. Proposed new tests
-
-### Numerics (biggest gap: order-of-accuracy verification)
-- ☑ **N1 — Isentropic vortex convection** (2D, smooth, periodic): convect one period,
-  grid-refine 32²/64²/128², **measure observed order** (→2 with MUSCL). *Done:*
-  `test/2D/euler/isentropic-vortex` (`IsentropicVortex`, validation tier).
-  `verify.py` gives a normalised L2 density error of 2.49 → 0.61 →
-  0.17 % and observed orders 2.04 then 1.84 against the exact vortex at t = 10; the runs
-  end slightly after t = 10 (the last time step is not cut), and against the exact vortex
-  at the time each run ends the orders are 2.15 and 2.13. Meshes/ICs/BCs
-  pre-generated with GRIB + `build_ic.py` + ATLAS BCB (periodic). *Possible extension:*
-  a Riemann × limiter sweep.
-- ☑ **N2 — Method of Manufactured Solutions (NS)**: source-term forcing, grid refine,
-  verify 2nd order on the *viscous* operator. Catches gradient/metric bugs N1 cannot.
-  *Done:* `test/2D/viscous/mms` (`MMSViscous`, validation tier). A smooth periodic
-  field is made an exact steady NS solution by an analytic source (derived with
-  sympy, FD-checked) injected by a dedicated driver `MOSE_mms`
-  ([`src/app/mms.f90`](../src/app/mms.f90), a build variant of `main.f90` whose
-  external callback adds the source). Constant `mu=10` (flat transport table),
-  `Pr=0.72`, `Re~5` (viscous ~20% of convective), mean `M~0.47` (high enough to
-  avoid low-Mach accuracy degradation). On 32/64/128 every primitive (rho,u,v,p)
-  converges at ~2nd order in both L2 and Linf (rho L2 0.059 → 0.013 → 0.0028 %,
-  order ~2.2). CTest runs the fast 32/64 subset (single-threaded); the full
-  32/64/128 study makes the V&V figure. Periodic meshes/ICs pre-generated
-  (GRIB + `build_ic.py`); the periodic `bc.txt` (topology-only) is shared with N1.
-  *On general grids:* `test/2D/viscous/mms/skewed` (`MMSViscousSkewed`) and
-  `test/3D/viscous/mms` (`MMSViscous3D`), validation tier: the fields periodic2d,
-  wall2d and periodic3d of the driver (`MOSE_MMS_FIELD`) on two-block grid families
-  whose blocks meet with permuted indices, zigzag (every cell skewed, its
-  neighbours the other way) and iface (a cell-size jump of 1.5 and kinked grid
-  lines). CTest runs the short forms (2-D on N = 10, 20; 3-D zigzag on N = 8, 12):
-  L2 errors decreasing on the finest pair, an observed L2 order of at least 0.7 on
-  zigzag and 1.4 on iface (70 % of the order each family should show), with walls
-  the same order for the heat flux integrated over the wall, and the totals of the
-  equations with zero boundary flux within the smallest L2 error of each grid.
-  The full form of the 3-D case (zigzag on N = 16, 24, 36, iface periodic and with
-  walls on N = 20, 30, 45) is `MMSViscous3DFull`, label `verification`, out of the PR
-  CI: 18 h at one thread with a `RELEASE` build on one core of a shared cluster node,
-  TIMEOUT three days. The short form
-  leaves out the grid with walls for its cost, so run the full form after any change
-  to the wall boundary conditions, to the face metrics or to the generator of the
-  cases.
-- ☑ **N3 — Riemann-solver smoke matrix**: coarse Sod, few steps, once per solver;
-  assert positivity (ρ,p>0) and no NaN. *Done:* `test/fast/riemann-smoke` (11
-  shock-capturing solvers; low-Mach family deferred to a Gresho smoke).
-- ☑ **N4 — Limiter / scheme sweep**: all 5 limiters + 3 time schemes + recon +
-  integration-variables; assert positivity. *Done:* `test/fast/numerics-smoke`.
-  (Monotonicity assertion is a possible future tightening.)
-- ☑ **N8 — Planar nozzle on grid families (RANS)**: a turbulent planar
-  converging-diverging nozzle, Spalart–Allmaras and SST, on grid families that
-  differ only in the direction of their grid lines (O, H, ZZ, SB2). *Done:*
-  `test/2D/viscous/planar-nozzle` (`PlanarNozzleGrids`, validation tier). The short
-  form runs 300 iterations on the coarse level from a quasi-1D field: on O and H,
-  mirror images of themselves whose four blocks have different index
-  orientations, the largest mirror asymmetry of every variable below 1e-10 of its
-  largest magnitude; on ZZ (Spalart–Allmaras) a finite flow with positive density
-  and pressure. The full form runs every family on three levels to convergence.
+| Time schemes (euler, RK2, RK3) | ◐ | order of RK2 and RK3: `TimeIntegration.TimeControl`, `.TurbulenceSources`; positivity with all three: `NumericsSmoke` | order of forward Euler |
+| Integration variables (cons, prim, prec) | ◐ | cons, prim: `NumericsSmoke`; the prim and prec update against the Weiss–Smith matrix: `PrecTransform`; prec with HLLC-PC: `Connections.ConnectionFlux`, `TimeIntegration.LocalTimeStep`, `Preconditioning`; refusals: `InputChecks.PrecScope` | accuracy of prim; prec with fluxes other than HLLC-PC |
+| Reconstruction and limiters | ◐ | MUSCL and first order; all five limiters stay positive (`NumericsSmoke`); face bounds (`MusclFaceBounds`); accuracy with van Leer (`IsentropicVortex`) and mc (`Sod79`) | accuracy with van Albada, minmod, superbee |
+| Riemann solvers (15) | ◐ | 11 in `RiemannSmoke`; HLLC+Chen and HLLC-PC in `Connections.ConnectionFlux`; HLLC-PC in `Preconditioning` | LMRoe only in the Gresho vortex (outside ctest); MiczekRoe in no test |
+| Low Mach | ◐ | `Preconditioning` (Mach 0.01 and 0.001) | accuracy of the low-Mach floor of the other solvers |
+| Viscous fluxes | ☑ | patch tests: `ViscousPatch.*`; order: `MMSViscous`, `MMSViscousSkewed`, `MMSViscous3D` | — |
+| Multi-block and chimera | ◐ | `Connections.*`; with MPI `MPIConnectionFlux`, `MPIConnectionOrder` | 3-D faces with permuted indices; connections with multigrid and RANS |
+| Axisymmetric wedge, rotational periodicity | ☑ | `WedgeAxisStep`, `Connections.SectorRadial`, `.SectorViscous` | — |
+| Multirate integrator | ☑ | the `Multirate.*` tests: identity, conservation, order, shocks, restart, input, MPI | — |
+| Residual smoothing, grid sequencing, CFL ramp | ☐ | implicit only | a test of each |
+| Mirror symmetry, free stream (single rate) | ☐ | only the multirate has them: `Multirate.Sym`, `.Free` | the same for the single-rate step |
+| 3-D inviscid | ☐ | — | an isentropic vortex or Euler manufactured case |
 
 ### Physics
-- ☑ **Reynolds-stress decay** — `test/2D/viscous/rsm-decay` (`RSMDecay`, validation tier):
-  isotropic turbulence in a uniform stream on an axisymmetric wedge, for SSGLRR,
-  SSGLRR-SD, SSGLRR-w2019 and SSGLRR-w2019-SD: the closed-form decay of k and omega,
-  isotropy, no radial velocity (the Reynolds stress in the viscous flux of the wedge
-  faces), and total enthalpy + k + R11 conserved (energy exchange with the mean flow,
-  Reynolds stress on the open boundaries).
-- ☑ **Turbulent flat plate of the NASA TMR, SA / SST / Wilcox2006 / SSGLRR** — the
-  verification case of the TMR, with its boundary conditions, on three grids of its
-  family (35x25, 69x49, 137x97): `test/2D/viscous/flat-plate-turbulent-tmr`. The short
-  form (`FlatPlateTMR`, validation tier) restarts each model for 5000 iterations from
-  its converged 35x25 solution: c_f at x = 0.970084071 and 1.90334 and C_D within 1e-5 (relative)
-  of the converged values, and the criteria of the V&V page on the stored results of
-  the full form. The full form (`FlatPlateTMRFull`, label `verification`) runs the twelve
-  cases to 300 000 iterations: the 137x97 grid against CFL3D and FUN3D (SSGLRR: TAU) on the same grid, and
-  the limit of the three grids against CFL3D on the 545x385 grid.
-- ☐ **P3 — Couette / Poiseuille** (2D viscous, analytic): clean fast laminar-NS check
-  independent of Blasius subtleties.
-- ◐ **P4 — 3D Euler verification**: 3D isentropic vortex or manufactured case. *Covered
-  with the viscous terms:* `MMSViscous3D` and `MMSViscous3DFull` (`test/3D/viscous/mms`),
-  manufactured solutions of the Navier–Stokes equations; no inviscid 3-D case.
-- ☑ **P5 — Shu–Osher** (1D): Mach-3 shock / sine interaction. *Done:*
-  `test/1D/Shu-Osher` (hand-generated IC via `gen_ic.py`). Two CTest entries:
-  `ShuOsher` (**fast**, single N=200 grid vs an N=1600 MOSE reference, 2.9 % L1) and
-  `ShuOsherConvergence` (**validation**, 4-grid Richardson study N=200/400/800/1600 —
-  the N=1600 solution is a study point — asserting a sane observed order (p ≈ 1.02)
-  and monotone L1 decrease vs the Richardson extrapolant, 3.55 → 2.83 → 1.46 → 0.72 %,
-  and producing the V&V figure).
 
-### Implementation / infrastructure (also serve as fast tests)
-- ☐ **I1 — Freestream preservation / GCL**: uniform flow on a stretched, curvilinear,
-  multi-block mesh; assert residual stays at machine-zero.
-- ◐ **I2 — Single-block vs multi-block equivalence**: same problem as 1 block and 2×2
-  blocks; fields identical to round-off. Direct halo/interface-flux test. *Covered for two
-  blocks:* `test/fast/connections/connection-flux` (`Connections`/`ConnectionFlux`, a periodic shock tube as one and
-  as two blocks, bit for bit, and conservation) and `test/fast/connections/connection-order`
-  (`Connections`/`ConnectionOrder`, two 2-D blocks with permuted index directions, the `bc.txt` records
-  sorted and reversed); with one block per MPI rank, `test/mpi/connection-flux`
-  (`MPIConnectionFlux`) and `test/mpi/connection-order` (`MPIConnectionOrder`), needs-mpi
-  tier. *Not covered:* four blocks at a vertex and 3-D faces with permuted directions.
-- ☑ **I3 — Restart round-trip**: N steps vs (N/2 → write → restart → N/2); match to
-  ~2e-15. *Done:* `test/fast/restart` (restart = `newrun=false`, reads OUTPUT/field.tec).
-  With `sol-format = vtk raw` the same test asks for identical bits, iteration counters
-  and output numbering included, and a restart from a solution without a time (Tecplot
-  ASCII without SOLUTIONTIME, vtk raw without TIME) must stop at setup, and a solution of
-  MOSE copied into INPUT/ must start a new run (vtk raw, vtk ascii, Tecplot ASCII); *MPI variant (needs-mpi tier):* `test/mpi/restart`
-  (`MPIRestart`, 2 ranks × 2 threads). `test/fast/restart/restart-counters` (`Restart`/`RestartCounters`)
-  covers the other counters, in every format (vtk raw, vtk ascii, Tecplot ASCII, Tecplot
-  binary when MOSE is built with TecIO): steady runs (global iteration count, probes, diagnostic
-  output), time-based output, the multigrid level, the global iteration count of a
-  multigrid restart from Tecplot ASCII, a transient started from a steady solution (vtk raw
-  and Tecplot ASCII), a steady restart from a vtk solution that holds TIME only, and
-  the residual history and probe rows of a restart from a solution older than the end
-  of the run that wrote it, also from history files cut by hand without a final newline,
-  and the rows of `torque.dat` of the rotating frame in the same restart. A first part that
-  ends on an output iteration (by iteration, also with `sol-overwrite = true` and with two
-  grid levels, and by time) writes there the solution and the probe row due, and the restart
-  in the same folder writes the files of the uninterrupted run. A first part killed with
-  SIGKILL at its third numbered solution, as a queue kills a run at its time limit, leaves in
-  `residual-history.dat` and in the probe files every row it wrote, and the restart from its
-  last solution writes the files of the uninterrupted run.
-- ☑ **I4 — Conservation invariant**: closed slip-wall box, shock-tube IC; total mass
-  conserved to round-off (~2e-13). *Done:* `test/fast/conservation`. (Energy invariant
-  is a possible future addition.)
-- ☑ **I5 — Serial vs OpenMP equivalence**: 1 vs 4 threads bit-identical, also with chimera faces meeting at
-  the edges of a block. *Done:*
-  `test/fast/openmp-equiv`. *MPI variant (needs-mpi tier):* `test/mpi/boundary-records`
-  (`MPIBoundaryRecords`) — a strip of four viscous blocks bit-identical on 1×1, 2×1,
-  4×1 and 2×2 ranks × threads, and with the `bc.txt` records in reverse order (1 and 2
-  ranks, with and without threads), the wall output included; the same with the
-  Spalart–Allmaras model, ordered and reversed (1×1, 1×4, 2×2), and with SA-RC, whose
-  velocity gradients cross the faces between ranks (2×1, 4×1, 2×2 against 1×1);
-  `test/mpi/vertex-stencil` (`MPIVertexStencil`) — a
-  2×2 box of viscous blocks with a vortex on the common vertex, bit-identical on 1×1,
-  1×4, 2×1, 4×1 and 2×2 ranks × threads; with chemistry = equilibrium, bit-identical
-  on 1×1 and 2×1; `test/mpi/bit-identity` (`MPIBitIdentity`) — every file a run writes
-  in `OUTPUT/` (solutions, residual history, probe) bit-identical on 1×1, 1×4, 2×1, 4×1
-  and 2×2 ranks × threads (1×1, 2×1 and 4×1 with a MOSE built without OpenMP) for five
-  cases: a 2×2-block box with inlets, outlets, walls
-  301 and 302 and symmetry planes, Spalart–Allmaras and SST steady (local time step,
-  implicit residual smoothing) and Spalart–Allmaras time-accurate, and the points
-  shared by 3 and by 5 blocks of `ViscousPatch`/`ViscousLinearPatch` with a field that changes at every
-  stage, and the same lines of the gas entering through each `400` boundary and the same lines at the end of the run
-  (`400` faces with gas entering, ghost cells of walls and `400` faces, turbulence values below zero), none with a count
-  of zero. Its 25 solver runs take ~40 s of CPU time (67 s of wall time, load average ~178
-  on 192 logical CPUs); main has no needs-mpi tier to compare with.
-- ☑ **I6 — MPI thread level**: MOSE requests `MPI_THREAD_FUNNELED`, so only the thread
-  that initialised MPI may call it. *Done (needs-mpi tier):* `test/mpi/thread-funnel`
-  (`MPIThreadFunnel`) — a probe library preloaded into the solver counts no MPI call
-  from other threads on 2×2, 2×4 and 2×2-with-IRS (steady) ranks × threads; skipped
-  (exit code 77) with a MOSE built without OpenMP, whose ranks have no other thread; built
-  and registered on Linux only (`LD_PRELOAD`, symbol aliases).
-- ☑ **I8 — Block-to-rank assignment**: the map that `decomposition-map` names in `INPUT/`, in
-  the format of the ATLAS mesh decomposer (MDB), gives the MPI rank of every block. *Done:*
-  `test/fast/input-checks/decomposition-map` (`InputChecks`/`DecompositionMap`) — on one rank a map with every block
-  on rank 0 gives the bits of the run without it, also the map of the halo-trade test
-  of MDB kept byte for byte, and maps that do not fit the mesh or the run (a number
-  written as a real and a directory included), a named file that is not there and a value with a
-  folder stop it at setup with the fault named, and a map left in `INPUT/` without the key is not read;
-  *MPI variant (needs-mpi tier):* `test/mpi/decomposition-map` (`MPIDecompositionMap`)
-  — on 2, 3 and 4 ranks every map (MOSE's own assignment, permutations, an idle rank
-  0, 110 blocks, fewer blocks than ranks) gives the one-rank field, and a map for other
-  ranks stops every rank with the same message.
-
-### Multirate integrator (`[MOSE-Multirate]`, label `multirate`)
-The checks live in `test/multirate/mr-<check>` and build their own small cases with
-`test/multirate/mr-common/gen_mr_cases.py` (numpy only); each entry below is a group of them, run one after the other
-by `test/multirate/run_group.sh`. Cases, checks and thresholds: [`docs/vv/multirate.md`](../docs/vv/multirate.md).
-`ctest -L multirate -LE verification` runs the entries below without their longer forms (label `verification`),
-`ctest -L multirate` with them.
-Costs: CPU time with one thread in the build of the CI job without MPI (gfortran 13.2, TESTING), the sum over the
-checks of an entry of the smaller of two runs of each (shared 192-thread machine, load 93–155); I17 is wall time on
-2–4 MPI processes. The fast entry is F31.
-- ☑ **I18 — Multirate identity and equivalence** (`MultirateIdentity`, validation): one level (`max-level` 0,
-  `safety` 1) = single-rate Heun step bit for bit, residual history included, on 33 configurations (blocks, inlets
-  401, 402, 403, 405, 408, 410 and 420, the SRM grain in its inflow mode, laminar plate with the two diffusive
-  metrics and with an isothermal wall, 3-D hot
-  cube, Spalart–Allmaras and SST, also with the rotation and curvature correction, 2-D wedge, 1-D slab between symmetry j and k faces with the y and z velocity frozen, 1-D
-  duct with inclined j and k faces, `bc.txt` in reverse order), and the per-cell copies of the solver routines and the
-  boundary fluxes of a record statement by statement against their originals, with the MPI tags of the multirate
-  apart from those of the
-  single-rate exchanges; 1 against 3 and 4 OpenMP threads bit for bit; equal levels across the connections and one
-  block = three blocks with the same map; the halo of every level against an independent construction; mirror
-  symmetry of a centred pulse; free-stream preservation on a curvilinear periodic mesh. ~6 min.
-- ☑ **I15 — Multirate conservation and exact restart** (`MultirateConservation`, validation): mass, momentum and
-  energy drift ≤ 1e-12 with levels (Euler, laminar, laminar and Spalart–Allmaras with `diffusive-metric = mean`,
-  Spalart–Allmaras on a smooth and on a rough wall, SST, the 2-D axisymmetric wedge; the mass of each species of a
-  frozen mixture of four; `SA-R` and SST with `sst-production = compressible`, mass and energy, and with
-  `k-energy-coupling`, mass, the energy drift reported, each with a result other than that of the run without the
-  option; `safety` 1.5; an SRM grain in its inflow mode with n = 0 at the
-  end of a closed duct, the mass against M(0) + mdot_ref A t) and positive controls that must drift, and with a
-  depth of the map that changes from one macro step to the next;
-  restart from `vtk raw` bit for bit (one and several blocks, map rebuilt at every macro step and every 4) and from
-  `tecplot ascii` (one and several blocks), output
-  instants k·`sol-dtime` and `time-threshold` bit for bit, one residual row per macro step, mass drift ≤ 1e-12 over
-  three restarts; with `recompute-every` 4 the cells per level change, and only at the macro steps 4 m + 1. ~6 min.
-- ☑ **N5 — Multirate temporal order** (`MultirateOrder` and `MultirateOrderInletsMoving`, validation; full forms in
-  `MultirateOrderFull`, verification):
-  with the levels fixed, observed order on the last pair L1 ≥ 1.9 (≥ 1.8 for the turbulent channels) and L∞ near the
-  faces between levels ≥ 1.8 (acoustic and entropy waves, isentropic vortex through three blocks, laminar plate, skewed
-  hot square, a wall on smoothly skewed cells whose levels change along it); 9 and 13 levels: the same order,
-  drift ≤ 1e-12, amplitude after 2000 macro steps ≤ 1.01 × the initial; in `MultirateOrderInletsMoving`, inlets 402
-  and 410 on the finest level: L∞ order at the inlet cells ≥ 1.8, u > 0 in those cells, and the first cell against the
-  table at the same time, at the peak of the data within half of the distance the table has moved from t = 0, at the
-  end of the run within the amplitude of the table, and a simple wave whose faces between levels travel
-  with it, refined jointly in space and time against the exact solution: L1 order on the last pair ≥ 1.9 with the map
-  rebuilt at every macro step, mass drift ≤ 1e-12. The short forms of the order checks judge the macro steps H0 and H0/2
-  against a reference step of dt_min/16, the full forms (`MR_FORM=full`) H0 … H0/8 against dt_min/64; with 13 levels the short
-  form checks the conservation only, the order and the stability run in the full form. The entropy wave passes the
-  first pair with L1 1.93 (threshold 1.9), with ifx and gfortran alike; a change of the spatial scheme or of the case
-  that lowers its ratio of the errors with H0 and H0/2 by about 2 % fails the short form, and the full form then
-  decides on the last pair. ~8 min and ~3 min; full forms ~68 min
-  (one run, gfortran 13.2 TESTING with Intel MPI).
-- ☑ **N6 — Multirate with shocks and the non-local CFL condition** (`MultirateShocks`, validation): Sod tube and a
-  planar shock with levels against the exact Riemann solution and the single rate (conservation ≤ 1e-12, L1 error
-  ≤ 1.05 × the single rate's, shock within one local cell, no more local extrema than the single rate); the
-  diagnostics of the step taken against the step admitted on the new state (positive and negative controls); states
-  that are not physical inside an attempt (a blast tube with far coarse cells and 10 levels: the attempt rejected and
-  redone with H halved, one halving per such rejection, conservation ≤ 1e-12, 1 and 3 threads
-  identical; a face that is not physical at the start of the macro step stops the run at the first stage with its
-  lines; faces that leave the tables after the first stage: the attempts rejected, and the stop below 2^-10 after 11
-  attempts with the face); the limit `max-attempts` (the stop at the rejection that reaches it, with the causes; the
-  outputs unchanged when the attempts stay below it; the limit checked after the floor; the attempt rejected by
-  `force-redo` not counted; a warning when the redo is off) and a local step that is not a positive finite number at
-  the start of the macro step (a cell at a negative pressure, at zero pressure at rest, at a negative density and
-  pressure with viscosity and at a density so small that the diffusion rate overflows: a step that is not a number,
-  infinite, negative and zero; the stop before the first stage, with the cell; the parts whose step is not a number,
-  infinite or zero hold in the builds without floating-point traps, TESTING and RELEASE); the
-  certificate, the interface margin and the redo of condition (4) of Gnedin, Semenov and Kravtsov (outputs unchanged
-  by a forced redo, conservation ≤ 1e-12, 1 and 3 threads identical; a redo that makes the map deeper than that of
-  its first attempt; the solutions at the output instants
-  k·`sol-dtime` bit for bit, the one at the end of the run included; the theta of each limiter in the margin at the
-  first macro step equal to the one of the set-up check; no violation on a uniform flow, whose cell at its limit ties
-  with it at the rounding; at the floor of kappa, no macro step redone on an acoustic wave, with cells raised by the
-  margin); no negative nu~, k or omega after a stage near walls, with a
-  positive control that must print the count. ~3 min.
-- ☑ **I16 — Multirate input checks** (`MultirateInput`, validation): 35 configurations outside the scope stop at
-  set-up or at the first macro step with a non-zero exit code and the message naming the key (among them, with
-  `nonlocal-cfl = redo`, `levels = recompute` and no fixed macro step, a cfl above 1 with van Leer, first-order and
-  minmod, and a vnn above 0.5 in a Navier–Stokes
-  run, `Wilcox2006`, `SA-RC` and `SST-RC` with levels, and an SRM grain in mode 1), and the controls complete (among
-  them vnn 0.5 in a Navier–Stokes run,
-  vnn 0.6 there with max-level 0 and in an Euler run, cfl 1.2 and vnn 0.6 with `nonlocal-cfl = off` and `count`,
-  cfl 1.2 with `nonlocal-cfl = redo` and `levels = fixed` or a fixed macro step, and `levels = fixed` with a fixed
-  macro step above the step of the map, which warns once);
-  a reading of `input.ini` during the run that changes a key of `[MOSE-Multirate]` or a key fixed for every run
-  (`time-accurate`, `k-energy-coupling`), or takes `cfl` and `vnn` (with `redo`) or `cfl-rise-threshold` out of the
-  scope, is not taken (`ini-error = warn`: the residual history of the run without the change, byte for byte) or stops
-  the run (`stop`), with `off` a `cfl` and a `vnn` above the bounds are taken, and a `cfl` within the bound is
-  taken with the interface margin following it, above its floor and at it; `fixed-macro-step` builds the level map of the macro step taken; the
-  depth of the map of the adaptive step is min(`max-level`, floor of the octaves of the local steps), also with
-  `levels = fixed`, and with a `macro-step-target` within the step of the slowest cells the map is the one built for
-  the target (the depth the target gives); the stage sequence of one macro step equals the reference sequence.
-  < 1 min.
-- ☑ **I17 — Multirate on MPI ranks and OpenMP threads** (`MultirateHybrid`, needs-mpi): 1×1 = P×T bit for bit for
-  the single rate and the multirate, the 1×1 multirate runs with cells on more than one level (laminar, Spalart–Allmaras and SST plates in 2×2 blocks, the 3-D hot cube in 2×2×2
-  blocks, the laminar plate in two blocks
-  joined with the orientation -1 0 0 1, Euler cases in blocks, maps whose depth comes from the largest local step of all
-  the processes, also where the blocks of one process alone span fewer octaves, a face
-  between levels one cell from a rank boundary, the block-to-rank map, a blast tube in blocks whose attempts take states
-  that are not physical, the stop below 2^-10 of the first attempt on 3 processes, the stop at `max-attempts` on 1×1,
-  3×1 and 3×2 and the stop on a local step that is not a positive finite number on 3 processes, which holds in the
-  builds without floating-point traps, TESTING and RELEASE, each process stopping with the others), the plate with
-  Spalart–Allmaras and SA-RC with `max-level` 0 on 2 ranks equal to 1×1, conservation
-  ≤ 1e-12, with the probe library of `MPIThreadFunnel` (built on Linux only) no MPI call from a
-  thread other than the main one and the largest MPI tag ≤ 32767; the plate joined with -1 0 0 1 equal to the plate without the
-  turn within 1e-10 of the scale of each variable; the exchange wait, the exchange start and the compute spread of the `Timing`
-  block and the times per level over the ranks on 2 ranks with unequal work by a map that the log names, on 1 and 2 threads; exact
-  restart on 2 ranks × 2 threads. ~6 min (one run,
-  gfortran 13.2 TESTING with Intel MPI).
-- ☑ **P7 — Viscous shock tube of Daru and Tenaud with the multirate integrator** (`MultirateDaruTenaud`, validation):
-  Re = 200, the lower half of the tube on 50 × 25 cells stretched towards the wall; single rate at dt0/4 (the
-  reference) and at dt0, multirate with H = 4 dt0 and with H = dt0 (core cells at the step of the single rate, wall
-  cells smaller); every cell within its limit; with H = dt0 the L1 density error and the errors at ten probes at most
-  1.05 × those of the single rate at every output instant; the largest density jump on the wall and symmetry rows
-  within one local cell of the reference and no more local extrema than the single rate; mass and energy drift
-  ≤ 1e-12. About 2 min of CPU with one thread. The medium form (`MultirateDaruTenaudMedium`, label verification), the same
-  checks on 100 × 50 cells, about 19 min (one run, gfortran 13.2 TESTING with Intel MPI). The full form
-  (`MultirateDaruTenaudFull`, label verification: not run by the
-  pull-request checks), the same checks on 500 × 250 cells, also reports the wall density against table 1 of Zhou, Xu
-  and Liu; about 100 h of CPU with one thread (its four runs take 3.5e5 s of CPU).
-- ☑ **P8 — Start-up of a nozzle with the multirate integrator** (`MultirateNozzleStartUp`, validation): a quasi-1D
-  convergent-divergent nozzle of 371 cells (case mr1d-nozzle-su) started by a ramp of the inlet total pressure from
-  1e5 to 2.6e5 Pa in 8 ms against an outlet at 1e5 Pa, the shock of the start-up moving down the divergent across a
-  face between levels; single rate at dt0/4 (the reference), dt0 and dt0/2, multirate with H = dt0 and with the
-  production macro step H and H/2; every cell of the fixed-step runs within its limit; in the throat band the error of
-  the multirate with H = dt0 at most 1.05 × that of the single rate wherever it has levels, the production runs within
-  the single-rate error plus the step differences and with an observed order ≥ 0.8 where the single rates converge; the
-  moving shock of H/2 within the shift of the single rates and of the two production runs (in faces) from the
-  reference. About 5 min of CPU with one thread.
-
----
-
-## 4. Pre-push fast suite (GitHub-runner friendly)
-
-Rules: minimal build only, tiny meshes (≤ ~1k cells), each part about 10 s of CPU time or
-less at one thread (the rule of a row, below the table), assert
-**hard invariants** (no digitized references, no plotting, no Cantera). Target **< 60 s** total (a target, not a limit: see the rule of a row and the count below the table).
-
-| # | Test | Asserts | Status | ~Cost |
-|---|---|---|---|---|
-| F1 | Freestream preservation (stretched multi-block) | residual ≈ machine-zero | ☐ | <2 s |
-| F2 | Sod coarse (existing) | shock/contact positions, positivity | ☑ `Sod79` | ~1 s |
-| F3 | Conservation in closed box | mass conserved to round-off | ☑ `Conservation` | <1 s |
-| F4 | Single- vs multi-block equivalence | identical field | ☑ `Connections`/`ConnectionFlux`, `Connections`/`ConnectionOrder` (I7, I7b) | see I7, I7b |
-| F5 | Riemann smoke matrix; shock-detector = Tramel with HLLC and HLLC+Tramel | no NaN, ρ,p>0; the set-up summary names the shock sensor, and HLLC+Tramel gives the field.tec of the run without the key | ☑ `RiemannSmoke` | ~3 s |
-| F5b | Numerics sweep (limiters/schemes/recon) | no NaN, ρ,p>0 | ☑ `NumericsSmoke` | ~5 s |
-| F5c | Limiter defaults (MUSCL without limiter, first-order with limiter) | field bit-identical to the explicit setting; matching warnings and summary | ☑ `InputChecks`/`LimiterDefaults` | <1 s |
-| F5d | Residual smoothing with time-accurate runs | refused at set-up, no solution; steady runs keep it | ☑ `InputChecks`/`IRSTimeAccurate` | <1 s |
-| F5f | Scope of the preconditioning: prec in a time-accurate run, HLLC-PC without prec (Sod tube) | refused at set-up, no solution; a steady prec run with HLLC-PC passes the set-up | ☑ `InputChecks`/`PrecScope` | <1 s |
-| F5e | Time control (1-D duct, time-dependent inlet 402; 1-D tube of air at Mach 2 with an entropy wave, steady, `res-threshold` = 1e-6, at 10⁵ Pa and at 10⁵ Pa × 2⁻²⁴, and at 10⁵ Pa in two parts with a restart from `vtk raw` after 60 iterations) | order in time ≥ 1.8 (RK2, RK3); table held before its first instant; time-threshold reached; the steady runs end at the same iteration, with the density residual at most 1e-6 of that of the first iteration, the run in two parts as the run in one go | ☑ `TimeIntegration`/`TimeControl` | ~5 s |
-| F6 | Restart round-trip; probes at a restart, the file of one of them removed | identical to uninterrupted run; the missing probe file written again, the other appended, with the probe rows of the uninterrupted run | ☑ `Restart`, `Restart`/`RestartCounters` | ~3 s, ~6 s |
-| I11 | Wall output in vtk raw (2x2-block box of 8 × 8 cells, adiabatic no-slip walls (301) on its four sides, 5 RK3 steps) | the run ends; every wall file `wallB<b>F<f>.vts` has the extent of its face (WholeExtent and Piece Extent, from `fieldBlock<b>.vts`), its points and one value of each wall variable per cell, as raw appended data; `OUTPUT/wall.vtm` lists 8 wall files, one for each wall face, all written, and no other wall file is there | ☑ `OutputFiles`/`WallOutput` | <1 s |
-| I5 | Serial vs OpenMP equivalence: the Sod tube; a chimera case, a block overset on another whose four chimera faces meet at its edges (Navier–Stokes; the bit comparison alone does not show the race it guards: it shows under ThreadSanitizer with Archer, in three runs of three) | 1 vs 4 threads bit-identical | ☑ `OpenMPEquiv` | ~3 s |
-| I12 | Names of the VTK outputs (steady viscous run on a 2 × 2-block box with no-slip walls, 5 iterations, `vtk raw`, laminar and with Spalart–Allmaras and `sol-variables = thermo transport`; the laminar run also in `vtk ascii` and in `tecplot ascii`) | every `.vts` that `field.vtm`, `wall.vtm` and `diagnostic.vtm` list parses as XML, and its data arrays are named as the variables that MOSE writes for the case (field, walls, diagnostic; the turbulence variable, the laminar viscosity and conductivity and the eddy viscosity with Spalart–Allmaras), with no other array; every `.vtm` lists its block files as `vtk/<file>.vts`, and every data array has the format of `sol-format`; the outputs of the steady run carry minus the iteration count as their time (`TIME`, `SOLUTIONTIME` without `STRANDID`) | ☑ `OutputFiles`/`VtkNames` | <1 s |
-| I13 | `vtk raw` solutions as raw appended data (the Sod tube of `test/1D/Sod79`, 10 iterations, a numbered solution every 3, steady with the diagnostic output after each solution, and time-accurate) | every data array of every block file of every `.vtm` in `OUTPUT/` is `format="appended"`, with the raw appended data in the file | ☑ `OutputFiles`/`VtkRawFormat` | <1 s |
-| F9 | Viscous stencil of chimera faces: two blocks of 8 x 6 cells (8 x 6 x 4 in 3-D) overlapping by 4 cells in x, each ghost cell on a cell of the other block; one step of a steady run with u = G y (2-D), u = G (y + z) (3-D), and a radial velocity on a 2-D wedge of 1 degree against the same wedge as one block; a control: the 2-D case with the y spacing of block 1 growing 4 times across its last cell, which turns over the first layer of extrapolated ghost cells behind the chimera face | y and z momentum residual zero within 1e-9 of μ G / H, also in the cells at the ends of the chimera faces (1/4 of it with the ghost cell copied beyond the edge); on the wedge the momentum residual of every cell that of the one block within 1e-9 of μ G / H (half of v/r at the chimera faces with the ghost cell as its own k neighbour); the control stops at set-up on the ghost cell behind the chimera face, whose viscous flux takes its metric | ☑ `Connections`/`ChimeraFace` | ~1 s |
-| F7 | Symmetry (coarse forward-step/wedge) | top/bottom mirror preserved | ☐ | <3 s |
-| F8 | Shu–Osher coarse (N=200) | L1 vs N=1600 ref < 5 %, finite | ☑ `ShuOsher` | ~2 s |
-| P1 | Ablative wall BCs (503/504) and the SRM grain (502, mode 1 a blowing wall, mode 2 an inflow, from rest); the melting column also without `schmidt` (default 0: one species needs no `diffusion.dat`) | wall state vs closed form, both face orientations, inert-surface fallback | ☑ `AblatingWall` | ~11 s |
-| P2 | Reynolds-stress model SSGLRR and its variants -SD, -w2019, -w2019-SD (isotropic turbulence in a uniform stream through an axisymmetric wedge, 32 × 4 cells) | decay of k and omega against the closed form, normal stresses equal and shear stresses zero, no radial or azimuthal velocity, total enthalpy + k + R11 conserved | ☑ `RSMDecay` (validation tier) | ~52 s (52.4 and 53.0 s, gfortran 13, 192 logical CPUs at a load average of 177-178) |
-| I9 | Exit codes of the error stops: the Sod tube as a viscous mixture of four species without `schmidt` and without `diffusion.dat` ([thermo](../docs/theory/thermo.md)); the Sod tube in air with a probe of an unknown variable; a steady run with the soot model LL91, with and without Spalart–Allmaras (six species with C(gr)), and the same state with `turbulence = SAcomp`; the Sod tube in air, steady, with sol-variables = none; the Sod tube that diverges (CFL 20), with an initial condition of too few variables, with a rotating frame of zero axis, of NaN axis or of infinite origin, with chemistry = equilibrium and no `INPUT/composition.txt`, with a value outside the rule of the registry: an interval, a list of reals, a list of integers; the Sod tube with a NaN velocity in one cell and with an infinite coordinate of one node; the duct of BCInput with a NaN and an infinite pressure, and a NaN time, in the table of its inlet 402; the duct with a NaN and an infinite total pressure and a NaN alpha of an inlet 401, an infinite total temperature of its inlet 402 and a NaN roughness of a wall 302 in its bc.txt; the duct with its inlet a face 410 whose file holds a NaN pressure and an infinite SOLUTIONTIME, and the same file missing, cut in the values of its second zone, with a word among them, with I=two in the header of its second zone, with I = 3 or j=2 there (no I= or no J=), with one value more in its first zone and with its two zones in decreasing time, and without p, without u and w, without rho(1); the duct in two blocks of 50 cells, two cells across in z, with faces 410 on its ends, on its faces in y and on its faces in z, read from three files in the form that the boundary-condition builder of ATLAS writes: as written, restarted, with the nodes of the faces in z moved by 5e-5 m (0.5e-2 of their shortest edge) and with the coordinates written with 15 digits, which run, and with the zones of its two blocks in the file of the faces in z under each other's title, those nodes moved by 2e-4 m, no zone of block 2, no zone of block 2 at the second time, the zones of block 2 cut to 25 cells, and the zone of block 1 at the second time taken from block 2, which stop at set-up; the Sod tube restarted from its solution with a NaN SOLUTIONTIME and with an infinite MOSE_LAST_OUTPUT_TIME; input.ini missing, empty, of comment lines only; the Sod tube with sol-dtime = NaN, Infinity and 0,5, sol-diter = seven and 2.5, sol-overwrite = yes and levels = 2.0 of [MOSE-Multigrid]; the tube holding the gas of `test/1D/Fer14` with chemistry = finite-rate: with its mechanism, a valid run with exclude-blocks = 1, and exclude-blocks with a word that is not a block number or with a block beyond the mesh, which stops at set-up; without `INPUT/chemistry-info.txt`; with its mechanism and a relative tolerance of the species of 1e-30, which H-radau5 refuses at every call, with 1 and 4 threads and on two multigrid levels; with its mechanism in a box of two blocks of 5 × 4 × 4 cells at 101325 Pa, at 2000 K beyond an oblique plane, where it ignites within the step, and at 300 K elsewhere, with `ode-max-steps` = 10, with 1 and 4 threads; the tube filled with steam far from chemical equilibrium, its block excluded from chemistry = equilibrium, on one grid and on two multigrid levels; on 2 MPI ranks (`MPIExitCodes`, needs-mpi tier), cfl = -1, without input.ini, the NaN velocity with the block on rank 1 alone and the infinite coordinate, the duct in two blocks with the zones of its two blocks under each other's title, a block on each rank, the Sod tube with its record 2 of type 409, and cfl = -1 written during the run in the input.ini of rank 0 with ini-error = stop (two folders, MPMD), and the initial condition of rank 1 alone cut in the middle (two folders), the tolerance of 1e-30 of the finite-rate chemistry with the block on rank 1 alone and 2 threads per rank, the box with `ode-max-steps` = 10, block 1 on rank 1 and block 2 on rank 0, 2 threads per rank, and one process without the launcher stopped with `MPI_ABORT` (a probe of an unknown variable, in the tube holding the gas of `test/1D/Fer14` with chemistry = finite-rate and its mechanism) | non-zero exit code and the diffusion-table error, no solution; exit status 1 and the name of the variable, no solution; exit status 0 and a diagnostic output that names every variable it writes, the local time step under dt; with SAcomp, exit status 0 and a diagnostic output that names every variable it writes, rhoNuTilde among them; exit status 1 and a message that names thermo or transport; exit code 1 to 128 and the error message (for input.ini, the reason it cannot be read, and no solution); for a key of input.ini whose value does not read as its type, exit code 1, the file, the section, the key and the value as written and the STOP line, no solution; for a value that is not finite, exit code 1, the place of the value and the STOP line, no solution; for the table, exit code 1, the line and the column, no solution; for bc.txt, exit code 1, the line, the record, its type and the name of the value, no solution; for the file of the face 410, exit code 1, the file, the zone, the line of its header, the variable and the cell, no solution, and for a file that cannot be read, exit code 1, the file and, for a zone, the zone and the line of its header (with the two times for zones out of time order, and the form of I and J to write for a header without I= or J=), no solution, and for a file that lacks a part of the state, exit code 1, the file and the variables it lacks, no solution; for the files of the duct in two blocks that stop, exit code 1, the file, the block and the record, and for the nodes the zone, the line of its header and the node, no solution, and for those that run, exit code 0 and the solution of the files as written, bit for bit (the restart: exit code 0 and its steps); for the restart, exit code 1, the file and the name of the value, the STOP line, the solution left as it was; exit code 0 and block 1 under the inactive blocks of the set-up summary; without the mechanism, exit code 1 at set-up, the message that names the file and the STOP line, no iteration, no warning of FLINT and no solution; for the integration that H-radau5 refuses, exit code 1, the line of the failure (the integrator, its return code and what it means, block 1, cell 1, 1, 1, the state of the cell) written once, the same with 4 threads as with 1, with grid level 2 on two levels, the STOP line and no solution; for the box, exit code 1, the line of return code -2 (more steps are needed than `ode-max-steps`) for block 1, cell 5, 3, 3, the smallest in the order block, k, j, i of the hot cells, where the integration fails, written once, the same with 4 threads as with 1, the STOP line and no solution; the field of the excluded block bit-identical to the run without chemistry, and different with the block not excluded; on 2 ranks, with cfl = -1 exit code 1 within 60 s, the message and the STOP line of both ranks, without input.ini exit code 1 to 128 within 60 s and the message, and for a value that is not finite exit code 1, the place written once and the STOP line of both ranks; with the zones of the duct under each other's title, exit code 1, the message and the STOP line of both ranks; with the record of type 409, exit code 1, the message with the line, the record and the type, and the STOP line of both ranks; with the input.ini of rank 0, which rank 0 passes to every rank, exit code 1 at iteration 20 and the rule, not a hang; with the initial condition of rank 1 cut, exit code 1, Initial conditions FAIL, the error of the read written once and the STOP line of both ranks; with the integration of the chemistry that fails on rank 1, exit code 1 within 60 s, the line of the failure written once, by rank 1, and the STOP line of both ranks; with the box, whose integrations fail on both ranks, exit code 1 within 60 s, the line of block 1, cell 5, 3, 3 written once, by rank 1, and the STOP line of both ranks; for the process stopped with `MPI_ABORT`, exit code 1 to 128 and, in its log, the message, the line of the set-up summary before it and the warning of FLINT on the error output | ☑ `ExitCodes` (validation) | ~22 s |
-| F10 | Quasi-2D with symmetry k faces; 1-D with symmetry j and k faces; a channel of variable section in a layer between parallel planes inclined to z and a 1-D channel of variable section, steady subsonic flow | p, u, v uniform; round-off in w does not grow (Heun, RK3); in 1-D, round-off in v and w does not grow; in the layer and in the channel the velocity across is integrated, with the warning, and p within 0.03 p0 of the quasi-1-D flow | ☑ `TimeIntegration`/`Quasi2DSymmetry` | ~7 s |
-| F11 | Local time step (square and skewed 2-D cells, cubic 3-D cells, heat-conduction and species-diffusion cells, 1-D at cfl 0.99; heat conduction on a periodic block of 8³ rhombohedra at 115°, Heun at vnn 0.5, 600 steps); with integration-variables = prec, a 2-D column in simple shear over a wall with SST and Wilcox 2006 | stable, uniform state kept, no NaN; the temperature wave of the rhombohedra decays; with prec the step of every cell (but the row next to the symmetry plane) equal to the rule with U_r from the viscous floor with the eddy viscosity of the model at the strain rate of the cell, within 1e-10, after one and after two steps | ☑ `TimeIntegration`/`LocalTimeStep` | ~7 s |
-| F12 | Turbulence sources in time-accurate runs (wall channel, SA and SST, Heun and RK3; SST-RC, RK3, one step, without point-implicit in the input and with it true and false); SST in a steady run of the near-wall channel, two RK3 iterations, without and with the point-implicit factor; Wilcox 2006 on a 3-D linear flow, divergence-free, with S^ zero on the diagonal (cube of 6³ cells), one step; Wilcox 2006 and SST with omega-wall-bc = asymptotic on the channel at rest, omega at the wall value 6 nu/(beta d²) of the model, one step | time order of nu~, k, omega ≥ 1.8 (Heun) and ≥ 2.7 (RK3); no negative stage value, and a first step equal to the rule with the bound of the stiffness that the state of each cell gives alone within 1e-6; in the steady run, without the factor a count above zero of the cell updates with k or omega below zero, with it no count printed; the -RC start-up warning printed and none about the CFL ramp (SST-RC); the warning about point-implicit only with point-implicit = true in the input; change of rho omega = dt (2 gamma rho S:S - beta_0 f_beta rho omega²) within 1e-6; in the wall cells, change of rho omega = -dt beta rho omega² (the destruction alone) within 1e-6 | ☑ `TimeIntegration`/`TurbulenceSources` | ~6 s |
-| F13 | Spalart–Allmaras on constructed fields: variable density (periodic field, no wall); SA-RC and SST-RC on a 3-D flow with vorticity along x, y and z (cube of 8³ cells) and on the same flow turned (x to y, y to z, z to x), one step each; SA-RC on a uniform shear in a frame turning about z and on a uniform flow (8 × 8 cells), one step each; SA-RC and SA on air at rest next to a wall and on air flowing along it on cells stretched along the flow (8 × 8 cells), one step each; the viscous stress on the axisymmetric wedge (200): Homann's stagnation-point flow and a polynomial field with dilatation and swirl (1° wedge, axis included), also on radii growing geometrically from the axis; the linear fields u_r = U r on uniform radii and on radii growing by 1.1 and 1.2, and u = (a x, 0, 0) next to a wall 301 on cells growing along x and r with bent lines; and the axis at r = 0 on the wedge and on a 3-D sector of 4° (200), where viscous runs stop at setup, as on the polar line of a 3-D mesh with mean; Spalart–Allmaras next to a wall (fluid at rest, nu~ = a y, chi < 1e-3), also on cells growing by 1.2 from the wall and on skewed cells (2-D, 3-D) with the density linear along the wall; SA-RC on the column with a shear flow whose strain rate varies along x, as one block, two blocks and two blocks with permuted indices | right-hand side of rho nu~ = standard conservation form, error < 0.02 and order > 1.5; change of rho nu~ (rho k and rho omega with SST-RC) the same in corresponding cells of the two 3-D runs within 1e-9 of its largest value; change of rho nu~ = dt rho c_b1 f_r1 S~ nu~ with the f_r1 of the specification within 1e-6 (shear), no NaN and no change (uniform); the same change of rho nu~ with SA-RC and SA within 1e-12 (rest; stream, off the wall row); viscous force vs exact: Homann, radial and axial error < 0.02 and order > 1.5, azimuthal zero; polynomial, radial and azimuthal error < 0.02 and order > 1.5, axial exact; on the growing radii the same, every error that is not round-off within 2 times that of the uniform radii; u_r = U r: every cell keeps sin²(δ/2) of its hoop term, within the round-off of the uniform radii (at most 1e-11, 3e-6 on the first row); u = (a x, 0, 0): no viscous force in the cells with no face 400, below 1e-11 of its scale; right-hand side of rho nu~ below 0.05 of (cb2/sigma) rho a^2 in every cell, wall cells included (grad nu~ = a there); on the skewed cells the terms in grad rho (difference with the run at uniform temperature) below 0.05 of the same scale; SA-RC: two blocks, and two blocks with permuted indices, give the change of rho nu~ over the step of one block to 1e-9 of its largest value (a ghost cell that copies the cell: about 3e-2) | ☑ `MMSResiduals` | ~10 s |
-| I7 | Faces between blocks (101, 201): periodic shock tube as one and as two blocks, HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC (low Mach) | two blocks = one block bit for bit; mass, momentum, energy conserved to 1e-13 | ☑ `Connections`/`ConnectionFlux` | ~2 s |
-| I7b | Faces between blocks of the same parity (2-D, index directions permuted across the cut), HLLC+Tramel, Navier–Stokes; the same with the block below the cut one cell thick across it, and two cells thick with two multigrid levels | bc.txt records sorted = reversed, bit for bit; the thin blocks stop the run at set-up with a non-zero exit code and the message (the record, the block across, its cells, the level) | ☑ `Connections`/`ConnectionOrder` | <1 s |
-| F15 | Wall output and residual (converged laminar hypersonic plate) | residual of ρu and ρe in the wall cells below 1e-6 of the wall shear force and heat flow of the face | ☑ `OutputFiles`/`WallOutputResidual` | ~2 s |
-| I8 | Block-to-rank map named by `decomposition-map` on one rank, also a map written by MDB, and a map left in `INPUT/` without the key | rank-0 map = no map bit for bit; misfit maps, a missing named file and a name with a folder stop at setup with the fault named; the map without the key = no map bit for bit | ☑ `InputChecks`/`DecompositionMap` | ~4 s |
-| I10 | input.ini read again during a run (2x2-block viscous box, 48 × 48 cells per block: ini-diter = 20, 40 iterations; the readings with an error, with ini-error left out and with ini-error = stop, on the same box with 24 × 24 cells per block, 30 iterations, solutions every 7; an input.ini with the required keys only, and one that also writes integration-variables = prim, riemann-solver = HLLE and flux-limiter = minmod, ini-diter = 5, 10 iterations); a comment line with "=" before cfl in [MOSE-Numerics], cfl = 0.4, 3 iterations, and the same run without the line; the same box with 24 × 24 cells per block in a rigid-body frame about x with the wall of x = 0 at rest (stationary-face-1 = 1 1), 30 iterations, solutions every 7, omega, rotational-frame, the stationary face or an axis of NaN written during the run (the last three with ini-error = stop and left out, with an axis that does not read too), and, with two stationary faces at the set-up (stationary-face-2 = 2 2), omega written with both keys, with the first alone and with none; the box with 24 × 24 cells per block, 30 iterations, solutions every 7: time-scheme = RK2 written during a run started with RK3 (with ini-error = stop, and with cfl = 0.4 in the same reading and ini-error left out), levels = 2 added and a probe added (ini-error left out), ode-relative-tol-temperature = 1e-5 at the start and 1.0e-05 in the reading; time-accurate = true written during the steady run (ini-error left out); the rigid-body frame with res-diter = 25 and a row of an earlier run in OUTPUT/torque.dat, newrun = false written during the run; irs-beta = 0.5 written during a run started without IRS (ini-error = stop); irs = false and irs-beta = 0.5 at the start on the box with 48 × 48 cells per block, read again unchanged every 5 iterations, 10 iterations; irs-beta = 0 written during a run started with irs-beta = 0.5, and the restart from its solution of iteration 20 with irs-beta = 0; riemann-solver = AUSM+M with riemann-options-Mco = 0.1 at the start and 0 written during the run (ini-error = stop); the tube of 200 cells of test/1D/diff1 (four species, no INPUT/diffusion.dat, time-accurate, 1010 iterations, read again at 1000) with schmidt = 1.0 at the start and 0 written during the run (ini-error = stop); on 2 MPI ranks (`MPIRuntimeInput`, needs-mpi tier), the 2x2-block box in two folders (MPMD), 40 iterations, sol-diter = 7 written during the run in the input.ini of rank 0 alone, then sol-diter = 7, res-diter = 7, ini-diter = 30 and cfl = -1 in the input.ini of rank 1 alone, and cfl = -1, then time-scheme = RK2, in the input.ini of rank 0 | cfl = -1 stops the run at setup and, written during the run with ini-error = stop, at the reading of iteration 20 with the message of the rule; with ini-error left out every error of the reading (cfl = -1, input.ini emptied, cfl = 0.4 with sol-diter = seven, cfl = -1 with ini-error = stop, comment lines only) is not taken: iteration 30, exit code 0, one warning and no [ERROR], the residual history of the run without the change byte for byte; with ini-error = stop, input.ini emptied, and cfl = -1 with ini-error = warn, stop the run at iteration 20; with the required keys only, and with the three keys written, the run reaches iteration 10 with the residual history of the same run without readings, byte for byte; with the comment line the run writes the residual history of the run without it, byte for byte, and the setup names no key as not read; omega from 1e4 to 2e4 rad/s: from iteration 21 the run of the restart from iteration 20 with 2e4 at set-up (residual history and solution of iteration 30 byte for byte); rotational-frame = none, stationary-face-1 = 1 3, axis = NaN 0.0 0.0: with ini-error = stop, stop at the reading of iteration 20 with the message; with the key left out, and with axis = 1.0 abc 0.0, not taken: iteration 30 and every output file of the run without the change, byte for byte; the keys left out keep their faces: with the first key alone and with none, iteration 30 and every output file of the run with both keys, byte for byte; time-scheme = RK2: with ini-error = stop, stop at the reading of iteration 20 with the message that time-scheme cannot change during the run; with cfl = 0.4 in the same reading, and levels = 2 and the probe added, not taken: iteration 30, exit code 0, one warning with the error and no [ERROR], the residual history of the run without the change byte for byte, no file of the probe; newrun = false: exit code 0, no warning, torque.dat starts again with its header at its row of iteration 25; 1.0e-05 after 1e-5: taken, no warning, the residual history of the run without the change byte for byte; time-accurate = true: not taken, one warning with the error, the residual history of the run without the change byte for byte; irs-beta = 0.5 in a run started without IRS: stop at the reading of iteration 20 with the message that it cannot be switched on during the run; irs = false with irs-beta = 0.5: the residual history of the same run without readings, byte for byte; irs-beta = 0: from iteration 21 the run of the restart without IRS (residual history and solutions of iterations 21, 28 and 30 byte for byte); riemann-options-Mco = 0 and schmidt = 0: stop at the reading (iteration 20, iteration 1000) with the key, its value, the value of the run and the reason of the set-up; on 2 ranks every rank takes the input.ini of rank 0, which rank 0 passes to every rank: with the change of rank 0 exit code 0 within 60 s at iteration 40 and the solutions of iterations 10, 20, 21, 28 and 35; with the changes of rank 1, and with cfl = -1 and time-scheme = RK2 in the file of rank 0, which no rank takes, exit code 0 within 60 s at iteration 40 and the files of the run without the change, byte for byte, not a hang | ☑ `RuntimeInput` (validation) | ~29 s (`MPIRuntimeInput` 30-63 s) |
-| F17 | Inlets: the ambient inlet (407) with the flow direction `normal` (planar duct, air entering at 50 m/s); inlets at total conditions (1-D tube of air, one forward Euler step): 407 and 401 from rest at p0 = 2 p and 36 p, an inlet the reservoir cannot feed, a 407 that it cannot feed with the gas moving in at 0.5 a and 1.2 a, and with p_back above p_stop; 401 and 407 with the gas moving in at 2a/(γ−1) or faster (6 a at p0 = p, 5.5 a from a reservoir at T0 = 25 T and p0 = 0.1 p, 20 a), and the hot inlet with the invariant of the cell at ±1e-9 a; inlets with a mass flux or a normal velocity (the same tube, the gas moving in at 0.1 a): 403, 404 with g = 0.3 rho a and 408 with un = 0.1 a on face 2, with g and un and with −g and −un, and on face 1; a nozzle 420 with g = 0.3 rho a on face 2, its p_sub and p_sup those of the nozzle that its reservoir (T0 = T, p0 = 2 p) chokes at g, the cell in the band of g | same field as the equivalent angles bit for bit, no transverse velocity (|v| <= 64 eps (|u| + c), rounding); mass flux of each inlet face = that of the face state (subsonic, choked at normal Mach 1, slip wall, outlet at min(p_back, p_stop)) within 1e-9 of rho a; the two fluxes at ±1e-9 a agree within 1e-9 of rho a; the mass flux into the domain of the 403, 404, 408 and 420 faces = that of the record, the magnitude of g or rho times that of un, within 1e-9 of rho a, and on face 2 the negative value gives the field of the positive one, bit for bit | ☑ `BoundaryConditions`/`Inlets` | ~2 s |
-| F18 | Wall distance (fluid at rest, nu~ uniform; convex corner of two walls, curved wall under a leaning mesh, nozzle lip on a 1° wedge; channel and pipe on a wedge periodic in x, 3-D sector closed by rotational periodicity, the channel with its periodic sides matched to 1e-8, 3-D slab periodic in k by type 200, each with the wall on part of the period; 3-D channel periodic in x and z with periods a hundredth of its height, wall on the whole period; the 2-D channel ten periods from the origin; a 2-D staggered row of plane blades 1.7 periods long; a 3-D block periodic along three nearly dependent translations; the 2-D channel turned by 30° with its coordinates rounded to 5, 4 and 2 significant digits; 3-D walls of twisted faces: a block under leaning cells, where in 9 cells the nearest face by the four triangles of each face is not the nearest face, and a block periodic in x) | distance read back from the Spalart–Allmaras source = exact distance to the wall and its periodic images within 1e-9 (1e-6 with the sides matched to 1e-8; for the turned channel, between the distances with the translation of each periodic face; on the twisted walls, the distance to the bilinear faces from the stationarity equations in rational arithmetic); with 2 digits, stop at set-up with the message on the periodic translations; no warning on twisted wall faces | ☑ `MeshGeometry`/`WallDistance` | ~5 s |
-| F19 | Mesh type (plane slab with y falling along j, right-handed wedge with the axis on its last j face, a wedge of 5 degrees in two blocks with coordinates of 5 significant digits, a plane slab far from the x axis (y from 1 to 1.001, 1e-4 thick), a wedge of 1 degree with coordinates of 2 significant digits, a plane slab with its k planes tilted by 2 % of its thickness, 3-D sectors of 90 degrees with the periodic plane turned by half a cell more (100 cells in k) or a tenth (20 cells) but at two nodes, a wedge block with a plane block, a plane slab whose k = 1 plane touches the k = 0 plane along x = 0, 3-D slab periodic in k with type 200, 3-D rings of 2 × 2 × 36 cells closed by type 200 over the full turn, with the last k plane written as the first or computed with cos and sin, and the second with a wall on its inner face) and folded cells (a 2-D and a 3-D block with one interior node moved across the next cell; one cell of a real 3-D mesh) | plane and meridional wall distance (to the wall of the nodes as written) within 1e-9, and the type in the set-up summary; set-up stop with a non-zero exit code (2 digits, tilted slab, touching k planes, shifted sectors, mixed blocks, folded cells); uniform flow kept within 1e-12, and on the rings, named 3-D with no sector angle; on the ring with a wall the distance to the plane wall face of the sector of each cell within 1e-9 | ☑ `MeshGeometry`/`MeshType` | ~3 s |
-| F21 | Rotational periodicity of a 3-D sector (annulus sector from -45 to 45 degrees, type 200 on the k faces, radial flow with uniform density and pressure, 20 steps of RK3) | the columns k and NK + 1 - k mirror images (rho, u, v, p equal, w opposite) within 1e-10 of their scales | ☑ `Connections`/`SectorRadial` | <1 s |
-| N7 | Patch test of the viscous fluxes: linear velocity and linear temperature on 2-D meshes with nodes moved at random, a fold between two blocks, a fan of index lines at a wall (the edges along it growing 7/4 times across the first cell: the second layer of extrapolated ghost cells turned over; 4 times: both layers, which no flux there reads), points shared by 3 and 5 blocks, a symmetry plane under skewed cells, a 3-D pair of blocks; walls with a prescribed heat flux; a control on parallelogram cells (walls 301 with q = 0) | viscous force and heat conduction of every cell below 1e-11 of their scale, also at every stage of an RK3 step around the points shared by 3 and 5 blocks; mean equal to a replica of its formula within 1e-10 | ☑ `ViscousPatch`/`ViscousLinearPatch` | ~10 s (44 one-step runs) |
-| N7b | The same next to walls of prescribed temperature (302) and next to walls coupled to another solver (103, 104: T linear along the wall, a velocity linear and zero on it, the stress on the wall left to the other solver): the wall temperature varying along the wall on skewed cells, also behind a wall whose two layers of extrapolated ghost cells are turned over (the edges along it growing 4 times across the first cell); a velocity linear and zero on a no-slip wall whose cells have nodes moved at random (2-D and 3-D), and the same on a wall that does not turn with a rotating frame, its velocity in the frame -Omega x r varying along it, with every face metric (mean on parallelogram cells, at a wall 302 and at an adiabatic wall 301), and there the energy of every cell; a control on parallelogram cells (T_w uniform along the wall); next to a face of type 410 on cells with nodes moved at random, the state of the file at the centre of the ghost cell (u linear, T linear at uniform pressure) and, with Spalart–Allmaras, ν̃ copied from the cell, linear and uniform (the gas entering at 1.2 times the density of the cells) | heat conduction and viscous force of the wall cells below 1e-11 of their scale; on the parallelogram cells of the frame the energy right-hand side of every cell equal to tau : grad u within 1e-11 of its scale (the work of the wall stress on the wall velocity included); next to the 302 wall also within the heat flux of 6 units in the last place of T_w, k ulp(T_w) A_w/(d V) each (1.9e-11 of the scale): the temperature of the cell, p/(rho R), holds 8 roundings from the T_w of the case, 11 with fast math (11 u T_w = 6.4 ulp at 300 K), so in every declared build (gfortran and ifx, DEBUG, TESTING, RELEASE); next to the face 410, the momentum and the energy of its cells equal to minus the flux of the uniform stress or heat through the face, the right-hand side of ρν̃ equal to its replica, and r(ρν̃) − ν̃ r(ρ), within 1e-11 of their scale | ☑ `ViscousWallPatch` (validation) | ~19 s (75 one-step runs) |
-| N7c | The same next to inlets and outlets, whose faces have no viscous flux: every outer face of a 2-D mesh with nodes moved at random (three sets of types) and of a 3-D pair of blocks an inlet or an outlet, one type per block face: 401–407 and 420, whose ghost cells are copies of the cell, and 408, whose ghost cells extrapolate the cells (3P1 − 3P2 + P3); a linear velocity and a linear temperature at uniform density (the 408 ghost cells extrapolate the density and the pressure: with a density that varies they do not hold T on the linear field). A laminar test: the cell metrics of the RANS source terms and the MUSCL reconstruction at the first interior face (zero slope behind a face whose ghost cells copy the cell) are not exercised; one rank, one thread | viscous force and heat conduction of every cell below 1e-11 of their scale, against minus the force of the uniform stress, or the uniform heat conduction, through the inlet and outlet faces of the cell | ☑ `ViscousPatch`/`ViscousOpenPatch` | ~4 s (16 one-step runs) |
-| F24 | Boundary input (1-D duct): inlet 402 table under four file names (plain, with a directory, longer than 32 characters, quoted with a blank), a missing table, a table whose times decrease and one that starts after the run; property lines with an empty value, short of a value, with a word for a number or with a misspelt flow direction; the inlet on face 1 a 404, 408 or 420 with g or un negative, or a 403, 404, 408 or 420 with g or un zero (the 420 a nozzle of exit-to-throat area ratio 2); the inlet on face 1 that nozzle without p_sub, with p_sub and p_sup swapped, with p_sub at p0, with p_sup zero, with g at 1.01 G*, G* the choked mass flux of its reservoir, and fed from T0 = 10000 K, the last row of the tables of the gas, one kelvin above the end of their interpolation; the outlet on face 2 of type 409 (without a property line) or 501, the 501 as the boundary-condition builder of ATLAS writes it; the outlet of the duct of the grain with Spalart-Allmaras of type 505 or 506 on its gas without the eight species of the surface reactions, and of type 506 with the line of an older ATLAS (five values), a seventh value, reac_id 2, phi < 0 or pyro_id 0 with phi > 0; an SRM grain boundary (502) with the Spalart-Allmaras model and with SST | the four runs bit-identical; the missing and the decreasing table stop the run at set-up with the name of the file; the late table gives the run of the same table with its first value at t = 0, bit for bit; the bad lines stop the run with their line, record and type; the inlets with g or un zero or negative on face 1 stop the run at set-up with exit code 1, no solution and their line, record, type, value and face, and for a negative value the outlet types; the nozzles stop the run at set-up with exit code 1, no solution and their line, record and type, with the empty value, the three thresholds, g and G*, or T0 and the end of the interpolation of the tables; the records of type 409 and 501 stop the run at set-up with exit code 1, no solution and their line, record and type, not on the count of the records; the 502 with Spalart-Allmaras runs 40 steps, and with SST (k and omega never below zero: no count of them printed), and one step at rest from a uniform rho nu~ m = mu changes it next to the grain by (m/(sigma rho h^2)) (cb2 m - 2 mu) dt plus the source terms at the distance h/2 to 1e-6 of 2 mu (the wall value nu~ = 0 in the ghost cells; an extrapolated ghost cell gives -2 mu), and in the other cells by the source terms at the distance (i - 1/2) h to the grain within 1e-9 (the grain a wall for the wall distance); the grain in mode 2 (an inflow) over one step from rest lets in the mass flux of the law (to 1e-8; its mode-1 twin's to 1e-14) and gives no source of rho nu~ in the other cells (no wall), and runs 40 steps with Spalart-Allmaras and with SST; a 502 line with a mode other than 1 and 2, p_ref = 0, mdot_ref < 0, mdot_ref = 0 in mode 2, T_af = 0 or at the last row of the tables, or an inflow short of its turbulence value stops the run at set-up with exit code 1; a grain that blows CH4 into N2 gives the face state the gas constant of CH4 (to 3e-14) at the static temperature of total T_af, and the gas the total enthalpy h(T_af) (to 2e-16; 1.2e-5 with T_af static), in both modes (the changes of mode 2 those of mode 1: rho and rho e to 1e-12, rho u to 3 ulp of the face pressure, which cancels in its change) | ☑ `BoundaryConditions`/`BCInput` | ~4 s |
-| F23 | Rotating frame (viscous Sod tube with walls 301 at its ends, rigid-body frame) with two `stationary-face-<n>` entries, the two ends; then one on a face of type 400 (no wall), and one on a block the mesh does not have; a stationary wall across the axis, gas at rest in the absolute frame; the same with two cells across, the face a wall 302 in part and a block connection (101) in part, and with a symmetry plane (300) in place of the connection | the run ends within 60 s with exit code 0; the set-up summary lists the two stationary patches; the two other faces stop the run at set-up with a non-zero exit code and the message; wall shear in the wall output below 1e-3 of mu Omega y_c / (dx/2); the face with the connection runs (exit code 0, patch listed, wall shear below 1e-3 of the scale), the one with the symmetry plane stops at set-up with the message | ☑ `BoundaryConditions`/`RotatingFrame` | ~1 s |
-| F25 | Probes given by position (planar 2-D duct, a different pressure in every cell, probes at cell centres in the mid-plane) | each probe holds the values of its cell, never a neighbour or a ghost cell | ☑ `OutputFiles`/`ProbePosition` | <1 s |
-| F27 | Viscous flux of the rotational periodicity of a 3-D sector (sector of 90 degrees against the sector of 180 degrees that holds it, viscous air at 10 Pa, a velocity periodic for a turn by 90 degrees with normal stress and shear on the periodic faces, with `diffusive-metric` = `stencil`; a radial flow with the k faces 200 and 300; a block periodic in z closed by 200 with no angle, a translated sector, and by periodic pairs 201, with Spalart–Allmaras; the radial flow, a linear field that the rotation allows, on radii stretched by a power 1.3 and growing by 1.2, with the default metric; a translated sector with tilted k faces next to a wall 301, cells growing from the wall along bent lines, a linear velocity zero on the wall and a linear temperature with its heat flux on the wall; one explicit step; the rule of type 200, which joins the two k faces of one block: a sector of 45 degrees cut along j, cut along k, with 200 on face 4, with a record outside its block, with no record on the other k face, a 2-D wedge with 200 on face 4 and with 200 on one k face only, and a ring of four blocks joined by 101, the junction at 2 pi included) | viscous force of every cell equal to that of the same cell in the larger sector within 1e-9 of its scale (momentum and energy), with each metric; 200 against 300 within 0.02 of the normal stress away from the j faces; translated 200 against 201: the step of rho, momentum, energy and rho nu~ of every cell within 1e-9 of the largest value; no viscous force of the linear fields on the stretched radii (away from the j faces) and next to the wall (every cell with no face 400), within 1e-11 of their scales; the sector cut along j gives the step of the whole sector within 1e-12, the other layouts stop at set-up, before the mesh type, with exit code 1 and the message that names the record; the ring joined by 101 gives the step of the sector closed by 200 (Euler within 1e-12, viscous force within 1e-9) | ☑ `Connections`/`SectorViscous` | ~4 s |
-| F26 | Sign of the wall heat flux and of the wall stress (the same wall on the two faces of one index direction, mirror images: a planar 2-D channel with the walls on the j faces, a 3-D channel with the walls on the i faces and on the k faces; one step) | `301` at q_wall = 1e4 W/m², air at rest: the cells next to the two walls warm up alike within 1e-9, qw = q_wall on both walls; `302` at 400 K: qw the same on the two walls within 1e-9 and positive; `302` with the air sliding along x at 10 m/s: tauX the same on the two walls within 1e-9 and positive, tauY opposite and tauZ the same within 1e-9 of tauX | ☑ `BoundaryConditions`/`WallHeatSign` | <1 s |
-| F28 | Extrapolation faces (`400`) and the gas entering through them (1-D tube of air with `400` ends, first order): one forward Euler step with the gas at rest, entering at 0.5 a, 1.327 a (with 2 a along z) and 6 a on either end; 20 RK3 steps with the gas entering at 0.5 a; 40 steps of an expansion that speeds up the gas entering at 1e-3 a; a run at Mach 6 and cfl 1.13 with gas entering across through its `400` j faces; with a MOSE built with OpenMP, a tube of 130 cells with gas entering through its `400` j faces, 1 and 4 threads; the tube with slip walls (`300`) at its ends, no `400` face | the boundary cells unchanged within 1e-12 of rho, rho a, rho a², the flux of each face from the change of its cell = the flux of the cell state within 1e-9 of rho a, rho a², rho a³; one line for each face where the gas enters (iteration 1, one face, its −w/a), and the end line with one evaluation, none of them at rest; no line of the ghost cells in the one-step runs; one line and 60 evaluations in the end line in 20 RK3 steps; a second line more than 10 times the first, the end line below 10 times the last line; the run that stops at its first stage prints the line before the stop and no end line; the same lines and end line with 1 and 4 threads, 130 faces; no line, no end line and no line of the ghost cells without `400` faces | ☑ `BoundaryConditions`/`Extrapolation400` | ~2 s |
-| F29 | Choked nozzle (`420`) below p_shock, the pressure behind a normal shock at the exit of the design flow, and from p_shock up to p_sub (1-D tube, one forward Euler step, first order, the nozzle on face 1, the gas of the tube moving in): the records of real nozzles that ATLAS writes from the exit-to-throat area ratio Ae_At (g = G*/Ae_At, p_sub and p_sup on the tables); the gas of the tube the design exit state at 0.98 of its pressure: air at T0 = 300 K and p0 = 2e5 Pa with exit Mach numbers 2.5, 3 and 4, the 13-species gas of the frozen rocket nozzle at T0 = 3644.12 K and p0 = 1.08e7 Pa with Ae_At = 40 (exit Mach number 4.46), and the air at the throat (Ae_At = 1) with g = (1 + 0.5e-9) G*; air with Ae_At = 4 (exit Mach number 2.94), the gas of the tube on the line of mass flux g and total enthalpy h0 at 2 p_sup (supersonic), midway between the sonic pressure of the line and p_shock, at (1 − 1e-6) p_shock, (1 + 1e-6) p_shock and 1.02 p_shock | below p_shock the fluxes of mass, momentum and energy through the nozzle face = g, p_e + g u_e and g h0 of the supersonic design exit state (the root of G = g on the supersonic branch, by bisection on the tables) within 1e-9 of each, and at the throat the run starts and the momentum flux = p* + g u* of the sonic state within 1e-9; above p_shock the fluxes of the gas of the tube within 1e-9; p_shock of the line = the normal-shock pressure p_e (1 + 2γ(M_e² − 1)/(γ + 1)) at the Mach number M_e of the design state within 1e-10 (the constant cp of the air) | ☑ `BoundaryConditions`/`Nozzle` | ~1 s |
-| P6 | Quadratic constitutive relation QCR2000, a unit check (QCR2000 is not selectable from the input): the stress of a 3-D velocity gradient with the eddy viscosity alone and with the laminar viscosity alone, called as the solver calls it | tau_QCR · n of the definition and the laminar stress, within 1e-12 | ☑ `QCR2000Stress` | <1 s |
-| N9 | Volume of a cell, a unit check of Compute_Metric_Tensor: ten cells (cubes with one twisted face, T_n/h = 1 and 5; a valid non-convex cell with six twisted faces; a collapsed edge with two twisted faces; a 2-D prism; wedge cells of 5°, one on the axis; the first cube and the prism moved by 1e3; the first cube mirrored, left-handed), a twisted mesh of 8³ cells, an inverted cell with det A > 0 at its centre and V < 0 | the integral of det J of the trilinear cell (exact, in rational arithmetic from the binary64 nodes) within 32 u; the volumes of the mesh sum to the volume enclosed by its boundary faces within 1e-13; the inverted cell raises the flag of degenerate or inverted cells | ☑ `CellVolume` | <1 s |
-| N10 | Order of rounding of `VOLATILE` variables, on which the geometry of the cells relies: (q − c1) − (c2 − c1) with q = 1, c1 = 2⁵⁴, c2 = 3 from the command line, through `VOLATILE` variables (a pair, an array) and through plain ones | −4 through the `VOLATILE` variables, the order of the source (plain ones printed: −2 with `-ffast-math` is allowed) | ☑ `VolatileOrder` | <1 s |
-| N11 | Wall distance to a bilinear face, a unit check of the certified minimum (Bilinear_Face_Distance) on 203 cases: twisted (twist 1 to 1e-6), plane, non-convex, degenerate (a collapsed side, nearly collapsed by 1e-6 to 1e-12, two collapsed sides, three coincident corners, a bowtie, a pinch, a needle of aspect 1e6), turned at random and moved by 1e3, points on the normal down to 1e-9, beyond sides and corners, at the focal point of a saddle, adverse cases; and of the fast-path test (Face_Fast_Test) on 108 faces | within 288 u S of the exact distance of the stationarity equations (rational arithmetic), certificate within 256 u S, no piece cut at the deepest level, at most 1e5 pieces; the fast path taken by every plane face (convex, thin tapered up to aspect 1e5, triangles of a collapsed side also far from the origin, parallelograms, 2-D extruded), not by twisted faces and darts, its bound of the gap at least the exact gap | ☑ `BilinearDistance` | <1 s |
-| I14 | Blocks whose state an MPI rank holds, a unit check of blocks_needing_full_arrays and deallocate_remote_computation_data: four blocks on three ranks, each rank set as a run on three ranks sets it (no MPI call); a chimera face (102) of block 2 (rank 1) with its donors in block 3 (rank 2), one of block 4 (rank 2) with its donors in block 2 (rank 1), and a face 104 of block 1 (rank 0) whose donors carry the number 4, a block of the other solver | the blocks with full arrays at set-up, and the blocks that keep P after it with every block allocated in full first (as with multigrid): block 1 on rank 0, blocks 2 and 3 on rank 1, blocks 2, 3 and 4 on rank 2; rank 0, which owns no receiver, holds no chimera donor | ☑ `RemoteBlocks` | <1 s |
-| N12 | Face values of the MUSCL reconstruction, a unit check of Reconstruction with each limiter: with van Leer, MC and superbee a cell 1.25 times its neighbour across a face (values 1, 0.01, 0, 0), its mirror image, and one forward Euler step at Courant number 1/2 of a cell of length 1 next to cells of 0.01 (h = 0.01, 0.01, 1, 1, 1; w = 0, 0, 1, 1000, 1000); 50000 random lines of four cells (lengths in ratios up to 100, values over 14 orders of magnitude and zero, beta = 1 and below 1) and 50000 with values from 1e-33 to 1e-8 times the largest length; lines of equal cells, data linear along the line, five cells for the two faces of a cell; 50000 pairs of slopes for the call with the bounds 2 and 2 | every face value within 8 ulp of the values of the two cells of its face (van Albada where the ratio of the slopes is positive; values below 1e-13 times the largest length left out); the cell not below zero after the step; the bounded slope with the sign of the slope without bounds and not larger; one slope for the two faces of a cell; on equal cells and for linear data the limiter's own slope; the call with the bounds 2 and 2 equal to the formulas of the limiters where the build keeps the order of evaluation of the source (printed with `-ffast-math`) | ☑ `MusclFaceBounds` | <1 s |
-| N13 | Face pressure of a reflective (symmetry) treatment, a unit check of the mirror pair of `BC_Symmetry_Eul` with the exact solver and HLLC (the default): N2 at 1e5 Pa and 300 K moving along the normal at 10 m/s (the low speed of a blown gas) and at 100 m/s (where the relations of a rarefaction and of a shock differ beyond the tolerance), away from the face and towards it | away from the face, the face pressure below that of the cell, towards it above; the exact solver within 1e-5 p (its stopping rule) of the exact solution, two rarefactions | ☑ `ReflectivePressure` | <1 s |
-| N14 | Preconditioning, a unit check of Compute_Prim_Residual and comp_Ur: one species and three species of different R, cp and heat of formation, three states, Ur = a to 1e-4 a, and prim; the three modes of Ur (default, `preconditioning-Uref`, `preconditioning-Mach`), the viscous floor and `preconditioning-Ur-min` | Gamma dQ = dU within 1e-10 of the terms of each row (Theta = 1/Ur² + 1/(cp T), rho_p with prim); prec at Ur = a gives the increment of prim; Ur of each mode as defined, the preconditioned Mach number of the Mach mode within 1e-12 | ☑ `PrecTransform` | <1 s |
-| F30 | Supersonic inlet (`405`) with the flow direction `normal` (1-D tube of air, one forward Euler step, first order, the inlet at Mach 2, the gas of the tube moving in through it at 0.1 a): `normal, normal` on the faces 1 and 2 of the tube along x and of its mirror image (i along −x), and on face 1 of the tube turned so that its axis is (1, 1, 1)/√3; `normal, 0` on face 2; `0.3, normal` on the faces 1 and 2 of a tube along z; `0, normal` and `0.2, normal` on the faces 1 and 2, and `normal, 0.3` on face 1 of the tube along z | mass flux into the domain and velocity of the inlet cell along the normal into the domain = those of `0, 0` on face 1 within 1e-9 of rho a and of a, velocity across that normal below 1e-9 a; the records with one angle `normal` that do not enter along the normal: the mass flux and the velocity of the angles the token stands for on that face, within 1e-9 of rho a and of a | ☑ `BoundaryConditions`/`SupersonicInlet` | ~1 s |
-| F31 | Multirate smoke (1-D acoustic wave and Sod tube of 284 cells): one level = single-rate step, 20 steps; four levels, 20 macro steps; the same run as 10 + restart + 10; cfl 1.2 with `max-level` 3; the Sod tube with one level and cfl 20; a tube of 8 cells with `400` ends and the gas entering through face 1 at 0.5 a, 20 Heun steps with one level and with the single rate | bit-identical fields and residual; mass and energy drift ≤ 1e-12 with four levels used; bit-identical output trees; set-up stop with a non-zero exit code and the message; for the diverging run exit code 1, the message of the state check and no solution; the lines of the gas entering and the end line of the run with one level those of the single rate (one line, 40 evaluations) | ☑ `MultirateSmoke` | ~1.4 s (load average 45) |
-
-**Rule of a row.** The ~Cost of a row is its CPU time at one thread in the build of the
-first CI job (gfortran, `TESTING`), the part run alone as its area runs it
-(`./run.sh <part>` in its folder). A row is in the fast tier when it takes about 10 s
-or less: a choice of MOSE, anchored to the slowest fast test of main at commit
-`b29130b`, `AblatingWall`, 9.7 s on the machine of the measurements below. Each row is
-measured twice and the lower time counts, with the machine and the load written next to
-it. On a shared machine the CPU time of the same test grew by up to 69 % with the load,
-so one measurement cannot place a row that lies near the cap. A row between 10 and 13 s
-is not moved on one measurement: it stays where it is until a measurement at a lower
-load decides. A row above 13 s runs in the validation tier, under a registration of its
-own that runs its part. A row moved there comes back to the fast tier when a measurement
-at a lower load gives 10 s or less. The band to 13 s is a choice of MOSE, as the cap is,
-not a consequence of the 69 %: at the load of the measurements the three rows above it
-are 32 to 52 % over the cap. So run `ExitCodes` (I9), `RuntimeInput` (I10) and
-`ViscousWallPatch` (N7b), measured at 13.2, 15.2 and 13.7 s (gfortran 13, a machine with
-192 logical CPUs at a load average of 164-174, the costs of the table for the rows of
-`InputChecks`, `TimeIntegration` and `ViscousPatch`); at a lower load these times can be
-about a third lower. With its runs of the readings of input.ini with an error,
-`RuntimeInput` takes 30.9 s, against 18.3 s without them, the two measured at the same
-time on the same machine at a load average of 165-168. With the runs of its parts 6 to 8, on
-the class of the keys, implicit residual smoothing and the checks between keys, it takes
-28.6 s, against 18.8 s without them, the two measured one after the other on the same
-machine at a load average of 44-51. With its runs of the files of `410`
-of the duct in two blocks, `ExitCodes` takes 12.9 s, against 10.9 s without them, the two
-measured one after the other on the same machine at a load average of 85. With its runs of
-the finite-rate chemistry with the gas and the mechanism of `test/1D/Fer14` (a run without
-its mechanism, a failed integration with 1 and 4 threads and on two multigrid levels, and
-integrations that fail in some cells of the two blocks of a box, with 1 and 4 threads),
-`ExitCodes` takes 22.1 s, against 15.3 s without them, and with its runs of failed
-integrations on 2 ranks `MPIExitCodes` takes 18.1 s, against 13.1 s, each pair measured one
-after the other on the same machine at a load average of 148-156 (gfortran 13; the lower of
-two runs). The costs of the
-other rows were measured when each row was added,
-as CPU time at one thread on the same machine at a load average of ~100 to ~250. The
-tests of main keep their tier: measured the same way at a load average of 140 to 145,
-`AblatingWall` takes 10.6 s, `Noh87` 8.5 s and `PrandtlMeyer` 8.4 s.
-
-Current `ctest -L fast`: **29 tests**, the 27 below, `MultirateSmoke` (F31) and `PrecTransform` (N14, 0.01 s). The 27 took
-~135 s of CPU time at one thread, one test at a
-time (gfortran 13 `TESTING`, a machine with 192 logical CPUs: the other 25 tests ~134 s
-at a load average of 150-156, `MusclFaceBounds` 0.45 s at 144; `ReflectivePressure` 0.002 s, gfortran 13 `RELEASE` on a
-machine with 12 logical CPUs at a load average of 1.6-4.8). The 27 tests: Sod79, Einfeldt91,
-Noh87, Toro99, ShuOsher, PrandtlMeyer, RiemannSmoke,
-NumericsSmoke, InputChecks, TimeIntegration, BoundaryConditions, Conservation,
-OpenMPEquiv, Connections, Restart, OutputFiles, MMSResiduals, ViscousPatch, AblatingWall,
-MeshGeometry, QCR2000Stress, CellVolume, VolatileOrder, BilinearDistance, RemoteBlocks,
-MusclFaceBounds, ReflectivePressure. `MultirateSmoke`
-takes ~1.4 s of CPU time (the smaller of two runs, on the same machine at a load average of 45). MPI
-builds also register the `needs-mpi` tier (`test/mpi/`; `MPIConnectionFlux`,
-`MPIConnectionOrder`: the two-block cases with one block per rank;
-`MPIDecompositionMap`).
-
-These catch most regressions (metrics, interfaces, solver crashes, restart/IO,
-conservation) with no reference data or heavy dependencies.
-
-The 4-grid Shu–Osher Richardson study (`ShuOsherConvergence`) uses the N=1600
-solution and matplotlib, so it lives in the **validation** tier rather than the
-fast pre-push suite (~4 s for the three solved grids).
-
-`PointImplicitSteady` ([`2D/viscous/point-implicit-steady`](2D/viscous/point-implicit-steady))
-converges a short hypersonic plate (6 × 16 cells; Spalart–Allmaras, SST, and SST and
-Wilcox 2006 with `k-energy-coupling = .true.`) with the point-implicit factor, then
-continues it at half the (cfl, vnn) and with implicit residual smoothing: the wall
-shear and heat flux must not move, to 1e-9. Its 14 000 iterations per model (about
-12 s of CPU at one thread each, ~50 s for the four) put it in the **validation**
-tier as well.
-
-`WedgeAxisStep` ([`2D/viscous/wedge-axis-step`](2D/viscous/wedge-axis-step)) checks the local time step
-next to the axis of a 1° wedge (diffusion-dominated, Prandtl number 10, a little swirl; square
-cells, cells twice as long in x, and a mesh with the axis on the last j face): 2000 steps
-at RK3 vnn 0.62 and Heun vnn 0.5 with no NaN; and, on cells four times as long in x with
-the Prandtl number of air and with 0.9, 2000 steps at the recommended vnn (RK3 0.5, Heun
-0.4). Its eight runs of 2000 iterations (~155 s of CPU, TIMEOUT 600 s) put it in the
-**validation** tier too.
-
-`Preconditioning` ([`2D/euler/low-mach-cylinder`](2D/euler/low-mach-cylinder)) runs inviscid flow past a cylinder
-(O-grid of 96 × 48 cells, first order, 3000 steady iterations) with `integration-variables = prec` and HLLC-PC at Mach
-0.01 and 0.001 (`preconditioning-eps-min` 1e-3 and 1e-4), and with `cons` and HLLC at Mach 0.01: the preconditioned runs
-converge (the residual falls by two orders), their Cp fields agree within 2e-3 near the cylinder (the incompressible
-limit; 3.0e-4 measured), the front half is within 0.3 of potential flow (0.20 measured; the dissipation of the scheme
-separates the flow at the back), and the run with HLLC differs by more than 1 in Cp (6.4 measured). Its three runs (~37 s
-of CPU at one thread, TIMEOUT 900 s) put it in the **validation** tier.
-
-`MMSViscousSkewed` ([`2D/viscous/mms/skewed`](2D/viscous/mms/skewed)), `MMSViscous3D`
-([`3D/viscous/mms`](3D/viscous/mms)) and `PlanarNozzleGrids`
-([`2D/viscous/planar-nozzle`](2D/viscous/planar-nozzle)), the short forms of N2 on general
-grids and of N8, take ~76 s, ~20 s and ~72 s of CPU time at one thread: they are in the
-**validation** tier, with a TIMEOUT of 900 s as `MMSViscous`.
-
-`FlatPlateTMR` ([`2D/viscous/flat-plate-turbulent-tmr`](2D/viscous/flat-plate-turbulent-tmr)),
-the short form of the flat plate of the NASA TMR, restarts each of its four models for
-5000 iterations from the converged 35x25 solution: 143 and 145 s of CPU time at one
-thread in two measurements on a machine with 96 logical CPUs at a load average of 74-75,
-152 and 154 s on one with 192 at 63-147 (gfortran 13 `TESTING`; SSG/LRR 41 to 45 s of
-it), so it is in the **validation** tier, with a TIMEOUT of 600 s. (The 70.5 s of the
-three models of before, recorded when the case was added, do not reproduce: on the first
-machine they take 99 and 107 s with the code before SSG/LRR, 102 and 103 s with it.)
-Its full form, `FlatPlateTMRFull` (label `verification`), runs the twelve cases of the
-V&V page to 300 000 iterations: about 51 h at one thread, an estimate from the solver
-time per iteration of a chain of 500 iterations (on the first machine; 36 h of it for
-SA, SST and Wilcox 2006, which were estimated at 24.5 h when the case was added), with a
-TIMEOUT of 103 h.
-
----
-
-## 5. Infrastructure (do this first)
-
-Restructure before adding cases:
-
-1. ◐ **Wire cases into [`test/CMakeLists.txt`](CMakeLists.txt)** with `LABELS` via the
-   `mose_add_test()` / `mose_add_fast_script()` helpers. *Covered:* the case folders of
-   the table of section 2 that have a CTest name, and the fast scripts. *Not covered:*
-   the case folders marked *outside* in that table.
-2. ☑ **Pre-push hook** → `ctest -L fast` ([`.githooks/pre-push`](../.githooks/pre-push)).
-3. ☑ **PR CI** → `ctest --label-exclude "needs-cantera|needs-sundials|needs-mpi|verification"`
-   ([`ctest.yml`](../.github/workflows/ctest.yml)); a second job with `USE_MPI=ON`
-   → `ctest -L needs-mpi`.
-4. ☐ **Nightly / `workflow_dispatch`** → full suite with Cantera+Sundials+MPI enabled.
-5. ☐ Standardize on one verifier name (currently both `check.py` and `verify.py`) and a
-   common exit-code contract (0 = pass, non-zero = fail) — needed before the remaining
-   `verify.py` cases can join tier 1.
-
----
-
-## 6. Tiering summary
-
-| Tier | Trigger | Selector | Contents |
+| Capability | | Tests | Missing |
 |---|---|---|---|
-| 0 — fast | pre-push hook | `ctest -L fast` | the rows of §4 in the fast tier |
-| 1 — PR CI | PR to `main` | `ctest -LE` the `needs-*` labels and `verification`; `ctest -L needs-mpi` (second job, MPI build) | fast + dependency-free validation; MPI tier |
-| 2 — nightly | schedule / dispatch | full | flames, reactive, equilibrium, MPI, parallel-equivalence, full forms of the verification cases (label `verification`) |
+| Turbulence: SA, SA-RC, SST, SST-RC, Wilcox 2006, SSG/LRR | ◐ | sources and invariants: `TimeIntegration.TurbulenceSources`, `MMSResiduals`, `PointImplicitSteady`, `PlanarNozzleGrids`, `Multirate.Positivity`; flat plate of the NASA TMR, four models: `FlatPlateTMR.*`; SSG/LRR decay: `RSMDecay` | limit of the grids only in `FlatPlateTMRFull`; SA-R untested; SAcomp only in `InputChecks.ExitCodes`; SSG/LRR in a rotating frame and on a 3-D sector; the variants -SD and -w2019 on the plate |
+| Boundary conditions | ☑ | `BoundaryConditions.*` (inlets, nozzle 420, extrapolation 400, supersonic inlet 405, wall heat sign) | — |
+| Ablating walls 503, 504, SRM grain 502; surface reactions 505, pyrolysing ablator 506 | ◐ | against the closed form (502–504) and by the relations of the wall model at the state reached (505, 506): `AblatingWall`; the rates and the pyrolysis gas alone: `GSIBradley`, `GSIAblator`; refusals at set-up: `BoundaryConditions.BCInput`, `Multirate.Reject` | a 505 or 506 result against a reference; SSG/LRR on these walls |
+| Rotating frame | ◐ | stationary walls of the frame, set-up and a short run: `BoundaryConditions.RotatingFrame` | no rotating-frame result against a reference: `3D/coriolis-channel` and `3D/pressure-centrifugal` are outside ctest |
+| Chemistry (frozen, finite-rate, equilibrium) | ◐ | runs that must end, stop at set-up, keep the bits or stop with their message: `InputChecks.ExitCodes`, `MPIExitCodes`, `MPIVertexStencil` | no reactive result against a reference; nothing is registered under `needs-cantera` or `needs-sundials` |
+| Laminar viscous flow with an analytic solution | ☐ | — | Couette, Poiseuille |
+
+### Implementation
+
+| Capability | | Tests | Missing |
+|---|---|---|---|
+| Restart | ☑ | every format, counters included: `Restart`, `Restart.Counters`, `MPIRestart`; binary Tecplot needs TecIO | `MPIRestart` in vtk raw only |
+| Input and exit codes | ☑ | `InputChecks.*`, `BoundaryConditions.BCInput`, `MPIExitCodes`, `MPIRuntimeInput` | — |
+| Output files | ◐ | `OutputFiles.*` | round trip of the formats |
+| Parallelism | ☑ | `OpenMPEquiv`, `Multirate.Threads`; ranks × threads: `MPIBitIdentity`, `MPIBoundaryRecords`, `MPIVertexStencil`, `Multirate.Hybrid`; `MPIThreadFunnel` | — |
+| Mesh geometry | ☑ | `MeshGeometry.*`, `BilinearDistance`, `CellVolume`, `VolatileOrder` | — |
+| Decomposition map | ☑ | `InputChecks.DecompositionMap`, `MPIDecompositionMap` | — |
 
 ---
 
-## 7. Suggested implementation order
+## 6. What to add
 
-1. CTest label restructure (#5.1) + pre-push/CI selector wiring (#5.2–5.3).
-2. F1, F3, F4 (no reference data needed) — makes the pre-push hook meaningful.
-3. F5–F7, then N3/N4 (cheap, high coverage of numerics paths).
-4. N1/N2 order-of-accuracy (multi-grid, slower → tier 1).
-5. P3–P5 physics validation (tier 1/2). (Turbulent flat plate SA/SST/Wilcox2006
-   exist as cases outside CTest: see §2 and §3.)
+In the order that closes most coverage per effort. The tier is a guess from the cost.
+
+| To add | Kind | Tier |
+|---|---|---|
+| Couette and Poiseuille flow against their analytic solutions | exact | light |
+| Free stream on a stretched curvilinear multi-block mesh, single rate | invariant | light |
+| Mirror symmetry of a coarse forward step or wedge, single rate | identity | light |
+| Order of forward Euler | order | light |
+| Wire the cases of section 7 that already have a criterion | exact, reference | medium |
+| 3-D inviscid case (isentropic vortex or Euler manufactured solution) | exact | medium |
+| LMRoe and MiczekRoe at low Mach (Gresho vortex) | exact | medium |
+| Residual smoothing, grid sequencing and CFL ramp, one test each | identity, invariant | medium |
+| Accuracy with van Albada, minmod and superbee | order | medium |
+| A reactive case against Cantera under `needs-cantera`, a stiff case under `needs-sundials` | reference | heavy |
+| The experiments of section 7 | reference | heavy |
+| One verifier name (today `check.py` and `verify.py`) and one exit-code rule | | |
+
+---
+
+## 7. Cases outside ctest
+
+Cases of [`docs/vv`](../docs/vv/index.md) that no test runs. "Missing" is what keeps each out.
+
+| Case (`test/`) | Reference | Missing |
+|---|---|---|
+| `2D/viscous/flat-plate-laminar` | Blasius | exit code is 0 whether it passes or not (RMS c_f 2.26 % against 2.5 % when last run) |
+| `2D/euler/oblique-shock` | oblique-shock relations | the criterion exists and failed when last run: HLLC T2/T1 1.94 % and M2 −3.21 % against 1.5 % |
+| `2D/euler/hypersonic-cylinder` | normal-shock relations | a criterion: `verify.py` prints and plots |
+| `2D/euler/rocket-nozzle/finite-rate` | stored field | nothing: its criterion passes (throat values within 1e-3); register it |
+| `2D/euler/rocket-nozzle/frozen`, `equilibrium` | CEA | a criterion: `verify.py` prints and plots |
+| `2D/euler/gresho-vortex` | the steady vortex | a criterion (LMRoe, low Mach) |
+| `2D/euler/supersonic-forward-step` | OpenFOAM | a criterion: `verify.py` prints L2 and L∞ differences |
+| `2D/euler/chang-nozzle`, `ramp-channel` | Mach on the axis; oblique-shock relations | a criterion: `verify.py` plots |
+| `3D/pressure-centrifugal` | closed form | a verifier |
+| `3D/coriolis-channel` | none | a reference and a verifier |
+| `1D/diff1`, `diff2`, `premixed-flame`, `Fer14` | Cantera; digitized experiment | a criterion; Cantera or finite-rate chemistry |
+| `2D/viscous/swbli/SA`, `SST` | Schülein experiment, SU2, Wind-US, OpenFOAM | a verifier; TecIO for the initial condition |
+| `3D/hyshotII` | experiment and TAU | a verifier; TecIO; an initial condition built with ATLAS |
+
+---
+
+## 8. Adding a test
+
+1. Put the case or the check in its folder (`test/1D`, `2D`, `3D` for a case with a reference; `test/checks` for a small
+   case that checks one mechanism; `test/unit` for a Fortran program; `test/multirate`, `test/mpi`). It must exit
+   with 0 when it passes and with a non-zero status otherwise, and write the details of a failure to its output.
+2. Register it in [`CMakeLists.txt`](CMakeLists.txt) with `mose_test(Name DIR ... KIND ... LABELS ... DESC "...")`. The
+   description is one line: it appears in section 4.
+3. Add its line to [`tiers.txt`](tiers.txt) (`-` for the seconds) and run it in the CI build; then
+   `tools/ctest_tiers.py update junit.xml` gives it its tier.
+4. Regenerate section 4: `python3 test/tools/inventory.py build`. CI fails if it is out of date.
+5. A check with several parts that do not need each other gets one test per part. Two tests that share a folder share
+   a `LOCK`.

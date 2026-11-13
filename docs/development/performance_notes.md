@@ -114,7 +114,7 @@ output bit-identical to serial, same as the non-IPO build. Worth stating because
 when this was measured, `ctest` had no MPI coverage at all. MPI builds
 register a `needs-mpi` tier that checks parallel runs: bit for bit against the
 serial run or the uninterrupted one, and which thread makes the MPI calls
-([Testing](testing.md#mpi-tier-contents)).
+([Testing](testing.md)).
 
 **Numerics** — IPO changes results at round-off, growing from ~1e-14 relative at
 t = 10 µs to ~3e-9 at 250 µs on Fer14, three orders below the ODE solver's own
@@ -386,7 +386,7 @@ after, the viscous variables of the rotational faces, `viscous_face_metric` and
 `Viscous_Variables` appears, once per stage.
 
 Output (rules 2–4). With each of the four changes the outputs are the same bits
-as without it with gfortran (TESTING, the fast tier), and with ifx: the first
+as without it with gfortran (TESTING, the tests of the former fast tier), and with ifx: the first
 one with the RELEASE flags already, the others built with `-fp-model=strict`,
 which is `-fp-model=precise` without contractions as rule 4 asks, and also enables
 `fenv_access` (the tests with viscous faces; the whole tier for the last

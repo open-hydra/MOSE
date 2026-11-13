@@ -208,8 +208,8 @@ python3 build_case.py hdpe     # generate mesh / IC / BC by hand
 python3 verify.py
 ```
 
-The case is registered in the fast tier as `AblatingWall` (about 11 s of CPU time at one thread; see
-`test/TESTING-PLAN.md`, section 4):
+The case is registered as `AblatingWall` (a medium test, about 11 s of CPU time at one thread; see
+`test/TESTING-PLAN.md`):
 
 ```bash
 ctest -R AblatingWall --output-on-failure
