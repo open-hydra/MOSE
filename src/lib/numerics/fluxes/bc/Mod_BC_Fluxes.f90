@@ -175,6 +175,7 @@ contains
                 ! at rest, as in a chamber before the ignition).
                 g = domain % bc(i) % aCoeff * &
                     ( domain % blk(Bm) % P(np,Im,Jm,Km) / domain % bc(i) % pRef ) ** domain % bc(i) % n
+                domain % bc(i) % g_srm = g   ! the gas mass flux of this face at this pressure, for the couplers (hydra-MI2)
                 T0 = SRM_Static_Temperature ( domain % bc(i) % T0, g, domain % blk(Bm) % P(np,Im,Jm,Km), &
                                               domain % bc(i) % ci(nrans+1:nrans+nsc) )
                 call BC_Inlet_MassFlux_T ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
