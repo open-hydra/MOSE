@@ -68,7 +68,10 @@ MOSE supports two chemistry modes that can be used independently or together:
 
 **Chemical equilibrium** — NASA CEA integration for flows where the chemistry time scale is much shorter than the flow time scale (e.g. rocket nozzle expansions).
 
-**Soot formation** — volume-fraction and sectional models for soot precursor growth and oxidation in hydrocarbon combustion.
+**Soot formation** — two-moment models (soot mass fraction and particle number density; Leung–Lindstedt `LL91` and a linear model `LIN`) for soot growth and oxidation in hydrocarbon combustion.
+
+!!! warning "Under development"
+    The soot models are not validated and no test covers them, and they are not available with the multirate integrator. MOSE prints a warning when `soot-generation` selects one. Passive scalars cannot be enabled from `input.ini` yet.
 
 | Capability | Details |
 |------------|---------|
@@ -76,7 +79,7 @@ MOSE supports two chemistry modes that can be used independently or together:
 | Rate law | Modified Arrhenius; forward–backward via equilibrium constants |
 | Stiff integration | Strang splitting + [OSLO](https://github.com/MarcoGrossi92/OSLO) / SUNDIALS |
 | Equilibrium | NASA CEA back-end |
-| Soot | Volume-fraction and sectional models |
+| Soot | Two-moment models `LL91`, `LIN` (under development) |
 
 ### Turbulence
 

@@ -24,7 +24,7 @@ contains
     call reg%add(section, 'equations', obj_sim_param%simulation_type, '', 'Gas dynamics equations', 'euler , navier-stokes', .true., KEY_FIXED)
     call reg%add(section, 'turbulence', obj_rans%model, 'none', 'RANS turbulence model', 'SA, SA-R, SA-RC, SAcomp, SST, SST-RC, Wilcox2006, SSGLRR, SSGLRR-SD, SSGLRR-w2019, SSGLRR-w2019-SD, none', .false., KEY_FIXED)
     call reg%add(section, 'chemistry', obj_chemistry%model, 'frozen', 'Chemistry model', 'frozen, finite-rate, equilibrium', .false., KEY_FIXED)
-    call reg%add(section, 'soot-generation', obj_soot%model, 'none', 'Soot generation model', 'LL91, LIN, none', .false., KEY_FIXED)
+    call reg%add(section, 'soot-generation', obj_soot%model, 'none', 'Soot generation model (under development: not validated)', 'LL91, LIN, none', .false., KEY_FIXED)
     call reg%add(section, 'rotational-frame', obj_rot%model, 'none', 'Rotational frame model', 'rigid-body, none', .false., KEY_FIXED_OWN)
     ! Laminar (molecular) transport closure
     call reg%add(section, 'schmidt', obj_sim_param%Sc, '0.0', 'Laminar Schmidt number', '>= 0', .false., KEY_TAKEN)
