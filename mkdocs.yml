@@ -111,6 +111,7 @@ nav:
     - Input File: user/input.md
     - Input Parameters: user/registry.md
     - Initial Conditions: user/initial-conditions.md
+    - Restarts in Detail: user/restart.md
     - Boundary Conditions: user/boundary-conditions.md
 
   - Theoretical Guide:
@@ -118,13 +119,27 @@ nav:
     - Governing Equations: theory/governing-equations.md
     - Spatial Discretization: theory/numerics.md
     - Riemann Solvers: theory/riemann-solvers.md
-    - Time Integration: theory/time-integration.md
+    - Boundary Conditions: theory/boundary-conditions.md
+    - Time Integration:
+      - theory/time-integration.md
+      - Multirate Time Stepping: theory/multirate.md
     - Turbulence Modelling: theory/turbulence.md
     - Rotating Frame: theory/rotating-frame.md
     - Thermodynamic and Transport Properties: theory/thermo.md
     - Finite-Rate Kinetics: theory/kinetics.md
     - Chemical Equilibrium: theory/equilibrium.md
     - Gas-Surface Interaction: theory/gsi.md
+    - Deep Dives:
+      - Mesh Geometry and Block Interfaces: theory/numerics-geometry.md
+      - Face Gradients and Metrics: theory/numerics-gradients.md
+      - Ghost Cells at Walls and Extrapolation Faces: theory/numerics-ghost-cells.md
+      - Axisymmetric Wedge and 3-D Sector: theory/numerics-wedge.md
+      - Local Time Step: theory/local-time-step.md
+      - Multirate Method: theory/multirate-method.md
+      - Multirate Analysis: theory/multirate-analysis.md
+      - Turbulence Model Variants: theory/turbulence-variants.md
+      - Turbulence Numerical Treatment: theory/turbulence-numerics.md
+      - Surface Models in Detail: theory/gsi-models.md
 
   - Verification & Validation:
     - vv/index.md

@@ -997,10 +997,11 @@ contains
 
     write(unit,'(A)') "# Input Parameters"
     write(unit,'(A)') ""
-    write(unit,'(A)') "MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The column During the run "// &
-      "says what such a reading does with each key: *taken*, the run takes the value written; *fixed*, the run keeps the "// &
-      "value that it read at its start, and another value written is an error of the reading, which `ini-error` decides; "// &
-      "*start only*, the key serves the start of the run, and a reading leaves it as it was."
+    write(unit,'(A)') "MOSE reads `input.ini` again every `ini-diter` iterations. The column *During the run* says what such a reading does with each key:"
+    write(unit,'(A)') ""
+    write(unit,'(A)') "- **taken**: the run takes the value written."
+    write(unit,'(A)') "- **fixed**: the run keeps the value it read at its start; another value is an error of the reading, which `ini-error` decides."
+    write(unit,'(A)') "- **start only**: the key serves the start of the run; a reading leaves it as it was."
 
     do i=1,this%size
 

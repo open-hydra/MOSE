@@ -88,7 +88,8 @@ during the run: lowering one below the iterations already done ends that level a
 ## Multirate time stepping
 
 In a time-accurate run, `[MOSE-Multirate] enabled = .true.` lets each cell advance with a sub-step close to its own
-stability limit instead of the global minimum (method and scope: [Time Integration](../theory/time-integration.md#multirate-time-stepping)):
+stability limit instead of the global minimum. The method is in [Time Integration](../theory/multirate.md#multirate-time-stepping);
+its checks are in [Multirate Verification](../vv/multirate.md).
 
 ```ini
 [MOSE-Numerics]
@@ -104,140 +105,108 @@ levels = recompute
 recompute-every = 1
 ```
 
-`max-level` is the deepest level allowed: the map of the adaptive step is built for the largest depth up to `max-level`
-at which the cells with the largest local step stay at level 0, so that $H$ never exceeds their step divided by $\sigma$
-and the formula of the levels leaves no coarse level empty (nesting, the interface margin and the equal levels across
-connections only raise levels, and can raise every cell of the slowest octave: the line `Multirate: cells per level`
-then starts with 0); without `macro-step-target` the map has $L = \min(\texttt{max-level}, \lfloor K \rfloor)$ levels
-below level 0, with $K = \log_2(\max_c \Delta t^{\text{cap}}_c/\min_c \Delta t^{\text{cap}}_c)$
-the octaves spanned by the local steps (the finest cells advance with $H/2^L$; on a uniform mesh $L = 0$ and
-$H = \Delta t_{min}/\sigma$); the default, 10, is a choice, not a bound of the scheme
-([Levels and macro step](../theory/time-integration.md#levels-and-macro-step)).  `safety` is the factor $\sigma$ (every cell
-advances with $h \le \Delta t^{\text{cap}}/\sigma$, at least 1; the default 2 keeps every cell, at the start of the macro
-step, within the admissible step of each face neighbour without the interface margin, which with `nonlocal-cfl = redo`
-gives it for every $\sigma$; with `max-level` = 0, $\sigma = 1$ gives the single-rate step), `levels = recompute` with `recompute-every = 1` recomputes the level
-map from the local steps at every macro step.  `macro-step-target` caps $H$ (in seconds; 0 = no cap).  With a target at
-or below $\max_c \Delta t^{\text{cap}}_c/\sigma$ the target already keeps $H$ within the step of the slowest cells: the
-map is built for the shorter of the target and $2^{\texttt{max-level}}\,\Delta t_{min}/\sigma$, so its depth $L$ is the
-one the target gives, at most `max-level`.  With a target above it the map is the one without a target.
-The two map policies promise different things.  `levels = recompute` (for production runs) rebuilds the map for the $H$
-actually taken, so every cell runs at the coarsest level within its own limit while the state changes.  `levels = fixed`
-(for studies of the temporal order) keeps the map of the adaptive step of the first macro step, so that with a smaller
-$H$ every cell's step $H/2^{\ell}$ scales with $H$ and the error of a run measures the order of the scheme alone; the
-map does not follow the state, so it is not meant for production runs.
-`fixed-macro-step` imposes a constant $H$, as a multiple of the minimum local step of the first macro step, for
-verification runs.  With `levels = recompute` the level map is built for that $H$ (each cell at the lowest level within
-its limit, at most `max-level`), and the run reports the largest ratio $h/(\Delta t^{\text{cap}}/\sigma)$, which exceeds
-1 only where `max-level` levels are not enough.  With `levels = fixed` the map is that of the adaptive step: it keeps
-every cell within its limit only up to its own step ($2^L\,\Delta t_{min}/\sigma$, or `macro-step-target`), so with an
-$H$ above it the finest cells start the first macro step beyond their limit, and every later one until their admissible
-step grows by the ratio of $H$ to the step of the map, which the run reports with a warning, once, and with the same
-ratio; with `levels = fixed` the certificate of `nonlocal-cfl` only counts.  Every `shell-diter`
-iterations the run prints the macro step $H$, the depth $L$ of its map,
-the cells per level, the wall time per level spent in the stages since the start of the run and, when process 0 exchanges
-data with other processes, the part of it spent waiting for the messages of the exchanges of the stages and copying them
-from the receive buffers (these two times are those of process 0), and $r_{post}$, the largest ratio
-between the step $h$ each cell took in the last macro step and the step $\Delta t^{\text{cap}}$ admitted on the state it
-reached, and $r_{nb}$, the same ratio with the $\Delta t^{\text{cap}}$ of a face neighbour of the cell (condition (4) of
-Gnedin, Semenov and Kravtsov, see [Non-local CFL condition](../theory/time-integration.md#non-local-cfl-condition));
-when a cell is above 1 or above $1/\text{cfl}$ (a Courant number above 1 where the convective limit rules) a line with
-the number of such cells for each.  The lines of the certificate of `nonlocal-cfl` come in a macro step whose last
-attempt violated condition (4) or that took more than one attempt, with a line of the attempts rejected for a state
-that is not physical when there were some, and the line of the cells whose level the term of the
-interface margin raises before nesting, when there are some.  $r_{post}$ and $r_{nb}$ are partial measures: only the state at the end of the macro step, and for $r_{nb}$ only the face
-neighbours in the block.  At the end of the run it prints, with 15 digits, the largest $h/(\Delta t^{\text{cap}}/\sigma)$ at the start
-of the macro steps when a macro step started with a cell above its limit, and the largest $r_{post}$ and $r_{nb}$ over the run when
-a macro step had a cell above 1, each with the number of such macro steps; a run in which none of this happened prints none of
-these lines.  A run on several processes ends with the minimum, mean and maximum over the processes, per level, of the wall
-time of the stages without the time of their exchanges and of the time of the exchanges: a stage of a level exchanges with
-the other processes what it reads from them, so on a level where the processes are unevenly loaded the processes with less
-work wait longer in those exchanges (see also [Timing](using.md#timing)); a process with neither cells nor exchanges at a level counts zero
-there, in the minimum and in the mean.  These lines only report: they change neither the steps nor the results.
-`nonlocal-cfl` checks condition (4) of Gnedin, Semenov and Kravtsov at the start of every sub-step of every cell
-([Non-local CFL condition](../theory/time-integration.md#non-local-cfl-condition)): `off`, `count` (the
-violations are counted, and printed at the end of a run that has some; nothing else changes) or `redo` (the default: a macro
-step that violates it is
-redone from its start with finer levels (deeper than the depth $L$ of its map when a cell needs it, at most `max-level`),
-or a halved $H$ when a cell would need more than `max-level`; a macro step in which a cell or a face takes a state that
-is not physical (a value that is not finite, a total density that is not positive, a negative pressure, a temperature
-outside the tables of the gas) is redone from its start with $H$ halved on the same levels, and a face that is not
-physical at the first stage of a level, at the start of the macro step, stops the run as in the single-rate step; with
-`fixed-macro-step` or `levels = fixed` it only counts, and there, as with a map of one level, the stops of the single-rate
-step stay (a cell with a value that is not finite or a negative pressure after its update, a face that is not physical)).  `interface-margin = .true.` keeps the coarse step of a face between levels within
-$\Delta t^{\text{cap}}/\kappa$ of the finer cell, $\kappa = \max(\text{cfl}\,(1+\theta),\ 1.1)$ with $\theta$ of the limiter
-(1 for `vanleer`, `mc`, `superbee`; 1/2 for `minmod`; $\sqrt2/2$ for `vanalbada`; 0 with `first-order`); it is always on with
-`redo`.  Below $\text{cfl}\,(1+\theta) = 1.1$ the margin does not depend on cfl, and no key turns the floor off
-([Non-local CFL condition](../theory/time-integration.md#non-local-cfl-condition)).  With
-`max-level` > 0 and `nonlocal-cfl = redo`, with `levels = recompute` and no `fixed-macro-step` (where the certificate
-redoes the attempts), the run stops at set-up when cfl exceeds 1 or, in a Navier–Stokes run, vnn
-exceeds 0.5: within a macro step the certificate accepts a sub-step up to the whole step that cfl and vnn admit on the
-state where it starts, and on the checkerboard mode, with every limiter, Heun is linearly stable only within these values
-(the table of [Time step](#time-step-cfl-and-vnn)); at the start of the macro step the cells run within $1/\sigma$ of
-their step, where a larger value would not show.  With `off` and `count` nothing bounds the sub-steps after the start of
-the macro step, and the set-up checks neither value.
-`force-redo = .true.` is a test device
-of `redo`: the first attempt of every macro step is rejected even when it satisfies (4) and is redone with the same $H$
-and level map, so the results must not change.  With `redo` a macro step stops the run, with its rejections by cause,
-when its $H$ falls below $2^{-10}$ of its first attempt or when `max-attempts` of its attempts (21 by default; the
-attempt rejected by `force-redo` is not counted) have been rejected; written with `count`, `off`, `fixed-macro-step` or
-`levels = fixed`, `max-attempts` gives a warning and does nothing.  Whatever the keys, at the start of every macro step
-a local step $\Delta t^{\text{cap}}$ that is zero, negative, infinite or not a number (from a state that is not physical,
-such as a pressure and a density of opposite signs, a zero pressure at rest in an inviscid run or a density and a
-pressure both negative in a viscous run, or from a negative eddy viscosity that makes every diffusivity negative) stops
-the run, with the number of such cells and the first one with its local step and its primitive variables.
-`conservative-correction = .false.` removes the flux correction between levels and is meant only as a positive control
-of the conservation tests.  One iteration is one macro step $H$; the residual printed is the change of the state over
-the macro step.  The macro step lands exactly on the output instants $t_k = k\,$`sol-dtime` ($k$ integer) and on
-`time-threshold`: when the next of them falls within $H$, $H$ is cut to end there (or stretched by at most
-$10^{-12} H$ when the step would end just short of it), the time is set to that instant, and the time-based solution
-is written at that macro step, also when it is the last of the run; a cut macro step counts as an iteration.  A macro step whose $H$ a redo of
-`nonlocal-cfl = redo` halves does not land: a later macro step reaches the instant.  With the multirate disabled the single-rate
-step is unchanged (it writes the solution at the first step past the time of the last output, or of the start, plus
-`sol-dtime`).  Time-based probe rows (`[MOSE-Probes]`) come
-at the end of the macro steps, which do not land on the probe instants: a probe whose `dtime` is below the macro step
-writes one row per macro step, at the time of its end.  A restart (`newrun = false`) from a `vtk raw` or a `tecplot ascii`
-solution goes on as the uninterrupted run, bit for bit, with `levels = recompute`: the level map depends only on the state, and
-with `recompute-every` = $k > 1$ it is rebuilt at the iterations $1, 1 + k, \dots$ of the run counter, which the
-restart carries on, so the restart is bit for bit when it falls on a multiple of $k$ (it rebuilds the map at its first
-macro step).  `levels = fixed` and `fixed-macro-step` cannot restart and stop the run at set-up.  The largest ratios
-printed at the end of the run cover the macro steps of that run only.  The
-multirate keys are fixed for the run (column During the run of the [Parameter Registry](registry.md)): a reading of
-`input.ini` during the run that writes another value of one, `enabled` included, is an error of the reading, which
-`ini-error` decides (with `warn` the reading is not taken, with `stop` the run stops).  Of the keys of other sections
-that the multirate integrator checks at set-up or at its first macro step, `time-accurate` is fixed for every run, and
-the checks of `cfl`, `vnn` and `cfl-rise-threshold`, which a reading takes, are made again at every reading, with the
-multirate keys of the set-up: with `max-level` > 0 and the redo of `nonlocal-cfl = redo` a cfl above 1 or a vnn above
-0.5 in a
-Navier–Stokes run, and `cfl-rise-threshold` > 0, is an error of the reading too; a cfl within the bound is taken, and
-$\kappa$ of the interface margin follows it from the next macro step, with the $\theta$ of the set-up.  The configurations that the multirate
-integrator does not support stop
-the run at set-up or at its first macro step with a message
-`[MOSE-Multirate] <item>` and a non-zero exit code: among them `Wilcox2006`, whose sources the stages do not evaluate,
-and, with `max-level` > 0, `SA-RC` and `SST-RC`, whose rotation and curvature terms are a field of the whole domain that
-the cell-wise sources of a level do not compute, and `SAcomp`, whose compressibility correction the stages do not
-evaluate (the single-rate integrator runs it); `SA`,
-`SA-R`, `SST`, `k-energy-coupling`, both forms of `sst-production` and `sst-dilatation-dissipation` run.  An SRM grain (`502`) runs in mode 2, an
-inflow, and stops the run in mode 1, a wall that blows the products in.  The boundary types `409`, `501` and `506`,
-which MOSE does not apply, stop every run at
-the reading of `bc.txt` ([Boundary Conditions](boundary-conditions.md)).  With `SA`, `SA-R` or `SST` the local step includes a bound of the stiffness of the turbulence
-sources (see the time step below), and so do the levels.  The multirate integrator runs on several MPI processes, each with
-OpenMP threads, with the same results as on one process.  `trace = .true.` prints on the standard output the sequence of
-the stages of the first macro step (lines `MR-TRACE`), its level map (lines `MR-LEVEL`), its halo lists (lines
-`MR-HALO`) and, in viscous runs, at every stage the check of the viscous variables that the fluxes read (lines
-`MR-VISC`); with several processes, those of the blocks of process 0.  The multirate integrator writes no file of its
-own.
+The defaults suit production runs. Set `cfl` and `vnn` within the limits [below](#limits-on-cfl-and-vnn).
 
-**Scope.** The multirate integrator runs time-accurate Heun (`time-scheme = RK2`) with
-`integration-variables = cons`. At set-up or at its first macro step it stops with a message
-`[MOSE-Multirate] <item>` and a non-zero exit code for the configurations outside its scope: other time schemes,
-`prim` or `prec`, implicit residual smoothing, a shock detector (`shock-detector`, also implied by `HLLC+Tramel`,
-`HLLC+Chen`, `HLLE++`, `AUSM+M`), chemistry, soot, the rotating frame, multigrid sequences, steady runs,
-`cfl-rise-threshold` > 0, chimera (`102`), coupled walls (`103`), an SRM grain `502` in mode 1, gas–surface interaction
-(`503`–`505`), rotational periodicity (`200`) in 3-D (the 2-D axisymmetric wedge runs, with levels too), boundary types
-without a multirate boundary flux, `Wilcox2006`, and, with `max-level` > 0, `SA-RC` and `SST-RC`; with `max-level` > 0,
-`nonlocal-cfl = redo`, `levels = recompute` and no `fixed-macro-step`, a `cfl` above 1 or, in a Navier–Stokes run, a
-`vnn` above 0.5; and a restart (`newrun = false`) with `levels = fixed` or a `fixed-macro-step`. `SA`, `SA-R`, `SST`,
-`k-energy-coupling` and both values of `sst-production` run.
+### Keys
+
+One iteration is one macro step $H$, and the residual printed is the change of the state over it.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `max-level` | 10 | Deepest level allowed. The finest cells advance with $H/2^L$, $L \le$ `max-level`; fewer levels are used when the local steps span fewer octaves. |
+| `safety` | 2.0 | Safety factor $\sigma \ge 1$: every cell advances with a sub-step of at most $\Delta t^\text{cap}/\sigma$, $\Delta t^\text{cap}$ being its local CFL/VNN step. With `max-level = 0`, $\sigma = 1$ gives the single-rate step. |
+| `macro-step-target` | 0 | Caps $H$, in seconds; 0 = no cap. |
+| `levels` | `recompute` | `recompute` rebuilds the level map for the $H$ taken: use it for production. `fixed` keeps the map of the first macro step, so that the error of a run measures the order of the scheme alone: use it for order studies only. |
+| `recompute-every` | 1 | Macro steps between two rebuilds of the map (`levels = recompute`). |
+| `fixed-macro-step` | 0 | A constant $H$, as a multiple of the smallest local step of the first macro step, for verification runs; 0 = adaptive. |
+| `nonlocal-cfl` | `redo` | Check of condition (4) of Gnedin et al.: `off`, `count` or `redo` ([below](#the-check-nonlocal-cfl)). |
+| `interface-margin` | `.false.` | Keeps the coarse step at a face between levels within $\Delta t^\text{cap}/\kappa$ of the finer cell. Always on with `redo`. |
+| `max-attempts` | 21 | With `redo`: the most attempts of one macro step. |
+| `force-redo` | `.false.` | Test device: rejects the first attempt of every macro step; the results must not change. |
+| `conservative-correction` | `.true.` | `.false.` removes the flux correction between levels, as a positive control of the conservation tests. |
+| `trace` | `.false.` | Prints the stage sequence, level map and halo lists of the first macro step (lines `MR-TRACE`, `MR-LEVEL`, `MR-HALO`, `MR-VISC`). |
+
+`fixed-macro-step` is for verification runs. With `levels = fixed` and an $H$ above the step of the map, the finest
+cells start beyond their limit, and the run warns once.
+
+### The check `nonlocal-cfl`
+
+- `off`: no check.
+- `count`: the violations are counted and printed at the end of a run that has some. Nothing else changes.
+- `redo`: a macro step that violates the condition is redone from its start, with finer levels (at most `max-level`) or
+  with $H$ halved when a cell needs more levels than that.
+
+With `redo` a macro step in which a cell or a face takes a state that is not physical (not finite, a total density that is
+not positive, a negative pressure, a temperature outside the tables of the gas) is redone with $H$ halved on the same levels. A
+face that is not physical at the start of the macro step stops the run, as in the single-rate step.
+
+The run stops, with the rejections by cause, when $H$ falls below $2^{-10}$ of its first attempt or when `max-attempts`
+attempts have been rejected. With `count`, `off`, `fixed-macro-step` or `levels = fixed`, `max-attempts` gives a warning and does nothing.
+
+At the start of every macro step a local step that is zero, negative, infinite or not a number stops the run, with the
+number of such cells and the first one, with its local step and primitive variables.
+
+### Limits on `cfl` and `vnn`
+
+With `max-level` > 0, `nonlocal-cfl = redo` and `levels = recompute` and no `fixed-macro-step`, the run stops at set-up
+when `cfl` exceeds 1 or, in a Navier–Stokes run, `vnn` exceeds 0.5 (the stability limits of
+[Time step](#time-step-cfl-and-vnn)). Otherwise the set-up checks neither value.
+
+### What the run prints
+
+Every `shell-diter` iterations the run prints:
+
+- the macro step $H$, the depth $L$ of its map and the cells per level;
+- the wall time per level, and on several processes the part spent in the exchanges (these are the times of process 0);
+- $r_\text{post}$ and $r_\text{nb}$, the largest ratios of the step each cell took to the step admitted on the state it
+  reached, and to that of a face neighbour; a line with the number of cells above 1 for each.
+
+When a macro step is rejected, more lines say why. At the end of the run the largest ratios are printed, with the number of
+macro steps that had a cell above 1. A run in which none of this happened prints no such lines. A run on several processes
+ends with the minimum, mean and maximum over the processes of the time of the stages and of their exchanges, per level
+(see [Timing](using.md#timing)). These lines only report: they change neither the steps nor the results.
+
+### Output times, probes and restarts
+
+- The macro step lands exactly on the output instants $k\,$`sol-dtime` and on `time-threshold`: when one falls within
+  $H$, $H$ is cut to end there, and the time-based solution is written at that macro step. A cut macro step counts as an iteration.
+- Time-based probe rows come at the end of the macro steps. A probe whose `dtime` is below $H$ writes one row per macro step.
+- A restart (`newrun = false`) from a `vtk raw` or `tecplot ascii` solution goes on bit for bit as the uninterrupted run
+  with `levels = recompute`. With `recompute-every` = $k$ > 1 it does so when it falls on a multiple of $k$. `levels = fixed` and
+  `fixed-macro-step` cannot restart, and stop the run at set-up.
+- The multirate integrator writes no file of its own.
+
+### Reading `input.ini` during the run
+
+The multirate keys are fixed for the run (column *During the run* of the [Parameter Registry](registry.md)): another
+value written during the run, `enabled` included, is an error of the reading, which `ini-error` decides. `time-accurate` is
+fixed too. The checks of `cfl`, `vnn` and `cfl-rise-threshold` are made again at every reading: a `cfl` or `vnn` above its
+limit, or `cfl-rise-threshold` > 0, is an error of the reading. A `cfl` within the limit is taken, and the interface
+margin follows it from the next macro step.
+
+### Scope
+
+The integrator runs time-accurate Heun (`time-scheme = RK2`) with `integration-variables = cons`, for the Euler and
+Navier–Stokes equations, laminar or with:
+
+- `SA`, `SA-R` or `SST`, with `k-energy-coupling` and either `sst-production`, and `sst-dilatation-dissipation`;
+- with `max-level = 0` also `SA-RC` and `SST-RC`.
+
+It runs on several blocks (the 2-D axisymmetric wedge included), with an SRM grain (`502`) in mode 2, and on several MPI
+processes with OpenMP threads, with the same results as on one process. With `SA`, `SA-R` or `SST` the local step
+includes a bound of the stiffness of the turbulence sources.
+
+Outside its scope the run stops at set-up or at its first macro step, with a message `[MOSE-Multirate] <item>` and a
+non-zero exit code:
+
+- other time schemes, `prim` or `prec`, steady runs, `cfl-rise-threshold` > 0, multigrid sequences;
+- implicit residual smoothing, a shock detector (also implied by `HLLC+Tramel`, `HLLC+Chen`, `HLLE++`, `AUSM+M`);
+- chemistry, soot, the rotating frame;
+- `Wilcox2006`, `SAcomp`, and with `max-level` > 0 `SA-RC` and `SST-RC`;
+- chimera (`102`), coupled walls (`103`), an SRM grain in mode 1, gas–surface interaction (`503`–`505`), rotational
+  periodicity (`200`) in 3-D, and boundary types without a multirate boundary flux;
+- a `cfl` or `vnn` above the limits [above](#limits-on-cfl-and-vnn);
+- a restart with `levels = fixed` or a `fixed-macro-step`.
 
 ---
 
@@ -257,7 +226,7 @@ Each cell takes the largest explicit step that keeps it stable, from one rule
 - in time-accurate RANS runs the stiffness of the turbulence sources adds up as well, with no
   parameter: near walls, where the destruction of $k$, $\omega$ or $\tilde\nu$ is fast, the step can
   be smaller than the convective and diffusive limits
-  ([theory](../theory/turbulence.md#time-accurate-runs-explicit-sources)). With SST or Wilcox 2006,
+  ([theory](../theory/turbulence-numerics.md#time-accurate-runs-explicit-sources)). With SST or Wilcox 2006,
   a time-accurate start far from the wall value of $\omega$ (100 times or more below it, in wall cells
   where diffusion sets the step) needs the CFL ramp `cfl-rise-threshold`: without it the first step
   can make $\omega$ negative.

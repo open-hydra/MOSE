@@ -81,7 +81,7 @@ my_case/
     (a periodicity with no rotation); otherwise the run stops. A block closed on itself over a full turn about $x$,
     its last $k$ node plane on the first one, is translated by zero: the periodicity by the identity. Every node is
     checked against the move of the nodes per cell in $k$ (defined in
-    [Spatial Discretization](../theory/numerics.md#rotational-periodicity-and-axisymmetric-wedge)). A block
+    [Spatial Discretization](../theory/numerics-wedge.md#rotational-periodicity-and-axisymmetric-wedge)). A block
     is turned when its nodes match the turn
     to within 1 % of that move and better than a translation, translated when they match a translation to within
     1 % of it and better than a turn, or when the angle is null (a turn by the null angle is the translation by
@@ -95,7 +95,7 @@ my_case/
     1 %: $k$ planes that touch or cross, or a $k = 1$ plane scaled radially about the axis. The set-up summary
     names the type, as `Mesh type`: 1-D, 2-D plane, 2-D axisymmetric wedge with its angle in rad, 3-D, or 3-D
     with the angle of its sectors in rad. The periodic images of the wall in the wall distance of the turbulence models
-    follow the same 1 % rule ([Turbulence](../theory/turbulence.md#wall-distance)).
+    follow the same 1 % rule ([Turbulence](../theory/turbulence-numerics.md#wall-distance)).
 
 ---
 
@@ -185,14 +185,14 @@ MOSE prints diagnostic information to the console during loading and iteration. 
 !!! note "Counts at the end of the run"
     A RANS run in which a stage made $\tilde\nu$, $k$ or $\omega$ negative before the realizability floor prints how
     many cell updates had such a stage
-    ([Turbulence](../theory/turbulence.md#time-accurate-runs-explicit-sources)):
+    ([Turbulence](../theory/turbulence-numerics.md#time-accurate-runs-explicit-sources)):
 
     ```text
      Turbulence variables below zero after a stage (set to the floor): <n>
     ```
 
     A run in which the limits of the ghost cells of walls and extrapolation faces acted
-    ([Spatial Discretization](../theory/numerics.md#ghost-cells-of-walls-and-extrapolation-faces)) prints the ghost fills
+    ([Spatial Discretization](../theory/numerics-ghost-cells.md#ghost-cells-of-walls-and-extrapolation-faces)) prints the ghost fills
     in which each did (one of the two counts can be zero):
 
     ```text

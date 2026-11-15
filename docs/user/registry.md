@@ -1,6 +1,10 @@
 # Input Parameters
 
-MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The column During the run says what such a reading does with each key: *taken*, the run takes the value written; *fixed*, the run keeps the value that it read at its start, and another value written is an error of the reading, which `ini-error` decides; *start only*, the key serves the start of the run, and a reading leaves it as it was.
+MOSE reads `input.ini` again every `ini-diter` iterations. The column *During the run* says what such a reading does with each key:
+
+- **taken**: the run takes the value written.
+- **fixed**: the run keeps the value it read at its start; another value is an error of the reading, which `ini-error` decides.
+- **start only**: the key serves the start of the run; a reading leaves it as it was.
 
 ## MOSE-Parameters
 
@@ -50,8 +54,8 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 | Parameter | Default | Allowed | Required | During the run | Description |
 |-----------|---------|---------|----------|----------------|-------------|
 | time-scheme | euler | euler, RK2, RK3 | yes | fixed | Time integration solver |
-| cfl | 0.5 | > 0 | yes | taken | CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17; at most 1 with the multirate integrator on ([MOSE-Multirate] enabled = .true., max-level > 0 and nonlocal-cfl = redo, levels = recompute and no fixed-macro-step)) |
-| vnn | 0.3 | > 0 |  no | taken | Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62; at most 0.5 in a Navier-Stokes run with the multirate integrator on ([MOSE-Multirate] enabled = .true., max-level > 0 and nonlocal-cfl = redo, levels = recompute and no fixed-macro-step)) |
+| cfl | 0.5 | > 0 | yes | taken | CFL number of the convective spectral radii, summed over the directions (RK2 <= 1, RK3 <= 1.17; at most 1 with the multirate integrator) |
+| vnn | 0.3 | > 0 |  no | taken | Diffusion number of the largest diffusivity, summed over the directions (RK2 <= 0.5, RK3 <= 0.62; at most 0.5 with the multirate integrator) |
 | cfl-rise-threshold | 0 | >= 0 |  no | taken | CFL rise threshold |
 | time-accurate | .false. | logical | yes | fixed | Time accurate switch |
 | integration-variables | cons | cons, prim, prec |  no | fixed | Integration variables: cons, prim (linearised primitive update) or prec (Weiss-Smith preconditioning; steady runs, with HLLC-PC) |
@@ -66,7 +70,7 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 | preconditioning-Ur-smooth | 0 | >= 0 |  no | taken | Passes of max-smoothing of Ur over the face neighbours |
 | space-reconstruction |  | MUSCL, first-order | yes | fixed | Space reconstruction method |
 | flux-limiter |  | vanalbada, minmod, superbee, vanleer, mc |  no | fixed | Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order) |
-| diffusive-metric | stencil | stencil, mean |  no | fixed | Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the k faces of type 200 for the linear fields that they allow) except at the chimera faces (102), which take the inverse of the mean of the inverse metrics of the two cells with every value, and at the symmetry faces with one cell across them, the walls 502 and the walls 503-506 while they ablate, which take the metric of the cell; mean takes the mean of the two metrics (the faces between blocks and of type 200 the inverse of the mean of the inverse metrics), overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r and does not converge next to a symmetry plane (300) that bounds a sector of a polar mesh |
+| diffusive-metric | stencil | stencil, mean |  no | fixed | Face metric of the viscous fluxes: stencil (exact for a linear field on any mesh) or mean (mean of the two cell metrics) |
 | shock-detector |  | Tramel, Chen |  no | fixed | Shock detector method |
 | riemann-solver | HLLC | HLLC, HLLC+Tramel, HLLC+Chen, HLLC-PC, HLLE, HLLE++, SLAU, SLAU2, LMRoe, MiczekRoe, AUSM+, AUSM+M, LLF, Rusanov, exact |  no | fixed | Riemann solver |
 | riemann-options-Mco | 0.0 | >= 0 |  no | taken | Low-Mach acoustic-dissipation cutoff Mach (floor) |
@@ -77,25 +81,25 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 |-----------|---------|---------|----------|----------------|-------------|
 | level1-iter | 0 | >= 0 |  no | taken | Iterations for multigrid level 1 |
 | level2-iter | 0 | >= 0 |  no | taken | Iterations for multigrid level 2 |
-| prolongated-diter | 0 | >= 0 |  no | taken | Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write) |
+| prolongated-diter | 0 | >= 0 |  no | taken | Coarse levels: least iterations between two writes of field/wall-prolongated; the end of a level always writes them (0 = every field write) |
 
 ## MOSE-Multirate
 
 | Parameter | Default | Allowed | Required | During the run | Description |
 |-----------|---------|---------|----------|----------------|-------------|
 | enabled | .false. | logical |  no | fixed | Multirate local time stepping: recursive Heun (SSP-RK2) with a level per cell, time-accurate runs only |
-| max-level | 10 | in [0, 50] |  no | fixed | Deepest level allowed (at most 50): the map of the adaptive step takes L = max-level levels below level 0, or fewer when the local steps span fewer octaves or macro-step-target gives a shorter H, so that H stays within the step of the slowest cells divided by safety; the finest cells advance with H/2^L |
-| safety | 2.0 | >= 1 |  no | fixed | Safety factor sigma: every cell advances with a sub-step h <= dtcap/sigma (dtcap = local CFL/VNN step); the default 2 keeps every cell, at the start of a macro step, within the admissible step of each face neighbour without the interface margin |
-| macro-step-target | 0.0 | >= 0 |  no | fixed | Target macro step H [s]; 0 = none (H set by the level map, within the step of the slowest cells divided by safety) |
+| max-level | 10 | in [0, 50] |  no | fixed | Deepest multirate level allowed: the finest cells advance with H/2^L (fewer levels when the local steps span fewer octaves) |
+| safety | 2.0 | >= 1 |  no | fixed | Safety factor sigma: every cell advances with a sub-step of at most dtcap/sigma (dtcap = local CFL/VNN step) |
+| macro-step-target | 0.0 | >= 0 |  no | fixed | Target macro step H [s]; 0 = set by the level map |
 | levels | recompute | fixed, recompute |  no | fixed | Level map: computed at the first macro step and kept (fixed) or recomputed from the local steps (recompute) |
 | recompute-every | 1 | > 0 |  no | fixed | Macro steps between two recomputations of the level map (levels = recompute) |
 | fixed-macro-step | 0.0 | >= 0 |  no | fixed | Fixed macro step as a multiple of the dt_min of the first macro step; 0 = adaptive (verification runs) |
 | conservative-correction | .true. | logical |  no | fixed | Conservative flux correction at the faces between levels (.false. only as a positive control) |
 | trace | .false. | logical |  no | fixed | Print the stage sequence, the level map and the halo lists of the first macro step (standard output) |
-| nonlocal-cfl | redo | off, count, redo |  no | fixed | Condition (4) of Gnedin et al. checked at every sub-step start: off; count (counts only); redo (a macro step that fails it is redone from its start with finer levels or a smaller H, with the interface margin; a macro step in which a cell or a face takes a state that is not physical is redone with H halved (with more than one level)) |
-| interface-margin | .false. | logical |  no | fixed | Faces between levels: the coarse step within dtcap/kappa of the fine cell, kappa = max(cfl (1 + theta) of the limiter, 1.1) (always on with nonlocal-cfl = redo) |
-| force-redo | .false. | logical |  no | fixed | Test device of nonlocal-cfl = redo: the first attempt of every macro step is rejected and redone with the same macro step and level map, so the results must not change |
-| max-attempts | 21 | >= 1 |  no | fixed | nonlocal-cfl = redo: attempts of a macro step at most (an attempt rejected by force-redo is not counted); when they are all rejected the run stops with the rejections by cause |
+| nonlocal-cfl | redo | off, count, redo |  no | fixed | Check of condition (4) of Gnedin et al. at every sub-step: off, count (counts only) or redo (a failing macro step is redone with finer levels or a smaller H) |
+| interface-margin | .false. | logical |  no | fixed | Faces between levels: the coarse step stays within dtcap/kappa of the fine cell (always on with nonlocal-cfl = redo) |
+| force-redo | .false. | logical |  no | fixed | Test device: the first attempt of every macro step is rejected and redone; the results must not change |
+| max-attempts | 21 | >= 1 |  no | fixed | nonlocal-cfl = redo: most attempts of one macro step before the run stops |
 
 ## MOSE-Physics
 
@@ -129,10 +133,10 @@ MOSE reads `input.ini` again during the run, every `ini-diter` iterations. The c
 | Prt | 0.85 | > 0 |  no | taken | Turbulent Prandtl number |
 | Sct | 0.90 | > 0 |  no | taken | Turbulent Schmidt number |
 | point-implicit | .true. | logical |  no | taken | Point-implicit factor 1/(1 + dt d) on the increment of the turbulence equations, steady runs only (time-accurate runs: explicit sources, stiffness in the time step) |
-| omega-wall-bc | practical | practical, asymptotic |  no | fixed | Omega wall condition for the omega-based models (SST, Wilcox2006, SSGLRR): Menter practical (60*nu/(beta1*y^2), beta1 of SST, for every model) or asymptotic (6*nu/(beta*y^2), exact y->0 limit with the beta of the model, beta1 for SST, beta0 for Wilcox2006 and the beta of LRR, 0.075, for SSGLRR, for wall-resolved meshes) |
-| sst-production | incompressible | incompressible, compressible |  no | fixed | SST production: incompressible (P = mu_t*S^2; NASA TMR SST-2003m, or SST-2003s with k-energy-coupling) or compressible (P = tau_ij*du_i/dx_j as OpenFOAM kOmegaSST arranges it: the limiter on mu_t*(S^2 - 2/3*divU^2) only, then -2/3*rho*k*divU added, and -2/3*gamma*rho*omega*divU in the omega equation; TMR SST-2003e limits the whole P and takes gamma/nu_t times it in the omega equation) |
-| sst-dilatation-dissipation | none | none, wilcox, zeman |  no | fixed | SST dilatation dissipation (compressibility correction of the k and omega dissipation, Rumsey NASA/TM-2009-215705 eqs. 40-43): none; wilcox (beta* -> beta*(1 + xi F), beta -> beta - beta* xi F, F = (Mt^2 - Mt0^2) for Mt > Mt0, xi = 2, Mt0 = 0.25, Mt = sqrt(2k)/a: Wilcox, for free shear layers); zeman (F = 1 - exp(-((Mt - Mt0)/L)^2) for Mt > Mt0, xi = 0.75, Mt0 = 0.2, L = 0.66: Zeman, for boundary layers). beta - beta* xi F is floored at 0 |
-| k-energy-coupling | .false. | logical |  no | fixed | Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants. The Reynolds-stress model SSGLRR is always in this form |
+| omega-wall-bc | practical | practical, asymptotic |  no | fixed | Wall value of omega: practical (Menter, 60 nu/(beta1 y^2)) or asymptotic (6 nu/(beta y^2), for wall-resolved meshes) |
+| sst-production | incompressible | incompressible, compressible |  no | fixed | SST production term: incompressible (mu_t S^2) or compressible (tau_ij du_i/dx_j, as OpenFOAM kOmegaSST) |
+| sst-dilatation-dissipation | none | none, wilcox, zeman |  no | fixed | Compressibility correction of the SST dissipation (Rumsey 2009): none, wilcox (free shear layers) or zeman (boundary layers) |
+| k-energy-coupling | .false. | logical |  no | fixed | Two-equation models: k in the total energy and in the stress tensor (full NASA TMR form), .false. = TMR m/e variants; SSGLRR is always in this form |
 
 ## MOSE-Rotating-Frame
 

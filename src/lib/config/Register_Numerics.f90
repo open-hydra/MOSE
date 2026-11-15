@@ -31,13 +31,10 @@ contains
 
     ! Stability coefficients and related options
     call reg%add( trim(section), 'cfl', obj_time_scheme%cfl, '0.5', &
-                  'CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17; at most 1 '// &
-                  'with the multirate integrator on ([MOSE-Multirate] enabled = .true., max-level > 0 and nonlocal-cfl = '// &
-                  'redo, levels = recompute and no fixed-macro-step))', '> 0', .true., KEY_TAKEN )
+                  'CFL number of the convective spectral radii, summed over the directions (RK2 <= 1, RK3 <= 1.17; at most 1 with the multirate integrator)', &
+                  '> 0', .true., KEY_TAKEN )
     call reg%add( trim(section), 'vnn', obj_time_scheme%vnn, '0.3', &
-                  'Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62; at most '// &
-                  '0.5 in a Navier-Stokes run with the multirate integrator on ([MOSE-Multirate] enabled = .true., '// &
-                  'max-level > 0 and nonlocal-cfl = redo, levels = recompute and no fixed-macro-step))', &
+                  'Diffusion number of the largest diffusivity, summed over the directions (RK2 <= 0.5, RK3 <= 0.62; at most 0.5 with the multirate integrator)', &
                   '> 0', .false., KEY_TAKEN )
     call reg%add( trim(section), 'cfl-rise-threshold', obj_time_scheme%rampa_cfl_iter, '0', 'CFL rise threshold', '>= 0', .false., KEY_TAKEN )
 
@@ -97,14 +94,7 @@ contains
           'Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order)', &
           'vanalbada, minmod, superbee, vanleer, mc', .false., KEY_FIXED )
     call reg%add( trim(section), 'diffusive-metric', obj_space_scheme%diffusive_metric, 'stencil', &
-                  'Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of '// &
-                  'the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the '// &
-                  'k faces of type 200 for the linear fields that they allow) except at the chimera faces (102), which take '// &
-                  'the inverse of the mean of the inverse metrics of the two cells with every value, and at the symmetry '// &
-                  'faces with one cell across them, the walls 502 and the walls 503-506 while they ablate, which take the '// &
-                  'metric of the cell; mean takes the mean of the two metrics (the faces between blocks and of type 200 the '// &
-                  'inverse of the mean of the inverse metrics), overstates the gradient by (1+r)^2/(4r) at a cell-size ratio '// &
-                  'r and does not converge next to a symmetry plane (300) that bounds a sector of a polar mesh', &
+                  'Face metric of the viscous fluxes: stencil (exact for a linear field on any mesh) or mean (mean of the two cell metrics)', &
                   'stencil, mean', .false., KEY_FIXED )
 
     ! Shock Detector ---------------------------------------
@@ -149,16 +139,13 @@ contains
     call reg%add( trim(section), 'enabled', obj_multirate%enabled, '.false.', 'Multirate local time stepping: recursive &
       &Heun (SSP-RK2) with a level per cell, time-accurate runs only', 'logical', .false., KEY_FIXED )
     call reg%add( trim(section), 'max-level', obj_multirate%max_level, '10', &
-      'Deepest level allowed (at most 50): the map of the adaptive step takes L = max-level levels below level 0, or fewer '// &
-      'when the local steps span fewer octaves or macro-step-target gives a shorter H, so that H stays within the step of '// &
-      'the slowest cells divided by safety; the finest cells advance with H/2^L', 'in [0, 50]', .false., KEY_FIXED )
+      'Deepest multirate level allowed: the finest cells advance with H/2^L (fewer levels when the local steps span fewer octaves)', &
+      'in [0, 50]', .false., KEY_FIXED )
     call reg%add( trim(section), 'safety', obj_multirate%safety, '2.0', &
-      'Safety factor sigma: every cell advances with a sub-step h <= dtcap/sigma (dtcap = local CFL/VNN step); '// &
-      'the default 2 keeps every cell, at the start of a macro step, within the admissible step of each face neighbour '// &
-      'without the interface margin', &
+      'Safety factor sigma: every cell advances with a sub-step of at most dtcap/sigma (dtcap = local CFL/VNN step)', &
       '>= 1', .false., KEY_FIXED )
     call reg%add( trim(section), 'macro-step-target', obj_multirate%macro_step_target, '0.0', &
-      'Target macro step H [s]; 0 = none (H set by the level map, within the step of the slowest cells divided by safety)', &
+      'Target macro step H [s]; 0 = set by the level map', &
       '>= 0', .false., KEY_FIXED )
     call reg%add( trim(section), 'levels', obj_multirate%levels, 'recompute', &
       'Level map: computed at the first macro step and kept (fixed) or recomputed from the local steps (recompute)', &
@@ -172,19 +159,14 @@ contains
     call reg%add( trim(section), 'trace', obj_multirate%trace, '.false.', 'Print the stage sequence, the level map and the &
       &halo lists of the first macro step (standard output)', 'logical', .false., KEY_FIXED )
     call reg%add( trim(section), 'nonlocal-cfl', obj_multirate%nonlocal_cfl, 'redo', &
-      'Condition (4) of Gnedin et al. checked at every sub-step start: off; count (counts only); redo (a macro step that '// &
-      'fails it is redone from its start with finer levels or a smaller H, with the interface margin; a macro step in '// &
-      'which a cell or a face takes a state that is not physical is redone with H halved (with more than one level))', &
+      'Check of condition (4) of Gnedin et al. at every sub-step: off, count (counts only) or redo (a failing macro step is redone with finer levels or a smaller H)', &
       'off, count, redo', .false., KEY_FIXED )
     call reg%add( trim(section), 'interface-margin', obj_multirate%interface_margin, '.false.', &
-      'Faces between levels: the coarse step within dtcap/kappa of the fine cell, kappa = max(cfl (1 + theta) of the '// &
-      'limiter, 1.1) (always on with nonlocal-cfl = redo)', 'logical', .false., KEY_FIXED )
+      'Faces between levels: the coarse step stays within dtcap/kappa of the fine cell (always on with nonlocal-cfl = redo)', 'logical', .false., KEY_FIXED )
     call reg%add( trim(section), 'force-redo', obj_multirate%force_redo, '.false.', &
-      'Test device of nonlocal-cfl = redo: the first attempt of every macro step is rejected and redone with the same '// &
-      'macro step and level map, so the results must not change', 'logical', .false., KEY_FIXED )
+      'Test device: the first attempt of every macro step is rejected and redone; the results must not change', 'logical', .false., KEY_FIXED )
     call reg%add( trim(section), 'max-attempts', obj_multirate%max_attempts, '21', &
-      'nonlocal-cfl = redo: attempts of a macro step at most (an attempt rejected by force-redo is not counted); when they '// &
-      'are all rejected the run stops with the rejections by cause', '>= 1', .false., KEY_FIXED )
+      'nonlocal-cfl = redo: most attempts of one macro step before the run stops', '>= 1', .false., KEY_FIXED )
 
   end subroutine Register_Multirate
 
@@ -210,14 +192,14 @@ contains
         call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m)), '>= 0', .false., KEY_TAKEN )
       enddo
       call reg%add( trim(codename)//'-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
-        'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write)', '>= 0', .false., KEY_TAKEN )
+        'Coarse levels: least iterations between two writes of field/wall-prolongated; the end of a level always writes them (0 = every field write)', '>= 0', .false., KEY_TAKEN )
     else
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
         call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m)), '>= 0', .false., KEY_TAKEN )
       enddo
       call reg%add( 'HYDRA-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
-        'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write)', '>= 0', .false., KEY_TAKEN )
+        'Coarse levels: least iterations between two writes of field/wall-prolongated; the end of a level always writes them (0 = every field write)', '>= 0', .false., KEY_TAKEN )
     endif
 
   end subroutine Register_Multigrid_Levels  
