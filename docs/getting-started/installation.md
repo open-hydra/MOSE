@@ -24,7 +24,7 @@ MOSE requires these three libraries by a range of releases, as FLINT, ATLAS and 
 |--------------|-----------------------------------------------|--------------------|-----------------------------------------|
 | `lib/ORION`  | `https://github.com/MarcoGrossi92/ORION.git` | 2.1 or a later 2.x | I/O routines (TecIO, VTK, Plot3D, etc.) |
 | `lib/OSLO`   | `https://github.com/MarcoGrossi92/OSLO.git`  | 1.1 or a later 1.x | ODE solvers library, required by FLINT  |
-| `lib/FLINT`  | `https://github.com/MarcoGrossi92/FLINT.git` | 2.0 or a later 2.x | Thermodynamic database utilities        |
+| `lib/FLINT`  | `https://github.com/MarcoGrossi92/FLINT.git` | 2.1 or a later 2.x | Thermodynamic database utilities        |
 
 The first configure needs the network: it lists the tags of each library (`git ls-remote`, https) and clones the newest release that satisfies the range. `deps.lock`, in the source root and not tracked, keeps the releases selected: the next configures use them without the network (`-DFETCHCONTENT_FULLY_DISCONNECTED=ON` works then). `-DSEMVER_UPDATE=ALL` (`./install.sh build --update-deps`) selects the newest releases again; `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>` (`--include-orion|flint|oslo=<path>`) builds a local checkout instead; a local checkout outside the range stops the configure (`-DMOSE_PIN_CHECK=WARNING` builds it on purpose). When a project embeds MOSE (Hydra), that project chooses the releases, and MOSE checks them against its ranges. See [Versioning](../development/versioning.md).
 

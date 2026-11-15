@@ -63,7 +63,7 @@ MOSE/
 
 | Library | Purpose |
 |---------|---------|
-| `FLINT` | Thermochemistry (release 2.0 or a later 2.x) |
+| `FLINT` | Thermochemistry (release 2.1 or a later 2.x) |
 | `ORION` | Structured multi-block grid I/O (release 2.1 or a later 2.x) |
 | `OSLO` | ODE solvers, required by FLINT (release 1.1 or a later 1.x) |
 | `FiNeR` | INI file parser (submodule `lib/FiNeR`, v2.3.0) |
