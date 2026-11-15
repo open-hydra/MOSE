@@ -14,7 +14,7 @@ project (${solver} LANGUAGES Fortran CXX C)
 # must overlap those of FLINT.
 set(MOSE_ORION_VERSION 2.1)
 set(MOSE_OSLO_VERSION 1.1)
-set(MOSE_FLINT_VERSION 2.0)
+set(MOSE_FLINT_VERSION 2.1)
 set(MOSE_ORION_URL https://github.com/MarcoGrossi92/ORION.git)
 set(MOSE_OSLO_URL  https://github.com/MarcoGrossi92/OSLO.git)
 set(MOSE_FLINT_URL https://github.com/MarcoGrossi92/FLINT.git)

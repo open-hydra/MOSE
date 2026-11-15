@@ -60,7 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `.vtm` files list their blocks correctly.
   - Steady outputs carry −iteration as their time.
   - Text formats write 17 digits.
-- ORION, OSLO and FLINT come by release range (`cmake/SemVerDeps.cmake`), fetched at configure: ORION 2.1, OSLO 1.1, FLINT 2.0 or a later release of the same major. OSLO 1.1 has no `dodesol`; ifx with OpenMP refuses FATODE's Rosenbrock solvers (`ros2`, `ros3`, `ros4`, `rodas3`, `rodas4`; use `H-rodas`).
+- ORION, OSLO and FLINT come by release range (`cmake/SemVerDeps.cmake`), fetched at configure: ORION 2.1, OSLO 1.1, FLINT 2.1 (the pyrolysis-gas tables of BC 506) or a later release of the same major. OSLO 1.1 has no `dodesol`; ifx with OpenMP refuses FATODE's Rosenbrock solvers (`ros2`, `ros3`, `ros4`, `rodas3`, `rodas4`; use `H-rodas`).
 - FiNeR v2.3.0 is the submodule `lib/FiNeR` (run `git submodule sync && git submodule update --init`); the configure
   fetches its libraries, and stops when FiNeR is not the pinned commit.
 - A local ORION, OSLO or FLINT clone outside MOSE's ranges stops the configure (`-DMOSE_PIN_CHECK=WARNING` allows it).

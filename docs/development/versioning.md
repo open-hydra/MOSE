@@ -13,7 +13,7 @@ change raises `Y`, anything else `Z`.
 |---|---|---|
 | ORION | `MOSE_ORION_VERSION 2.1`: 2.1.0 and later, up to 3.0.0 excluded | `semver_dependency` of `cmake/SemVerDeps.cmake` |
 | OSLO | `MOSE_OSLO_VERSION 1.1`: 1.1.0 and later, up to 2.0.0 excluded | `semver_dependency` |
-| FLINT | `MOSE_FLINT_VERSION 2.0`: 2.0.0 and later, up to 3.0.0 excluded | `semver_dependency` |
+| FLINT | `MOSE_FLINT_VERSION 2.1`: 2.1.0 and later, up to 3.0.0 excluded | `semver_dependency` |
 | FiNeR | `MOSE_FINER_TAG v2.3.0` | the submodule `lib/FiNeR`, checked against its `VERSION` file |
 
 `cmake/SemVerDeps.cmake` is FLINT's file, copied unmodified: update it from FLINT, never here.
