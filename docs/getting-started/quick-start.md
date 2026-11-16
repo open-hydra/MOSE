@@ -8,7 +8,7 @@ This guide walks you through running the **Prandtl–Meyer expansion** test case
 
 <figure>
   --8<-- "docs/getting-started/mach.svg"
-  Contours of Mach number from the Prandtl–Meyer expansion test case.
+  <figcaption>Contours of Mach number from the Prandtl–Meyer expansion test case.</figcaption>
 </figure>
 
 ---

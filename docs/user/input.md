@@ -89,7 +89,7 @@ during the run: lowering one below the iterations already done ends that level a
 
 In a time-accurate run, `[MOSE-Multirate] enabled = .true.` lets each cell advance with a sub-step close to its own
 stability limit instead of the global minimum. The method is in [Time Integration](../theory/multirate.md#multirate-time-stepping);
-its checks are in [Multirate Verification](../vv/multirate.md).
+its checks are in [Multirate Verification](../vv/multirate/index.md).
 
 ```ini
 [MOSE-Numerics]

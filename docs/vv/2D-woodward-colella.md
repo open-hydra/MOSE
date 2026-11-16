@@ -14,18 +14,7 @@ A uniform Mach 3 flow enters from the left boundary and faces a forward step obs
 - Expansion fan originating from the step corner
 - Contact surface separating regions of different entropy
 
-## Numerical setup
-
-| Parameter | Value |
-|---|---|
-| Domain | $[0, 3] \times [0, 1]$ |
-| Final time | $t = 4.0$ |
-| Mach number | 3.0 |
-| Time scheme | RK3 |
-| CFL | 0.8 |
-| Space reconstruction | MUSCL |
-| Flux limiter | Van Leer |
-| Riemann solver | HLLE |
+Mach 3, domain $[0, 3] \times [0, 1]$, final time $t = 4$. **Scheme**: HLLE, MUSCL with the Van Leer limiter.
 
 ## Grid structure
 

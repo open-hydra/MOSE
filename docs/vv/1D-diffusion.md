@@ -46,24 +46,7 @@ $1/W_{\rm mix} = \sum_k Y_k/W_k$, and partial densities $\rho_k = Y_k\rho$. The
 $\sim\!4{:}1$ temperature ratio gives a $\sim\!4{:}1$ density ratio across the
 front — the key feature of this case (see below).
 
-## Numerical setup
-
-| Parameter | Value |
-|---|---|
-| Equations | Navier–Stokes (laminar) |
-| Domain | $[0,\,0.05]$ m |
-| Grid | $200 \times 1$ |
-| Final time | $200$ ms (snapshots every $50$ ms) |
-| Time scheme | RK2 (time-accurate) |
-| CFL / VNN | 0.95 / 0.95 |
-| Space reconstruction | MUSCL |
-| Flux limiter | Van Leer |
-| Riemann solver | HLLC |
-| Laminar Schmidt $Sc$ | 1.0 |
-| Laminar Prandtl $Pr_l$ | 1.0 |
-
-The two ends in $x$ are **periodic** (`201`) and the $j$ faces use symmetry (`300`),
-so the only error sources are the diffusive flux and the time integration.
+200 cells, laminar Navier–Stokes, $Sc = Pr = 1$. **Scheme**: HLLC, MUSCL with the Van Leer limiter.
 
 ## Unity Lewis number and the reference solution
 

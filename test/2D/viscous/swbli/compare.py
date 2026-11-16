@@ -21,6 +21,7 @@ Two modes (per model, --model SA|SST):
         SWBLI-cf-<model>-validation.svg   validation: MOSE, OpenFOAM, Wind-US, experiment
         SWBLI-cf-sst-omegaBC-mose.svg     (SST) MOSE, practical vs asymptotic omega BC
         SWBLI-cf-sst-production-mose.svg  (SST) MOSE, incompressible vs compressible production
+        SWBLI-cf-sa-diffusion-mose.svg    (SA) MOSE, present vs OpenFOAM-form SA diffusion
 
   --fields  also print the boundary-layer and incident-shock metrics of the V&V
             page; needs OUTPUT/field.tec and an OpenFOAM run (a time directory
@@ -29,6 +30,10 @@ Two modes (per model, --model SA|SST):
 
 Reference wall solutions (<MODEL>/reference/):
     MOSE-SA.tec, OF-SA.xy                                SA
+        MOSE-SA.tec                     the present code
+        MOSE-SA-openfoam-diffusion.tec  SA diffusion in OpenFOAM's form (no
+                                        (nu + nu~) grad rho . grad nu~ term):
+                                        the verification against OF-SA.xy
     MOSE-SST-<omega-wall-bc>-<sst-production>.tec        MOSE SST
         asymptotic-compressible     base case (SST/input.ini as committed)
         asymptotic-incompressible   sst-production = incompressible
@@ -365,11 +370,13 @@ def sst_setup(case):
 def references(case, M, tag=None):
     """Paths of the MOSE and OpenFOAM reference walls (None where there is none).
 
-    SA has one of each; SST has one per (omega-wall-bc, sst-production) tag.
+    SA has one of each, plus the verification tag "openfoam-diffusion"; SST has
+    one per (omega-wall-bc, sst-production) tag.
     """
     ref = case / "reference"
     if M == "SA":
-        mose, of = ref / "MOSE-SA.tec", ref / "OF-SA.xy"
+        mose = ref / ("MOSE-SA.tec" if tag is None else f"MOSE-SA-{tag}.tec")
+        of = ref / "OF-SA.xy"
     else:
         mose, of = ref / f"MOSE-SST-{tag}.tec", ref / f"OF-SST-{tag}.xy"
     return (mose if mose.exists() else None), (of if of.exists() else None)
@@ -456,7 +463,8 @@ def docs_figures(case, M):
     """The V&V page figures, from the reference files only."""
     m = M.lower()
     ref = case / "reference"
-    mose_ref, of_ref = references(case, M, None if M == "SA" else "asymptotic-compressible")
+    mose_ref, of_ref = references(case, M, "openfoam-diffusion" if M == "SA"
+                                  else "asymptotic-compressible")
     xm, cfm, pwm = mose_wall(mose_ref)
     xo, cfo, pwo = of_wall(of_ref)
     print(f"MOSE:     {mose_ref.relative_to(root)}\nOpenFOAM: {of_ref.relative_to(root)}")
@@ -491,7 +499,16 @@ def docs_figures(case, M):
     cf_axes(ax)
     save(fig, f"SWBLI-cf-{m}-validation.svg")
 
-    if M != "SST":
+    if M == "SA":
+        # --- the present SA diffusion against the OpenFOAM form verified above
+        xp, cfp, pwp = mose_wall(ref / "MOSE-SA.tec")
+        report({"MOSE": (xm, cfm, pwm), "MOSE, present": (xp, cfp, pwp)}, "MOSE")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(xm, cfm, MOSE_C, ls="--", lw=2.5, label="MOSE, OpenFOAM-form diffusion")
+        ax.plot(xp, cfp, MOSE_C, lw=3.5, label="MOSE, present diffusion")
+        ax.plot(xo, cfo, OF_C, lw=2.0, label="OpenFOAM")
+        cf_axes(ax, (0.32, 0.45))
+        save(fig, "SWBLI-cf-sa-diffusion-mose.svg")
         return
 
     # --- MOSE sensitivity studies: same grid, one input line changed ------

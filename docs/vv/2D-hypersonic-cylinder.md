@@ -20,17 +20,6 @@ $$\frac{T_2}{T_1} = \frac{p_2/p_1}{\rho_2/\rho_1}$$
 
 The reference values of the total pressure $p_0$ and total temperature $T_0$ behind the shock follow from the post-shock state and Mach number through the isentropic relations.
 
-## Numerical setup
-
-| Parameter | Value |
-|---|---|
-| Time scheme | RK3 |
-| Time stepping | local (steady), 5000 iterations |
-| CFL | 0.5 |
-| Space reconstruction | MUSCL |
-| Flux limiter | Van Albada |
-| **Riemann solvers tested** | **HLLC, HLLC+Tramel, HLLE, SLAU** |
-
 ## Grid structure
 
 The mesh is composed of a structured grid around the cylindrical body with 160 cells in the circumferential direction and 40 cells in the radial direction, extending from the cylinder surface to a far-field boundary located at 1.5 cylinder radii.
@@ -46,6 +35,11 @@ Boundary conditions:
 - Faces 5 and 6 (`200`): the closure of the planar 2-D mesh
 
 The test reads no probe: `verify.py` takes the post-shock total quantities in the field cell next to the cylinder surface and to the stagnation streamline (indices 80 and 0 of the field, counted from 0).
+
+Four Riemann solvers are compared: HLLC, HLLC+Tramel, HLLE and SLAU (MUSCL with the Van Albada limiter, steady, 5000 iterations).
+
+!!! note "The stagnation values are not converged"
+    Next to the stagnation point the solution does not settle with any of the four solvers: after 5000 iterations the density residual is still 3.5% (HLLE) to 16.6% (HLLC+Tramel) of its first value. With HLLC and SLAU the stagnation values also change with the compiler (up to 1.6 points of $p_0$ error); with HLLE and HLLC+Tramel they agree within 0.01%.
 
 ## Results and verification
 
@@ -74,9 +68,3 @@ the normal-shock relations (GNU 12.2 RELEASE build, the build of the figures):
 | SLAU | 8.31264 | −3.41 | 4068.34 | −0.02 |
 | **Analytical** | **8.60638** | **—** | **4069.11** | **—** |
 
-`verify.py` prints these values and draws the figures. They are not converged values: the
-solution next to the stagnation point does not settle with any of the four solvers, and after the 5000 iterations the
-density residual is 3.5 % (HLLE), 6.0 % (SLAU), 8.0 % (HLLC) and 16.6 % (HLLC+Tramel) of its first value. The state
-of the cell changes with the iteration and, with HLLC and SLAU, with the build: with gfortran 13 TESTING the error of
-$p_0$ is +6.35 % (HLLC) and −2.17 % (SLAU), with ifx 2024.1 RELEASE +6.13 % and −0.58 %; with HLLC+Tramel and HLLE the
-three builds agree within 0.009 % ($p_0$) and 0.002 % ($T_0$).

@@ -6,34 +6,9 @@ The validation metric is the **wall pressure along the between-injector line**, 
 
 **References**: Karl, *Numerical Investigation of a Generic Scramjet Configuration*, PhD thesis, TU Dresden (2011) - the experiment with error bars and the TAU S-A solution; Chapuis et al., *A computational study of the HyShot II combustor performance*, Proc. Combust. Inst. **34** (2013) 2101-2109 - the same measurements in the paper's coordinates, used here only to audit the unit conversion.
 
-!!! warning "The case as committed stops on its coarsest grid level"
-    Started from the [initial condition](#initial-condition) that ATLAS ICB builds from the `[ICB-*]` sections of
-    `input.ini`, with the committed `input.ini` and boundary-condition files, the run stops on the coarsest grid level
-    (level 3), where the multigrid sequence starts, in iteration 859 of its 100,000. Two cells of block 10 (the
-    downstream part of the O-grid ring around the porthole), with centres 0.14 mm above the bottom wall and 0.1 to
-    0.2 mm outside the edge of the porthole on its downstream side, hold hydrogen of the jet. They empty towards vacuum:
-    they go from 24.2 and 14.2 kPa after 800 iterations to 414 and 463 Pa after 858 (7.9 and 12.2 K), while the cells
-    next to them hold 1.3 to 51 kPa. In the chemistry of iteration 859 the integrator, RADAU5, fails in the first of
-    them, cell (2, 4, 5) of level 3, from 5.8 K and 302 Pa (`MATRIX IS REPEATEDLY SINGULAR`), and MOSE stops at the end
-    of that chemistry, before the fluxes of the second half of the step, with exit status 1 and the line
-    `[ERROR] Chemistry: the integrator H-radau5 failed (return code -4: matrix is repeatedly singular) in block 10 of
-    grid level 3, cell i, j, k = 2, 4, 5, ...`.
-
-    The collapse comes from the MUSCL reconstruction together with the
-    [implicit residual smoothing](../theory/time-integration.md#implicit-residual-smoothing-irs): from the same start,
-    the run with `irs-beta = 0` and the run with `space-reconstruction = first-order` pass iteration 2000 of level 3,
-    the lowest temperature of the level after 857 iterations being 132.9 K and 162.5 K, while the run without
-    chemistry (`exclude-blocks` with the eleven blocks) stops in the same iteration on a negative pressure of cell
-    (3, 2, 5) of block 10, next to the second of the two cells: MOSE prints `Integration failed at b, i, j, k:` and
-    `NaN, infinity or p<0 detected` and exits with status 1. All these runs use the code of this repository built with
-    GNU Fortran 12 in `RELEASE` mode, with 4 MPI ranks of 5 OpenMP threads (the case as committed stops in the same
-    iteration and cell also without MPI, with 8 threads), and the time stepping of `input.ini`: local time steps, RK2,
-    CFL 0.8 and VNN 0.5 ramped linearly over the first 5000 iterations (`cfl-rise-threshold`), so 0.137 and 0.086 in
-    iteration 859.
-
 <figure>
   <img src="../images/HyShot-field.png" alt="HyShot II combustor: temperature, pressure and hydrogen mass fraction">
-  Reacting flow in the computed domain: static pressure, static temperature, and hydrogen mass fraction.
+  <figcaption>Reacting flow in the computed domain: static pressure, static temperature, and hydrogen mass fraction.</figcaption>
 </figure>
 
 ---
@@ -103,78 +78,13 @@ $\phi$ follows from the two boundary conditions and the stoichiometric H$_2$/air
 
 The pipe wall upstream of the wall plane is adiabatic and the part above it is a connection, switched by a range-based composite patch.
 
-### Initial condition
-
-ATLAS ICB builds the initial field, `INPUT/ic.szplt`, from the `[ICB-*]` sections of `input.ini` (see [What ships, and what you build](#what-ships-and-what-you-build)). Every block takes the state of `[ICB-Block*]`, except blocks 6 to 9, the four blocks of the porthole that run down the pipe: their own sections split them along $z$ at the wall plane, and a cell whose centre lies below it takes the state of `[hydroIC]`, any other cell the state of `[airIC]`, equal to that of `[ICB-Block*]`.
-
-| Region | Gas | Velocity | $p$ | $T$ | $\tilde\nu$ |
-|---|---|---|---|---|---|
-| Every cell above the wall plane | air, $Y_{\mathrm{N_2}} = 0.7686$, $Y_{\mathrm{O_2}} = 0.2314$ | $M = 2.49$ along $x$ | 130.2 kPa | 1377 K | $10^{-6}$ m$^2$/s |
-| The pipe, below the wall plane | pure H$_2$ | $w = 1204.2$ m/s, into the duct | 252.8 kPa | 248.4 K | $10^{-6}$ m$^2$/s |
-
-The hydrogen moves at its speed of sound with the mass flux of the `403` inflow of the pipe: with the tables of the case, 1204.2 m/s is the speed of sound of hydrogen at 248.4 K and $\rho w = 297.15$ kg/(m$^2$ s) is the mass flux $g = 297.134$ kg/(m$^2$ s) of that inflow, each to within 0.01 %, and the stagnation temperature of this state is 299.5 K, against $T_0 = 300$ K of the inflow. The air is uniform: it does not follow the profile of the inlet, and next to the 300 K walls it starts at 1377 K and $M = 2.49$ too.
-
----
-
-## Numerical setup
-
-### Grid
-
-Three independent, overlapping structured regions - a stretched upstream box, the homogeneous chamber background, and a refined O-grid patch around the porthole with its pipe - coupled by **chimera overlap**, with no conformal interface between the regions. The overlap connectivity (donor/overset, type 102) is computed by the ATLAS pre-processor from the geometry, so the regions can be re-meshed independently.
-
-| Parameter | Value |
-|---|---|
-| Blocks | 11 |
-| Cells | 4,563,968 |
-| Boundary faces | 414,752 |
-| of which chimera / connection / symmetry / wall / inlet-outlet | 28,768 / 59,712 / 224,224 / 95,008 / 7,040 |
-| Chamber spacing $\Delta x = \Delta y$ | 0.25 mm |
-| First wall cell | 1 $\mu$m, growth 1.2, 28 cells (mirrored at the ceiling) |
-| Wall resolution, bottom wall | $y^+$ median 1.3, 95th percentile 1.9, max 2.1 |
-
-### Physics and numerics
-
-| Parameter | Value |
-|---|---|
-| Equations | Navier-Stokes |
-| Equation of state | ideal gas, thermally perfect (variable $c_p(T)$) |
-| Turbulence model | Spalart-Allmaras |
-| Species diffusion | constant laminar Schmidt number, $Sc = 0.7$ |
-| Turbulent Schmidt number | $Sc_t = 0.7$ |
-| Chemistry | finite-rate, Gerlinger-9 (9 species, 19 reactions) |
-| Chemistry-flow coupling | Strang operator splitting |
-| ODE solver | `H-radau5` |
-| Riemann solver | HLLC (Batten) |
-| Space reconstruction | MUSCL, Van Leer limiter |
-| Time scheme | RK2, conservative variables, steady (local time stepping) |
-| Implicit residual smoothing | $\beta = 0.5$ |
-| CFL / VNN | 0.8 / 0.5 |
-| Multigrid | 3 levels, 100,000 (L3) + 20,000 (L2) + 20,000 (L1) iterations |
-
-### Chemistry tolerances
-
-The ODE error control is set explicitly and tightly:
-
-```ini
-[MOSE-Chemistry]
-ode-absolute-tol-species     = 1e-12 (x9)
-ode-relative-tol-species     = 1e-8  (x9)
-ode-absolute-tol-temperature = 1e-4
-ode-relative-tol-temperature = 1e-8
-ode-max-steps                = 100000
-```
-
-This is not a convergence detail. MOSE integrates the chemistry on **partial densities** $\rho_s$ [kg/m$^3$], and the registered default absolute tolerance sits one to two decades *above* the entire pre-ignition radical pool. At the default the induction zone is integrated as if it were zero, heat release is displaced downstream, and the case shows no OH anywhere near the porthole - while the flow field (separation size, reversed-flow fraction, peak backflow velocity) is identical to a fraction of a percent. Tightening the tolerance alone raises peak $Y_{\mathrm{OH}}$ in the porthole region by two to three orders of magnitude.
-
-Getting ignition to occur **ahead** of the jet, as the literature reports, additionally requires the profiled inflow: the uniform inlet delivers near-wall gas about 145 K colder, which weakens the upstream separation and roughly quarters the amount of hot flammable gas there. Both changes are necessary; neither is sufficient.
-
 ---
 
 ## Results
 
 <figure>
   --8<-- "docs/vv/images/HyShot-pw.svg"
-  Wall pressure along the between-injector line.
+  <figcaption>Wall pressure along the between-injector line.</figcaption>
 </figure>
 
 The measured pressure rises through a shock train from about 120 kPa at the entrance to nearly 290 kPa at the end of the constant-area duct, then collapses to about 50 kPa through the nozzle. MOSE reproduces the whole structure: the level and slope of the rise, the position of the collapse at $x = 650$ mm, and the nozzle expansion.
@@ -201,47 +111,3 @@ MOSE carries **no systematic bias** in the mean combustor pressure level - the q
 The residual pointwise scatter is dominated by **shock-train phase**, not by level. Both computations produce oscillations of the right amplitude at very nearly the right wavelength, but a small streamwise offset between computed and measured shock positions turns into a large pointwise error whenever a measurement station happens to fall between a computed peak and trough. That the two independent RANS solutions disagree with **each other** by 9.8% RMS - less than either differs from the measurement (13.2% and 17.8%) - confirms the scatter is phase, not physics: a shock train in a duct is exquisitely sensitive to the upstream boundary layer and to the effective back pressure, and neither is measured.
 
 ---
-
-## Running the case
-
-### What ships, and what you build
-
-Everything the case needs is committed **except the initial condition**. At 4.6 M cells an initial field is about 375 MB even as a single-precision `.szplt`, and 2.2 GB as Tecplot ASCII, so it is not something a repository can carry.
-
-| Committed | Build yourself |
-|---|---|
-| `MESH/mesh.szplt` - the overset grid, and `MESH/hyshot_mesh.py` that generates it | `INPUT/ic.szplt` - the initial field |
-| `INPUT/phase.txt`, `thermo.dat`, `transport.dat`, `chemistry-*` - the 9-species Gerlinger mixture | |
-| `INPUT/bc.txt`, `bc2.txt`, `bc3.txt` - boundary conditions and chimera connectivity, one file per multigrid level | |
-| `input.ini` - the solver setup documented above | |
-
-So the first step is to build the initial condition with the ATLAS pre-processor, from the shipped mesh and phase data. ICB looks for the mesh (`mesh.tec`, then `mesh.p3d`, then `mesh.szplt`), the phase file and its thermodynamic table **in the working directory**, and writes into `fromATLAStoSolver/`:
-
-```bash
-cd test/3D/hyshotII
-ln -s MESH/mesh.szplt .          # ICB searches the cwd, not MESH/
-ln -s INPUT/phase.txt .          # and needs the phase file beside it
-ln -s INPUT/thermo.dat .         # and its thermodynamic table
-ulimit -s unlimited
-ATLAS ICB                        # -> fromATLAStoSolver/ic.szplt
-mv fromATLAStoSolver/ic.szplt INPUT/
-```
-
-Then solve:
-
-```bash
-./MOSE.sh compile              # or copy an existing bin/MOSE
-./MOSE.sh -p 60 solve          # 60 OpenMP threads (the option goes before the task); ~30 h for the full MG schedule
-```
-
-The boundary-condition files are committed, so ATLAS BCB does not need to run. They already encode everything in the [boundary conditions](#boundary-conditions) table - the profiled supersonic inlet, the sonic hydrogen porthole, the 300 K isothermal walls and the chimera overlap - which is why the physical settings are documented on this page rather than being readable from `input.ini`.
-
-The wall-pressure figure is drawn from `reference/wall.tec`, a MOSE wall solution of this case, which `wall_pressure.py` reads in its own folder:
-
-```bash
-cd test/3D/hyshotII/reference
-python wall_pressure.py                  # -> docs/vv/images/HyShot-pw.svg
-python wall_pressure.py --preset paper   # -> wall_pressure.pdf / .png
-```
-
-`wall_pressure.py` stitches the between-injector line across whatever bottom-wall zones `wall.tec` contains, accepting only rows that genuinely sample $y = W$, so it survives a re-mesh without editing. It also re-audits the thesis-to-paper coordinate and pressure-normalisation transform on every run, and prints the worst disagreement between the two digitisations of the same measurements.

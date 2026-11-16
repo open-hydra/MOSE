@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Figures of the viscous shock tube of Daru and Tenaud with the multirate integrator (mr-daru) for its V&V page
-(docs/vv/multirate.md), from the runs of run.sh in RUNS_DIR (ref, sr, mra, mrb) and the file of verify_daru.py --json.
+(docs/vv/multirate/index.md), from the runs of run.sh in RUNS_DIR (ref, sr, mra, mrb) and the file of verify_daru.py --json.
 Every form:
   multirate-daru-<form>-errors.svg  the density error e of sr, mra and mrb against the reference ref at the ten output
                                     times, and the ratio e(mrb)/e(sr) with its acceptance limit 1.05;

@@ -18,7 +18,8 @@ swbli/
 │   ├── MOSE.sh         ./MOSE.sh solve
 │   ├── INPUT/          bc.txt + multigrid levels, ic.szplt, transport tables
 │   ├── MESH/script.geo gmsh mesh definition (GRIB builds the mesh from it)
-│   ├── reference/      reference wall solutions: MOSE-SA.tec, OF-SA.xy,
+│   ├── reference/      reference wall solutions: MOSE-SA.tec,
+│   │                   MOSE-SA-openfoam-diffusion.tec, OF-SA.xy,
 │   │                   wind-SA.dat, SU2-SA.dat, schulein.dat
 │   ├── OUTPUT/         your MOSE run (untracked)
 │   └── OPENFOAM/       rhoCentralFoam companion case (run inputs)
@@ -134,7 +135,8 @@ or by 1–2% cell-to-cell without trend (OpenFOAM).
 
 | File | Setup | Iterations (fine grid) |
 |---|---|---|
-| `SA/reference/MOSE-SA.tec` | `SA/input.ini` | 100k |
+| `SA/reference/MOSE-SA.tec` | `SA/input.ini` | 120k |
+| `SA/reference/MOSE-SA-openfoam-diffusion.tec` | `SA/input.ini`, code of October 2026 without the −(ν + ν̃) ∇ρ·∇ν̃ / σ term (OpenFOAM's form of the SA diffusion; not an input option) | 120k |
 | `SST/reference/MOSE-SST-asymptotic-compressible.tec` | `SST/input.ini` (base case) | 200k |
 | `SST/reference/MOSE-SST-asymptotic-incompressible.tec` | `sst-production = incompressible` | 200k |
 | `SST/reference/MOSE-SST-practical-compressible.tec` | `omega-wall-bc = practical` | 200k |
@@ -154,7 +156,8 @@ wall-adjacent cell); `compressible` = `kOmegaSST`, `incompressible` =
 | `SST/reference/OF-SST-wallfunction-incompressible.xy` | `wallfunction incompressible` | restart of `wallfunction compressible` at 300k, to 450k |
 | `SST/reference/OF-SST-asymptotic-incompressible.xy` | `asymptotic incompressible` | restart of `wallfunction compressible` at 300k, to 450k |
 
-The verification of the V&V page pairs `MOSE-SST-asymptotic-compressible` with
+The verification of the V&V page pairs `MOSE-SA-openfoam-diffusion` with `OF-SA`, and
+`MOSE-SST-asymptotic-compressible` with
 `OF-SST-asymptotic-compressible`; its attribution table uses the four OpenFOAM
 SST files.
 

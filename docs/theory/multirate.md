@@ -66,7 +66,7 @@ immediate neighbours end their step at or before $t_0 + \Delta t$ (condition (4)
 - **Second order in time** on a fixed mesh: proven.
 - **Stability**: proven for linear two-cell fluxes (first-order upwind, central diffusion), and for the limited reconstruction
   of the advection equation in one dimension (two levels, and three levels with a band of one cell). Elsewhere it rests on the
-  tests of [Multirate Verification](../vv/multirate.md).
+  tests of [Multirate Verification](../vv/multirate/index.md).
 - With one level, the macro step is the single-rate step to the bit.
 
 The input keys are in the [User Guide](../user/input.md#multirate-time-stepping), which also lists the configurations the

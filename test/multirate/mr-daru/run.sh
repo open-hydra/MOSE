@@ -13,7 +13,7 @@
 #    mra  max-level 3, safety 2, H = 4 dt0: the largest power of two of dt0 within 2^L dt_min(0)/safety = 4.44 dt0;
 #    mrb  max-level 3, safety 2, H = dt0: the core cells take the step of sr, the cells next to the walls, where the
 #         viscous limit rules, smaller ones.
-#  Checks: verify_daru.py. Figures (docs/vv/multirate.md): plot_daru.py writes runs/multirate-daru-<form>-*.svg from the
+#  Checks: verify_daru.py. Figures (docs/vv/multirate/index.md): plot_daru.py writes runs/multirate-daru-<form>-*.svg from the
 #  runs and from the errors that verify_daru.py writes with --json (mra and mrb log their cells per level at every macro
 #  step, shell-diter 1); every figure names its mesh and form, and only the full form is drawn next to the published
 #  solutions. Without matplotlib the figures are skipped and the test is unchanged.

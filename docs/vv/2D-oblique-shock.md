@@ -14,16 +14,6 @@ $$\tan(\delta) = 2\cot(\beta) \frac{M_1^2 \sin^2(\beta) - 1}{M_1^2 \left(\gamma 
 
 Post-shock properties (pressure ratio, temperature ratio, density ratio, exit Mach) are uniform. 
 
-## Numerical setup
-
-| Parameter | Value |
-|---|---|
-| Time scheme | RK3 |
-| CFL | 0.9 |
-| Space reconstruction | MUSCL |
-| Flux limiter | Van Albada |
-| **Riemann solvers tested** | **HLLC, HLLC+Tramel, HLLE, SLAU** |
-
 ## Grid structure
 
 The mesh is composed of two structured blocks:
@@ -40,6 +30,8 @@ Boundary conditions:
 - Wall: slip wall (symmetry)
 - Upper boundary: zero-gradient extrapolation
 - Exit: zero-gradient extrapolation
+
+Four Riemann solvers are compared: HLLC, HLLC+Tramel, HLLE and SLAU (MUSCL with the Van Albada limiter).
 
 ## Results and verification
 

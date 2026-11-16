@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Figures of the multirate order test (mr-order) for its V&V page (docs/vv/multirate.md), written from the results of
+"""Figures of the multirate order test (mr-order) for its V&V page (docs/vv/multirate/index.md), written from the results of
 run.sh in RUNS_DIR (the files <case>-order.json of verify_order.py and the runs themselves):
   multirate-order.svg        the L1 error of the density against the macro step H for every case, relative to the error
                              with the largest macro step H0, and the interface error (Linf on the cells within 4 cells
