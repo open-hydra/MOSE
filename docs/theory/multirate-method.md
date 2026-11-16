@@ -218,7 +218,7 @@ $H$ also keep $h_{\ell_c} \le \Delta t^{\text{cap}}_v/\kappa$, $\kappa \ge 1.1$,
 for every face neighbour $v$ in the block, so (3) holds there for every $\sigma \ge 1$.
 
 So $\sigma \ge 2$ is what gives
-(3) without the margin; $\sigma$ can take every value of at least 1.  Without the margin, a Sod tube with $\sigma = 1$ breaks down ([Multirate Verification](../vv/multirate.md#safety-factor)).  With
+(3) without the margin; $\sigma$ can take every value of at least 1.  Without the margin, a Sod tube with $\sigma = 1$ breaks down ([Multirate Verification](../vv/multirate/index.md)).  With
 $L_{\max} = 0$ every cell advances with $H \le \min_c \Delta t^{\text{cap}}_c/\sigma$, (3) holds with $\sigma = 1$
 and the macro step is the single-rate step.  The default is $\sigma = 2$, the smallest value that gives (3) without
 the margin: the term $\sigma H/\Delta t^{\text{cap}}_c = 2^{L}\Delta t_{\min}/\Delta t^{\text{cap}}_c$ of the levels of
@@ -319,7 +319,7 @@ does not give ([Appendix B](multirate-analysis.md#appendix-b-total-variation-at-
 
 Several levels, several dimensions, systems and the
 positivity at the faces between levels are outside this result: for them, and for the limited reconstruction outside it, the
-stability at the faces between levels rests on the tests of [Multirate Verification](../vv/multirate.md).
+stability at the faces between levels rests on the tests of [Multirate Verification](../vv/multirate/index.md).
 
 **The floor of $\kappa$.**  $\text{cfl}\,(1+\theta)$ is the hypothesis above; $\kappa_0$ is the margin of condition (4)
 below.  With $\kappa \le 1$ and $\sigma = 2$ the margin would raise no cell above the level that nesting gives it: the cell that sets $H$, next to a coarser cell,
@@ -567,7 +567,7 @@ between levels, for every linear semi-discretisation and for $f \in C^2$ (the
 limiter and the switches of the turbulence models break $C^2$ where they
 act).
 
-This is what the order tests of [Multirate Verification](../vv/multirate.md) measure: fixed mesh,
+This is what the order tests of [Multirate Verification](../vv/multirate/index.md) measure: fixed mesh,
 fixed map, $H \to 0$.  At a fixed Courant number ($H \propto \Delta x$) the
 local error of a macro step is $O(H^2)$ in the cells next to a face between
 levels and $O(H^3)$ elsewhere (first order locally, as the conventional
@@ -584,7 +584,7 @@ bounded total area).
 
 Outside that linear setting no
 bound is proven at a fixed Courant number: the moving-levels test of
-[Multirate Verification](../vv/multirate.md) measures the $L^1$ order of this
+[Multirate Verification](../vv/multirate/index.md) measures the $L^1$ order of this
 case on a simple wave of the Euler equations (second order); its global
 $L^\infty$ order, near 1.3 as for the single-rate step with
 the same limiter, has its largest error at the maximum of the wave and does
@@ -615,7 +615,7 @@ forward-Euler steps (Appendix A, Remark 4): for the advection equation in one
 dimension, with two levels and with three levels and a band of one cell, Appendix B bounds the growth of the total variation
 by terms local to the faces between levels, and elsewhere the stability at the
 faces between levels rests on the tests of
-[Multirate Verification](../vv/multirate.md).
+[Multirate Verification](../vv/multirate/index.md).
 
 ```text
 ADVANCE(l, tau):  U0 := U on the cells of level l
@@ -665,7 +665,7 @@ two-cell fluxes (first-order upwind, central diffusion) Theorem 2 of
 Appendix A covers them (every nested map, bands of one cell included); with the limited reconstruction
 Appendix B bounds the total variation for the advection equation in one dimension with three levels and a band of one
 cell (Theorem 3b), and their effect on the stability is tested in
-[Multirate Verification](../vv/multirate.md) (bands of one cell, 2000 macro steps).
+[Multirate Verification](../vv/multirate/index.md) (bands of one cell, 2000 macro steps).
 
 The coarser cells read by a stage (the **halo**) are the union of the true
 stencils of the routines the stage calls: the four cells along the axis of
@@ -807,7 +807,7 @@ What is proven, and where:
 Outside the proofs are the limited reconstruction in several dimensions, more than three levels or three levels in another
 arrangement, HLLC on the Euler and Navier–Stokes equations, the turbulence sources, the terms of the axisymmetric wedge (faces
 `200`) and shocks that cross faces between levels. For them the stability rests on the tests of
-[Multirate Verification](../vv/multirate.md).
+[Multirate Verification](../vv/multirate/index.md).
 
 !!! note "Stability of Heun with a limiter"
     Every cell advances within its own local step divided by $\sigma$.  In

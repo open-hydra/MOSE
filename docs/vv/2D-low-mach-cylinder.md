@@ -13,8 +13,7 @@ preconditioning of MOSE, `integration-variables = prec` with the flux `HLLC-PC`
 
 <figure>
   --8<-- "docs/vv/images/LMC-cp-fields.svg"
-  Pressure coefficient near the cylinder, flow from left to right: preconditioned at Mach 0.01 and 0.001, and without
-  preconditioning at Mach 0.01 (its own colour scale).
+  <figcaption>Pressure coefficient near the cylinder, flow from left to right: preconditioned at Mach 0.01 and 0.001, and without preconditioning at Mach 0.01 (its own colour scale).</figcaption>
 </figure>
 
 ---
@@ -49,21 +48,10 @@ from $r = R$ to $r = 40R$, with cells growing geometrically from a first cell as
 
 <figure>
   --8<-- "docs/vv/images/LMC-grid.svg"
-  The O-grid: the whole domain (every second grid line) and the region next to the cylinder.
+  <figcaption>The O-grid: the whole domain (every second grid line) and the region next to the cylinder.</figcaption>
 </figure>
 
-## Numerical setup
-
-| Run | `integration-variables` | `riemann-solver` | Mach | `preconditioning-eps-min` |
-|---|---|---|---|---|
-| `prec-m2` | `prec` | `HLLC-PC` | 0.01 | 1e-3 |
-| `prec-m3` | `prec` | `HLLC-PC` | 0.001 | 1e-4 |
-| `cons-m2` | `cons` | `HLLC` | 0.01 | — |
-
-All three runs are steady (`time-accurate = false`, local time steps), first order in space, with forward Euler at
-CFL 0.8, for 3000 iterations. `preconditioning-eps-min` is a tenth of the Mach number, so that the floor
-$\varepsilon a$ of the reference velocity stays below the flow speed, except near the stagnation points, and the two
-preconditioned runs are the same problem in scaled variables.
+Three steady, first-order runs are compared: the preconditioned solver (HLLC-PC) at Mach 0.01 and 0.001, and the conservative solver (HLLC, no preconditioning) at Mach 0.01.
 
 ## Results
 
@@ -71,8 +59,7 @@ preconditioned runs are the same problem in scaled variables.
 
 <figure>
   --8<-- "docs/vv/images/LMC-cp-wall.svg"
-  Pressure coefficient of the first row of cells against potential flow at the same cell centres. Left: the two
-  preconditioned runs, on top of each other. Right: without preconditioning, against the preconditioned run.
+  <figcaption>Pressure coefficient of the first row of cells against potential flow at the same cell centres. Left: the two preconditioned runs, on top of each other. Right: without preconditioning, against the preconditioned run.</figcaption>
 </figure>
 
 The preconditioned runs follow potential flow over the front of the cylinder, from the stagnation point to the
@@ -84,7 +71,7 @@ up to 6.5 dynamic pressures, the $O(1/M)$ error of a flux whose dissipation scal
 
 <figure>
   --8<-- "docs/vv/images/LMC-mach-independence.svg"
-  Difference of the pressure coefficient between Mach 0.01 and Mach 0.001, preconditioned.
+  <figcaption>Difference of the pressure coefficient between Mach 0.01 and Mach 0.001, preconditioned.</figcaption>
 </figure>
 
 Between Mach 0.01 and 0.001 the pressure coefficient changes by at most $3.0 \times 10^{-4}$ in the cells within
@@ -95,7 +82,7 @@ limit. The difference is largest at the shoulders, where the flow is fastest.
 
 <figure>
   --8<-- "docs/vv/images/LMC-total-pressure.svg"
-  Loss of total pressure, preconditioned run at Mach 0.01.
+  <figcaption>Loss of total pressure, preconditioned run at Mach 0.01.</figcaption>
 </figure>
 
 Potential flow has no loss of total pressure. The dissipation of the first-order scheme on this grid makes one at the
@@ -108,7 +95,7 @@ numbers: it is an error of the discretisation, not of its low-Mach limit.
 
 <figure>
   --8<-- "docs/vv/images/LMC-residuals.svg"
-  Density residual of the three runs, relative to the first iteration.
+  <figcaption>Density residual of the three runs, relative to the first iteration.</figcaption>
 </figure>
 
 The density residual of the preconditioned runs falls by 1.8 × 10⁻³ (Mach 0.01) and 2.4 × 10⁻³ (Mach 0.001) in
@@ -140,11 +127,3 @@ unit check `PrecTransform` the update itself, against the Weiss–Smith matrix.
   (here $M/10$). With one `eps-min` for both, the floor $\varepsilon a$ is another fraction of the flow speed at
   each Mach number, and the runs are different problems: at Mach 0.001, `eps-min` = 1e-3 lifts the reference
   velocity to the free-stream speed wherever the gas is slower.
-
-## Reproduce
-
-```bash
-cd test/2D/euler/low-mach-cylinder
-./run.sh                    # the three runs and the checks
-python3 plot_vv.py          # the figures of this page and the numbers quoted
-```

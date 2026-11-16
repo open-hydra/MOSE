@@ -32,24 +32,7 @@ density (temperature) ratio, $u_b/u_u = \rho_u/\rho_b = T_b/T_u \approx 7.2$: th
 run takes the 2.428 m/s of the initial burnt state to the $u_\text{burnt}$ of the
 steady flame, 2.04 m/s (below).
 
-## Numerical setup
-
-| Parameter | Value |
-|---|---|
-| Equations | Navier–Stokes (laminar) + finite-rate chemistry |
-| Mechanism | ZK (25 species) |
-| Domain | $[0,\,0.30]$ m |
-| Grid | $4000 \times 1$ |
-| Multigrid | 5 levels (FMG start-up) |
-| Time scheme | RK2 (time-accurate), Strang splitting for chemistry |
-| ODE solver | ROS4 |
-| CFL | 0.9 |
-| Space reconstruction | MUSCL |
-| Flux limiter | Van Albada |
-| Riemann solver | HLLC (Batten) |
-| Schmidt / Prandtl | 0.7 / 0.7 |
-
-The inflow is a subsonic inlet and the outflow a fixed-pressure outlet; the spanwise faces use symmetry, reducing the problem to 1-D along $i$.
+ZK mechanism (25 species), 4000 cells over 0.30 m. **Scheme**: HLLC (Batten), MUSCL with the Van Albada limiter.
 
 ## Results and verification
 

@@ -6,7 +6,7 @@ A 2D axisymmetric Euler simulation of a rocket nozzle operating on RP-1/LOX prop
 
 <figure>
   --8<-- "docs/vv/images/Merlin-field.svg"
-  Contours of Mach number from the 2D finite-rate simulation of the Merlin nozzle.
+  <figcaption>Contours of Mach number from the 2D finite-rate simulation of the Merlin nozzle.</figcaption>
 </figure>
 
 ---
@@ -106,6 +106,5 @@ the solutions of the frozen and equilibrium runs.
 
 <figure>
   --8<-- "docs/vv/images/Merlin-XY.svg"
-  Mass-flow-weighted 1D averages of Mach number (with the frozen speed of sound), temperature ratio T/T0, ratio of specific
-  heats and molar mass of the three configurations, against the CEA stations (frozen and equilibrium).
+  <figcaption>Mass-flow-weighted 1D averages of Mach number (with the frozen speed of sound), temperature ratio T/T0, ratio of specific heats and molar mass of the three configurations, against the CEA stations (frozen and equilibrium).</figcaption>
 </figure>

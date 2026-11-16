@@ -50,30 +50,14 @@ swamped by acoustic dissipation.
 
 Three reference Mach numbers are tested: $M_{\rm ref} = 0.1,\ 0.01,\ 0.001$.
 
-## Numerical setup
-
-| Parameter | Value |
-|---|---|
-| Time scheme | RK3 (time-accurate) |
-| Final time | $t = 1$ |
-| CFL | 0.6 |
-| Space reconstruction | first order |
-| Low-Mach cutoff | $M_{co} = 0.005$ ($\approx 5\,M_{\rm peak}$) |
-| **Riemann solvers tested** | **AUSM+M** (`input.ini`), **HLLC** (baseline), **LMRoe** |
-
-The cutoff $M_{co}$ is the shared low-Mach dissipation floor described in
-[Low-Mach Cutoff Mach $M_{co}$](../theory/riemann-solvers.md#low-mach-cutoff-mach-m_co).
-**HLLC** is the *control*: it carries no low-Mach treatment and shows what the
-baseline upwind dissipation does to the vortex. **LMRoe** and **AUSM+M** are the
-low-Mach-corrected schemes. HLLC and LMRoe run with `riemann-solver` changed in
-`input.ini`.
-
 ## Grid structure
 
 A uniform $100 \times 100$ Cartesian grid on the unit square $[0,1]^2$, vortex
 centred at $(0.5, 0.5)$. All four boundaries are **periodic**, so the only error
 sources are the spatial flux and the time integration — there is no boundary
 contamination.
+
+Three Riemann solvers are compared, all first order in space with the low-Mach cutoff $M_{co} = 0.005$ ([theory](../theory/riemann-solvers.md#low-mach-cutoff-mach-m_co)): **HLLC**, the control without low-Mach treatment, and the low-Mach-corrected **LMRoe** and **AUSM+M**.
 
 ## Results and verification
 

@@ -615,7 +615,7 @@ exact conservation of the single-rate scheme.
 The idea and the guarantees are in [Multirate Time Stepping](multirate.md); the construction in detail is in
 [Multirate Method](multirate-method.md) and the proofs of its order and stability in [Multirate Analysis](multirate-analysis.md).
 The input keys are in the [User Guide](../user/input.md#multirate-time-stepping) and its verification in
-[Multirate Verification](../vv/multirate.md).
+[Multirate Verification](../vv/multirate/index.md).
 
 ---
 

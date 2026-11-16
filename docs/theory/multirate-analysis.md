@@ -108,7 +108,7 @@ condition.
 
 *Remark 2 (range).*  The constant of Theorem 1 contains $\|f'\| \sim 1/\Delta x$:
 the theorem holds for $H \to 0$ on a fixed mesh, which is what the order tests
-of [Multirate Verification](../vv/multirate.md) measure.  Where the limiter switches, and at the
+of [Multirate Verification](../vv/multirate/index.md) measure.  Where the limiter switches, and at the
 switches of HLLC and of the turbulence models, (H2) fails locally, and the
 local error of Heun itself is $O(H^2)$ there.  At a fixed Courant number
 ($H \propto \Delta x$) the theorem gives no bound (the Corollary below gives

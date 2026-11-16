@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Figure of the test mr-moving-levels (simple wave with moving level boundaries) for its V&V page (docs/vv/multirate.md), written from
+"""Figure of the test mr-moving-levels (simple wave with moving level boundaries) for its V&V page (docs/vv/multirate/index.md), written from
 the files <label>.json of verify_moving_levels.py in RUNS_DIR:
   multirate-moving-levels-order.svg  left, the L1 error of the density against the number of cells n for the multirate with the levels
                           recomputed at every macro step (mr), with the map of the first macro step kept (mrf), the single

@@ -1,4 +1,4 @@
-"""Style of the figures of the multirate tests for the V&V pages (docs/vv/multirate.md): the style of the V&V figures of
+"""Style of the figures of the multirate tests for the V&V pages (docs/vv/multirate/index.md): the style of the V&V figures of
 MOSE, as test/2D/viscous/swbli/compare.py draws them:
   - transparent background and text kept as text (svg.fonttype none), so that the pages draw the text in their own
     colour (docs/stylesheets/extra.css);

@@ -82,7 +82,7 @@ Being $C^\infty$ and periodic, the field is represented exactly at the domain ed
 
 <figure>
   --8<-- "docs/vv/images/mms-solution.svg"
-  Manufactured solutions
+  <figcaption>Manufactured solutions</figcaption>
 </figure>
 
 ## Governing equations and source

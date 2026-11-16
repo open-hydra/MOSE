@@ -143,29 +143,40 @@ nav:
 
   - Verification & Validation:
     - vv/index.md
-    - Shock Tube: vv/1D.md
-    - Reactive Shock Tube: vv/1D-fer14.md
-    - Unity-Lewis Diffusion: vv/1D-diffusion.md
-    - Multicomponent Diffusion: vv/1D-multicomponent-diffusion.md
-    - Premixed Laminar Flame: vv/1D-premixed-flame.md
-    - Isentropic Vortex: vv/2D-isentropic-vortex.md
-    - Viscous Manufactured Solution: vv/2D-mms.md
-    - Viscous Manufactured Solutions on Skewed Grids: vv/2D-mms-skewed.md
-    - 3D Viscous Manufactured Solutions on Skewed Grids: vv/3D-mms.md
-    - Woodward-Colella Step: vv/2D-woodward-colella.md
-    - Oblique Shock: vv/2D-oblique-shock.md
-    - Hypersonic Cylinder: vv/2D-hypersonic-cylinder.md
-    - Gresho Vortex: vv/2D-gresho-vortex.md
-    - Low-Mach Cylinder: vv/2D-low-mach-cylinder.md
-    - Rocket Nozzle: vv/2D-nozzle.md
-    - Planar Nozzle on Grid Families: vv/2D-planar-nozzle-grids.md
-    - Laminar Flat Plate: vv/2D-flat-plate-laminar.md
-    - Turbulent Flat Plate of the NASA TMR: vv/2D-flat-plate-turbulent-tmr.md
-    - Shock Boundary Layer Interaction: vv/2D-swbli.md
-    - Ablating Wall: vv/2D-ablating-wall.md
-    - HyShot II Scramjet Combustor: vv/3D-hyshotII.md
-    - Rotating Frame: vv/rotating-frame.md
-    - Multirate Verification: vv/multirate.md
+    - Order of Accuracy:
+      - Isentropic Vortex: vv/2D-isentropic-vortex.md
+      - Viscous Manufactured Solution: vv/2D-mms.md
+      - Manufactured Solutions on Skewed Grids: vv/2D-mms-skewed.md
+      - 3D Manufactured Solutions on Skewed Grids: vv/3D-mms.md
+    - Shock Capturing:
+      - 1D Euler Problems: vv/1D.md
+      - Oblique Shock: vv/2D-oblique-shock.md
+      - Woodward-Colella Step: vv/2D-woodward-colella.md
+      - Hypersonic Cylinder: vv/2D-hypersonic-cylinder.md
+    - Low Mach Number:
+      - Gresho Vortex: vv/2D-gresho-vortex.md
+      - Low-Mach Cylinder: vv/2D-low-mach-cylinder.md
+    - Wall-Bounded and Turbulent Flows:
+      - Laminar Flat Plate: vv/2D-flat-plate-laminar.md
+      - Turbulent Flat Plate (NASA TMR): vv/2D-flat-plate-turbulent-tmr.md
+      - Planar Nozzle on Grid Families: vv/2D-planar-nozzle-grids.md
+      - Shock Wave-Boundary Layer Interaction: vv/2D-swbli.md
+    - Multicomponent and Reacting Flows:
+      - Unity-Lewis Diffusion: vv/1D-diffusion.md
+      - Multicomponent Diffusion: vv/1D-multicomponent-diffusion.md
+      - Premixed Laminar Flame: vv/1D-premixed-flame.md
+      - Reactive Shock Tube: vv/1D-fer14.md
+      - Rocket Nozzle: vv/2D-nozzle.md
+      - Ablating Wall: vv/2D-ablating-wall.md
+    - Applications:
+      - HyShot II Scramjet Combustor: vv/3D-hyshotII.md
+    - Solver Features:
+      - Rotating Frame: vv/rotating-frame.md
+      - Multirate Time Stepping:
+        - vv/multirate/index.md
+        - Temporal Order: vv/multirate/order.md
+        - Viscous Shock Tube: vv/multirate/daru-tenaud.md
+        - Nozzle Start-Up: vv/multirate/nozzle-startup.md
 
   - Developer Guide:
     - development/index.md

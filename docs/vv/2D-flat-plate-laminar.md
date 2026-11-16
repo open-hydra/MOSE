@@ -36,16 +36,7 @@ where $Re_x = U_\infty x / \nu$ is the local Reynolds number.
 | Viscosity | 1.0 × 10⁻³ Pa·s |
 | Re/m | $8.06\times10^{4}$ m⁻¹ ($g/\mu$, with the mass flux $g = 80.648$ kg m⁻² s⁻¹ of the inlet) |
 
-## Numerical setup
-
-| Parameter | Value |
-|---|---|
-| Time scheme | RK2 |
-| CFL | 0.5 |
-| VNN | 0.5 |
-| Space reconstruction | MUSCL |
-| Flux limiter | Van Leer |
-| Riemann solver | HLLC |
+**Scheme**: HLLC, MUSCL with the Van Leer limiter.
 
 ## Grid structure
 

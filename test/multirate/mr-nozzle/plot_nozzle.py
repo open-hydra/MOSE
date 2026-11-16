@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Figures of the start-up of a nozzle with the multirate integrator (mr-nozzle) for its V&V page (docs/vv/multirate.md),
+"""Figures of the start-up of a nozzle with the multirate integrator (mr-nozzle) for its V&V page (docs/vv/multirate/index.md),
 from the file of verify_nozzle.py --json:
   multirate-nozzle-short-shock.svg   the position of the moving shock (face of largest compression in the divergent) at
                                      the output times where it is a shock (the outputs judged by the test) for ref, sr,
