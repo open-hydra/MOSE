@@ -178,7 +178,7 @@ contains
     implicit none
     integer, intent(in) :: nmgl
     integer :: m
-    character(len=llen) :: option
+    character(len=llen) :: option, section
 
     ! Allocate iteration threshold array for each level
     obj_multigrid%MGL = max(nmgl, 1)
@@ -201,6 +201,45 @@ contains
       call reg%add( 'HYDRA-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
         'Coarse levels: least iterations between two writes of field/wall-prolongated; the end of a level always writes them (0 = every field write)', '>= 0', .false., KEY_TAKEN )
     endif
+
+    ! Multigrid FAS cycle (off in the hydra coupling) -------
+    obj_multigrid%description     = 'none'
+    obj_multigrid%error_message   = 'none'
+    obj_multigrid%cycle             = 'none'
+    ! Defaults of the cycle: two smoothing iterations before the coarse-grid visit, none after, the restricted residual
+    ! in full and half the prolongated correction
+    obj_multigrid%pre_iter          = 2
+    obj_multigrid%post_iter         = 0
+    obj_multigrid%coarse_iter       = 1
+    obj_multigrid%damp_restriction  = 1d0
+    obj_multigrid%damp_prolongation = 0.5d0
+    obj_multigrid%cycle_start       = 0
+    obj_multigrid%cycle_turbulence  = .false.
+    obj_multigrid%cycle_turbulence_start = 0
+    if (obj_sim_param%HYDRA_MG) return
+    section = trim(codename)//'-Multigrid'
+    call reg%add( trim(section), 'cycle', obj_multigrid%cycle, 'none', &
+      'FAS cycle on the levels below the running one: none = grid sequencing only, v, w (steady runs without '// &
+      'chemistry; a run started without it cannot switch it on)', 'none, v, w', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'pre-iter', obj_multigrid%pre_iter, '2', &
+      'FAS: smoothing iterations on a level before its coarse-grid visit', '>= 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'post-iter', obj_multigrid%post_iter, '0', &
+      'FAS: smoothing iterations on a level after the coarse-grid correction', '>= 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'coarse-iter', obj_multigrid%coarse_iter, '1', &
+      'FAS: smoothing iterations on the coarsest level of a cycle', '> 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'damp-restriction', obj_multigrid%damp_restriction, '1.0', &
+      'FAS: factor of the restricted residual in the forcing term of a cycle', 'in (0, 1]', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'damp-prolongation', obj_multigrid%damp_prolongation, '0.5', &
+      'FAS: factor of the prolongated coarse-grid correction of a cycle', 'in (0, 1]', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'cycle-start', obj_multigrid%cycle_start, '0', &
+      'FAS: iteration of the running level from which the cycle acts; before it the level iterates as in grid '// &
+      'sequencing (0: from the first iteration)', '>= 0', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'cycle-turbulence', obj_multigrid%cycle_turbulence, '.false.', &
+      'FAS: the equations of a one- or two-equation RANS model also on the coarse levels of a cycle, with forcing term '// &
+      'and correction (.false.: frozen at the restricted state)', 'logical', .false., KEY_TAKEN )
+    call reg%add( trim(section), 'cycle-turbulence-start', obj_multigrid%cycle_turbulence_start, '0', &
+      'FAS: iterations of the running level after cycle-start from which cycle-turbulence acts; before it the RANS '// &
+      'equations stay frozen on the coarse levels (0: from the start of the cycle)', '>= 0', .false., KEY_TAKEN )
 
   end subroutine Register_Multigrid_Levels  
 

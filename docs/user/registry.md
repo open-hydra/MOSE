@@ -82,6 +82,15 @@ MOSE reads `input.ini` again every `ini-diter` iterations. The column *During th
 | level1-iter | 0 | >= 0 |  no | taken | Iterations for multigrid level 1 |
 | level2-iter | 0 | >= 0 |  no | taken | Iterations for multigrid level 2 |
 | prolongated-diter | 0 | >= 0 |  no | taken | Coarse levels: least iterations between two writes of field/wall-prolongated; the end of a level always writes them (0 = every field write) |
+| cycle | none | none, v, w |  no | taken | FAS cycle on the levels below the running one: none = grid sequencing only, v, w (steady runs without chemistry; a run started without it cannot switch it on) |
+| pre-iter | 2 | >= 0 |  no | taken | FAS: smoothing iterations on a level before its coarse-grid visit |
+| post-iter | 0 | >= 0 |  no | taken | FAS: smoothing iterations on a level after the coarse-grid correction |
+| coarse-iter | 1 | > 0 |  no | taken | FAS: smoothing iterations on the coarsest level of a cycle |
+| damp-restriction | 1.0 | in (0, 1] |  no | taken | FAS: factor of the restricted residual in the forcing term of a cycle |
+| damp-prolongation | 0.5 | in (0, 1] |  no | taken | FAS: factor of the prolongated coarse-grid correction of a cycle |
+| cycle-start | 0 | >= 0 |  no | taken | FAS: iteration of the running level from which the cycle acts; before it the level iterates as in grid sequencing (0: from the first iteration) |
+| cycle-turbulence | .false. | logical |  no | taken | FAS: the equations of a one- or two-equation RANS model also on the coarse levels of a cycle, with forcing term and correction (.false.: frozen at the restricted state) |
+| cycle-turbulence-start | 0 | >= 0 |  no | taken | FAS: iterations of the running level after cycle-start from which cycle-turbulence acts; before it the RANS equations stay frozen on the coarse levels (0: from the start of the cycle) |
 
 ## MOSE-Multirate
 

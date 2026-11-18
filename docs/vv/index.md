@@ -71,6 +71,7 @@ Species diffusion, chemistry and gas–surface interaction.
 |---|---|---|
 | [Rotating Frame](rotating-frame.md) | Coriolis and centrifugal source terms | Analytical balance |
 | [Multirate Time Stepping](multirate/index.md) | Local time stepping: exactness, conservation, temporal order, accuracy on real flows | Single-rate solver; exact and published solutions |
+| [Multigrid Cycles (FAS)](fas-cycles.md) | Convergence acceleration of steady runs: same solution as grid sequencing, wall-clock time, choice of the settings | Grid sequencing; Jameson (1983) |
 
 ## Running the cases
 

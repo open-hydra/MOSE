@@ -296,8 +296,10 @@ After a run completes, the `OUTPUT/` directory contains:
 | `field-prolongated.*`, `wall-prolongated.*` | Multigrid runs: the solution of the coarse level being computed, prolongated to the finest level, written with every coarse-level output (with `prolongated-diter` > 0 at most once every `prolongated-diter` iterations of the level) and at the end of every coarse level |
 
 The residuals of `diagnostic.*` are those of the last stage of the iteration written (the wall output, written just
-before, leaves them alone). With a single species the diagnostic output needs `sol-variables` to name `thermo` (the
-default) or `transport`; otherwise the run stops at its first solution output.
+before, leaves them alone); with the multigrid cycle (`cycle` of `[MOSE-Multigrid]`), those of the state at the end of
+the step, before its coarse-grid correction, which the cycle computes for its forcing term. With a single species the
+diagnostic output needs `sol-variables` to name `thermo` (the default) or `transport`; otherwise the run stops at its
+first solution output.
 
 ### Input/Output Formats
 

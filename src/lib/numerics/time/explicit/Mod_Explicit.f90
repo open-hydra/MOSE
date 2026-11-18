@@ -3,7 +3,7 @@ module MOSE_Mod_Explicit
 
   implicit none
   private
-  public :: Explicit_Step
+  public :: Explicit_Step, Assemble_Residual, Smoothing_Step
 
   ! Stage k of the Runge-Kutta scheme with n_RK stages (coefficients in Lib_RK.f90) evaluates the residual of an
   ! approximation of the solution at t^n + RKtheta(n_RK,k)*dt: forward Euler 0; Heun 0, 1; SSP RK3 0, 1, 1/2.
@@ -18,19 +18,11 @@ contains
     use MOSE_Config_Types_m
     use MOSE_Global_m
     use MOSE_Mod_dt,              only: Set_Global_dt, Compute_dt
-    use MOSE_Lib_Ghost,           only: Fill_Ghost_Cell
-    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes, Zero_W_Residual, Zero_V_Residual, &
-                                        Viscous_Variables
-    use MOSE_Mod_BC_Fluxes,       only: BC_Fluxes
-    use MOSE_Lib_RANS,            only: RANS_Source_Terms
-    use MOSE_Mod_Soot,            only: Soot_Source_Terms
     use MOSE_Mod_Newstate,        only: RK_Newstate
     use MOSE_Lib_Preconditioning, only: update_derived_variables
-    use MOSE_Lib_SpalartShur,     only: Cell_Velocity_Gradient
     use MOSE_Lib_Chemistry,       only: Chemistry_Newstate, Chemistry_Equilibrium, Chemistry_Failure_Reduce, &
                                         Chemistry_Failed, Chemistry_Failure_Stop
     use MOSE_Mod_Diagnostic,      only: Compute_Residual
-    use MOSE_Lib_RotatingFrame,   only: RotatingFrame_Source_Terms
     use MOSE_Mod_MPI,             only: is_local_block, mpi_reduce_sum_r8_array, &
                                         mpi_is_root, mpi_bcast_logical, mpi_bcast_integer
     use MOSE_Mod_Timers,          only: timer_iter_begin, timer_iter_end, timer_report, &
@@ -98,31 +90,7 @@ contains
           !$omp end single
         endif
 
-        call Zero_Residuals ( domain(level) )                ! Zero residuals
-        call Fill_Ghost_Cell ( domain(level) )               ! Fill ghost cells
-        if (model>0) call Viscous_Variables ( domain(level) ) ! Viscous variables of the cells, for the viscous fluxes
-        call Internal_Fluxes ( domain(level) )               ! Convective and Diffusive fluxes
-        call BC_Fluxes ( domain(level) )                     ! Boundary fluxes
-
-        call External_Function ( domain(level) )             ! External function (e.g. source terms)
-
-        if (obj_rot%enabled) &
-           call RotatingFrame_Source_Terms ( domain(level) ) ! Coriolis and centrifugal source terms
-
-        if (model==2) then
-          ! The eddy viscosity of the reference velocity of the preconditioner (Update_Derived_Variables, below)
-          ! takes the velocity gradient of the cells of this state, with the ghost cells of this stage; the -RC models
-          ! compute it with their sources
-          if ( obj_prec%enabled .and. .not. obj_rans%SpalartShur ) call Cell_Velocity_Gradient ( domain(level) )
-          call RANS_Source_Terms ( domain(level) )           ! RHS of turbulence equations (the ghost cells of the fluxes)
-        endif
-
-        if (obj_soot%enabled) then
-          call Soot_Source_Terms ( domain(level) )           ! RHS of soot equations
-        end if 
-
-        if (freeze_w) call Zero_W_Residual ( domain(level) ) ! Quasi-2D, symmetry k faces: w not integrated
-        if (freeze_v) call Zero_V_Residual ( domain(level) ) ! 1-D, symmetry j faces: v not integrated
+        call Assemble_Residual ( domain(level), External_Function ) ! Residual of the stage
 
         call RK_Newstate ( domain(level), i_rk )             ! State update
         call Update_Derived_Variables ( domain(level) )
@@ -244,6 +212,86 @@ contains
     endif
 
   end subroutine Explicit_Step
+
+
+  !> Residual of the domain for its current state: fluxes, boundary fluxes and source terms. Call it inside a parallel
+  !> region
+  subroutine Assemble_Residual ( domain, External_Function )
+    use MOSE_Advanced_Types_m
+    use MOSE_Config_Types_m
+    use MOSE_Global_m
+    use MOSE_Lib_Ghost,           only: Fill_Ghost_Cell
+    use MOSE_Mod_Fluxes,          only: Zero_Residuals, Internal_Fluxes, Zero_W_Residual, Zero_V_Residual, &
+                                        Viscous_Variables
+    use MOSE_Mod_BC_Fluxes,       only: BC_Fluxes
+    use MOSE_Lib_RANS,            only: RANS_Source_Terms
+    use MOSE_Mod_Soot,            only: Soot_Source_Terms
+    use MOSE_Lib_SpalartShur,     only: Cell_Velocity_Gradient
+    use MOSE_Lib_RotatingFrame,   only: RotatingFrame_Source_Terms
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    external :: External_Function
+
+    call Zero_Residuals ( domain )                       ! Zero residuals
+    call Fill_Ghost_Cell ( domain )                      ! Fill ghost cells
+    if (model>0) call Viscous_Variables ( domain )       ! Viscous variables of the cells, for the viscous fluxes
+    call Internal_Fluxes ( domain )                      ! Convective and Diffusive fluxes
+    call BC_Fluxes ( domain )                            ! Boundary fluxes
+
+    call External_Function ( domain )                    ! External function (e.g. source terms)
+
+    if (obj_rot%enabled) &
+       call RotatingFrame_Source_Terms ( domain )        ! Coriolis and centrifugal source terms
+
+    if (model==2) then
+      ! The eddy viscosity of the reference velocity of the preconditioner (Update_Derived_Variables, after the state
+      ! update) takes the velocity gradient of the cells of this state, with the ghost cells of this stage; the -RC models
+      ! compute it with their sources
+      if ( obj_prec%enabled .and. .not. obj_rans%SpalartShur ) call Cell_Velocity_Gradient ( domain )
+      call RANS_Source_Terms ( domain )                  ! RHS of turbulence equations (the ghost cells of the fluxes)
+    endif
+
+    if (obj_soot%enabled) then
+      call Soot_Source_Terms ( domain )                  ! RHS of soot equations
+    end if
+
+    if (freeze_w) call Zero_W_Residual ( domain )        ! Quasi-2D, symmetry k faces: w not integrated
+    if (freeze_v) call Zero_V_Residual ( domain )        ! 1-D, symmetry j faces: v not integrated
+
+  end subroutine Assemble_Residual
+
+
+  !> One step of a coarse level of the multigrid cycle: the stages of Explicit_Step with the forcing term (Jameson 1983),
+  !> without residual monitor or output. ramp scales the CFL and VNN numbers
+  subroutine Smoothing_Step ( domain, ramp, External_Function )
+    use MOSE_Advanced_Types_m
+    use MOSE_Config_Types_m
+    use MOSE_Mod_dt,              only: Compute_dt
+    use MOSE_Mod_Newstate,        only: RK_Newstate
+    use MOSE_Lib_Preconditioning, only: update_derived_variables
+    use MOSE_Lib_Multigrid,       only: Add_FAS_Forcing
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    real(R8), intent(in) :: ramp
+    external :: External_Function
+    ! Local
+    integer :: i_rk
+
+    domain % dtglobal = 1d5
+    call Compute_dt ( domain, obj_time_scheme%cfl * ramp, obj_time_scheme%vnn * ramp, 0 )
+
+    !$omp parallel
+    call Copy_State ( domain )
+
+    do i_rk = 1, obj_time_scheme%n_RK
+      call Assemble_Residual ( domain, External_Function ) ! Residual of the stage
+      call Add_FAS_Forcing ( domain )                      ! Forcing term
+      call RK_Newstate ( domain, i_rk )                    ! State update
+      call Update_Derived_Variables ( domain )
+    enddo
+    !$omp end parallel
+
+  end subroutine Smoothing_Step
 
 
   subroutine Copy_State ( domain )

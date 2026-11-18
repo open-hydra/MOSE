@@ -53,6 +53,7 @@ RiemannSmoke                 light   1.7
 ShuOsher                     light   0.4
 ShuOsherConvergence          light   4.5
 Sod79                        light   1.4
+TimeIntegration.MultigridNoneInert light   -
 TimeIntegration.Quasi2DSymmetry light   4.6
 TimeIntegration.TimeControl  light   3.2
 Toro99                       light   2.4
@@ -100,10 +101,13 @@ PointImplicitSteady          medium  26
 Preconditioning              medium  36
 RSMDecay                     medium  31
 TimeIntegration.LocalTimeStep medium  5.1
+TimeIntegration.MultigridChecks medium  -
+TimeIntegration.MultigridStart medium  -
 TimeIntegration.TurbulenceSources medium  5.2
 ViscousPatch.ViscousLinearPatch medium  6.2
 ViscousPatch.ViscousWallPatch medium  12
 WedgeAxisStep                medium  79
+FlatPlateLaminar.FAS         heavy   -
 FlatPlateTMRFull             heavy   -
 MMSViscous                   heavy   131
 MMSViscous3DFull             heavy   -

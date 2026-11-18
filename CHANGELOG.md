@@ -29,9 +29,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - With `phi = 0` and `h_v0 = 0` it is `505` bit for bit; a `506` line of an older ATLAS must be regenerated.
 - Tests of the reacting walls: `AblatingWall` runs `505` and `506` on the gas `test/common/CHO-N2-viscous`; unit checks `GSIBradley`, `GSIAblator`.
 - `sst-dilatation-dissipation` (`none`, `wilcox`, `zeman`): compressibility correction of the SST dissipation.
+- FAS multigrid cycle for steady runs without chemistry, `cycle = v` or `w` of `[MOSE-Multigrid]`; tests `TimeIntegration.Multigrid*`, `FlatPlateLaminar.FAS`.
 
 ### Changed
 
+- The screen line names the grid level only when the run solves a coarser level of the grid sequence.
 - The soot models (`soot-generation = LL91`, `LIN`) are flagged as under development: a run that selects one prints a
   warning, and the docs say they are not validated. Passive scalars have no input key yet.
 - Tests in three tiers by time: `light` (under 5 s), `medium` (5 s to 100 s), `heavy` (100 s and more), in place of `fast`, `validation`, `verification`; pull requests run `light` and `medium` in parallel, `heavy` runs locally.

@@ -225,6 +225,10 @@ mose_test(FlatPlateTMR.Reference
     KIND reference  LABELS physics 2D
     LOCK flat-plate-tmr
     DESC "criteria of the V&V page from the stored results (CFL3D, FUN3D, TAU)")
+mose_test(FlatPlateLaminar.FAS
+    DIR 2D/viscous/flat-plate-laminar-fas  RUN "./MOSE.sh test"
+    KIND reference  LABELS numerics 2D
+    DESC "laminar flat plate to convergence, FAS cycle at its defaults and grid sequencing: skin friction within 2.5 % RMS of Blasius and within 0.5 % RMS of each other, residual 1e-7 in at most half the iterations")
 mose_test(FlatPlateTMRFull
     DIR 2D/viscous/flat-plate-turbulent-tmr  RUN "./MOSE.sh test && python3 -B verify.py"
     KIND reference  LABELS physics 2D
@@ -302,6 +306,18 @@ mose_test(TimeIntegration.Quasi2DSymmetry
     DIR checks/time-integration/quasi2d-symmetry
     KIND invariant  LABELS numerics 1D 2D
     DESC "symmetry faces of quasi-2-D and 1-D cases: round-off in w does not grow")
+mose_test(TimeIntegration.MultigridNoneInert
+    DIR checks/time-integration/multigrid-none-inert
+    KIND identity  LABELS numerics 1D
+    DESC "cycle = none with the other keys of the FAS cycle set writes the files of the run without them, bit for bit")
+mose_test(TimeIntegration.MultigridStart
+    DIR checks/time-integration/multigrid-start
+    KIND identity  LABELS numerics 3D
+    DESC "FAS cycle from cycle-start and Spalart-Allmaras in it from cycle-turbulence-start: as a restart, bit for bit")
+mose_test(TimeIntegration.MultigridChecks
+    DIR checks/time-integration/multigrid-checks
+    KIND contract  LABELS implementation 1D 2D 3D
+    DESC "a FAS cycle that cannot work stops at the set-up and at a reading of input.ini, the grid level in the shell line")
 mose_test(BoundaryConditions.Inlets
     DIR checks/boundary-conditions/inlets
     KIND exact  LABELS physics 1D

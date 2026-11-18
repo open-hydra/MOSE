@@ -257,10 +257,20 @@ module MOSE_Config_Types_m
     integer              :: MGL                ! Number of multigrid levels
     integer, allocatable :: iter_threshold(:)  ! Number of iterations for each level
     integer              :: prolongated_diter = 0  ! Level iterations between two prolongated writes (0: with every field write)
+    character(len=llen)  :: cycle              ! FAS cycle: none (grid sequencing only), v, w
+    integer              :: pre_iter           ! Smoothing iterations on a level before its coarse-grid visit
+    integer              :: post_iter          ! Smoothing iterations on a level after the coarse-grid correction
+    integer              :: coarse_iter        ! Smoothing iterations on the coarsest level of a cycle
+    real(R8)             :: damp_restriction   ! Factor of the restricted residual in the forcing term
+    real(R8)             :: damp_prolongation  ! Factor of the prolongated correction
+    integer              :: cycle_start        ! Iteration of the running level from which the cycle acts
+    logical              :: cycle_turbulence   ! RANS equations also on the coarse levels of a cycle
+    integer              :: cycle_turbulence_start  ! ... from this many iterations after cycle_start
     ! Useful variables
     integer, public :: MG_level    ! Current MG-level being solved
     logical, public :: change_MG   ! Logical variable to change MG-level
     integer, public :: prolongated_last = 0  ! Level iteration of the last prolongated write on the current level
+    logical, public :: cycle_at_setup = .false.  ! FAS cycle on at setup: only then are its arrays allocated
   end type multigrid_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
