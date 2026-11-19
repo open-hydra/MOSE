@@ -13,7 +13,10 @@ Air of test/common/Air-viscous at P_REF, T_REF, a velocity U0 along x with a vor
 swirl about x, so that every direction has gradients from the first stage on. Turbulence: Spalart-Allmaras (rho nu~ = 3 mu)
 or SST (rho k, rho omega), the inlets carrying the same specific values.
 
-Usage: make_case.py SA|SST [--outdir DIR]       writes DIR/INPUT/ic.tec and DIR/INPUT/bc.txt
+With --levels L the boundary records of the coarser grid levels 2 to L of a multigrid run as well, INPUT/bc<m>.txt: the
+same faces on blocks of NI x NJ x NK cells halved m - 1 times (NK at least 1).
+
+Usage: make_case.py SA|SST [--outdir DIR] [--levels L]    writes DIR/INPUT/ic.tec and DIR/INPUT/bc.txt (and bc2.txt ...)
 """
 import argparse
 import math
@@ -87,7 +90,8 @@ def outer(model, b, face):
     return 300, None
 
 
-def write_bc(path, model):
+def write_bc(path, model, NI=NI, NJ=NJ, NK=NK):
+    """Boundary records of the blocks of NI x NJ x NK cells (those of the finest level by default)."""
     rows = []
     for q in range(2):
         for p in range(2):
@@ -122,10 +126,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("model", choices=["SA", "SST"])
     ap.add_argument("--outdir", default=".")
+    ap.add_argument("--levels", type=int, default=1)
     a = ap.parse_args()
     os.makedirs(os.path.join(a.outdir, "INPUT"), exist_ok=True)
     write_ic(os.path.join(a.outdir, "INPUT", "ic.tec"), a.model)
     n = write_bc(os.path.join(a.outdir, "INPUT", "bc.txt"), a.model)
+    for m in range(2, a.levels + 1):
+        h = 2 ** (m - 1)
+        write_bc(os.path.join(a.outdir, "INPUT", f"bc{m}.txt"), a.model, NI // h, NJ // h, max(1, NK // h))
     print(f"2x2 blocks of {NI}x{NJ}x{NK} cells, turbulence {a.model}, {n} boundary records")
 
 

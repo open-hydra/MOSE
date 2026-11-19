@@ -54,6 +54,7 @@ module MOSE_Advanced_Types_m
     real(R8), dimension(:,:,:,:), allocatable :: R                     ! Residuals
     real(R8), dimension(:,:,:,:), allocatable :: Visc                  ! Viscous variables of the cells, once per stage
     real(R8), dimension(:,:,:,:), allocatable :: RS1, RS2              ! Implicit smoothing residuals (temporary storage)
+    real(R8), dimension(:,:,:,:), allocatable :: fas_q0, fas_f         ! FAS coarse levels: restricted state, forcing term
     real(R8), dimension(:,:,:), allocatable   :: dtlocal               ! Local time step
     real(R8), dimension(:,:,:), allocatable   :: beta                  ! Shock detector flag
     real(R8), dimension(:,:,:), allocatable   :: Ur                    ! Preconditioning reference velocity
@@ -127,6 +128,7 @@ module MOSE_Advanced_Types_m
     integer, dimension(:,:), allocatable             :: local_bf_count   ! 0 on blocks of other ranks
     integer, dimension(:), allocatable               :: local_bf_idx
     integer                                          :: mg_level = 1     ! Multigrid level of this domain (selects exchange schedules)
+    logical                                          :: fas_forcing = .false. ! Coarse level of a multigrid cycle (forcing term on)
   end type MOSE_domain_type
 
   type :: MOSE_simulation_type

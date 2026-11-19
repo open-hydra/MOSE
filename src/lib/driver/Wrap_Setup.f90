@@ -620,6 +620,9 @@ contains
       if (index(obj_irs%error_message,'ERROR')>0) then
         write(*,'(A)') obj_irs%error_message;          has_error = .true.
       endif
+      if (index(obj_multigrid%error_message,'ERROR')>0) then
+        write(*,'(A)') obj_multigrid%error_message;    has_error = .true.
+      endif
 
     end subroutine Stop_Simulation
 
@@ -710,6 +713,8 @@ contains
       end select
       if ( obj_multigrid%MGL > 1 ) &
         write(*,'(A,T35,I0)') '   Multigrid levels', obj_multigrid%MGL
+      if ( obj_multigrid%cycle_at_setup ) &
+        write(*,'(A,T35,A)') '   Multigrid cycle', trim(obj_multigrid%description)
 
       ! ----- Boundary conditions -----
       call Print_BC_Summary ()

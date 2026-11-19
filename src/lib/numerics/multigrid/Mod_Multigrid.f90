@@ -35,6 +35,13 @@ contains
         call Allocate_Block ( simulation%domain(m) % Blk(b), simulation%domain(m) % Blk(b) % Dim )
         ! exclude-blocks on every level: the step of each level applies the chemistry (Mod_Explicit)
         simulation%domain(m) % Blk(b) % no_chem = simulation%domain(m-1) % Blk(b) % no_chem
+        ! Multigrid cycle: restricted state and forcing term of the coarse levels (MOSE_Mod_FAS)
+        if (obj_multigrid%cycle_at_setup) then
+          allocate ( simulation%domain(m) % Blk(b) % fas_q0, simulation%domain(m) % Blk(b) % fas_f, &
+                     mold = simulation%domain(m) % Blk(b) % P )
+          simulation%domain(m) % Blk(b) % fas_q0 = 0d0
+          simulation%domain(m) % Blk(b) % fas_f  = 0d0
+        endif
       enddo
 
       call Coarse_Grid ( simulation%domain(m-1), simulation%domain(m) )

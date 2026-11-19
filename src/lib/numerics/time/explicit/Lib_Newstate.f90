@@ -6,6 +6,7 @@ module MOSE_Lib_Newstate
   private
   public :: Newstate_Conservative, Newstate_Primitive, Compute_Prim_Residual, Count_Negative_Turbulence, &
             Report_Negative_Turbulence
+  public :: Check_And_Fix_State
 
   !> Cell updates of this process in which a stage made nu~, k or omega negative, before the realizability floor
   integer(I8) :: n_negative_turbulence = 0
@@ -25,6 +26,7 @@ contains
     use MOSE_Lib_RANS
     use MOSE_Lib_IRS
     use MOSE_Mod_MPI, only: is_local_block
+    use MOSE_Lib_FAS_Guards, only: Halve_Coarse_Update
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     integer, intent(in)                   :: irk
@@ -74,7 +76,7 @@ contains
           call Update_State_Cons_IRS( domain%blk(b)%P(:,i,j,k),   &
                                       domain%blk(b)%PO(:,i,j,k),  &
                                       domain%blk(b)%r(:,i,j,k),   &
-                                      irk, n_rk, b, i, j, k )
+                                      irk, n_rk, b, i, j, k, domain%fas_forcing )
         enddo; enddo; enddo
         !$omp end do
       enddo
@@ -93,7 +95,7 @@ contains
                                    domain%blk(b)%r(:,i,j,k),    &
                                    domain%blk(b)%dtlocal(i,j,k),&
                                    domain%blk(b)%vol(i,j,k),    &
-                                   irk, n_rk, b, i, j, k, strangcoeff )
+                                   irk, n_rk, b, i, j, k, strangcoeff, domain%fas_forcing )
         enddo; enddo; enddo
         !$omp end do
       enddo
@@ -110,13 +112,14 @@ contains
       residual = -residual / volume * dt * strangcoeff
     end subroutine Scale_Residual_Cons
 
-    ! Apply RK stage + cons2prim after IRS smoothing
-    subroutine Update_State_Cons_IRS( prim, primold, residual, irk, n_rk, b, i, j, k )
+    ! Apply RK stage + cons2prim after IRS smoothing (guarded: coarse level of a multigrid cycle)
+    subroutine Update_State_Cons_IRS( prim, primold, residual, irk, n_rk, b, i, j, k, guarded )
       implicit none
       real(R8), intent(inout) :: prim(nprim), residual(nprim)
       real(R8), intent(in)    :: primold(nprim)
       integer,  intent(in)    :: irk, n_rk, b, i, j, k
-      real(R8) :: rho, Rgas, temperature, consold(nprim), cons(nprim)
+      logical,  intent(in)    :: guarded
+      real(R8) :: rho, Rgas, temperature, consold(nprim), cons(nprim), cons_stage(nprim)
 
       consold(1:np) = prim2cons( primold(1:np) )
       cons   (1:np) = prim2cons( prim   (1:np) )
@@ -125,7 +128,8 @@ contains
         cons   (np+1:nprim) = prim   (np+1:nprim)
       endif
 
-      cons = RK_stage( irk, n_rk, cons, consold, residual )
+      cons_stage = cons
+      cons = RK_stage( irk, n_rk, cons_stage, consold, residual )
 
       ! Reuse current prim pressure/density for temperature guess (cheap)
       call co_rotot_Rtot( prim(1:nsc), rho, Rgas )
@@ -134,17 +138,19 @@ contains
       prim(1:np) = cons2prim( cons(1:np), temperature )
       if (nprim > np) prim(np+1:nprim) = cons(np+1:nprim)
 
+      if ( guarded ) call Halve_Coarse_Update( prim, cons, cons_stage, consold, residual, temperature, irk, n_rk )
       call check_and_fix_state( prim, b, i, j, k )
 
     end subroutine Update_State_Cons_IRS
 
-    ! Full compute+update without IRS
-    subroutine Compute_Cons_NoIRS( prim, primold, residual, dt, volume, irk, n_rk, b, i, j, k, strangcoeff )
+    ! Full compute+update without IRS (guarded: coarse level of a multigrid cycle)
+    subroutine Compute_Cons_NoIRS( prim, primold, residual, dt, volume, irk, n_rk, b, i, j, k, strangcoeff, guarded )
       implicit none
       real(R8), intent(inout) :: prim(nprim), residual(nprim)
       real(R8), intent(in)    :: primold(nprim), dt, volume, strangcoeff
       integer,  intent(in)    :: irk, n_rk, b, i, j, k
-      real(R8) :: rho, Rgas, temperature, consold(nprim), cons(nprim)
+      logical,  intent(in)    :: guarded
+      real(R8) :: rho, Rgas, temperature, consold(nprim), cons(nprim), cons_stage(nprim)
 
       residual = -residual / volume * dt * strangcoeff
 
@@ -155,7 +161,8 @@ contains
         cons   (np+1:nprim) = prim   (np+1:nprim)
       endif
 
-      cons = RK_stage( irk, n_rk, cons, consold, residual )
+      cons_stage = cons
+      cons = RK_stage( irk, n_rk, cons_stage, consold, residual )
 
       call co_rotot_Rtot( prim(1:nsc), rho, Rgas )
       temperature = prim(np) / ( rho * Rgas )
@@ -163,6 +170,7 @@ contains
       prim(1:np) = cons2prim( cons(1:np), temperature )
       if (nprim > np) prim(np+1:nprim) = cons(np+1:nprim)
 
+      if ( guarded ) call Halve_Coarse_Update( prim, cons, cons_stage, consold, residual, temperature, irk, n_rk )
       call Check_And_Fix_State( prim, b, i, j, k )
 
     end subroutine Compute_Cons_NoIRS

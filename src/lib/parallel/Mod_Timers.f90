@@ -1,5 +1,6 @@
 !>@brief Wall-clock instrumentation of the solver loop.
-!> Every rank accumulates the time spent in one `Explicit_Step`, the time
+!> Every rank accumulates the time spent in one `Explicit_Step` and in its
+!> multigrid cycle (`cycle` of `[MOSE-Multigrid]`), the time
 !> blocked on the exchanges between the ranks (the wait for their messages and
 !> the copy from the receive buffers, between `timer_comm_begin` and
 !> `timer_comm_end`) and the time blocked on collectives (between
@@ -41,6 +42,7 @@ module MOSE_Mod_Timers
   end type stats_type
 
   real(R8) :: t_iter_beg = 0.0_R8   !< start of the current iteration
+  real(R8) :: t_cycle_beg = 0.0_R8  !< start of the current multigrid cycle
   real(R8) :: t_comm_beg = 0.0_R8   !< start of the current exchange wait
   real(R8) :: t_sync_beg = 0.0_R8   !< start of the current collective
   real(R8) :: t_iter_acc = 0.0_R8   !< iteration time since the last report
@@ -61,6 +63,7 @@ module MOSE_Mod_Timers
   public :: timer_wtime
   public :: timer_run_begin, timer_summary
   public :: timer_iter_begin, timer_iter_end
+  public :: timer_cycle_begin, timer_cycle_end
   public :: timer_comm_begin, timer_comm_end
   public :: timer_sync_begin, timer_sync_end
   public :: timer_xstart_enable, timer_xstart_begin, timer_xstart_end
@@ -114,6 +117,23 @@ contains
     n_iter_acc = n_iter_acc + 1
     n_run      = n_run + 1
   end subroutine timer_iter_end
+
+
+  !> Open the multigrid-cycle timer, after `Explicit_Step`. Call outside any
+  !> OpenMP parallel region.
+  subroutine timer_cycle_begin()
+    t_cycle_beg = timer_wtime()
+  end subroutine timer_cycle_begin
+
+
+  !> Close the multigrid-cycle timer and add its time to the iteration time,
+  !> without counting one more iteration.
+  subroutine timer_cycle_end()
+    real(R8) :: dt
+    dt = timer_wtime() - t_cycle_beg
+    t_iter_acc = t_iter_acc + dt
+    t_run_iter = t_run_iter + dt
+  end subroutine timer_cycle_end
 
 
   !> Open the exchange-wait timer. Call from a single-threaded region only.

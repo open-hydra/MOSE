@@ -594,11 +594,94 @@ levels; each coarse level runs its own number of iterations, and its
 solution is prolongated to the next finer level, down to level 1. The
 residual criterion of a steady run and the final time also end a level. The
 iteration count starts again from zero on each level, and each level advances
-its own time from the initial time of the run (zero in a new run).
+its own time from the initial time of the run (zero in a new run). With
+`cycle = none`, the default, there are no V or W cycles, no coarse-grid
+correction and no dual time stepping: the coarse levels only provide the
+starting solution of the finer ones. With `cycle = v` or `w` the levels below
+the one being computed form a multigrid cycle (below).
 
-There are
-no V or W cycles, no coarse-grid correction and no dual time stepping: the
-coarse levels only provide the starting solution of the finer ones.
+### Multigrid cycle (FAS)
+
+With `cycle = v` or `w` of `[MOSE-Multigrid]` the levels below the one being
+computed run a cycle of the Full Approximation Scheme (FAS) of Brandt [3], in the
+form Jameson gave it for the Euler equations [4]. The cycle runs after the first
+`pre-iter` iterations of every group of `pre-iter + post-iter` iterations of the
+level being computed: with the defaults, 2 and 0, after iterations 2, 4, 6, ...
+(with 1 and 0, after every iteration: the scheme of Jameson), from the iteration
+`cycle-start` of the level (0 by default). Then, on the level $h$ and on each
+coarser level $H$ in turn:
+
+1. **Restriction** of the residual of level $h$,
+   $\mathbf{R}_h(\mathbf{U}_h) + \mathbf{P}_h$ ($\mathbf{P}_h = 0$ on the level
+   being computed), and of its state, as at set-up
+   ([Restriction](#restriction-fine-coarse)): $\mathbf{U}_H^{(0)}$.
+2. **Forcing term** of level $H$,
+
+    $$
+    \mathbf{P}_H = d_r \sum_{\text{fine}\,\in\,\text{coarse}}
+    \left(\mathbf{R}_h + \mathbf{P}_h\right) - \mathbf{R}_H\!\left(\mathbf{U}_H^{(0)}\right)
+    $$
+
+    with $d_r$ = `damp-restriction` (1 by default); the residuals are
+    integrated over the cells, so the fine ones are summed.
+3. **Pre-smoothing**: `pre-iter` steps of level $H$, `coarse-iter` on the
+   coarsest level (1 by default), with the forcing term added to the residual
+   of every stage.
+4. **Coarser levels**: unless $H$ is the coarsest level, steps 1 to 6 on
+   level $H$ and the next coarser one, once with `v`, twice with `w` (the
+   coarsest level once, from the level above it).
+5. **Post-smoothing**: `post-iter` steps of level $H$ (0 by default; none on
+   the coarsest level).
+6. **Correction**: $\Delta\mathbf{U}_H = \mathbf{U}_H - \mathbf{U}_H^{(0)}$,
+   interpolated to level $h$ with the weights of the
+   [Prolongation](#prolongation-coarse-fine) and multiplied by $d_p$ =
+   `damp-prolongation` (0.5 by default), is added to the conservative
+   variables of level $h$.
+
+When the level being computed has converged, $\mathbf{R}_h = 0$ and
+$\mathbf{U}_H^{(0)}$ is a steady state of every coarse level: the correction is
+zero, and the cycle changes the path to the steady state, not the steady state.
+In a closed domain (no inflow or outflow) the steady states form a family set by
+the totals of the conserved variables, which the prolongation of the correction
+does not conserve: the cycle and the grid sequencing can end on two members of it.
+
+**On the coarse levels** of a cycle:
+
+- the reconstruction is of first order, whatever that of the level being
+  computed;
+- the RANS, soot and passive-scalar equations keep the restricted values. With
+  `cycle-turbulence = .true.` the equations of a one- or two-equation RANS
+  model are solved too, `cycle-turbulence-start` iterations after
+  `cycle-start`, and a fine cell takes the correction of its turbulence
+  variables first, halved until they stay positive;
+- the local time step takes the `cfl` and `vnn` of the input, times the fraction
+  of `cfl-rise-threshold` that the level being computed has reached;
+- a stage update or a correction whose state is not physical (not finite,
+  density or pressure not positive, temperature out of the thermodynamic tables)
+  is halved, down to $2^{-10}$ of it, and then dropped, instead of stopping the
+  run (with `integration-variables = prim` or `prec` the run stops on a stage
+  update); the end of the run prints how many were;
+- the iteration count, the residual and the outputs do not change: they are
+  those of the level being computed, whose iteration time includes the cycle.
+
+**Implicit residual smoothing.** Residual smoothing slows a mode of wavenumber
+$k$ by $1 + 4\varepsilon\sin^2(k\Delta x/2)$: used to raise the time step, as
+Jameson and Baker introduced it [12], it keeps the damping of the high-frequency
+modes that the smoothing steps must give a cycle; at the CFL number of the
+explicit scheme it removes that damping. With the cycle, run without it first.
+
+**Limits.** The cycle serves steady runs without chemistry: MOSE stops at
+set-up with `time-accurate = true`, with finite-rate or equilibrium chemistry
+(integrated apart from the residual, [Strang splitting](#strang-operator-splitting),
+so the forcing term would not hold it), with `levels = 1` and with
+`pre-iter + post-iter` below 1. Its arrays are allocated at set-up, so
+`cycle = v` or `w` read during a run started without it is an error of the
+reading; `cycle-turbulence = .true.` with a Reynolds-stress model (SSG/LRR)
+stops the run too. With strong shocks the cycle can stop on a non-physical
+state where the grid sequencing runs.
+
+The gains and costs measured on the steady tests, the choice of the defaults and
+the settings for each kind of flow are in [Multigrid Cycles (FAS)](../vv/fas-cycles.md).
 
 ---
 
@@ -636,5 +719,7 @@ The input keys are in the [User Guide](../user/input.md#multirate-time-stepping)
 [7] M. H. Carpenter, D. Gottlieb, S. Abarbanel, W.-S. Don, "The theoretical accuracy of Runge–Kutta time discretizations for the initial boundary value problem: a study of the boundary error," *SIAM J. Sci. Comput.*, 16(6), 1241–1252, 1995, doi:10.1137/0916072 (ICASE Report 93-83, 1993).
 
 [8] W. Hundsdorfer, *Numerical Solution of Advection–Diffusion–Reaction Equations*, lecture notes, Thomas Stieltjes Institute, CWI, Amsterdam, 2000.
+
+[12] A. Jameson, T. J. Baker, "Solution of the Euler equations for complex configurations," AIAA Paper 83-1929, 1983.
 
 [19] J. M. Weiss, W. A. Smith, "Preconditioning applied to variable and constant density flows," *AIAA J.*, 33(11), 2050–2057, 1995, doi:10.2514/3.12946.

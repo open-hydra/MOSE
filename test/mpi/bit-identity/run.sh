@@ -16,6 +16,14 @@
 #                 probe in block 4; Spalart-Allmaras, steady, local time step,
 #                 implicit residual smoothing (irs-beta = 0.5), 30 iterations;
 #    sst-steady   the same with SST;
+#    sa-fas       sa-steady on three grid levels (16 x 16 x 4, 8 x 8 x 2 and
+#                 4 x 4 x 1 cells per block) with the FAS cycle: 5 iterations
+#                 on each coarse level, then 30 on the finest with cycle = w,
+#                 pre-iter = 2, post-iter = 1, coarse-iter = 2, so that every
+#                 transfer of the cycle (restriction, forcing term, coarse
+#                 smoothing with the forcing, correction) runs across the
+#                 faces between ranks;
+#    sst-fas      the same with SST and cycle = v;
 #    sa-unsteady  the same box, Spalart-Allmaras, time-accurate, RK3, 20 steps;
 #    star3        the mesh of ViscousLinearPatch with a point shared by three
 #                 blocks, star5 the one with a point shared by five blocks
@@ -80,9 +88,12 @@ write_ini() {
       return ;;
   esac
   local model=SA accurate=false iters=30 irs=0.5
+  local mg=''
   case $1 in
     sst-steady)  model=SST ;;
     sa-unsteady) accurate=true; iters=20; irs=0.0 ;;
+    sa-fas)      mg=w ;;
+    sst-fas)     model=SST; mg=v ;;
   esac
   printf '%s\n' '[MOSE-Parameters]' "iter-threshold = $iters" 'res-threshold = 1e-300' 'newrun = true' '' \
     '[MOSE-Physics]' 'equations = navier-stokes' "turbulence = $model" '' \
@@ -93,6 +104,9 @@ write_ini() {
     'ini-diter = 1000000000' '' \
     '[MOSE-Probes]' 'probe1 = p1' '' '[p1]' 'variables = rho(1) u v w p' 'diter = 1' \
     'index-position = 4 9 9 2' > input.ini
+  [[ -n $mg ]] && printf '%s\n' '' '[MOSE-Multigrid]' 'levels = 3' "level1-iter = $iters" 'level2-iter = 5' \
+    'level3-iter = 5' "cycle = $mg" 'pre-iter = 2' 'post-iter = 1' 'coarse-iter = 2' >> input.ini
+  return 0
 }
 
 # make_inputs <case>: INPUT/ic.tec and INPUT/bc.txt of the case
@@ -100,6 +114,8 @@ make_inputs() {
   case $1 in
     sa-steady|sa-unsteady) python3 -B make_case.py SA > /dev/null ;;
     sst-steady)            python3 -B make_case.py SST > /dev/null ;;
+    sa-fas)                python3 -B make_case.py SA --levels 3 > /dev/null ;;
+    sst-fas)               python3 -B make_case.py SST --levels 3 > /dev/null ;;
     star3|star5)           python3 -B "$PATCH" case "$1" mom > /dev/null && cp INPUT/bc-ns.txt INPUT/bc.txt ;;
   esac
 }
@@ -143,7 +159,8 @@ same() {
 endlines() {
   local c="$1" b="$2" p l1 lb shown=""
   local zero='flux evaluations: 0,|extrapolation cut: 0, with the 302 temperature at T_w/2: 0$|\(set to the floor\): 0$'
-  for p in '400 faces with gas entering' 'Ghost cells of walls and 400 faces' 'Turbulence variables below zero'; do
+  for p in '400 faces with gas entering' 'Ghost cells of walls and 400 faces' 'Turbulence variables below zero' \
+           'Multigrid corrections halved' 'Multigrid coarse smoothing updates halved'; do
     l1=$(grep -a "$p" "runs/$c/solve_1x1.log")
     lb=$(grep -a "$p" "runs/$c/solve_$b.log")
     [[ $(printf '%s' "$l1" | grep -c '') -le 1 && $l1 == "$lb" ]] \
@@ -171,7 +188,7 @@ lines() {
 
 status=0
 serial=0
-for c in sa-steady sst-steady sa-unsteady star3 star5; do
+for c in sa-steady sst-steady sa-unsteady star3 star5 sa-fas sst-fas; do
   make_inputs "$c" || fail "case generation ($c)"
   write_ini "$c"
   run "$c" 1 1
@@ -192,8 +209,8 @@ if [[ $status -ne 0 ]]; then
   exit 1
 fi
 if [[ $serial -eq 1 ]]; then
-  echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks: 1x1, 2x1 and 4x1 bit-identical, with the same 400 lines and end lines; 1x4 and 2x2 not run: MOSE built without OpenMP"
+  echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks, SA and SST with the FAS cycle: 1x1, 2x1 and 4x1 bit-identical, with the same 400 lines and end lines; 1x4 and 2x2 not run: MOSE built without OpenMP"
 else
-  echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks: 1x1, 1x4, 2x1, 4x1 and 2x2 bit-identical, with the same 400 lines and end lines"
+  echo "MPIBitIdentity: ok — SA and SST steady with walls and IRS, SA time-accurate, points shared by 3 and 5 blocks, SA and SST with the FAS cycle: 1x1, 1x4, 2x1, 4x1 and 2x2 bit-identical, with the same 400 lines and end lines"
 fi
 exit 0
