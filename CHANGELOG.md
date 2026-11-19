@@ -84,6 +84,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Soot (under development): the thermophoretic flux of the model without the species `C(gr)` read out of bounds and now
   acts on its own variables; it takes the molecular viscosity only. A run whose species lack `C2H2` or `O2` stops at the start.
 - `prec`: the update no longer clamps Ur at 1e-3 a; runs with Ur below it (small `eps-min`) diverged.
+- Finite-rate chemistry: a step that the integrator reports as a success but that returns a non-physical state stops the run.
 - Turbulence models:
   - SA conservative term −(1/σ)(ν + ν̃)∇ρ·∇ν̃.
   - Point-implicit form in steady runs (the steady state no longer depends on Δt), also with `k-energy-coupling`.

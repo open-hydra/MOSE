@@ -18,11 +18,22 @@ module MOSE_Lib_Chemistry
   ! smallest block, k, j, i, so that the record does not depend on the number of threads nor on the order in which the
   ! dynamic schedule gives them the cells; with the state of the cell before the chemistry step and the step. The record is
   ! never reset: a failure ends the run in the step that records it (Explicit_Step)
+  ! A step that the integrator reports as a success but whose state is not physical (Nonphysical_Reason) is recorded as a
+  ! failure too, with nonphysical set and the reason; the record keeps the partial densities of the cell before the step,
+  ! so that the failure can be replayed outside MOSE
   type :: chemistry_failure_t
     logical  :: found = .false.
     integer  :: b = 0, i = 0, j = 0, k = 0, code = 0
     real(R8) :: T = 0.0_R8, p = 0.0_R8, rho = 0.0_R8, dt = 0.0_R8
+    logical  :: nonphysical = .false.
+    character(len=96) :: reason = ''
+    real(R8), allocatable :: rho_s(:)
   end type chemistry_failure_t
+
+  ! A partial density below -nonphysical_rho_s times the density after a step is a state that the chemistry cannot reach:
+  ! a physical step undershoots zero by round-off and tolerance only (5e-5 of the density at most on the 225608 cells of
+  ! the coarse grid of lumen/simple3D_2 with sdirk4b, where H-radau5 returned states below -0.3)
+  real(R8), parameter :: nonphysical_rho_s = 1.0e-2_R8
   type(chemistry_failure_t) :: chem_failure
 
   ! The smallest number of a block with a failed integration on any rank, huge(1.0_R8) when there is none
@@ -145,14 +156,15 @@ contains
     integer, intent(in) :: block_id   ! the number of the block, for the record of a failed integration
     ! Local
     integer :: lz
-    real(R8) :: Z(nsc+1), yeq(nsc)
+    real(R8) :: Z(nsc+1), Z_in(nsc+1), yeq(nsc)
     real(R8) :: dtchem, t0, rho, temp, teq
+    character(len=96) :: reason
     real(R8) :: e_old, T_new, e_new, cv_new, departure
     integer :: i, j, k, s, err, iter
 
     lz = nsc + 1 ! Z vector length: number of species + temperature.
 
-    !$omp do collapse (3) schedule (dynamic, 64) private(i,j,k,s,Z,dtchem,t0,err,rho,temp)
+    !$omp do collapse (3) schedule (dynamic, 64) private(i,j,k,s,Z,Z_in,dtchem,t0,err,rho,temp,reason)
     do k = 1, n(3); do j = 1, n(2); do i = 1, n(1)
 
       rho = sum( P(1:nsc,i,j,k) )
@@ -162,6 +174,7 @@ contains
       temp     = Z(lz)
       dtchem   = dt(i,j,k)
       t0 = 0d0
+      Z_in     = Z
 
       ! ODE integration according to selected method.  IJAC_chem is 0 unless
       ! an analytical Jacobian was both asked for and available.
@@ -171,7 +184,16 @@ contains
       ! stopped, or where it started. The cell keeps its state and the failure is recorded; the run stops after the chemistry
       ! of the step, on every thread and rank (Explicit_Step), before any flux reads the cell
       if ( Integration_Failed(err) ) then
-        call Record_Failure ( block_id, i, j, k, err, temp, P(np,i,j,k), rho, dt(i,j,k) )
+        call Record_Failure ( block_id, i, j, k, err, temp, P(np,i,j,k), rho, dt(i,j,k), Z_in(1:nsc) )
+        cycle
+      end if
+
+      ! An integration that the integrator reports as a success can still return a state that is not physical (H-radau5
+      ! does, with temperatures of 3e4 K and partial densities of -11 kg/m3): the same as a failure, before the clipping
+      ! below would hide it and the fluxes read it
+      reason = Nonphysical_Reason ( Z, rho )
+      if ( len_trim(reason) > 0 ) then
+        call Record_Failure ( block_id, i, j, k, err, temp, P(np,i,j,k), rho, dt(i,j,k), Z_in(1:nsc), reason )
         cycle
       end if
 
@@ -255,18 +277,60 @@ contains
 
   !> Records a failed integration (inside the OpenMP loop of Chemistry_Newstate: one thread at a time), keeping, among those
   !> of the step on this rank, the one of the smallest block, k, j, i
-  subroutine Record_Failure ( block_id, i, j, k, code, T, p, rho, dt )
+  subroutine Record_Failure ( block_id, i, j, k, code, T, p, rho, dt, rho_s, reason )
     implicit none
     integer,  intent(in) :: block_id, i, j, k, code
     real(R8), intent(in) :: T, p, rho, dt   ! the state of the cell before the chemistry step, and the step
+    real(R8), intent(in) :: rho_s(:)        ! the partial densities of the cell before the chemistry step
+    character(len=*), intent(in), optional :: reason   ! a success of the integrator with a state that is not physical
 
     !$omp critical (MOSE_chemistry_failure)
     if ( .not. chem_failure%found .or. Comes_Before([block_id, k, j, i], &
-                                                    [chem_failure%b, chem_failure%k, chem_failure%j, chem_failure%i]) ) &
-      chem_failure = chemistry_failure_t(.true., block_id, i, j, k, code, T, p, rho, dt)
+                                                    [chem_failure%b, chem_failure%k, chem_failure%j, chem_failure%i]) ) then
+      chem_failure%found = .true.
+      chem_failure%b = block_id; chem_failure%i = i; chem_failure%j = j; chem_failure%k = k
+      chem_failure%code = code
+      chem_failure%T = T; chem_failure%p = p; chem_failure%rho = rho; chem_failure%dt = dt
+      chem_failure%rho_s = rho_s
+      chem_failure%nonphysical = present(reason)
+      chem_failure%reason = ''
+      if ( present(reason) ) chem_failure%reason = reason
+    end if
     !$omp end critical (MOSE_chemistry_failure)
 
   end subroutine Record_Failure
+
+
+  !> Why the state Z = (partial densities, temperature) that the integrator returns at the end of a step is not physical,
+  !> blank when it is: a value that is not finite, a temperature outside the thermodynamic and rate tables (where the source
+  !> terms of FLINT are not defined, rhs_native), or a partial density below -nonphysical_rho_s times the density rho
+  function Nonphysical_Reason ( Z, rho ) result(reason)
+    use MOSE_Global_m,            only: nsc
+    use MOSE_Finite_m,            only: Not_Finite
+    use FLINT_Lib_Thermodynamic,  only: Tmin, Tmax, species_names
+    use FLINT_Lib_Chemistry_data, only: T_tab_min, T_tab_max
+    implicit none
+    real(R8), intent(in) :: Z(:)
+    real(R8), intent(in) :: rho
+    character(len=96)    :: reason
+    integer :: s, lz
+
+    reason = ''
+    lz = nsc + 1
+    if ( any(Not_Finite(Z(1:lz))) ) then
+      reason = 'a value that is not finite'
+      return
+    end if
+    if ( Z(lz) < real(max(Tmin, T_tab_min), R8) .or. Z(lz) >= real(min(Tmax, T_tab_max), R8) ) then
+      reason = 'T = '//Real_Text(Z(lz))//' K, outside the tables ('//Integer_Text(max(Tmin, T_tab_min))//' to '// &
+               Integer_Text(min(Tmax, T_tab_max))//' K)'
+      return
+    end if
+    s = minloc(Z(1:nsc), 1)
+    if ( Z(s) < -nonphysical_rho_s * rho ) &
+      reason = 'rho_'//trim(species_names(s))//' = '//Real_Text(Z(s))//' kg/m3, at T = '//Real_Text(Z(lz))//' K'
+
+  end function Nonphysical_Reason
 
 
   !> a before c in the lexicographic order
@@ -317,21 +381,39 @@ contains
   !> stops with mpi_stop_all, exit code 1, and no solution of the step is written.
   subroutine Chemistry_Failure_Stop ( level, levels )
     use MOSE_Mod_MPI, only: mpi_size_, mpi_rank_, mpi_stop_all
+    use FLINT_Lib_Thermodynamic, only: species_names
     implicit none
     integer, intent(in) :: level, levels   ! the grid level of the step and the number of grid levels of the run
     character(len=64) :: place, rank
+    character(len=:), allocatable :: what, line
+    integer :: s
 
     if ( chem_failure%found .and. real(chem_failure%b, R8) == chem_failed_block ) then
       write(place,'(A,I0)') 'block ', chem_failure%b
       if ( levels > 1 ) write(place,'(A,I0,A,I0)') 'block ', chem_failure%b, ' of grid level ', level
       rank = ''
       if ( mpi_size_ > 1 ) write(rank,'(A,I0,A)') ' (rank ', mpi_rank_, ')'
-      write(*,'(A)') ' [ERROR] Chemistry: the integrator '//trim(chem_ode_solver)//' failed (return code '// &
-        Integer_Text(chem_failure%code)//': '//Code_Meaning(chem_failure%code)//') in '//trim(place)// &
+      if ( chem_failure%nonphysical ) then
+        what = ' returned a state that is not physical ('//trim(chem_failure%reason)//') although it reported success' // &
+               ' (return code '//Integer_Text(chem_failure%code)//')'
+      else
+        what = ' failed (return code '//Integer_Text(chem_failure%code)//': '//Code_Meaning(chem_failure%code)//')'
+      end if
+      write(*,'(A)') ' [ERROR] Chemistry: the integrator '//trim(chem_ode_solver)//what//' in '//trim(place)// &
         ', cell i, j, k = '//Integer_Text(chem_failure%i)//', '//Integer_Text(chem_failure%j)//', '// &
         Integer_Text(chem_failure%k)//', over a chemistry step of '//Real_Text(chem_failure%dt)//' s from T = '// &
         Real_Text(chem_failure%T)//' K, p = '//Real_Text(chem_failure%p)//' Pa, rho = '//Real_Text(chem_failure%rho)// &
         ' kg/m3'//trim(rank)
+      ! The partial densities before the step, in full precision: with T they are the state that the integrator was given
+      ! (Z = rho_s, T), which replays the failure outside MOSE
+      if ( allocated(chem_failure%rho_s) ) then
+        line = ' [ERROR]   partial densities before the step (kg/m3):'
+        do s = 1, size(chem_failure%rho_s)
+          line = line//' '//trim(species_names(s))//' = '//Real_Text_Full(chem_failure%rho_s(s))
+        end do
+        write(*,'(A)') line
+        write(*,'(A)') ' [ERROR]   temperature before the step (K): '//Real_Text_Full(chem_failure%T)
+      end if
     end if
     call mpi_stop_all ( 'chemistry integration error (see above)' )
 
@@ -450,6 +532,19 @@ contains
     text = trim(adjustl(buffer))
 
   end function Real_Text
+
+
+  !> A real with every digit of its double precision (17 significant digits), to replay a state exactly
+  function Real_Text_Full ( x ) result(text)
+    implicit none
+    real(R8), intent(in) :: x
+    character(len=:), allocatable :: text
+    character(len=32) :: buffer
+
+    write(buffer,'(ES24.16E3)') x
+    text = trim(adjustl(buffer))
+
+  end function Real_Text_Full
 
 
 end module MOSE_Lib_Chemistry
