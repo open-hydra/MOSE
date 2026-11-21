@@ -34,8 +34,8 @@ contains
     ! Local
     integer  :: f, lower, upper, i, ii, b
     integer  :: error
-    integer  :: Bm, Im, Jm, Km, Fm, Bs, Fs
-    real(R8) :: T0, g, pstat, rhot(nsc), visct(1:nrans)
+    integer  :: Bm, Im, Jm, Km, Fm, mman
+    real(R8) :: T0, g, mdot_face, rhot(nsc), visct(1:nrans)
     real(R8) :: r_fc(3)                              ! Face centre [m] (stationary-wall BCs)
     logical  :: RSM, soot_enabled
     logical  :: open_stress                          ! the turbulent stress acts on the open boundaries
@@ -55,6 +55,9 @@ contains
     ! Connection faces (101, 201): one flux per face, for the two cells
     call Connection_Fluxes ( domain, Sc, Sct, Prt, Prl, soot_enabled )
 
+    ! Manifolds (501): the state the faces of each group take at this stage, from the cells of its faces on every rank
+    call Manifold_Gather ( domain )
+
     ! BC fluxes are computed block by block and, within a block, face by face, over the
     ! records of the blocks this rank owns only (lists built once by build_local_bc_index):
     ! no rank scans the records of the whole domain. The records of one face of one block
@@ -68,8 +71,8 @@ contains
         lower = domain % local_bf_first(b,f)
         upper = lower + domain % local_bf_count(b,f) - 1
 
-        !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, rhot, visct, &
-        !$omp   T0, g, pstat, r_fc, ablating, Tw_surface, dR)
+        !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, error, mman, rhot, visct, &
+        !$omp   T0, g, mdot_face, r_fc, ablating, Tw_surface, dR)
         do ii = lower, upper
           i  = domain % local_bf_idx(ii)
           Bm = domain % bc(i) % b
@@ -243,10 +246,27 @@ contains
                 call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
               endif
 
-            case (501) ! manifold - mean flow connection
-              Bs = domain % bc(i) % bs
-              Fs = domain % bc(i) % fs
-              call BC_Manifold ( domain % blk(Bm), Fm, domain % blk(Bs), Fs, T0, g, pstat )
+            case (501) ! manifold: the faces of a group joined by a lumped plenum, in the state of the group (Manifold_Gather)
+              mman = domain % bc(i) % man_idx
+              if ( domain % bc(i) % man_role == MANIFOLD_OUTLET ) then
+                ! The gas leaves at the static pressure that the inlet side gives the group (406; a cell whose gas moves
+                ! inward is a slip wall for the stage)
+                call BC_Outflow ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), domain % man(mman) % p_out, &
+                                  domain % bc(i) % rel_fac, mdot_face, error )
+                if (error == 1) call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+              else if ( domain % man(mman) % active ) then
+                ! The gas comes back with the mass flux, total temperature, species and turbulence of the group, along
+                ! the face normal (403)
+                call BC_Inlet_MassFlux_T0 ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
+                                             domain % man(mman) % T0_in, domain % man(mman) % g_in, &
+                                             domain % bc(i) % rel_fac, huge(1.0_R8), huge(1.0_R8), &
+                                             domain % man(mman) % ci_in(nrans+1:nrans+nsc), &
+                                             domain % man(mman) % ci_in(1:nrans), error )
+                if (error == 1) call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+              else
+                ! Nothing leaves through the outlet faces of the group yet: a slip wall
+                call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
+              end if
 
             case (502) ! SRM grain combustion
               ! Like the GSI walls below, a burning grain lays down the complete boundary
@@ -338,7 +358,7 @@ contains
           ! k-energy-coupling) of the momentum and energy equations
           if ( open_stress ) then
             select case ( domain % bc(i) % type )
-              case (400:408, 410, 420)
+              case (400:408, 410, 420, 501)
                 call BC_Open_Turbulent_Stress ( Im, Jm, Km, Fm, domain % blk(Bm) )
             end select
           end if

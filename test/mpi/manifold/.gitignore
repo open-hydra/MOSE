@@ -1,0 +1,5 @@
+bin/
+OUTPUT/
+INPUT/
+runs/
+input.ini

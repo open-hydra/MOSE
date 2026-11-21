@@ -9,6 +9,7 @@ BilinearDistance             light   0.0
 BoundaryConditions.BCInput   light   4.6
 BoundaryConditions.Extrapolation400 light   0.9
 BoundaryConditions.Inlets    light   1.6
+BoundaryConditions.Manifold  light   -
 BoundaryConditions.Nozzle    light   1.2
 BoundaryConditions.RotatingFrame light   0.5
 BoundaryConditions.SupersonicInlet light   1.0
@@ -74,6 +75,7 @@ MPIBitIdentity               medium  -
 MPIBoundaryRecords           medium  -
 MPIConnectionFlux            medium  -
 MPIConnectionOrder           medium  -
+MPIManifold                  medium  -
 MPIDecompositionMap          medium  -
 MPIExitCodes                 medium  -
 MPIRestart                   medium  -

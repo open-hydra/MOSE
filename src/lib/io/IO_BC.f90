@@ -144,9 +144,6 @@ contains
       ! This list must stay in step with the property lines actually consumed by
       ! Read_BC below: if a type reads one there but is missing here, the scan
       ! mistakes its property line for a record and the whole file is rejected.
-      ! 501 keeps its property line in this list, as the boundary-condition builder of ATLAS writes it, although
-      ! Read_BCfile stops on its record before reading it (Unapplied_Type): a file of that builder reaches that stop, not
-      ! the error of the count.
       ! IDs with ONE property line:
       !   101/103 = connection | 201 = periodic | 301,302 = wall | 401-410,420 = inlet/outlet
       !   501 = manifold | 502 = srm | 503-506 = gas-surface interaction
@@ -543,12 +540,33 @@ contains
           end if
 
         ! ─────────────────────────────────────────────────────────────────────
-        ! Types that MOSE does not apply: 409 (a forced outlet) and 501 (a manifold). No branch of the boundary fluxes
-        ! applies them, so the face would get no flux: the run stops here, at the line of the record, before its property
-        ! line (Unapplied_Type). Check_BC counts the property line of 501, as the boundary-condition builder of ATLAS
-        ! writes it, so such a file reaches this stop.
-        case(409, 501)
+        ! A type that MOSE does not apply: 409 (a forced outlet). No branch of the boundary fluxes applies it, so the face
+        ! would get no flux: the run stops here, at the line of the record (Unapplied_Type).
+        case(409)
           call Unapplied_Type ( i, bc(i)%type, nline )
+
+        ! ─────────────────────────────────────────────────────────────────────
+        ! Manifold (501): the faces of a group joined by a lumped plenum (Lib_BC_Fluxes_Manifold)
+        ! Second line: gid, role, K, rel_fac, mdot_ratio, p0_ratio, dh0, as the boundary-condition builder of ATLAS writes
+        !   them: the group id and the role of the face (1 outlet: the gas leaves the domain there; 2 inlet: it comes
+        !   back), two integers; the loss K on the dynamic head of the outlet faces; the relaxation factor of the faces;
+        !   the mass flow, total pressure and total enthalpy of the inlet faces against those of the outlet faces. The
+        !   groups (the same parameters on every record, an outlet and an inlet face in each) are checked once every
+        !   record of the level is read (Manifold_Setup).
+        case(501)
+          if (level == 1) nio = nio + 1
+          bc(i)%man_gid = IEMPTY ; bc(i)%man_role = IEMPTY
+          bc(i)%man_K = EMPTY ; bc(i)%rel_fac = EMPTY ; bc(i)%man_mratio = EMPTY ; bc(i)%man_p0ratio = EMPTY
+          bc(i)%man_dh0 = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%man_gid, bc(i)%man_role, bc(i)%man_K, bc(i)%rel_fac, &
+                                                       bc(i)%man_mratio, bc(i)%man_p0ratio, bc(i)%man_dh0
+          if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, [ bc(i)%man_gid, bc(i)%man_role ], 'gid role' )
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%man_K, bc(i)%rel_fac, bc(i)%man_mratio, &
+                                             bc(i)%man_p0ratio, bc(i)%man_dh0 ], 'K rel_fac mdot_ratio p0_ratio dh0' )
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%man_K, bc(i)%rel_fac, bc(i)%man_mratio, &
+                                        bc(i)%man_p0ratio, bc(i)%man_dh0 ], 'K rel_fac mdot_ratio p0_ratio dh0' )
+          if ( ios == 0 ) call Need_Manifold ( i, nline, bc(i) )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! SRM grain boundary
@@ -1123,6 +1141,46 @@ contains
   !   negative value on a face 1, 3 or 5, stops the run. On a face 2, 4 or 6 a negative value is taken as its
   !   magnitude: it is the component of a gas that enters along the face normal of the solver, which points toward
   !   growing index, out of the domain on those faces. The flux routines take -BC_Sign |v| along that normal.
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Need_Manifold: the values of a manifold record (501), record n at line nline: the group id from 1, the role 1 (outlet)
+  !   or 2 (inlet), K >= 0, 0 < rel_fac <= 1, mdot_ratio > 0 and p0_ratio > 0 (dh0 takes any value). The groups
+  !   themselves -- the same parameters on every record, an outlet and an inlet face in each -- are checked once every
+  !   record of the level is read (Manifold_Setup, Lib_BC_Fluxes_Manifold).
+  subroutine Need_Manifold ( n, nline, bc )
+    use MOSE_Advanced_Types_m, only: MOSE_bc_type
+    use MOSE_Mod_MPI,          only: mpi_stop_all
+    implicit none
+    integer,            intent(in) :: n, nline
+    type(MOSE_bc_type), intent(in) :: bc
+    ! Local
+    character(len=400) :: msg
+    character(len=120) :: head
+
+    write(head,'(3A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type 501):'
+    if ( bc%man_gid < 1 ) then
+      write(msg,'(A,I0,A)') trim(head)//' the group id is ', bc%man_gid, '; the ids of the manifolds start at 1'
+    else if ( bc%man_role /= 1 .and. bc%man_role /= 2 ) then
+      write(msg,'(A,I0,A)') trim(head)//' the role is ', bc%man_role, &
+        '; it is 1 (outlet: the gas leaves the domain through the face) or 2 (inlet: it comes back)'
+    else if ( bc%man_K < 0d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' K = ', bc%man_K, &
+        ' is negative; the loss on the dynamic head of the outlet faces is 0 or positive'
+    else if ( bc%rel_fac <= 0d0 .or. bc%rel_fac > 1d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' rel_fac = ', bc%rel_fac, ' is outside (0, 1]'
+    else if ( bc%man_mratio <= 0d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' mdot_ratio = ', bc%man_mratio, &
+        ' is not positive; it is the mass flow of the inlet faces over that of the outlet faces'
+    else if ( bc%man_p0ratio <= 0d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' p0_ratio = ', bc%man_p0ratio, &
+        ' is not positive; it is the total pressure of the inlet faces over that of the outlet faces'
+    else
+      return
+    end if
+    call mpi_stop_all ( trim(msg) )
+
+  end subroutine Need_Manifold
+
+
   subroutine Need_Inward ( n, btype, nline, face, v, name )
     use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
@@ -1446,9 +1504,8 @@ contains
   end subroutine Load_Pyrolysis_Tables
   !─────────────────────────────────────────────────────────────────────────────
   ! Unapplied_Type: stop the run on record n, of type btype, whose record line is line nline of the boundary file: a type
-  !   that MOSE does not apply, 409 (a forced outlet) or 501 (a manifold), whose face would get no flux (for another btype
-  !   the message names no model). Every rank reads every record of the file, so every rank stops on the same record
-  !   (mpi_stop_all).
+  !   that MOSE does not apply, 409 (a forced outlet), whose face would get no flux (for another btype the message names
+  !   no model). Every rank reads every record of the file, so every rank stops on the same record (mpi_stop_all).
   subroutine Unapplied_Type ( n, btype, nline )
     use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none
@@ -1462,9 +1519,6 @@ contains
     case ( 409 )
       what   = 'a forced outlet'
       advice = 'give the face an outlet type (406, or 400)'
-    case ( 501 )
-      what   = 'a manifold'
-      advice = 'join faces that match cell by cell with a block connection (101), or give the face an inlet or outlet type'
     case default
       what   = 'a type with no boundary flux'
       advice = 'give the face a type of the user guide (docs/user/boundary-conditions.md)'
