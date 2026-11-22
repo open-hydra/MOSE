@@ -443,8 +443,8 @@ contains
         if (ndir == 3) call Reject('3D rotational periodicity', &
           'rotational periodic boundaries (type 200) in 3D are not supported (the 2D axisymmetric wedge is)')
       case (0, 101, 201, 300, 301, 302, 400:408, 410, 420)
-        ! types with a boundary flux in BC_Flux_Record, or without one as in BC_Fluxes (0 null); 409 and 501 stop
-        ! every run at the reading of bc.txt (Unapplied_Type, IO_BC.f90), before this check
+        ! types with a boundary flux in BC_Flux_Record, or without one as in BC_Fluxes (0 null); 409 stops every run
+        ! at the reading of bc.txt (Unapplied_Type, IO_BC.f90), before this check; 501 (manifold) has none: refused below
       case default
         write(tname,'(I0)') t
         call Reject('boundary type', 'boundary type '//trim(tname)//' has no multirate boundary flux (the multirate '// &

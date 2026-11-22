@@ -26,13 +26,15 @@
 #  above one kelvin below the last row of the tables of the gas, where their
 #  interpolation ends (T0 = 10000 K, the last row of test/common/Air), with
 #  T0 and that temperature, 9999 K (make_case.py
-#  nozzle). A record of type 409 (a forced outlet), 501 (a manifold) or
-#  501 (a manifold), which MOSE does not apply, must
-#  stop the run at set-up with exit code 1, no solution and a message with
-#  the line of bc.txt, the record and the type, and not on the count of
-#  the records: the outlet of the duct (record 2) of type 409, without a
-#  property line, or 501, written as the boundary-condition builder of
-#  ATLAS writes it (make_case.py unapplied). A wall of surface reactions
+#  nozzle). A record of type 409 (a forced outlet), which MOSE does not
+#  apply, must stop the run at set-up with exit code 1, no solution and a
+#  message with the line of bc.txt, the record and the type, and not on the
+#  count of the records: the outlet of the duct (record 2) of type 409,
+#  without a property line. A manifold (501) on that outlet alone, written
+#  as the boundary-condition builder of ATLAS writes it (group 1, role 1,
+#  the parameters at their defaults), is a group with no inlet face: the run
+#  must stop at set-up alike, with the group and its counts of records
+#  (make_case.py unapplied). A wall of surface reactions
 #  (505) or of the pyrolysing ablator (506) on the outlet of the duct of
 #  the grain, whose gas has none of their eight species, must stop the run
 #  at set-up with exit code 1 and a message that names them; a 506 line
@@ -230,7 +232,7 @@ nozzle psup-zero "$order"
 nozzle choked "bc.txt line 2 \\(record 1, type 420\\): g = $val is above the choked mass flux G\\* = $val of T0, p0 and the gas: no nozzle exit has that mass flux"
 nozzle t0-above "bc.txt line 2 \\(record 1, type 420\\): T0 = $val is above 9999 K, one kelvin below the last row of the tables of the gas, where their interpolation ends: extend the tables to higher temperatures"
 
-echo "-- records of a type that MOSE does not apply: the outlet of the duct of type 409 and 501 --"
+echo "-- the outlet of the duct of type 409 (not applied) and of type 501 (a manifold with no inlet face) --"
 unapplied() {   # unapplied <type> <message>: the run must stop at set-up with exit code 1, the message, no solution, and not
                 # on the count of the records, which keeps the property line of the types 501 and 506
   python3 -B make_case.py unapplied "$1" || exit 1
@@ -247,7 +249,7 @@ unapplied() {   # unapplied <type> <message>: the run must stop at set-up with e
 }
 none='the face would get no flux'
 unapplied 409 "bc.txt line 3 (record 2, type 409): MOSE does not apply type 409 (a forced outlet): $none; give the face an outlet type (406, or 400)"
-unapplied 501 "bc.txt line 3 (record 2, type 501): MOSE does not apply type 501 (a manifold): $none; join faces that match cell by cell with a block connection (101), or give the face an inlet or outlet type"
+unapplied 501 "manifold group 1 of grid level 1 has 1 outlet and 0 inlet records: a manifold joins at least one face where the gas leaves the domain (role 1) and one where it comes back (role 2)"
 
 echo "-- an SRM grain boundary (502) with a RANS model --"
 python3 -B make_case.py srm || exit 1

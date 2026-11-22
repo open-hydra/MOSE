@@ -1,0 +1,6 @@
+bin/
+OUTPUT/
+INPUT/
+runs/
+input.ini
+__pycache__/

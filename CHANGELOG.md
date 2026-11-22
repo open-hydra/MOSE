@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Manifold boundary `501`: outlet and inlet faces of a group joined by a lumped plenum, on any ranks; tests
+  `BoundaryConditions.Manifold`, `MPIManifold`. See [Boundary Conditions](docs/user/boundary-conditions.md#manifold).
 - SSG/LRR-ω Reynolds-stress model (`turbulence = SSGLRR`, `-SD`, `-w2019`, `-w2019-SD`); tests `RSMDecay`, `FlatPlateTMR`.
 - Multirate (local time stepping) integrator for time-accurate runs, `[MOSE-Multirate]`; tests in `test/multirate`.
 - NASA TMR turbulent flat plate as a verification case (SA, SST, Wilcox 2006, SSG/LRR on three grids).

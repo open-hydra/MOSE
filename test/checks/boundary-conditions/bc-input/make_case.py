@@ -439,7 +439,8 @@ def write_refused(kind):
 def write_unapplied(kind):
     """The case of p0.dat with record 2, the outlet on face 2 at line 3 of INPUT/bc.txt, of type kind: 409 without a
     property line, as the reader counts it (the boundary-condition builder of ATLAS does not write 409); 501 as that
-    builder writes it, with the source block and face, 1 and 1, as two integers, each followed by a comma."""
+    builder writes it, the group id 1 and the role 1 (outlet) as two integers, then K, rel_fac, mdot_ratio, p0_ratio and
+    dh0 at their defaults: a manifold whose only face is an outlet, which MOSE refuses (no face takes the gas back)."""
     if kind not in UNAPPLIED:
         sys.exit(f"unknown type {kind}")
     write_case("p0.dat")
@@ -449,7 +450,8 @@ def write_unapplied(kind):
     if kind == "409":
         del lines[3]
     else:
-        lines[3] = "       1,       1,\n"
+        lines[3] = ("       1,       1,  0.0000000000000000E+00,  1.0000000000000000E+00,  1.0000000000000000E+00,"
+                    "  1.0000000000000000E+00,  0.0000000000000000E+00,\n")
     with open("INPUT/bc.txt", "w") as f:
         f.write("".join(lines))
 

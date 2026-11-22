@@ -1,154 +1,329 @@
+!> The manifold (BC 501): the faces of a group joined by a lumped plenum. The gas that leaves the domain through the
+!> outlet faces of the group (role 1) comes back through its inlet faces (role 2). Once per stage, before the boundary
+!> fluxes, Manifold_Gather sums over the faces of each group on every rank and sets the state of the group; BC_Fluxes
+!> applies it with the inlet 403 on the inlet faces and the outlet 406 on the outlet faces. The roles are those of the
+!> records: no sign of the flow changes them. The groups are built at set-up, per grid level, from the records every
+!> rank has read (Manifold_Setup); the faces of a group may lie on any ranks and be cut by the decomposition.
 module MOSE_Lib_BC_Fluxes_Manifold
   use iso_fortran_env, only: I4 => int32, R8 => real64
   use MOSE_Advanced_Types_m
   use MOSE_Global_m
   use MOSE_Parameters_m
-  use MOSE_Lib_BC_Fluxes, only: Face_Index
+  use MOSE_Lib_BC_Fluxes, only: Face_Index, Compute_Modfm
 
   implicit none
-  public
+  private
+  public :: Manifold_Setup, Manifold_Gather, MANIFOLD_OUTLET, MANIFOLD_INLET
+
+  integer, parameter :: MANIFOLD_OUTLET = 1   !< role of a face where the gas leaves the domain into the manifold
+  integer, parameter :: MANIFOLD_INLET  = 2   !< role of a face where it comes back in
 
 contains
 
-  subroutine BC_Manifold ( Blkm, Fm, Blks, Fs, T0, g, pstat )
-    use FLINT_Lib_Thermodynamic
-
-    type(MOSE_block_type), intent(in) :: Blkm, Blks
-    integer, intent(in)   :: Fm, Fs
-    real(R8), intent(out) :: T0, g, pstat
+  !─────────────────────────────────────────────────────────────────────────────
+  !> The groups of the manifold records of a domain (one grid level), from the records every rank has read: one group
+  !> per id, in the order the ids first appear; its parameters from its first record, which every other record of the
+  !> group must repeat (ATLAS writes them group-wide); roles 1 or 2 only; at least one record of each role in the whole
+  !> domain. Each record gets the index of its group (man_idx). The run stops on every rank on a bad file.
+  subroutine Manifold_Setup ( domain, level )
+    use MOSE_Mod_MPI, only: mpi_stop_all, mpi_is_root
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    integer,                intent(in)    :: level
     ! Local
-    integer  :: im_min, jm_min, km_min, im_max, jm_max, km_max, dirm
-    integer  :: is_min, js_min, ks_min, is_max, js_max, ks_max, dirs
-    integer  :: im, jm, km, is, js, ks, Face_i, Face_j, Face_k
-    real(R8) :: area, area_M, area_S, Trozza, meanTrozza, meanTrozza_S
-    real(R8), dimension(1:np) :: cons, meancons, meancons_S, meanprim_S
-    real(R8) :: rho, Rgas, v, T, Tdiff, cp
-    integer  :: T_i, Tint(2)
+    integer :: i, m, n501, nman
+    integer, allocatable :: gids(:)
+    character(len=400) :: msg
 
-    ! Calculate Area of Local Block
-    im_min = 1
-    jm_min = 1
-    km_min = 1
-    im_max = Blkm % dim(1)
-    jm_max = Blkm % dim(2)
-    km_max = Blkm % dim(3)
-    select case(Fm)
-      case(1)
-        im_max = 1
-        dirm = 1
-      case(2)
-        im_min = Blkm % dim(1)
-        dirm = 1
-      case(3)
-        jm_max = 1
-        dirm = 2
-      case(4)
-        jm_min = Blkm % dim(2)
-        dirm = 2
-      case(5)
-        km_max = 1
-        dirm = 3
-      case(6)
-        km_min = Blkm % dim(3)
-        dirm = 3
-    end select
+    domain % nman = 0
+    if (allocated(domain % man)) deallocate(domain % man)
+    n501 = 0
+    do i = 1, domain % nbound
+      if (domain % bc(i) % type == 501) n501 = n501 + 1
+    end do
+    allocate ( domain % man(0) )
+    if (n501 == 0) return
 
-    area_M = 0.0d0
+    ! The distinct ids, in the order of the file
+    allocate ( gids(n501) )
+    nman = 0
+    do i = 1, domain % nbound
+      if (domain % bc(i) % type /= 501) cycle
+      if (domain % bc(i) % man_gid < 1) then
+        write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] manifold (501) record ', i, ' of grid level ', level, &
+          ': the group id is ', domain % bc(i) % man_gid, '; the ids start at 1'
+        call mpi_stop_all ( trim(msg) )
+      end if
+      if (domain % bc(i) % man_role /= MANIFOLD_OUTLET .and. domain % bc(i) % man_role /= MANIFOLD_INLET) then
+        write(msg,'(A,I0,A,I0,A,I0,A)') '[ERROR] manifold (501) record ', i, ' of grid level ', level, &
+          ': the role is ', domain % bc(i) % man_role, '; it is 1 (outlet: the gas leaves the domain) or 2 (inlet)'
+        call mpi_stop_all ( trim(msg) )
+      end if
+      if ( .not. any ( gids(1:nman) == domain % bc(i) % man_gid ) ) then
+        nman = nman + 1
+        gids(nman) = domain % bc(i) % man_gid
+      end if
+    end do
 
-    do km = km_min, km_max; do jm = jm_min, jm_max; do im = im_min, im_max
+    deallocate ( domain % man )
+    allocate ( domain % man(nman) )
+    domain % nman = nman
+    do m = 1, nman
+      domain % man(m) % gid = gids(m)
+      allocate ( domain % man(m) % ci_in(nsc+nrans) )
+      domain % man(m) % ci_in = 0d0
+    end do
 
-      call Face_Index ( Fm, dirm, im, jm, km, Face_i, Face_j, Face_k )
+    ! The records of each group: the parameters of the first, repeated by the others; the roles counted
+    do i = 1, domain % nbound
+      if (domain % bc(i) % type /= 501) cycle
+      do m = 1, nman
+        if (gids(m) == domain % bc(i) % man_gid) exit
+      end do
+      domain % bc(i) % man_idx = m
+      associate ( g => domain % man(m), r => domain % bc(i) )
+        if (g % n_out + g % n_in == 0) then
+          g % K = r % man_K ; g % rf = r % rel_fac ; g % mratio = r % man_mratio ; g % p0ratio = r % man_p0ratio
+          g % dh0 = r % man_dh0
+          g % first = i
+        else
+          call Same ( 'K',          r % man_K,       g % K )
+          call Same ( 'rel_fac',    r % rel_fac,     g % rf )
+          call Same ( 'mdot_ratio', r % man_mratio,  g % mratio )
+          call Same ( 'p0_ratio',   r % man_p0ratio, g % p0ratio )
+          call Same ( 'dh0',        r % man_dh0,     g % dh0 )
+        end if
+        if (r % man_role == MANIFOLD_OUTLET) then
+          g % n_out = g % n_out + 1
+        else
+          g % n_in = g % n_in + 1
+        end if
+      end associate
+    end do
 
-      area = Blkm % dir(dirm) % f(Face_i,Face_j,Face_k) % A
-      area_M = area_M + area
+    do m = 1, nman
+      if (domain % man(m) % n_out == 0 .or. domain % man(m) % n_in == 0) then
+        write(msg,'(A,I0,A,I0,A,I0,A,I0,A)') '[ERROR] manifold group ', gids(m), ' of grid level ', level, ' has ', &
+          domain % man(m) % n_out, ' outlet and ', domain % man(m) % n_in, ' inlet records: a manifold joins at least '// &
+          'one face where the gas leaves the domain (role 1) and one where it comes back (role 2)'
+        call mpi_stop_all ( trim(msg) )
+      end if
+    end do
 
-    enddo; enddo; enddo
+    if (mpi_is_root) then
+      write(*,'(A,I0,A)') ' Manifold groups of grid level ', level, ':'
+      do m = 1, nman
+        associate ( g => domain % man(m) )
+          write(*,'(A,I0,A,I0,A,I0,A,ES10.3,A,F6.3,A,ES10.3,A,ES10.3,A,ES12.5,A)') '   group ', g % gid, ': ', g % n_out, &
+            ' outlet and ', g % n_in, ' inlet records; K ', g % K, ', rel_fac ', g % rf, ', mdot-ratio ', g % mratio, &
+            ', p0-ratio ', g % p0ratio, ', dh0 ', g % dh0, ' J/kg'
+        end associate
+      end do
+    end if
 
-    ! Calculate Mean Properties of Connected Block
-    is_min = 1
-    js_min = 1
-    ks_min = 1
-    is_max = Blks % dim(1)
-    js_max = Blks % dim(2)
-    ks_max = Blks % dim(3)
-    select case(Fs)
-      case(1)
-        is_max = 1
-        dirs = 1
-      case(2)
-        is_min = Blks % dim(1)
-        dirs = 1
-      case(3)
-        js_max = 1
-        dirs = 2
-      case(4)
-        js_min = Blks % dim(2)
-        dirs = 2
-      case(5)
-        ks_max = 1
-        dirs = 3
-      case(6)
-        ks_min = Blks % dim(3)
-        dirs = 3
-    end select
+  contains
 
-    area_S = 0.0d0
-    meancons = 0.0d0
-    meanTrozza = 0.0d0
-    do ks = ks_min, ks_max; do js = js_min, js_max; do is = is_min, is_max
+    subroutine Same ( what, v, v1 )
+      character(len=*), intent(in) :: what
+      real(R8),         intent(in) :: v, v1
+      if ( abs(v - v1) <= 1d-12 * max(1d0, abs(v1)) ) return
+      write(msg,'(A,I0,A,I0,A,I0,3A,ES15.8,A,I0,A,ES15.8)') '[ERROR] manifold (501) record ', i, ' of grid level ', &
+        level, ' (group ', domain % bc(i) % man_gid, '): its ', trim(what), ' is ', v, ' while record ', &
+        domain % man(m) % first, ' of the group has ', v1
+      call mpi_stop_all ( trim(msg)//'; the parameters of a manifold are those of its section, the same on every record' )
+    end subroutine Same
 
-      call Face_Index ( Fs, dirs, is, js, ks, Face_i, Face_j, Face_k )
+  end subroutine Manifold_Setup
 
-      area = Blks % dir(dirs) % f (Face_i,Face_j,Face_k) % A
-      area_S = area_S + area
 
-      cons = prim2cons( Blks % P(1:np,is,js,ks) ) * area
+  !─────────────────────────────────────────────────────────────────────────────
+  !> The state the faces of each manifold group take at this stage, from the cells of the group's faces on every rank.
+  !> Called by every thread of the parallel region at the top of BC_Fluxes: one thread sums over the records of this rank,
+  !> reduces the sums over the ranks (MPI from the primary thread, as the connection exchange) and sets the targets; the
+  !> others wait at the barrier.
+  !>
+  !> Outlet faces, the cells whose gas leaves: the mass flow sum g dA (g = rho u.n), and with it the total enthalpy, the
+  !> dynamic pressure qd = rho v^2/2, the temperature (the start of the inversion of h), the species mass fractions and the
+  !> turbulence variables, each as sum g phi dA; every cell gives its area. Inlet faces, every cell: the area, the static
+  !> pressure sum p dA, and the dynamic head sum g qd dA with its own g = rho |u.n|. Then, for the group, the
+  !> mass-flow-weighted means: the inlet faces take the mass flux g_in = mdot-ratio mdot / A_in, the total temperature of
+  !> h0_in = h0_out - dh0 at the mean composition (Total_Temperature), the mean species and turbulence; the outlet faces
+  !> take the static pressure p_out = p0_out - q_out of the total pressure p0_out = p0_in / p0-ratio + K q_out, with
+  !> p0_in = mean p of the inlet cells + their mass-weighted q: the total pressure is the same on the two sides of a
+  !> loss-free plenum (K = 0, p0-ratio = 1), and mass and total enthalpy cross it exactly (mdot-ratio = 1, dh0 = 0).
+  subroutine Manifold_Gather ( domain )
+    use MOSE_Mod_MPI,        only: mpi_size_, mpi_allreduce_sum_r8_array, mpi_is_root
+    use MOSE_Config_Types_m, only: obj_io
+    use FLINT_Lib_Thermodynamic
+    implicit none
+    type(MOSE_domain_type), intent(inout) :: domain
+    ! Local
+    integer  :: nsum, m, ii, i, Bm, Im, Jm, Km, Fm, dir, Face_i, Face_j, Face_k, modfm, modfm1, modfm2, modfm3, s, k
+    integer  :: iAout, imdot, igh0, igq, igT, iAin, ipA, igin, igqin, isp, iturb
+    real(R8), allocatable :: sums(:,:), flat(:)
+    real(R8) :: A, n(3), Prim(nprim), rho, Rgas, Un, g, q, qd, T, hcell, h0cell
+    real(R8) :: A_in, q_out, q_in, p_in, ysum
+    real(R8) :: y(nsc)
 
-      meancons = meancons + cons
+    if (domain % nman == 0) return
 
-      ! Temperature initial guess for Newton-Raphson
-      call co_rotot_Rtot ( Blks % P(1,is,js,ks), rho, Rgas )
-      Trozza = Blks % P(np,is,js,ks) / ( rho * Rgas ) * area
-      meanTrozza = meanTrozza + Trozza
+    !$omp master
+    ! The slots of the sums of a group
+    iAout = 1           ! area of the outlet faces
+    imdot = 2           ! mass flow leaving through the outlet cells, sum g dA
+    igh0  = 3           ! sum g h0 dA over them
+    igq   = 4           ! sum g qd dA over them, qd = rho v^2/2
+    igT   = 5           ! sum g T dA over them
+    iAin  = 6           ! area of the inlet faces
+    ipA   = 7           ! sum p dA over the inlet cells
+    igin  = 8           ! sum g dA over the inlet cells, g = rho |u.n|
+    igqin = 9           ! sum g qd dA over the inlet cells
+    isp   = 9           ! then the nsc species, sum g y dA over the leaving outlet cells
+    iturb = 9 + nsc     ! then the nrans turbulence variables, sum g phi dA over them (phi specific)
+    nsum  = iturb + nrans
+    allocate ( sums(nsum, domain % nman) )
+    sums = 0d0
 
-    enddo; enddo; enddo
+    do ii = 1, domain % n_local_bc
+      i = domain % local_bc_idx(ii)
+      if (domain % bc(i) % type /= 501) cycle
+      m  = domain % bc(i) % man_idx
+      Bm = domain % bc(i) % b ; Im = domain % bc(i) % i ; Jm = domain % bc(i) % j ; Km = domain % bc(i) % k
+      Fm = domain % bc(i) % f
+      call Compute_Modfm ( Fm, modfm, modfm1, modfm2, modfm3 )
+      call Face_Index ( Fm, dir, Im, Jm, Km, Face_i, Face_j, Face_k )
+      associate ( blk => domain % blk(Bm) )
+        A    = blk % dir(dir) % f(Face_i,Face_j,Face_k) % A
+        n    = blk % dir(dir) % f(Face_i,Face_j,Face_k) % n
+        Prim = blk % P(:,Im,Jm,Km)
+      end associate
+      call co_rotot_Rtot ( Prim(1:nsc), rho, Rgas )
+      Un = real(modfm2, R8) * dot_product ( Prim(nu:nw), n )   ! normal velocity out of the domain
+      q  = 0.5d0 * sum ( Prim(nu:nw)**2 )   ! specific kinetic energy
+      qd = rho * q                         ! dynamic pressure
+      T  = Prim(np) / ( rho * Rgas )
+      select case ( domain % bc(i) % man_role )
+      case ( MANIFOLD_OUTLET )
+        sums(iAout,m) = sums(iAout,m) + A
+        if (Un > 0d0) then
+          g  = rho * Un
+          hcell = 0d0
+          do s = 1, nsc
+            hcell = hcell + Prim(s) / rho * f_tabT ( T, s, h_tab )
+          end do
+          h0cell = hcell + q
+          sums(imdot,m) = sums(imdot,m) + g * A
+          sums(igh0,m)  = sums(igh0,m)  + g * h0cell * A
+          sums(igq,m)   = sums(igq,m)   + g * qd * A
+          sums(igT,m)   = sums(igT,m)   + g * T * A
+          do s = 1, nsc
+            sums(isp+s,m) = sums(isp+s,m) + g * Prim(s) / rho * A
+          end do
+          do k = 1, nrans
+            sums(iturb+k,m) = sums(iturb+k,m) + g * Prim(nt+k-1) / rho * A
+          end do
+        end if
+      case ( MANIFOLD_INLET )
+        g = rho * abs(Un)
+        sums(iAin,m)  = sums(iAin,m)  + A
+        sums(ipA,m)   = sums(ipA,m)   + Prim(np) * A
+        sums(igin,m)  = sums(igin,m)  + g * A
+        sums(igqin,m) = sums(igqin,m) + g * qd * A
+      end select
+    end do
 
-    meanTrozza_S = meanTrozza / area_S
-    meancons_S = meancons / area_S
-    meanprim_S = cons2prim ( meancons_S, meanTrozza_S )
-    
-    ! Mass FLux
-    g = norm2(meancons_S(nu:nw)) * area_S / area_M
+    if (mpi_size_ > 1) then
+      flat = reshape ( sums, [nsum * domain % nman] )
+      call mpi_allreduce_sum_r8_array ( flat, nsum * domain % nman )
+      sums = reshape ( flat, [nsum, domain % nman] )
+    end if
 
-    ! Total Temperature
-    v = norm2(meanprim_S (nu:nw))
-    call co_rotot_Rtot ( meanprim_S(1), rho, Rgas )
-    T = meanprim_S(np) / (rho * Rgas)
+    ! The state of each group
+    do m = 1, domain % nman
+      associate ( gr => domain % man(m) )
+        A_in = sums(iAin,m)
+        p_in = 0d0
+        if (A_in > 0d0) p_in = sums(ipA,m) / A_in
+        gr % mdot_out = sums(imdot,m)
+        gr % active   = gr % mdot_out > 0d0 .and. A_in > 0d0
+        if (gr % active) then
+          ! The mass-flow-weighted means of the gas that leaves
+          y = sums(isp+1:isp+nsc,m) / gr % mdot_out
+          ysum = sum(y)
+          if (ysum > 0d0) y = y / ysum
+          gr % h0_out = sums(igh0,m) / gr % mdot_out
+          q_out       = sums(igq,m)  / gr % mdot_out
+          ! The inlet faces: the mass flux, the total temperature of the total enthalpy carried over (less dh0), the
+          ! species and the turbulence of the gas that leaves
+          gr % g_in  = gr % mratio * gr % mdot_out / A_in
+          gr % h0_in = gr % h0_out - gr % dh0
+          gr % T0_in = Total_Temperature ( gr % h0_in, y, sums(igT,m) / gr % mdot_out )
+          gr % ci_in(nrans+1:nrans+nsc) = y
+          do k = 1, nrans
+            gr % ci_in(k) = sums(iturb+k,m) / gr % mdot_out
+          end do
+          ! The outlet faces: the static pressure of the total pressure that the inlet side gives the group, through the
+          ! loss and the ratio (the dynamic heads q of the two sides, mass-weighted)
+          q_in = 0d0
+          if (sums(igin,m) > 0d0) q_in = sums(igqin,m) / sums(igin,m)
+          gr % p0_in  = p_in + q_in
+          gr % p0_out = gr % p0_in / gr % p0ratio + gr % K * q_out
+          gr % p_out  = gr % p0_out - q_out
+          gr % mdot_in = gr % g_in * A_in
+        else
+          ! Nothing leaves yet: the inlet faces are slip walls, the outlet faces take the pressure of the inlet side
+          gr % g_in  = 0d0
+          gr % p_out = p_in
+          gr % mdot_in = 0d0 ; gr % h0_out = 0d0 ; gr % h0_in = 0d0 ; gr % p0_out = p_in ; gr % p0_in = p_in
+        end if
+      end associate
+    end do
 
-    T_i = int ( T )
-    Tdiff  = T - T_i
-    Tint(1) = T_i
-    Tint(2) = T_i + 1
+    ! One line per group at the shell interval, once per iteration (the first stage that sees it)
+    if ( mpi_is_root .and. obj_io % shell_diter > 0 ) then
+      if ( mod ( domain % iter, obj_io % shell_diter ) == 0 ) then
+        do m = 1, domain % nman
+          associate ( gr => domain % man(m) )
+            if ( gr % last_line == domain % iter ) cycle
+            gr % last_line = domain % iter
+            write(*,'(A,I0,A,I0,A,I0,A,2ES17.9,A,2ES17.9,A,2ES17.9,A,ES11.3,A)') ' manifold ', gr % gid, ', grid level ', &
+              domain % mg_level, ', iteration ', domain % iter, ': mdot out/in', gr % mdot_out, gr % mdot_in, &
+              ' kg/s, h0 out/in', gr % h0_out, gr % h0_in, ' J/kg, p0 out/in', gr % p0_out, gr % p0_in, ' Pa, taken out', &
+              gr % mdot_out * gr % dh0, ' W'
+          end associate
+        end do
+      end if
+    end if
 
-    cp = f_tabT_expr(1,cp_tab,Tint,Tdiff)
-    T0 = T + 0.5d0 * v**2 / cp
+    deallocate ( sums )
+    !$omp end master
+    !$omp barrier
 
-    ! ! Check T0
-    ! meancons_M = meancons_S * area_S / area_M
-    ! meanprim_M = cons2prim ( meancons_M, temperature )
-    ! v_M = meanprim_M (nu:nw)
-    ! call co_rotot_Rtot ( meanprim_M(1:nsc), rho, Rgas )
-    ! T_M = meanprim_M(np) / (rho * Rgas)
-    ! T_i = int ( T_M )
-    ! Tdiff  = T_M - T_i
-    ! Tint(1) = T_i
-    ! Tint(2) = T_i + 1
-    ! cp_M = f_tabT_expr(1,cp_tab,Tint,Tdiff)
-    ! T0_M = T_M + 0.5d0 * dot_product (v_M, v_M) / cp_M
-  
-    ! Static Pressure
-    pstat = meanprim_S (np)
+  end subroutine Manifold_Gather
 
-  end subroutine BC_Manifold
+
+  !─────────────────────────────────────────────────────────────────────────────
+  !> The temperature at which the mixture of mass fractions y has the enthalpy h0: Newton from T_start with cp of the
+  !> tables as the slope (the enthalpy grows with T), to 1e-12 of T_start
+  pure real(R8) function Total_Temperature ( h0, y, T_start ) result ( T )
+    use FLINT_Lib_Thermodynamic, only: f_tabT, h_tab, cp_tab
+    implicit none
+    real(R8), intent(in) :: h0, y(nsc), T_start
+    ! Local
+    integer  :: it, s
+    real(R8) :: F, dF, dT
+    T = T_start
+    do it = 1, 50
+      F  = -h0
+      dF = 0d0
+      do s = 1, nsc
+        F  = F  + y(s) * f_tabT ( T, s, h_tab )
+        dF = dF + y(s) * f_tabT ( T, s, cp_tab )
+      end do
+      dT = F / dF
+      T  = T - dT
+      if ( abs(dT) <= 1d-12 * T_start ) exit
+    end do
+  end function Total_Temperature
 
 end module MOSE_Lib_BC_Fluxes_Manifold

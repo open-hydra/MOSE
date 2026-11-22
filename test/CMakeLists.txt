@@ -322,6 +322,10 @@ mose_test(BoundaryConditions.Inlets
     DIR checks/boundary-conditions/inlets
     KIND exact  LABELS physics 1D
     DESC "inlets at total conditions, mass flux, normal velocity: fluxes against the face state")
+mose_test(BoundaryConditions.Manifold
+    DIR checks/boundary-conditions/manifold
+    KIND identity  LABELS numerics 1D
+    DESC "manifold (501): a duct cut by a manifold, straight or turned back, keeps the exact state and finds it from a perturbed one as one block does; mass flow, total enthalpy and total pressure cross it in the relations of the record")
 mose_test(BoundaryConditions.Nozzle
     DIR checks/boundary-conditions/nozzle
     KIND exact  LABELS physics 1D
@@ -646,6 +650,11 @@ mose_test(MPIConnectionFlux
     KIND identity  LABELS implementation 1D
     REQUIRES MPI
     DESC "faces between ranks give the one-rank bits and conserve")
+mose_test(MPIManifold
+    DIR mpi/manifold
+    KIND identity  LABELS implementation 1D
+    REQUIRES MPI
+    DESC "manifold (501) with its two sides on two ranks gives the one-rank bits")
 mose_test(MPIConnectionOrder
     DIR mpi/connection-order
     KIND identity  LABELS implementation 2D

@@ -25,6 +25,7 @@ contains
     use MOSE_IO_BC,                only: Setup_BC
     use MOSE_IO_BC_Q2D,            only: Check_Q2D_Nodes
     use MOSE_Lib_BC_Fluxes_Extrapolation, only: Setup_400_Entering
+    use MOSE_Lib_BC_Fluxes_Manifold,      only: Manifold_Setup
     use MOSE_Lib_RotatingFrame,    only: Check_Stationary_Faces
     use MOSE_Mod_Metrics,          only: Setup_Metrics
     use MOSE_Mod_Fluxes,           only: Setup_Quasi2D_W
@@ -184,6 +185,8 @@ contains
       simulation%domain(m)%mg_level = m
       call build_ghost_schedule(simulation%domain(m))
       call build_local_bc_index(simulation%domain(m))
+      ! The manifolds (501) of the level: their groups from the records every rank has read
+      call Manifold_Setup(simulation%domain(m), m)
     end do
 
     ! Read grid file and setup metrics in each grid level.
