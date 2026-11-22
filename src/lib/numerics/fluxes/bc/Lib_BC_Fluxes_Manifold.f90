@@ -1,25 +1,9 @@
 !> The manifold (BC 501): the faces of a group joined by a lumped plenum. The gas that leaves the domain through the
-!> outlet faces of the group (role 1) comes back through its inlet faces (role 2): once per stage, before the boundary
-!> fluxes, Manifold_Gather sums over the faces of each group that this rank owns, adds the sums of the other ranks (one
-!> reduction per stage), and sets the state the faces of the group take at this stage; BC_Fluxes then applies it with the
-!> inlet 403 (mass flux and total temperature, along the face normal, the mean species and turbulence) on the inlet faces
-!> and the outlet 406 (a static pressure) on the outlet faces, with the relaxation factor of the record.
-!>
-!> The means are mass-flow-weighted: the inlet faces get the mass flow of the outlet faces (times mdot-ratio) spread
-!> uniformly over their area, the mass-flow-weighted total enthalpy (less dh0), species and turbulence of the gas that
-!> leaves; the outlet faces take the static pressure that gives them the total pressure of the inlet side (over p0-ratio,
-!> plus the loss K on their dynamic head). With the defaults mass, total enthalpy and total pressure cross the manifold
-!> exactly: a loss-free, perfectly mixed plenum, as the 1-D network models assume.
-!>
-!> The roles are those of the records: no sign of the flow changes them. A cell of an outlet face whose gas moves inward
-!> is a slip wall for the stage, as on a 406; when nothing leaves through the outlet faces of a group (the first stages
-!> of a run from rest), its inlet faces are slip walls and its outlet faces take the mean static pressure of the inlet
-!> side. The record's parameters: K, the loss on the dynamic head of the outlet faces; rel_fac; mdot-ratio, p0-ratio and
-!> dh0, the mass flow, total pressure and total enthalpy of the inlet faces against those of the outlet faces (the
-!> cycle's topology lumped on one link: one element out of N, a bleed, a turbine).
-!>
-!> Every rank reads every record, so the groups are built without a reduction (Manifold_Setup, at set-up, per grid
-!> level); the faces of a group may lie on any ranks and be cut by the decomposition.
+!> outlet faces of the group (role 1) comes back through its inlet faces (role 2). Once per stage, before the boundary
+!> fluxes, Manifold_Gather sums over the faces of each group on every rank and sets the state of the group; BC_Fluxes
+!> applies it with the inlet 403 on the inlet faces and the outlet 406 on the outlet faces. The roles are those of the
+!> records: no sign of the flow changes them. The groups are built at set-up, per grid level, from the records every
+!> rank has read (Manifold_Setup); the faces of a group may lie on any ranks and be cut by the decomposition.
 module MOSE_Lib_BC_Fluxes_Manifold
   use iso_fortran_env, only: I4 => int32, R8 => real64
   use MOSE_Advanced_Types_m
@@ -319,20 +303,6 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
-  !> The enthalpy of the mixture of mass fractions y at T, from the tables of the gas (f_tabT, h_tab)
-  pure real(R8) function Mixture_h ( T, y ) result ( h )
-    use FLINT_Lib_Thermodynamic, only: f_tabT, h_tab
-    implicit none
-    real(R8), intent(in) :: T, y(nsc)
-    ! Local
-    integer :: s
-    h = 0d0
-    do s = 1, nsc
-      h = h + y(s) * f_tabT ( T, s, h_tab )
-    end do
-  end function Mixture_h
-
-
   !> The temperature at which the mixture of mass fractions y has the enthalpy h0: Newton from T_start with cp of the
   !> tables as the slope (the enthalpy grows with T), to 1e-12 of T_start
   pure real(R8) function Total_Temperature ( h0, y, T_start ) result ( T )

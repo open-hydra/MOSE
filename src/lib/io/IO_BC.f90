@@ -1135,13 +1135,6 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
-  ! Need_Inward: the mass flux g of an inlet 403, 404 or 420, or the velocity un of an inlet 408 (v, named name), of
-  !   record n, type btype, line nline of the file, on face face of its block, already finite and given (Need_Inlet, or
-  !   Need_Finite and Need_R). v is positive into the domain on every face: an inlet only lets gas in, so zero, or a
-  !   negative value on a face 1, 3 or 5, stops the run. On a face 2, 4 or 6 a negative value is taken as its
-  !   magnitude: it is the component of a gas that enters along the face normal of the solver, which points toward
-  !   growing index, out of the domain on those faces. The flux routines take -BC_Sign |v| along that normal.
-  !─────────────────────────────────────────────────────────────────────────────
   ! Need_Manifold: the values of a manifold record (501), record n at line nline: the group id from 1, the role 1 (outlet)
   !   or 2 (inlet), K >= 0, 0 < rel_fac <= 1, mdot_ratio > 0 and p0_ratio > 0 (dh0 takes any value). The groups
   !   themselves -- the same parameters on every record, an outlet and an inlet face in each -- are checked once every
@@ -1181,6 +1174,13 @@ contains
   end subroutine Need_Manifold
 
 
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Need_Inward: the mass flux g of an inlet 403, 404 or 420, or the velocity un of an inlet 408 (v, named name), of
+  !   record n, type btype, line nline of the file, on face face of its block, already finite and given (Need_Inlet, or
+  !   Need_Finite and Need_R). v is positive into the domain on every face: an inlet only lets gas in, so zero, or a
+  !   negative value on a face 1, 3 or 5, stops the run. On a face 2, 4 or 6 a negative value is taken as its
+  !   magnitude: it is the component of a gas that enters along the face normal of the solver, which points toward
+  !   growing index, out of the domain on those faces. The flux routines take -BC_Sign |v| along that normal.
   subroutine Need_Inward ( n, btype, nline, face, v, name )
     use MOSE_Mod_MPI, only: mpi_stop_all
     implicit none

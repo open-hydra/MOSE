@@ -256,7 +256,7 @@ contains
                 if (error == 1) call BC_Symmetry_Eul ( Bm, Im, Jm, Km, Fm, domain % blk(Bm) )
               else if ( domain % man(mman) % active ) then
                 ! The gas comes back with the mass flux, total temperature, species and turbulence of the group, along
-                ! the face normal (403)
+                ! the face normal (403; alpha, beta = huge: the token 'normal')
                 call BC_Inlet_MassFlux_T0 ( Bm, Im, Jm, Km, Fm, domain % blk(Bm), &
                                              domain % man(mman) % T0_in, domain % man(mman) % g_in, &
                                              domain % bc(i) % rel_fac, huge(1.0_R8), huge(1.0_R8), &
