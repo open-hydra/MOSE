@@ -217,7 +217,8 @@ def last_manifold_line(log):
 def carried(log, directory, tol, par):
     v = last_manifold_line(log)
     b1 = read_blocks(directory)[0]
-    q = 0.5 * b1["u"][-1] ** 2
+    rho_key = [k for k in b1 if k.startswith("rho")][0]
+    q = 0.5 * b1[rho_key][-1] * b1["u"][-1] ** 2   # dynamic pressure of the outlet cells (uniform across the duct)
     bad = 0
     d = abs(v["mdot_in"] - par["mr"] * v["mdot_out"]) / abs(v["mdot_out"])
     print(f"    mdot out {v['mdot_out']:.10e} in {v['mdot_in']:.10e}: mr x out off by {d:.1e}")
@@ -225,7 +226,9 @@ def carried(log, directory, tol, par):
     d = abs(v["h0_in"] - (v["h0_out"] - par["dh0"])) / abs(v["h0_out"])
     print(f"    h0 out {v['h0_out']:.10e} in {v['h0_in']:.10e}: in = out - dh0 off by {d:.1e}")
     bad += d > tol
-    print(f"    p0 out {v['p0_out']:.10e} in {v['p0_in']:.10e} (the static pressure is continuous: not checked)")
+    d = abs(v["p0_in"] - par["pr"] * (v["p0_out"] - par["K"] * q)) / abs(v["p0_in"])
+    print(f"    p0 out {v['p0_out']:.10e} in {v['p0_in']:.10e}: in = pr (out - K q_out) off by {d:.1e}")
+    bad += d > tol
     sys.exit(1 if bad else 0)
 
 

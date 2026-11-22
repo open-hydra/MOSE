@@ -348,14 +348,48 @@ positive into the gas, as `q_wall` (a `301` wall writes its `q_wall`, a `503` wa
 absorbs, conducted and radiated, the other walls the heat they conduct into the gas); the mass flux `mdot` of the walls
 `503`–`506` is positive into the gas, the mass the surface blows in.
 
-### Physical Models
+### Manifold
 
-| Type | Name | Data line |
-|:----:|------|-----------|
-| `501` | Manifold connection | `bs  fs` |
+| Type | Name | Data line (comma-separated) |
+|:----:|------|-----------------------------|
+| `501` | Manifold: faces joined by a lumped plenum | `gid,  role,  K,  rel_fac,  mdot_ratio,  p0_ratio,  dh0` |
 
-MOSE does not apply type `501`: a record of type `501` stops the run at set-up, with the line of `bc.txt`, the record and
-its type.
+The gas that leaves the domain through the **outlet** faces of a group (`role` 1) comes back through its **inlet**
+faces (`role` 2). The records of a group share its id `gid` and its five parameters; the boundary-condition builder of
+ATLAS writes them from one `manifold` section per junction, whose `outlet` and `inlet` lists give the faces their roles
+(no sign of the flow changes them). Any number of faces on either side, on any ranks, cut or not by the decomposition:
+the sums over the faces of a group are reduced once per stage.
+
+At each stage, over the cells of the outlet faces whose gas leaves, MOSE sums the mass flow $\dot m = \sum \rho u_n\,dA$
+and, weighted by it, the total enthalpy $h_0$, the dynamic pressure $q = \rho v^2/2$, the species and the turbulence variables;
+over the cells of the inlet faces, the area $A_\text{in}$, the static pressure and their own dynamic pressure. Then
+
+- the inlet faces take the inlet `403`: the mass flux $g = \texttt{mdot\_ratio}\;\dot m / A_\text{in}$ along the face
+  normal (uniform over the inlet faces), the total temperature of $h_{0,\text{in}} = h_{0,\text{out}} - \texttt{dh0}$ at the
+  mean composition, the mass-flow-weighted species and turbulence variables (specific, as the inlets read them);
+- the outlet faces take the outlet `406` at the static pressure $p_\text{out} = p_{0,\text{out}} - q_\text{out}$ of the total
+  pressure $p_{0,\text{out}} = p_{0,\text{in}} / \texttt{p0\_ratio} + K\,q_\text{out}$, with $p_{0,\text{in}}$ the mean static
+  pressure of the inlet cells plus their mass-weighted dynamic pressure.
+
+With the defaults (`K` = 0, `mdot_ratio` = 1, `p0_ratio` = 1, `dh0` = 0) the plenum is loss-free and perfectly mixed:
+mass, total enthalpy and total pressure cross it exactly. `K` is a loss on the dynamic pressure of the outlet faces
+(`K` = 1 when the gas that leaves loses its dynamic pressure in the plenum, as a jet into a large volume does: the static
+pressure is then about the same on the two sides); the three ratios lump the topology of a flow system on one link (one
+element simulated out of N, a bleed, the total-pressure ratio and specific work `dh0` [J/kg] of a turbine): with
+`mdot_ratio` ≠ 1 or `dh0` ≠ 0 the link is a mass or energy sink by construction. `rel_fac` is that of the inlets and
+outlets: the face takes `rel_fac` times the manifold's value plus (1 − `rel_fac`) times its own cell's; the converged
+state does not depend on it.
+
+A cell of an outlet face whose gas moves inward is a slip wall for the stage, as on a `406`. While nothing leaves
+through the outlet faces of a group (a run started from rest), its inlet faces are slip walls and its outlet faces take
+the mean static pressure of the inlet side; an inlet face needs the gas of its cell moving inward to open, as the `403`
+does: start the run with the flow in the right sense. The record is refused at set-up when `gid` < 1, `role` is not 1 or
+2, `K` < 0, `rel_fac` is outside (0, 1], a ratio is not positive, when the records of a group do not carry the same
+parameters, or when a group has no outlet or no inlet face.
+
+At every `shell-diter` iterations one line per group: `manifold <gid>, grid level <m>, iteration <n>: mdot out/in, h0
+out/in, p0 out/in, taken out` (the mass flows, total enthalpies and total pressures of the two sides, and the power
+$\dot m\,\texttt{dh0}$). The same rule holds on every grid level of a multigrid run, each level gathering its own faces.
 
 ### Gas–Surface Interaction
 

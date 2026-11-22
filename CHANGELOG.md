@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- The manifold boundary (`501`): faces of a group joined by a lumped plenum, the gas leaving through the outlet faces
+  coming back through the inlet faces with its mass flow, total enthalpy, species and turbulence (mass-flow-weighted)
+  and the same total pressure, optionally through a loss `K` and the ratios of a lumped link (`mdot_ratio`, `p0_ratio`,
+  `dh0`); any number of faces on any ranks. See [Boundary Conditions](docs/user/boundary-conditions.md#manifold).
 - SSG/LRR-ω Reynolds-stress model (`turbulence = SSGLRR`, `-SD`, `-w2019`, `-w2019-SD`); tests `RSMDecay`, `FlatPlateTMR`.
 - Multirate (local time stepping) integrator for time-accurate runs, `[MOSE-Multirate]`; tests in `test/multirate`.
 - NASA TMR turbulent flat plate as a verification case (SA, SST, Wilcox 2006, SSG/LRR on three grids).

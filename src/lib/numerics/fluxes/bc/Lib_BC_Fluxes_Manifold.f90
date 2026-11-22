@@ -5,11 +5,11 @@
 !> inlet 403 (mass flux and total temperature, along the face normal, the mean species and turbulence) on the inlet faces
 !> and the outlet 406 (a static pressure) on the outlet faces, with the relaxation factor of the record.
 !>
-!> The means are those of the 2025 manifold of hydra-MF, to reproduce its runs: the area-weighted mean of the conservative
-!> state over the outlet faces, from which the mass flux (scaled by the area ratio), the static temperature, the velocity
-!> and so the total temperature of the inlet faces follow; the outlet faces take the area-mean static pressure of the
-!> inlet faces (K and p0-ratio do not act on this rule). (The mass-flow-weighted means and the equal total pressure of
-!> H6_manifold_design.md §7 replace them in the next commit.)
+!> The means are mass-flow-weighted: the inlet faces get the mass flow of the outlet faces (times mdot-ratio) spread
+!> uniformly over their area, the mass-flow-weighted total enthalpy (less dh0), species and turbulence of the gas that
+!> leaves; the outlet faces take the static pressure that gives them the total pressure of the inlet side (over p0-ratio,
+!> plus the loss K on their dynamic head). With the defaults mass, total enthalpy and total pressure cross the manifold
+!> exactly: a loss-free, perfectly mixed plenum, as the 1-D network models assume.
 !>
 !> The roles are those of the records: no sign of the flow changes them. A cell of an outlet face whose gas moves inward
 !> is a slip wall for the stage, as on a 406; when nothing leaves through the outlet faces of a group (the first stages
@@ -158,14 +158,15 @@ contains
   !> reduces the sums over the ranks (MPI from the primary thread, as the connection exchange) and sets the targets; the
   !> others wait at the barrier.
   !>
-  !> Outlet faces, every cell: the area-weighted conservative state (species densities, momentum, total energy; the
-  !> turbulence variables likewise) and the area-weighted temperature (the start of the temperature iteration of the
-  !> mean state); the cells whose gas leaves also give the mass flow, total enthalpy and dynamic head of the line of the
-  !> log. Inlet faces, every cell: the area and the area-weighted static pressure; the dynamic head of the line. Then,
-  !> for the group: the mean state of the outlet faces gives the mass flux g_in = |rho u| A_out / A_in times mdot-ratio,
-  !> the static temperature T of the mean state and T0_in = T + v^2/(2 cp(T)) of that state, lowered by dh0 through
-  !> h(T0); the outlet faces take p_out, the area-mean static pressure of the inlet faces. The species and turbulence
-  !> of the inlet faces are those of the mean state.
+  !> Outlet faces, the cells whose gas leaves: the mass flow sum g dA (g = rho u.n), and with it the total enthalpy, the
+  !> dynamic pressure qd = rho v^2/2, the temperature (the start of the inversion of h), the species mass fractions and the
+  !> turbulence variables, each as sum g phi dA; every cell gives its area. Inlet faces, every cell: the area, the static
+  !> pressure sum p dA, and the dynamic head sum g qd dA with its own g = rho |u.n|. Then, for the group, the
+  !> mass-flow-weighted means: the inlet faces take the mass flux g_in = mdot-ratio mdot / A_in, the total temperature of
+  !> h0_in = h0_out - dh0 at the mean composition (Total_Temperature), the mean species and turbulence; the outlet faces
+  !> take the static pressure p_out = p0_out - q_out of the total pressure p0_out = p0_in / p0-ratio + K q_out, with
+  !> p0_in = mean p of the inlet cells + their mass-weighted q: the total pressure is the same on the two sides of a
+  !> loss-free plenum (K = 0, p0-ratio = 1), and mass and total enthalpy cross it exactly (mdot-ratio = 1, dh0 = 0).
   subroutine Manifold_Gather ( domain )
     use MOSE_Mod_MPI,        only: mpi_size_, mpi_allreduce_sum_r8_array, mpi_is_root
     use MOSE_Config_Types_m, only: obj_io
@@ -174,26 +175,27 @@ contains
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     integer  :: nsum, m, ii, i, Bm, Im, Jm, Km, Fm, dir, Face_i, Face_j, Face_k, modfm, modfm1, modfm2, modfm3, s, k
-    integer  :: iTA, iAout, iAin, ipA, imdot, igh0, igq, igin, igqin, iturb
+    integer  :: iAout, imdot, igh0, igq, igT, iAin, ipA, igin, igqin, isp, iturb
     real(R8), allocatable :: sums(:,:), flat(:)
-    real(R8) :: A, n(3), Prim(nprim), cons(np), rho, Rgas, Un, g, q, T, hcell, h0cell, cp
-    real(R8) :: meancons(np), meanprim(np), v2, A_out, A_in, q_out, q_in, p_in
+    real(R8) :: A, n(3), Prim(nprim), rho, Rgas, Un, g, q, qd, T, hcell, h0cell
+    real(R8) :: A_in, q_out, q_in, p_in, ysum
     real(R8) :: y(nsc)
 
     if (domain % nman == 0) return
 
     !$omp master
-    ! The slots of the sums of a group: the np conservative variables, then
-    iTA   = np + 1    ! sum of T dA over the outlet cells
-    iAout = np + 2    ! area of the outlet faces
-    iAin  = np + 3    ! area of the inlet faces
-    ipA   = np + 4    ! sum of p dA over the inlet cells
-    imdot = np + 5    ! mass flow leaving through the outlet cells
-    igh0  = np + 6    ! sum of g h0 dA over the leaving outlet cells
-    igq   = np + 7    ! sum of g q dA over them, q = v^2/2
-    igin  = np + 8    ! sum of g dA over the inlet cells, g = rho |u.n|
-    igqin = np + 9    ! sum of g q dA over the inlet cells
-    iturb = np + 9    ! then the nrans turbulence variables, rho phi dA
+    ! The slots of the sums of a group
+    iAout = 1           ! area of the outlet faces
+    imdot = 2           ! mass flow leaving through the outlet cells, sum g dA
+    igh0  = 3           ! sum g h0 dA over them
+    igq   = 4           ! sum g qd dA over them, qd = rho v^2/2
+    igT   = 5           ! sum g T dA over them
+    iAin  = 6           ! area of the inlet faces
+    ipA   = 7           ! sum p dA over the inlet cells
+    igin  = 8           ! sum g dA over the inlet cells, g = rho |u.n|
+    igqin = 9           ! sum g qd dA over the inlet cells
+    isp   = 9           ! then the nsc species, sum g y dA over the leaving outlet cells
+    iturb = 9 + nsc     ! then the nrans turbulence variables, sum g phi dA over them (phi specific)
     nsum  = iturb + nrans
     allocate ( sums(nsum, domain % nman) )
     sums = 0d0
@@ -213,17 +215,12 @@ contains
       end associate
       call co_rotot_Rtot ( Prim(1:nsc), rho, Rgas )
       Un = real(modfm2, R8) * dot_product ( Prim(nu:nw), n )   ! normal velocity out of the domain
-      q  = 0.5d0 * sum ( Prim(nu:nw)**2 )
+      q  = 0.5d0 * sum ( Prim(nu:nw)**2 )   ! specific kinetic energy
+      qd = rho * q                         ! dynamic pressure
       T  = Prim(np) / ( rho * Rgas )
       select case ( domain % bc(i) % man_role )
       case ( MANIFOLD_OUTLET )
-        cons = prim2cons ( Prim(1:np) )
-        sums(1:np,m)  = sums(1:np,m)  + cons * A
-        sums(iTA,m)   = sums(iTA,m)   + T * A
         sums(iAout,m) = sums(iAout,m) + A
-        do k = 1, nrans
-          sums(iturb+k,m) = sums(iturb+k,m) + Prim(nt+k-1) * A
-        end do
         if (Un > 0d0) then
           g  = rho * Un
           hcell = 0d0
@@ -233,14 +230,21 @@ contains
           h0cell = hcell + q
           sums(imdot,m) = sums(imdot,m) + g * A
           sums(igh0,m)  = sums(igh0,m)  + g * h0cell * A
-          sums(igq,m)   = sums(igq,m)   + g * q * A
+          sums(igq,m)   = sums(igq,m)   + g * qd * A
+          sums(igT,m)   = sums(igT,m)   + g * T * A
+          do s = 1, nsc
+            sums(isp+s,m) = sums(isp+s,m) + g * Prim(s) / rho * A
+          end do
+          do k = 1, nrans
+            sums(iturb+k,m) = sums(iturb+k,m) + g * Prim(nt+k-1) / rho * A
+          end do
         end if
       case ( MANIFOLD_INLET )
         g = rho * abs(Un)
         sums(iAin,m)  = sums(iAin,m)  + A
         sums(ipA,m)   = sums(ipA,m)   + Prim(np) * A
         sums(igin,m)  = sums(igin,m)  + g * A
-        sums(igqin,m) = sums(igqin,m) + g * q * A
+        sums(igqin,m) = sums(igqin,m) + g * qd * A
       end select
     end do
 
@@ -253,44 +257,35 @@ contains
     ! The state of each group
     do m = 1, domain % nman
       associate ( gr => domain % man(m) )
-        A_out = sums(iAout,m)
-        A_in  = sums(iAin,m)
-        p_in  = 0d0
+        A_in = sums(iAin,m)
+        p_in = 0d0
         if (A_in > 0d0) p_in = sums(ipA,m) / A_in
         gr % mdot_out = sums(imdot,m)
-        gr % active   = gr % mdot_out > 0d0 .and. A_out > 0d0 .and. A_in > 0d0
+        gr % active   = gr % mdot_out > 0d0 .and. A_in > 0d0
         if (gr % active) then
-          ! The mean conservative state of the outlet faces and its primitive form (the temperature iteration of
-          ! cons2prim starts from the mean temperature)
-          meancons = sums(1:np,m) / A_out
-          meanprim = cons2prim ( meancons, sums(iTA,m) / A_out )
-          call co_rotot_Rtot ( meanprim(1:nsc), rho, Rgas )
-          y  = meanprim(1:nsc) / rho
-          T  = meanprim(np) / ( rho * Rgas )
-          v2 = sum ( meanprim(nu:nw)**2 )
-          cp = 0d0
-          do s = 1, nsc
-            cp = cp + y(s) * f_tabT ( T, s, cp_tab )
-          end do
-          gr % g_in  = gr % mratio * norm2 ( meancons(nu:nw) ) * A_out / A_in
-          gr % T0_in = T + 0.5d0 * v2 / cp
-          if (gr % dh0 /= 0d0) gr % T0_in = Total_Temperature ( Mixture_h ( gr % T0_in, y ) - gr % dh0, y, gr % T0_in )
+          ! The mass-flow-weighted means of the gas that leaves
+          y = sums(isp+1:isp+nsc,m) / gr % mdot_out
+          ysum = sum(y)
+          if (ysum > 0d0) y = y / ysum
+          gr % h0_out = sums(igh0,m) / gr % mdot_out
+          q_out       = sums(igq,m)  / gr % mdot_out
+          ! The inlet faces: the mass flux, the total temperature of the total enthalpy carried over (less dh0), the
+          ! species and the turbulence of the gas that leaves
+          gr % g_in  = gr % mratio * gr % mdot_out / A_in
+          gr % h0_in = gr % h0_out - gr % dh0
+          gr % T0_in = Total_Temperature ( gr % h0_in, y, sums(igT,m) / gr % mdot_out )
           gr % ci_in(nrans+1:nrans+nsc) = y
           do k = 1, nrans
-            gr % ci_in(k) = sums(iturb+k,m) / A_out / rho
+            gr % ci_in(k) = sums(iturb+k,m) / gr % mdot_out
           end do
-          ! The outlet faces: the area-mean static pressure of the inlet faces, as in 2025 (K and p0-ratio do not act on
-          ! this rule); the total pressures of the two sides (mass-weighted dynamic heads q) for the line of the log
-          q_out = sums(igq,m) / gr % mdot_out
-          q_in  = 0d0
+          ! The outlet faces: the static pressure of the total pressure that the inlet side gives the group, through the
+          ! loss and the ratio (the dynamic heads q of the two sides, mass-weighted)
+          q_in = 0d0
           if (sums(igin,m) > 0d0) q_in = sums(igqin,m) / sums(igin,m)
-          gr % p_out  = p_in
           gr % p0_in  = p_in + q_in
-          gr % p0_out = p_in + q_out
-          ! The line of the log
+          gr % p0_out = gr % p0_in / gr % p0ratio + gr % K * q_out
+          gr % p_out  = gr % p0_out - q_out
           gr % mdot_in = gr % g_in * A_in
-          gr % h0_out  = sums(igh0,m) / gr % mdot_out
-          gr % h0_in   = Mixture_h ( gr % T0_in, y )
         else
           ! Nothing leaves yet: the inlet faces are slip walls, the outlet faces take the pressure of the inlet side
           gr % g_in  = 0d0
