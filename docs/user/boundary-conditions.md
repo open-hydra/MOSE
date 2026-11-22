@@ -376,9 +376,9 @@ mass, total enthalpy and total pressure cross it exactly. `K` is a loss on the d
 (`K` = 1 when the gas that leaves loses its dynamic pressure in the plenum, as a jet into a large volume does: the static
 pressure is then about the same on the two sides); the three ratios lump the topology of a flow system on one link (one
 element simulated out of N, a bleed, the total-pressure ratio and specific work `dh0` [J/kg] of a turbine): with
-`mdot_ratio` ≠ 1 or `dh0` ≠ 0 the link is a mass or energy sink by construction. `rel_fac` is that of the inlets and
-outlets: the face takes `rel_fac` times the manifold's value plus (1 − `rel_fac`) times its own cell's; the converged
-state does not depend on it.
+`mdot_ratio` ≠ 1 or `dh0` ≠ 0 the link is a mass or energy sink by construction. `rel_fac` acts on the outlet faces,
+as on a `406`: their static pressure is `rel_fac` times the manifold's plus (1 − `rel_fac`) times their own cell's (the
+inlet faces take the values of the manifold as they are); the converged state does not depend on it.
 
 A cell of an outlet face whose gas moves inward is a slip wall for the stage, as on a `406`. While nothing leaves
 through the outlet faces of a group (a run started from rest), its inlet faces are slip walls and its outlet faces take
