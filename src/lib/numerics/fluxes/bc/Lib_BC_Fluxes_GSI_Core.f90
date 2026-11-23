@@ -59,6 +59,10 @@ module MOSE_Lib_BC_Fluxes_GSI_Core
   public :: GSI_KIND_PYROLYSIS, GSI_KIND_REACTIONS, GSI_KIND_CHAR_PYROLYSIS, gsi_pyrolysis_t
   public :: GSI_PYRO_HTPB, GSI_PYRO_HDPE, GSI_PYRO_PP, GSI_REAC_CARBON_BRADLEY
   public :: RANS_WALL_NO_BLOWING, RANS_WALL_BLOWING
+  !> Wall species state of the last ablating wall cell processed for the wall output (BC_Wall_Ablation called
+  !> with Ovar): wall partial densities and species surface fluxes. Read by MOSE_IO_Wall (keyword 'species').
+  real(R8), allocatable, public :: gsi_wall_roi(:), gsi_wall_omega(:)
+  logical, public :: gsi_wall_species_set = .false.
 
   !> Family of gas-surface interaction model, selecting the GSI dispatch.
   integer, parameter :: GSI_KIND_PYROLYSIS = 1  !< Arrhenius pyrolysis of a solid fuel
@@ -535,6 +539,11 @@ contains
       end if
     end if
     if ( .not. ablates ) return
+
+    if ( present(Ovar) ) then
+      if ( .not. allocated(gsi_wall_roi) ) allocate ( gsi_wall_roi(nsc), gsi_wall_omega(nsc) )
+      gsi_wall_roi = Prim_wall(1:nsc) ; gsi_wall_omega = omega ; gsi_wall_species_set = .true.
+    end if
 
     ! q_rad closes the wall temperature balance above; the gas only ever loses q_conv.
     call Ablation_Wall_Fluxes ( Im, Jm, Km, face, Blk, Prim, rho, T_wall, rho_wall, Prim_wall, &
