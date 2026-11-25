@@ -5,6 +5,8 @@ module MOSE_Wrap_Postprocess
   private
   public :: MOSE_postprocess
 
+  ! Grid level in the shell line (MOSE_postprocess)
+  logical, private :: shell_level_set = .false., shell_level = .false.
   character(81), private :: RANS_shell_format  =    "('MOSE | Iter =', i9, ' | Global iter =', i9, ' | Density residual =', E13.6)"
   character(69), private :: URANS_shell_format =    "('MOSE | Iter =', i9, ' | Time =', E13.6,  ' | Delta t =', E13.6)"
   character(96), private :: RANS_shell_format_MG  = "('MOSE Grid Level', i2, ' | Iter =', i9, ' | Global iter =', i9, ' | Density residual =', E13.6)"
@@ -27,6 +29,8 @@ contains
     use MOSE_Mod_MPI,        only: mpi_is_root
     use MOSE_Mod_Timers,     only: timer_summary
     use MOSE_Lib_Newstate,   only: Report_Negative_Turbulence
+    use MOSE_Lib_FAS_Guards, only: Report_FAS_Update_Fallbacks
+    use MOSE_Lib_Multigrid,  only: Report_FAS_Fallbacks
     use MOSE_Lib_Ghost,      only: Report_Wall_Ghosts
     use MOSE_Lib_BC_Fluxes_Extrapolation, only: Report_400_Entering
     use MOSE_Mod_Multirate,  only: mr_output_landed
@@ -40,6 +44,12 @@ contains
     logical  :: iter_based
 
     level = obj_multigrid%MG_level
+
+    ! Grid level in the shell line only when the run solves a coarser level of the grid sequence (from its start level)
+    if (.not. shell_level_set) then
+      shell_level_set = .true.
+      if (level > 1) shell_level = any(obj_multigrid%iter_threshold(2:level) > 0)
+    end if
 
     ! Update IOfield and IOwall solutiontime, on every grid level: a coarse level writes its own solutions
     ! (field-level<L>, wall-level<L>) with its IOfield and IOwall
@@ -85,13 +95,14 @@ contains
       if (mpi_is_root) then
         ! Shell
         if ( obj_time_scheme%time_accurate ) then
-          if (obj_multigrid%MGL > 1 ) then
+          if (shell_level) then
             write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(level)%time, simulation%domain(level)%dtglobal
           else
-            write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
+            write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(level)%time, &
+              simulation%domain(level)%dtglobal
           endif
         else
-          if (obj_multigrid%MGL > 1 ) then
+          if (shell_level) then
             write (*,RANS_shell_format_MG) level, obj_sim_param%iter_from_call, obj_sim_param%iter_general, obj_sim_param%residuotot(1)
           else
             write (*,RANS_shell_format) obj_sim_param%iter_from_call, obj_sim_param%iter_general, obj_sim_param%residuotot(1)
@@ -134,6 +145,11 @@ contains
 
       ! Negative turbulence variables after a stage, over the run (collective)
       call Report_Negative_Turbulence()
+
+      ! Multigrid corrections halved or not applied, and coarse smoothing updates halved, the state not being physical,
+      ! over the run (collective)
+      call Report_FAS_Fallbacks()
+      call Report_FAS_Update_Fallbacks()
 
       ! Cuts and floors of the ghost cells of walls and 400 faces, over the run (collective)
       call Report_Wall_Ghosts()
@@ -183,13 +199,14 @@ contains
       if (mpi_is_root) then
         if ( mod (simulation%domain(level) % iter, obj_io%shell_diter) == 0d0 ) then
           if (obj_time_scheme%time_accurate) then
-            if (obj_multigrid%MGL > 1 ) then
+            if (shell_level) then
               write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(level)%time, simulation%domain(level)%dtglobal
             else
-              write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
+              write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(level)%time, &
+                simulation%domain(level)%dtglobal
             endif
           else
-            if (obj_multigrid%MGL > 1 ) then
+            if (shell_level) then
               write (*,RANS_shell_format_MG) level, obj_sim_param%iter_from_call, obj_sim_param%iter_general, obj_sim_param%residuotot(1)
             else
               write (*,RANS_shell_format) obj_sim_param%iter_from_call, obj_sim_param%iter_general, obj_sim_param%residuotot(1)
@@ -279,13 +296,14 @@ contains
       if (mpi_is_root) then
         if ( mod (simulation%domain(level) % iter, obj_io%shell_diter) == 0d0 ) then
           if (obj_time_scheme%time_accurate) then
-            if (obj_multigrid%MGL > 1 ) then
+            if (shell_level) then
               write (*,URANS_shell_format_MG) level, obj_sim_param%iter_from_call, simulation%domain(level)%time, simulation%domain(level)%dtglobal
             else
-              write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(1)%time, simulation%domain(1)%dtglobal
+              write (*,URANS_shell_format) obj_sim_param%iter_from_call, simulation%domain(level)%time, &
+                simulation%domain(level)%dtglobal
             endif
           else
-            if (obj_multigrid%MGL > 1 ) then
+            if (shell_level) then
               write (*,RANS_shell_format_MG) level, obj_sim_param%iter_from_call, obj_sim_param%iter_general, obj_sim_param%residuotot(1)
             else
               write (*,RANS_shell_format) obj_sim_param%iter_from_call, obj_sim_param%iter_general, obj_sim_param%residuotot(1)

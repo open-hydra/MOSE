@@ -4,7 +4,7 @@ module MOSE_Assign_Setup
   
   implicit none
   private
-  public :: Assign_Setup, IRS_On, Riemann_Mco_Error, Schmidt_Error
+  public :: Assign_Setup, IRS_On, Riemann_Mco_Error, Schmidt_Error, Cycle_Error
 
 contains
 
@@ -24,7 +24,7 @@ contains
     use MOSE_Lib_RotatingFrame,   only: Setup_RotatingFrame
     implicit none
     ! Local
-    character(len=:), allocatable :: check
+    character(len=:), allocatable :: check, key
 
     !! Setting simulation type
     if (obj_sim_param%simulation_type=='euler') then
@@ -124,6 +124,25 @@ contains
       obj_irs%error_message = '[ERROR] Implicit residual smoothing (irs, irs-beta > 0) is supported only for '// &
                               'steady/pseudo-time runs.'
     end if
+    ! Multigrid FAS cycle: its arrays are allocated at setup only (Setup_Multigrid), on the coarser levels
+    if (trim(obj_multigrid%cycle) /= 'none' .and. obj_multigrid%MGL > 1) then
+      obj_multigrid%cycle_at_setup = .true.
+      obj_multigrid%description = trim(obj_multigrid%cycle)//'-cycle'
+    end if
+    ! The FAS cycle accelerates steady runs: the forcing term changes the transient of a time-accurate run. The chemistry
+    ! is split from the residual (Strang), so the forcing term of the coarse levels would not hold it. The checks that a
+    ! reading of input.ini during the run can break too are those of Cycle_Error
+    if (obj_multigrid%cycle_at_setup .and. &
+        (obj_time_scheme%time_accurate .or. obj_sim_param%HYDRA_time_accurate)) then
+      obj_multigrid%error_message = '[ERROR] The multigrid cycle (cycle = v, w) is supported only for '// &
+                                    'steady/pseudo-time runs.'
+    else if (obj_multigrid%cycle_at_setup .and. obj_chemistry%imodel > 0) then
+      obj_multigrid%error_message = '[ERROR] The multigrid cycle (cycle = v, w) is supported only without chemistry: '// &
+                                    'the chemistry, split from the residual (Strang), would not enter its forcing term.'
+    else
+      call Cycle_Error(check, key)
+      if (len(check) > 0) obj_multigrid%error_message = check
+    end if
     ! Space scheme
     ! ... written in Mod_Space ...
     ! Riemann solver
@@ -190,6 +209,42 @@ contains
     end if
 
   end function Schmidt_Error
+
+
+  !> The checks of the set-up on the multigrid cycle (cycle = v, w) that a reading of input.ini during the run can break:
+  !> the cycle needs the coarser grid levels and, its arrays being allocated at set-up only (Setup_Multigrid), cannot be
+  !> switched on in a run started without it; the running level iterates only in its pre- and post-smoothing; the RANS
+  !> equations on the coarse levels (cycle-turbulence) are those of a one- or two-equation model only (Cycle_Turbulence of
+  !> MOSE_Lib_Multigrid). Its error and the key the error names, or empty strings. At set-up (Assign_Setup, once
+  !> cycle_at_setup is set) and at every reading of input.ini during the run, on the values read (Read_Inifile_Runtime):
+  !> the run never goes on with values that its set-up refuses
+  subroutine Cycle_Error(out, key)
+    use MOSE_Config_Types_m, only: obj_multigrid
+    use MOSE_Global_m,       only: model, nrans
+    implicit none
+    character(len=:), allocatable, intent(out) :: out, key
+
+    out = ''
+    key = ''
+    if (trim(obj_multigrid%cycle) == 'none') return
+    if (obj_multigrid%MGL < 2) then
+      key = 'cycle'
+      out = '[ERROR] The multigrid cycle (cycle = v, w) needs the coarser grid levels: levels > 1 in the Multigrid '// &
+            'section, or cycle = none.'
+    else if (.not. obj_multigrid%cycle_at_setup) then
+      key = 'cycle'
+      out = '[ERROR] The run started without the multigrid cycle, which cannot be switched on during the run (its '// &
+            'arrays exist only when it is on at set-up).'
+    else if (obj_multigrid%pre_iter + obj_multigrid%post_iter < 1) then
+      key = 'pre-iter'
+      out = '[ERROR] The multigrid cycle needs pre-iter + post-iter of at least 1.'
+    else if (obj_multigrid%cycle_turbulence .and. model == 2 .and. nrans > 2) then
+      key = 'cycle-turbulence'
+      out = '[ERROR] cycle-turbulence = true needs a RANS model of one or two equations: the multigrid cycle does '// &
+            'not solve the equations of a Reynolds-stress model (SSG/LRR) on its coarse levels; set it to false.'
+    end if
+
+  end subroutine Cycle_Error
 
 
   !> Implicit residual smoothing is on with irs = true or irs-beta > 0: at set-up (Assign_Setup), and from the values of

@@ -202,6 +202,7 @@ nav:
         - Temporal Order: vv/multirate/order.md
         - Viscous Shock Tube: vv/multirate/daru-tenaud.md
         - Nozzle Start-Up: vv/multirate/nozzle-startup.md
+      - Multigrid Cycles (FAS): vv/fas-cycles.md
 
   - Developer Guide:
     - development/index.md

@@ -100,7 +100,8 @@ contains
   !> faces of the rotating frame, an axis or origin that is not finite or does not read, an axis of zero length, implicit
   !> residual smoothing switched on in a run started without it, whose arrays exist only when it is on at set-up, values
   !> that a check of the set-up between keys refuses, riemann-solver with riemann-options-Mco and schmidt with the table of
-  !> the binary diffusion coefficients and, with the multirate integrator, cfl, vnn and cfl-rise-threshold
+  !> the binary diffusion coefficients, the multigrid cycle switched on in a run started without it and the keys of the
+  !> cycle (Cycle_Error) and, with the multirate integrator, cfl, vnn and cfl-rise-threshold
   !> (Multirate_Reading_Error)) stops
   !> the run with ini-error = stop, as at set-up. With ini-error = warn, the default, the reading is not taken: a warning
   !> gives the iteration and the error (Write_Not_Taken), and the run goes on with every value it had before the reading,
@@ -117,7 +118,7 @@ contains
     use Finer,               only: file_ini
     use MOSE_Backend_INI,    only: Load_Ini, Count_Stationary_Faces, Lists_Changed
     use MOSE_Lib_RotatingFrame, only: Reload_RotatingFrame
-    use MOSE_Assign_Setup,   only: IRS_On, Riemann_Mco_Error, Schmidt_Error
+    use MOSE_Assign_Setup,   only: IRS_On, Riemann_Mco_Error, Schmidt_Error, Cycle_Error
     use MOSE_Input_Registry
     use MOSE_Parameters_m,   only: codename
     use MOSE_Config_Types_m, only: obj_io, obj_irs, obj_multirate
@@ -130,6 +131,7 @@ contains
     type(file_ini) :: fini
     character(len=1024) :: out
     character(len=256)  :: reason   ! The error of the rotating frame that this rank finds, blank if none
+    character(len=:), allocatable :: reason_cycle, key_cycle   ! The error of the multigrid cycle and its key (Cycle_Error)
     real(R8) :: flag, flag_all, first
     logical  :: warn, taken
 
@@ -161,6 +163,11 @@ contains
     ! run values that its set-up refuses
     if (index(out,'ERROR') == 0) out = Refused_Value(trim(codename)//'-Numerics', 'riemann-options-Mco', Riemann_Mco_Error())
     if (index(out,'ERROR') == 0) out = Refused_Value(trim(codename)//'-Physics', 'schmidt', Schmidt_Error())
+    ! the multigrid cycle switched on in a run started without it, and its keys against the checks of the set-up
+    if (index(out,'ERROR') == 0) then
+      call Cycle_Error(reason_cycle, key_cycle)
+      out = Refused_Value(trim(codename)//'-Multigrid', key_cycle, reason_cycle)
+    end if
     ! and, with the multirate integrator, its checks of the set-up on cfl, vnn and cfl-rise-threshold
     if (index(out,'ERROR') == 0 .and. obj_multirate%enabled) out = Multirate_Reading_Error()
     flag = 0.0_R8

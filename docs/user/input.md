@@ -93,6 +93,65 @@ stops the run, and a value below 1 counts as 1. With `levels = n` the number of 
 must be a multiple of 2^(n−1) in i, and in j and k unless it is 1, or the run stops at set-up.
 `level1-iter`, `level2-iter`, ... give the iterations of each level. They are read again with `input.ini`
 during the run: lowering one below the iterations already done ends that level at the iteration after that reading.
+The line written on the screen names the grid level (`MOSE Grid Level n | Iter = ...`) only when the run solves a
+coarser level of the grid sequence; a run on the finest level only, whose coarser levels serve the multigrid cycle,
+writes the line of a single grid (`MOSE | Iter = ...`).
+
+---
+
+## Multigrid cycle (FAS)
+
+`cycle` in `[MOSE-Multigrid]` makes the levels below the one being computed a multigrid cycle (Full Approximation
+Scheme, [theory](../theory/time-integration.md#multigrid-cycle-fas)), for steady runs without chemistry. With
+`cycle = none`, the default, the coarse levels only give the starting solution of the finer ones (grid sequencing).
+The levels still run from the coarsest to the finest, so level 2 has its cycle on levels 3, 4, ... and level 1 on
+levels 2, 3, ...; the coarsest level has none.
+
+```ini
+[MOSE-Multigrid]
+levels = 3
+level3-iter = 2000
+level2-iter = 2000
+level1-iter = 100000
+cycle = w
+```
+
+A complete case is `test/2D/viscous/flat-plate-laminar-fas`: the laminar flat plate with the cycle at its defaults,
+with the boundary files of its coarse levels (`INPUT/bc2.txt`, `INPUT/bc3.txt`).
+
+### Keys
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `cycle` | `none` | `none`: grid sequencing only; `v`: each coarser level visited once per cycle; `w`: twice. |
+| `cycle-start` | 0 | Iteration of the level being computed from which the cycle acts; before it the level iterates as with `none`. |
+| `pre-iter` | 2 | Iterations of each level, the level being computed included, before its visit to the coarser ones. |
+| `post-iter` | 0 | Iterations of each level after the correction from the coarser ones. The cycle runs once every `pre-iter + post-iter` iterations, a sum of at least 1. |
+| `coarse-iter` | 1 | Iterations of the coarsest level of the cycle. |
+| `damp-restriction` | 1.0 | Factor of the restricted residual in the forcing term. |
+| `damp-prolongation` | 0.5 | Factor of the prolongated correction. |
+| `cycle-turbulence` | `.false.` | `.true.`: the equations of a one- or two-equation RANS model are solved on the coarse levels too; otherwise they keep the restricted values. |
+| `cycle-turbulence-start` | 0 | Iterations after `cycle-start` from which `cycle-turbulence` acts: with both at 2000 the RANS equations enter the cycle at iteration 4000. |
+
+Every key is read again during the run.
+
+### When the run stops
+
+The cycle stops the run at set-up with `time-accurate = true`, with a `chemistry` model other than `frozen`, with
+`levels = 1`, with `pre-iter + post-iter` below 1, and with `cycle-turbulence = .true.` and a Reynolds-stress model
+(SSG/LRR). Its arrays are allocated at set-up: `cycle = none` switches it off during the run, but `v` or `w` written
+during a run started with `none` is an error of the reading (with `ini-error = stop` the run stops, with `warn` the
+reading is not taken), as is every other value that the set-up refuses.
+
+### Settings
+
+Start from the defaults; where they gain little, change one key at a time, and go back to the defaults if the residual
+stalls above that of the grid sequencing. `damp-prolongation = 1` can be faster, but stalls or stops the run more
+often. With Spalart–Allmaras try `cycle-turbulence = .true.`; with the k–ω models keep it off. In general, use no
+implicit residual smoothing with the cycle (`irs-beta = 0`). Keep `coarse-iter = 1`. On a level that starts far from
+the solution, start the cycle, or the turbulence in it, later (`cycle-start`, `cycle-turbulence-start`). On runs that
+converge in seconds or a few minutes and with strong shocks, use `cycle = none`. How the defaults and these
+[guidelines](../vv/fas-cycles.md#guidelines) were chosen is in the V&V.
 
 ---
 

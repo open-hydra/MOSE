@@ -27,6 +27,13 @@
 #   multigrid  two grid levels, 10 iterations on the coarse one, then 30 on
 #              the fine one, the restart after 15 of them; solutions every 4
 #              iterations of the level. Carries the level.
+#   multigrid-cycle  the same with the FAS cycle (cycle = w, pre-iter = 2,
+#              post-iter = 1: the cycle after the fine iterations 2, 5, 8, ...),
+#              the restart after 15 of them, between two cycles. The cycle
+#              keeps nothing from one iteration to the next (forcing term and
+#              coarse state are built again at each cycle) and its place among
+#              the iterations comes from the iteration count of the level: the
+#              restart repeats the run in one go.
 #  and, with Tecplot ASCII,
 #   multigrid-tecplot  the same two levels: the global iteration count of the
 #              restart goes on from the magnitude of the solution time read on
@@ -96,6 +103,8 @@
 #              due there is the final one, field, which holds output 3.
 #   multigrid-on-output  the run of multigrid split after 16 iterations of
 #              the fine level: field4 (MOSE_ITERATION 16, MOSE_OUTPUT_NUMBER 4).
+#   multigrid-cycle-on-output  the same for multigrid-cycle: the restart
+#              after the fine iteration 16, the one before a cycle.
 #   dtime-on-output  time-accurate, a solution and a probe row every 0.0083 s,
 #              50 iterations, split at the first time-based output of the run
 #              in one go (both fall due at the first step past 0.0083 s):
@@ -163,7 +172,7 @@ write_ini() {
     case $case in
       steady|steady-overwrite)    printf '%s\n' 'cfl = 0.5' 'cfl-rise-threshold = 30' 'time-accurate = false' ;;
       dtime|dtime-on-output|probes|torque) printf '%s\n' 'cfl = 0.9' 'time-accurate = true' ;;
-      multigrid|multigrid-tecplot|time-only) printf '%s\n' 'cfl = 0.5' 'time-accurate = false' ;;
+      multigrid|multigrid-cycle|multigrid-tecplot|time-only) printf '%s\n' 'cfl = 0.5' 'time-accurate = false' ;;
       transient|transient-tecplot|transient-szplt) if [[ $newrun == true ]]; then printf '%s\n' 'cfl = 0.5' 'time-accurate = false'
                  else printf '%s\n' 'cfl = 0.9' 'time-accurate = true'; fi ;;
     esac
@@ -188,6 +197,8 @@ write_ini() {
                                'origin = 0.0 0.0 0.0' ;;
       multigrid) printf '%s\n' 'sol-diter = 4' '' '[MOSE-Multigrid]' 'levels = 2' 'level2-iter = 10' \
                                "level1-iter = $iters" ;;
+      multigrid-cycle) printf '%s\n' 'sol-diter = 4' '' '[MOSE-Multigrid]' 'levels = 2' 'level2-iter = 10' \
+                               "level1-iter = $iters" 'cycle = w' 'pre-iter = 2' 'post-iter = 1' ;;
       multigrid-tecplot) printf '%s\n' '' '[MOSE-Multigrid]' 'levels = 2' 'level2-iter = 10' "level1-iter = $iters" ;;
     esac
   } > "$dir/input.ini"
@@ -294,6 +305,8 @@ fi
 
 run_case multigrid 30 15 || status=1   # with levels, level1-iter counts the iterations on the fine level
 on_output multigrid-on-output multigrid 30 16 4 || status=1   # fine iterations 4, 8, 12 and 16 write field1 to field4
+run_case multigrid-cycle 30 15 || status=1
+on_output multigrid-cycle-on-output multigrid-cycle 30 16 4 || status=1
 
 # The same three cases in the other formats
 formats=('vtk ascii' 'tecplot ascii')
@@ -524,5 +537,5 @@ EOF
 if [[ $status -ne 0 ]]; then
   fail "a restart does not carry on the counters"
 fi
-echo "RestartCounters: ok — steady, dtime, multigrid, probes and rotating-frame (torque.dat) restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline, from a first part killed at its time limit and from a first part that ends on an output iteration (by iteration and by time), a transient from a steady solution starts at t = 0 and a steady restart from a solution with TIME only goes on from |TIME|"
+echo "RestartCounters: ok — steady, dtime, multigrid (also with the FAS cycle), probes and rotating-frame (torque.dat) restarts reproduce the uninterrupted runs bit for bit, also from history files cut by hand without a final newline, from a first part killed at its time limit and from a first part that ends on an output iteration (by iteration and by time), a transient from a steady solution starts at t = 0 and a steady restart from a solution with TIME only goes on from |TIME|"
 exit 0
