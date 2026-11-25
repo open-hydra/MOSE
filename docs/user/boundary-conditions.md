@@ -353,6 +353,13 @@ The following table lists all numeric BC type codes used in `bc.txt`, their phys
     positive into the gas, as `q_wall` (a `301` wall writes its `q_wall`, a `503` wall that melts minus the heat its surface
     absorbs, conducted and radiated, the other walls the heat they conduct into the gas); the mass flux `mdot` of the walls
     `503`–`506` is positive into the gas, the mass the surface blows in.
+    With more than one species the group `thermal` of `wall-variables` also writes `qdiff` after `qw`: the diffusive
+    heat flux into the gas, $\sum_s J_s\,h_s(T_w)$ with $J_s = \omega_s - \dot m\,Y_{w,s}$ the diffusive mass flux of
+    species $s$ into the gas; it is that of the walls `504`–`506` and zero on the other walls. The keyword `species`
+    adds, for the same walls (zero elsewhere), the wall mass fractions `Yw(k)`, the species surface fluxes `omega(k)`
+    (along the face normal of the solver, toward growing index: minus the flux into the gas on a high face) and, last,
+    `hw`, the enthalpy of the wall gas at the wall temperature, $\sum_s Y_{w,s}\,h_s(T_w)$. A mass-transfer coefficient
+    follows as `qdiff` $/\,(h_e(T_w) - $ `hw`$)$, with $h_e(T_w)$ the enthalpy of the edge composition at $T_w$.
 
 ### Manifold
 

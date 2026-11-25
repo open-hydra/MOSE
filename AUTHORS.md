@@ -30,3 +30,4 @@ Automatically sourced from git history.
 
 - Andrea Giacomi
 - Matteo Fiore
+- passarani

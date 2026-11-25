@@ -8,6 +8,15 @@ module MOSE_IO_Wall
   ! Wall output, one container per multigrid level (index = domain%mg_level): allocated on
   ! every rank, filled and written on root only
   type(ORION_data), allocatable :: IOwall(:)
+  ! keyword 'species' of wall-variables, for the ablating walls 504-506 (zero on the other walls): the wall mass fractions
+  ! Yw(k), the species surface fluxes omega(k) and, last, hw, the enthalpy of the wall gas at the wall temperature
+  ! (sum of Yw(k) h_k(Tw)): with Tw and qdiff of the group 'thermal', what the mass-transfer coefficient
+  ! qdiff / (h_e(Tw) - hw) needs, h_e(Tw) being the enthalpy of the edge composition at Tw
+  logical :: write_wall_species = .false.
+  ! column "qdiff" of the group 'thermal', written when the gas has more than one species: the diffusive heat flux into
+  ! the gas, sum of J_s h_s(Tw) over the species (J_s the diffusive mass flux of species s into the gas); it is that of
+  ! the ablating walls 504-506 (pyrolysis, surface reactions, pyrolysing ablator) and zero on the other walls
+  logical :: write_wall_qdiff = .false.
 
 contains
 
@@ -39,10 +48,26 @@ contains
       obj_io%Owallnames = trim(obj_io%Owallnames)//' "Tw" "qw"'
       obj_io%write_wall_thermal = .true.
     endif
+    write_wall_qdiff = obj_io%write_wall_thermal .and. nsc > 1
+    if (write_wall_qdiff) then
+      obj_io%Onwall = obj_io%Onwall + 1
+      obj_io%Owallnames = trim(obj_io%Owallnames)//' "qdiff"'
+    endif
     if (index(obj_io%wall_variables,'mass')>0) then
       obj_io%Onwall = obj_io%Onwall + 1
       obj_io%Owallnames = trim(obj_io%Owallnames)//' "mdot"'
       obj_io%write_wall_mass = .true.
+    endif
+    write_wall_species = index(obj_io%wall_variables,'species')>0
+    if (write_wall_species) then
+      obj_io%Onwall = obj_io%Onwall + 2*nsc + 1
+      do i = 1, nsc
+        obj_io%Owallnames = trim(obj_io%Owallnames)//' "Yw('//trim(str(.true.,i))//')"'
+      enddo
+      do i = 1, nsc
+        obj_io%Owallnames = trim(obj_io%Owallnames)//' "omega('//trim(str(.true.,i))//')"'
+      enddo
+      obj_io%Owallnames = trim(obj_io%Owallnames)//' "hw"'
     endif
 
     allocate(IOwall(lv)%block(1:count(obj_io_bc%viscous_flag)))
@@ -182,10 +207,13 @@ contains
     use MOSE_Lib_BC_Fluxes_GSI_Char_Pyrolysis
     use MOSE_Config_Types_m,    only: obj_rot
     use MOSE_Lib_RotatingFrame, only: RF_Is_Stationary_Face, RF_Wall_Velocity, RF_Wall_Velocity_Gradient, RF_Face_Center
+    use MOSE_Lib_BC_Fluxes_GSI_Core, only: gsi_wall_y, gsi_wall_omega, gsi_wall_species_set, gsi_wall_qdiff, gsi_wall_hw
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     real(R8), dimension(8) :: Ovar
+    real(R8), allocatable :: Oext(:)   ! keyword 'species': wall mass fractions, species surface fluxes, wall gas enthalpy
+    integer :: NO                      ! values per wall cell in wall_buf
     logical  :: ablating
     real(R8) :: Tw_surface
     integer :: f, lower, upper, i, b, bb, pv, Bm, Im, Jm, Km, Fm, Is, Js, Ks
@@ -205,7 +233,11 @@ contains
       end do
     end do
 
-    allocate(wall_buf(8 * n_wall_total))
+    ! per wall cell: Ovar(1:8), qdiff, then with the keyword 'species' the wall mass fractions, the surface fluxes and hw
+    NO = 9
+    if (write_wall_species) NO = 9 + 2*nsc + 1
+    allocate(Oext(2*nsc+1))
+    allocate(wall_buf(NO * n_wall_total))
     wall_buf = 0d0
 
     ! The records grouped by block, then face, in the order of the file within a group
@@ -254,6 +286,7 @@ contains
           r_keep = domain % blk(Bm) % r (:,Im,Jm,Km)
 
           Ovar = 0d0
+          gsi_wall_species_set = .false.
           select case ( domain % bc(i) % type )
 
             ! A wall that does not rotate with the frame moves with -(Omega x r) in it: the wall velocity
@@ -318,7 +351,10 @@ contains
 
           domain % blk(Bm) % r (:,Im,Jm,Km) = r_keep
 
-          wall_buf(8*(wall_i-1)+1 : 8*wall_i) = Ovar
+          wall_buf(NO*(wall_i-1)+1 : NO*(wall_i-1)+8) = Ovar
+          if (gsi_wall_species_set) wall_buf(NO*(wall_i-1)+9) = gsi_wall_qdiff
+          if (write_wall_species .and. gsi_wall_species_set) &
+            wall_buf(NO*(wall_i-1)+10 : NO*wall_i) = [ gsi_wall_y, gsi_wall_omega, gsi_wall_hw ]
         enddo
 
       enddo ! face
@@ -326,7 +362,7 @@ contains
 
     ! Reduce wall_buf to root. Each cell is owned by exactly one rank, so SUM gives
     ! correct values. On root, wall_buf is updated in-place by mpi_reduce_sum_r8_array.
-    call mpi_reduce_sum_r8_array(wall_buf, 8*n_wall_total)
+    call mpi_reduce_sum_r8_array(wall_buf, NO*n_wall_total)
 
     ! Root fills IOwall from the gathered buffer
     if (mpi_is_root) then
@@ -341,7 +377,8 @@ contains
           do ii = lower, upper
             i = order(ii)
             wall_i = wall_i + 1
-            Ovar = wall_buf(8*(wall_i-1)+1 : 8*wall_i)
+            Ovar = wall_buf(NO*(wall_i-1)+1 : NO*(wall_i-1)+8)
+            if (write_wall_species) Oext = wall_buf(NO*(wall_i-1)+10 : NO*wall_i)
 
             select case(f)
               case(1,2); Is = 1               ; Js = domain%bc(i)%j ; Ks = domain%bc(i)%k
@@ -358,9 +395,17 @@ contains
               IOwall(lv)%block(bb)%vars(pv+1:pv+2, Is, Js, Ks) = Ovar(6:7)
               pv = pv + 2
             endif
+            if (write_wall_qdiff) then
+              IOwall(lv)%block(bb)%vars(pv+1, Is, Js, Ks) = wall_buf(NO*(wall_i-1)+9)
+              pv = pv + 1
+            endif
             if (obj_io%write_wall_mass) then
               IOwall(lv)%block(bb)%vars(pv+1, Is, Js, Ks) = Ovar(8)
-              pv = pv + 2
+              pv = pv + 1
+            endif
+            if (write_wall_species) then
+              IOwall(lv)%block(bb)%vars(pv+1:pv+2*nsc+1, Is, Js, Ks) = Oext
+              pv = pv + 2*nsc + 1
             endif
           enddo
 
@@ -368,7 +413,7 @@ contains
       enddo ! block
     end if
 
-    deallocate(wall_buf, order, first, next)
+    deallocate(wall_buf, order, first, next, Oext)
 
   end subroutine Extract_Properties_From_BC
   

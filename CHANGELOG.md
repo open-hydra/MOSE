@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Wall output: `qdiff`, the diffusive heat flux into the gas, in the group `thermal` of multi-species runs; keyword
+  `species` of `wall-variables`: wall mass fractions `Yw(k)`, species surface fluxes `omega(k)` and the wall gas enthalpy
+  `hw` of the walls `504`–`506`. See [Boundary Conditions](docs/user/boundary-conditions.md).
 - Manifold boundary `501`: outlet and inlet faces of a group joined by a lumped plenum, on any ranks; tests
   `BoundaryConditions.Manifold`, `MPIManifold`. See [Boundary Conditions](docs/user/boundary-conditions.md#manifold).
 - SSG/LRR-ω Reynolds-stress model (`turbulence = SSGLRR`, `-SD`, `-w2019`, `-w2019-SD`); tests `RSMDecay`, `FlatPlateTMR`.
