@@ -8,7 +8,10 @@ module MOSE_IO_Wall
   ! Wall output, one container per multigrid level (index = domain%mg_level): allocated on
   ! every rank, filled and written on root only
   type(ORION_data), allocatable :: IOwall(:)
-  ! keyword 'species' of wall-variables: wall partial densities and species surface fluxes of the GSI walls
+  ! keyword 'species' of wall-variables, for the ablating walls 504-506 (zero on the other walls): the wall mass fractions
+  ! Yw(k), the species surface fluxes omega(k) and, last, hw, the enthalpy of the wall gas at the wall temperature
+  ! (sum of Yw(k) h_k(Tw)): with Tw and qdiff of the group 'thermal', what the mass-transfer coefficient
+  ! qdiff / (h_e(Tw) - hw) needs, h_e(Tw) being the enthalpy of the edge composition at Tw
   logical :: write_wall_species = .false.
   ! column "qdiff" of the group 'thermal', written when the gas has more than one species: the diffusive heat flux into
   ! the gas, sum of J_s h_s(Tw) over the species (J_s the diffusive mass flux of species s into the gas); it is that of
@@ -57,13 +60,14 @@ contains
     endif
     write_wall_species = index(obj_io%wall_variables,'species')>0
     if (write_wall_species) then
-      obj_io%Onwall = obj_io%Onwall + 2*nsc
+      obj_io%Onwall = obj_io%Onwall + 2*nsc + 1
       do i = 1, nsc
-        obj_io%Owallnames = trim(obj_io%Owallnames)//' "rho('//trim(str(.true.,i))//')"'
+        obj_io%Owallnames = trim(obj_io%Owallnames)//' "Yw('//trim(str(.true.,i))//')"'
       enddo
       do i = 1, nsc
         obj_io%Owallnames = trim(obj_io%Owallnames)//' "omega('//trim(str(.true.,i))//')"'
       enddo
+      obj_io%Owallnames = trim(obj_io%Owallnames)//' "hw"'
     endif
 
     allocate(IOwall(lv)%block(1:count(obj_io_bc%viscous_flag)))
@@ -203,12 +207,12 @@ contains
     use MOSE_Lib_BC_Fluxes_GSI_Char_Pyrolysis
     use MOSE_Config_Types_m,    only: obj_rot
     use MOSE_Lib_RotatingFrame, only: RF_Is_Stationary_Face, RF_Wall_Velocity, RF_Wall_Velocity_Gradient, RF_Face_Center
-    use MOSE_Lib_BC_Fluxes_GSI_Core, only: gsi_wall_roi, gsi_wall_omega, gsi_wall_species_set, gsi_wall_qdiff
+    use MOSE_Lib_BC_Fluxes_GSI_Core, only: gsi_wall_y, gsi_wall_omega, gsi_wall_species_set, gsi_wall_qdiff, gsi_wall_hw
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
     real(R8), dimension(8) :: Ovar
-    real(R8), allocatable :: Oext(:)   ! keyword 'species': wall partial densities, species surface fluxes
+    real(R8), allocatable :: Oext(:)   ! keyword 'species': wall mass fractions, species surface fluxes, wall gas enthalpy
     integer :: NO                      ! values per wall cell in wall_buf
     logical  :: ablating
     real(R8) :: Tw_surface
@@ -229,10 +233,10 @@ contains
       end do
     end do
 
-    ! per wall cell: Ovar(1:8), qdiff, then with the keyword 'species' the wall partial densities and surface fluxes
+    ! per wall cell: Ovar(1:8), qdiff, then with the keyword 'species' the wall mass fractions, the surface fluxes and hw
     NO = 9
-    if (write_wall_species) NO = 9 + 2*nsc
-    allocate(Oext(2*nsc))
+    if (write_wall_species) NO = 9 + 2*nsc + 1
+    allocate(Oext(2*nsc+1))
     allocate(wall_buf(NO * n_wall_total))
     wall_buf = 0d0
 
@@ -350,7 +354,7 @@ contains
           wall_buf(NO*(wall_i-1)+1 : NO*(wall_i-1)+8) = Ovar
           if (gsi_wall_species_set) wall_buf(NO*(wall_i-1)+9) = gsi_wall_qdiff
           if (write_wall_species .and. gsi_wall_species_set) &
-            wall_buf(NO*(wall_i-1)+10 : NO*wall_i) = [ gsi_wall_roi, gsi_wall_omega ]
+            wall_buf(NO*(wall_i-1)+10 : NO*wall_i) = [ gsi_wall_y, gsi_wall_omega, gsi_wall_hw ]
         enddo
 
       enddo ! face
@@ -400,8 +404,8 @@ contains
               pv = pv + 1
             endif
             if (write_wall_species) then
-              IOwall(lv)%block(bb)%vars(pv+1:pv+2*nsc, Is, Js, Ks) = Oext
-              pv = pv + 2*nsc
+              IOwall(lv)%block(bb)%vars(pv+1:pv+2*nsc+1, Is, Js, Ks) = Oext
+              pv = pv + 2*nsc + 1
             endif
           enddo
 

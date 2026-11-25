@@ -60,8 +60,10 @@ module MOSE_Lib_BC_Fluxes_GSI_Core
   public :: GSI_PYRO_HTPB, GSI_PYRO_HDPE, GSI_PYRO_PP, GSI_REAC_CARBON_BRADLEY
   public :: RANS_WALL_NO_BLOWING, RANS_WALL_BLOWING
   !> Wall species state of the last ablating wall cell processed for the wall output (BC_Wall_Ablation called
-  !> with Ovar): wall partial densities and species surface fluxes. Read by MOSE_IO_Wall (keyword 'species').
-  real(R8), allocatable, public :: gsi_wall_roi(:), gsi_wall_omega(:)
+  !> with Ovar): wall mass fractions, species surface fluxes and the enthalpy of the wall gas at the wall temperature,
+  !> sum over the species of Y_w,s h_s(T_wall). Read by MOSE_IO_Wall (keyword 'species').
+  real(R8), allocatable, public :: gsi_wall_y(:), gsi_wall_omega(:)
+  real(R8), public :: gsi_wall_hw = 0d0
   logical, public :: gsi_wall_species_set = .false.
   !> Diffusive heat flux into the gas at that wall cell, sum over the species of J_s h_s(T_wall), with J_s the diffusive
   !> mass flux of species s into the gas: J_s = omega_s - mdot Y_w,s along the face normal of the solver, times `into`
@@ -546,11 +548,12 @@ contains
     if ( .not. ablates ) return
 
     if ( present(Ovar) ) then
-      if ( .not. allocated(gsi_wall_roi) ) allocate ( gsi_wall_roi(nsc), gsi_wall_omega(nsc) )
-      gsi_wall_roi = Prim_wall(1:nsc) ; gsi_wall_omega = omega ; gsi_wall_species_set = .true.
-      gsi_wall_qdiff = 0d0
+      if ( .not. allocated(gsi_wall_y) ) allocate ( gsi_wall_y(nsc), gsi_wall_omega(nsc) )
+      gsi_wall_y = Prim_wall(1:nsc) / rho_wall ; gsi_wall_omega = omega ; gsi_wall_species_set = .true.
+      gsi_wall_qdiff = 0d0 ; gsi_wall_hw = 0d0
       do s = 1, nsc
-        gsi_wall_qdiff = gsi_wall_qdiff + ( omega(s) - mdot * Prim_wall(s) / rho_wall ) * f_tabT ( T_wall, s, h_tab )
+        gsi_wall_qdiff = gsi_wall_qdiff + ( omega(s) - mdot * gsi_wall_y(s) ) * f_tabT ( T_wall, s, h_tab )
+        gsi_wall_hw    = gsi_wall_hw + gsi_wall_y(s) * f_tabT ( T_wall, s, h_tab )
       end do
       gsi_wall_qdiff = - face % modfm2 * gsi_wall_qdiff
       if ( gsi_wall_qdiff == 0d0 ) gsi_wall_qdiff = 0d0   ! -0 written as +0, as Compute_Wall_Properties does
