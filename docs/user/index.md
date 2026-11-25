@@ -1,5 +1,14 @@
 # User Guide
 
+## Topic guides
+
+- [Run diagnostics and troubleshoot a case](diagnostics.md)
+- [Validate `input.ini` and change settings during a run](input-validation.md)
+- [Configure multigrid and FAS cycles](multigrid.md)
+- [Configure multirate time stepping](multirate.md)
+- [Browse boundary conditions by type](boundaries/index.md)
+
+
 The User Guide describes how to set up, configure, and run simulations with MOSE.
 
 <div class="grid cards" markdown>

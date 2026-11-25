@@ -53,7 +53,7 @@ my_case/
     └── <name>.txt            ← time-history at probe locations
 ```
 
-!!! note "Mixture files"
+??? note "Mixture files"
     Besides `phase.txt` and `thermo.dat`, `INPUT/` holds the files of the models in use, with the phase prefix in a
     multi-phase run:
 
@@ -71,7 +71,7 @@ my_case/
 !!! warning
     MOSE reads the grid geometry directly from the initial condition file (the `x`, `y`, `z` node coordinates). There is no separate mesh file.
 
-!!! note "Mesh type"
+??? note "Mesh type"
     MOSE takes the type of the mesh from the nodes of every block. The mesh is 3-D if a block has more than one cell
     in $k$, 2-D if not and a block has more than one cell in $j$, 1-D otherwise. A 2-D mesh is an axisymmetric wedge
     when, in every block, the $k = 1$ node plane is the $k = 0$ plane turned about the $x$ axis by the same angle ($x$
@@ -134,152 +134,155 @@ mpirun -n 8 ./bin/MOSE
 
 ---
 
+For a shorter explanation of log messages, exit status, timing, and output files, see [Run diagnostics and troubleshooting](diagnostics.md).
+
 ## Logging and Diagnostics
 
-MOSE prints diagnostic information to the console during loading and iteration. This includes:  
-- Loading status of input files (thermodynamics, transport, chemistry, initial and boundary conditions)
-- Summary of the case set-up (number of blocks, cells, boundary faces, types of boundary conditions, physical model details, numerical scheme choices)
-- Iteration count and residuals during the run
+??? note "Detailed reference: logging, stopping criteria, and timing"
+    MOSE prints diagnostic information to the console during loading and iteration. This includes:  
+    - Loading status of input files (thermodynamics, transport, chemistry, initial and boundary conditions)
+    - Summary of the case set-up (number of blocks, cells, boundary faces, types of boundary conditions, physical model details, numerical scheme choices)
+    - Iteration count and residuals during the run
 
-!!! tip "Loading checks"
-    If any issue occurs during loading (e.g., missing files, format errors), MOSE will print an error message and exit, so the successful loading message is a good sign that the case is set up correctly.
+    !!! tip "Loading checks"
+        If any issue occurs during loading (e.g., missing files, format errors), MOSE will print an error message and exit, so the successful loading message is a good sign that the case is set up correctly.
 
-!!! note "Exit code"
-    A run that MOSE stops on an error, at loading, at set-up, because the solution diverges («Integration failed at
-    b, i, j, k», then «NaN, infinity or p<0 detected») or because an integration of the finite-rate chemistry fails
-    (below), ends with a non-zero exit code: 1 where MOSE ends with `stop 1`
-    or `error stop 1`, otherwise that of `ERROR STOP` (128 with ifx, 1 with gfortran) or the one the MPI launcher gives
-    for `MPI_ABORT` with error code 1. With MPI, an initial condition that cannot be read (also when one rank alone finds
-    it), a failed integration of the finite-rate chemistry on any rank, an error that rank 0 finds at set-up or when it
-    reads `input.ini` again, and most errors that every rank finds
-    stop every rank together: each rank writes its message, the ranks finalize MPI and end with exit code 1. A `stop`
-    outside these collective stops, a divergence for instance, ends its own rank only, and the MPI launcher ends the run
-    with a code of its own (255 with the `mpiexec` of Intel MPI 2021.12). Some errors that one rank finds alone, at
-    set-up in the mesh of its blocks (such as a degenerate or folded cell, an axis at r = 0 or a wall on a face of zero
-    area) or in its probes (a probe file that cannot be opened, an unknown probe variable) and on rank 0 in the
-    diagnostic output, and one error of `bc.txt` that every rank finds (chimera entries whose donor fractions sum to
-    less than one half) stop the run through `MPI_ABORT`: the rank
-    writes out its output first, but `MPI_ABORT` makes only a best attempt to stop the processes, and what the other
-    ranks hold for their output may not reach the log. A divergence is caught on any value that is not finite or on a
-    negative pressure, in RELEASE builds with fast math too; a value of the initial condition that is not finite stops
-    the run at set-up ([Initial Conditions](initial-conditions.md#required-variables)). The errors of each input are in
-    its page ([Input File](input.md), [Initial Conditions](initial-conditions.md),
-    [Boundary Conditions](boundary-conditions.md)).
+    !!! note "Exit code"
+        A run that MOSE stops on an error, at loading, at set-up, because the solution diverges («Integration failed at
+        b, i, j, k», then «NaN, infinity or p<0 detected») or because an integration of the finite-rate chemistry fails
+        (below), ends with a non-zero exit code: 1 where MOSE ends with `stop 1`
+        or `error stop 1`, otherwise that of `ERROR STOP` (128 with ifx, 1 with gfortran) or the one the MPI launcher gives
+        for `MPI_ABORT` with error code 1. With MPI, an initial condition that cannot be read (also when one rank alone finds
+        it), a failed integration of the finite-rate chemistry on any rank, an error that rank 0 finds at set-up or when it
+        reads `input.ini` again, and most errors that every rank finds
+        stop every rank together: each rank writes its message, the ranks finalize MPI and end with exit code 1. A `stop`
+        outside these collective stops, a divergence for instance, ends its own rank only, and the MPI launcher ends the run
+        with a code of its own (255 with the `mpiexec` of Intel MPI 2021.12). Some errors that one rank finds alone, at
+        set-up in the mesh of its blocks (such as a degenerate or folded cell, an axis at r = 0 or a wall on a face of zero
+        area) or in its probes (a probe file that cannot be opened, an unknown probe variable) and on rank 0 in the
+        diagnostic output, and one error of `bc.txt` that every rank finds (chimera entries whose donor fractions sum to
+        less than one half) stop the run through `MPI_ABORT`: the rank
+        writes out its output first, but `MPI_ABORT` makes only a best attempt to stop the processes, and what the other
+        ranks hold for their output may not reach the log. A divergence is caught on any value that is not finite or on a
+        negative pressure, in RELEASE builds with fast math too; a value of the initial condition that is not finite stops
+        the run at set-up ([Initial Conditions](initial-conditions.md#required-variables)). The errors of each input are in
+        its page ([Input File](input.md), [Initial Conditions](initial-conditions.md),
+        [Boundary Conditions](boundary-conditions.md)).
 
-    A binary Tecplot file, read (`ic-format = tecplot binary`) or written, in a build without TecIO stops the run inside
-    the ORION library with `ERROR STOP` («You can not read in binary format without compiling against TecIO», or «write»
-    for a file it writes), with the exit code of `ERROR STOP` given above; with MPI it is not one of the collective
-    stops, and the exit code is the one the launcher gives.
+        A binary Tecplot file, read (`ic-format = tecplot binary`) or written, in a build without TecIO stops the run inside
+        the ORION library with `ERROR STOP` («You can not read in binary format without compiling against TecIO», or «write»
+        for a file it writes), with the exit code of `ERROR STOP` given above; with MPI it is not one of the collective
+        stops, and the exit code is the one the launcher gives.
 
-!!! note "Chemistry integration failures"
-    An integration of the finite-rate chemistry that the integrator reports as failed (a negative return code; with
-    `dodesol` any code but 0), for instance when it needs more steps than `ode-max-steps` allows or when it refuses its
-    tolerances, leaves the cell at its state, and MOSE stops the run at the end of the chemistry of that step, on every
-    thread and every MPI rank together, before any flux reads the cell, with exit code 1 and the line
-    `STOP: chemistry integration error (see above)`. One message comes before it: the integrator, its return code and
-    what its documentation says the code means, the block (and the grid level in a multigrid run), the cell, the
-    chemistry step, the temperature, the pressure and the density of the cell, and the rank in an MPI run. Among the
-    cells whose integration failed in the step, the message gives the one of the smallest block, then k, j and i, so
-    that it is the same with any number of threads and ranks. No solution of that step is written.
+    !!! note "Chemistry integration failures"
+        An integration of the finite-rate chemistry that the integrator reports as failed (a negative return code; with
+        `dodesol` any code but 0), for instance when it needs more steps than `ode-max-steps` allows or when it refuses its
+        tolerances, leaves the cell at its state, and MOSE stops the run at the end of the chemistry of that step, on every
+        thread and every MPI rank together, before any flux reads the cell, with exit code 1 and the line
+        `STOP: chemistry integration error (see above)`. One message comes before it: the integrator, its return code and
+        what its documentation says the code means, the block (and the grid level in a multigrid run), the cell, the
+        chemistry step, the temperature, the pressure and the density of the cell, and the rank in an MPI run. Among the
+        cells whose integration failed in the step, the message gives the one of the smallest block, then k, j and i, so
+        that it is the same with any number of threads and ranks. No solution of that step is written.
 
-!!! note "Counts at the end of the run"
-    A RANS run in which a stage made $\tilde\nu$, $k$ or $\omega$ negative before the realizability floor prints how
-    many cell updates had such a stage
-    ([Turbulence](../theory/turbulence-numerics.md#time-accurate-runs-explicit-sources)):
+    !!! note "Counts at the end of the run"
+        A RANS run in which a stage made $\tilde\nu$, $k$ or $\omega$ negative before the realizability floor prints how
+        many cell updates had such a stage
+        ([Turbulence](../theory/turbulence-numerics.md#time-accurate-runs-explicit-sources)):
 
-    ```text
-     Turbulence variables below zero after a stage (set to the floor): <n>
+        ```text
+         Turbulence variables below zero after a stage (set to the floor): <n>
+        ```
+
+        A run in which the limits of the ghost cells of walls and extrapolation faces acted
+        ([Spatial Discretization](../theory/numerics-ghost-cells.md#ghost-cells-of-walls-and-extrapolation-faces)) prints the ghost fills
+        in which each did (one of the two counts can be zero):
+
+        ```text
+         Ghost cells of walls and 400 faces, fills with the extrapolation cut: <n>, with the 302 temperature at T_w/2: <m>
+        ```
+
+        A run in which none of this happened prints neither line.
+
+    The [Quick Start](../getting-started/quick-start.md) shows the screen of a whole run, from the loading checks
+    to the lines after the timing block.
+
+    ### Stopping criteria
+
+    A run ends after `iter-threshold` iterations, at `time-threshold` (time-accurate
+    runs) or, in steady runs only, when the density residual has fallen by the
+    factor `res-threshold` from the first iteration of the run (of each grid level
+    of a multigrid sequence). The density residual is the L2 norm, over all the
+    cells, of the change of density in one iteration; `residual-history.dat` and
+    the screen report it as it is, while the convergence test takes it relative to
+    the first iteration, so that the density level and the number of cells do not
+    set the threshold. An input written for the absolute test of earlier versions
+    keeps its stop with `res-threshold` divided by the density residual of the
+    first iteration, R₁: Rₙ ≤ (ε/R₁) R₁ is Rₙ ≤ ε. R₁ is the first row of
+    `residual-history.dat` when `res-diter` is 1 (ten digits) and the
+    `MOSE_RES_REFERENCE` of the solutions (all its bits); this holds on one
+    grid level, since a sequence of grids measures each level from its own first
+    residual. A residual that rises before it falls is still measured
+    from the first iteration: the run goes on until the residual is
+    `res-threshold` times that of the first iteration, not times its peak, so it
+    ends later than a test relative to the peak would, never earlier. A restart
+    from a solution keeps the residual of the first iteration of the
+    uninterrupted run, with all its bits in every format (see
+    [Restart](initial-conditions.md#restart)). In
+    time-accurate runs the residual is reported but does not end the run.
+
+    ### Timing
+
+    At the end of a run MOSE prints a `Timing` block. `Solver` is the time spent
+    inside the iteration loop and is the figure to quote when timing the code;
+    `Elapsed` adds what happens between iterations, which is dominated by solution
+    output. On more than one rank the block also reports load imbalance and the
+    fraction of time blocked on halo exchanges and on collectives.
+
+    The exchange wait is the time spent waiting for the messages of the exchanges
+    between the ranks and copying them from the receive buffers. In the
+    single-rate step it is the wait for the ghost cells of the block connections
+    between ranks, with their copy into the ghost cells, and for the donor cells of
+    chimera faces; the exchanges of the tangential ghost values `Pg` and of the
+    connection fluxes, and the wait for the sends, are not part of it. In multirate
+    runs it covers every exchange of the stages (ghost cells, tangential ghost
+    values, connection fluxes) and of the level map and its lists. Filling the send
+    buffers, and in multirate runs computing the tangential values that are sent,
+    count as the work of the rank; a multirate run on more than one rank gives the
+    start of its exchanges on a line of the block, `Exchange start`: the time of the
+    master thread from the first receive posted to the start of the wait, in every
+    exchange of the multirate (posting the receives, filling the send buffers, in
+    viscous runs also computing the tangential values that are sent, posting the
+    sends). It is part of the work of the rank, not of the exchange wait, so the
+    compute spread does not change. The
+    collective wait is the time in the reduction of the local time steps, in the
+    reduction of the residual and in the broadcasts of the controls, and in
+    multirate runs in the reductions of the macro step. A multirate run on more
+    than one rank ends with the minimum, mean and maximum over the ranks, per level,
+    of the time of the stages without their exchanges and of the time of the
+    exchanges ([Multirate time stepping](input.md#multirate-time-stepping)).
+
+    For a running report rather than a single summary, set `timer-diter` in
+    `[MOSE-IO]` to the number of iterations between reports:
+
+    ```ini
+    [MOSE-IO]
+    timer-diter = 100
     ```
 
-    A run in which the limits of the ghost cells of walls and extrapolation faces acted
-    ([Spatial Discretization](../theory/numerics-ghost-cells.md#ghost-cells-of-walls-and-extrapolation-faces)) prints the ghost fills
-    in which each did (one of the two counts can be zero):
-
-    ```text
-     Ghost cells of walls and 400 faces, fills with the extrapolation cut: <n>, with the 302 temperature at T_w/2: <m>
+    ```
+     MOSE Timing | Level 1 | Iter 100 | 100 iters | wall/iter  9.2450E-01 s | rank min  9.1120E-01 avg  9.1934E-01 | imbalance     0.6 % | exchange wait     3.1 % | collective wait     0.9 %
+     MOSE Ranks  | compute/iter max  8.8600E-01 s (rank 3) | min  8.6010E-01 s (rank 7) | mean  8.7412E-01 s | spread     1.4 %
     ```
 
-    A run in which none of this happened prints neither line.
-
-The [Quick Start](../getting-started/quick-start.md) shows the screen of a whole run, from the loading checks
-to the lines after the timing block.
-
-### Stopping criteria
-
-A run ends after `iter-threshold` iterations, at `time-threshold` (time-accurate
-runs) or, in steady runs only, when the density residual has fallen by the
-factor `res-threshold` from the first iteration of the run (of each grid level
-of a multigrid sequence). The density residual is the L2 norm, over all the
-cells, of the change of density in one iteration; `residual-history.dat` and
-the screen report it as it is, while the convergence test takes it relative to
-the first iteration, so that the density level and the number of cells do not
-set the threshold. An input written for the absolute test of earlier versions
-keeps its stop with `res-threshold` divided by the density residual of the
-first iteration, R₁: Rₙ ≤ (ε/R₁) R₁ is Rₙ ≤ ε. R₁ is the first row of
-`residual-history.dat` when `res-diter` is 1 (ten digits) and the
-`MOSE_RES_REFERENCE` of the solutions (all its bits); this holds on one
-grid level, since a sequence of grids measures each level from its own first
-residual. A residual that rises before it falls is still measured
-from the first iteration: the run goes on until the residual is
-`res-threshold` times that of the first iteration, not times its peak, so it
-ends later than a test relative to the peak would, never earlier. A restart
-from a solution keeps the residual of the first iteration of the
-uninterrupted run, with all its bits in every format (see
-[Restart](initial-conditions.md#restart)). In
-time-accurate runs the residual is reported but does not end the run.
-
-### Timing
-
-At the end of a run MOSE prints a `Timing` block. `Solver` is the time spent
-inside the iteration loop and is the figure to quote when timing the code;
-`Elapsed` adds what happens between iterations, which is dominated by solution
-output. On more than one rank the block also reports load imbalance and the
-fraction of time blocked on halo exchanges and on collectives.
-
-The exchange wait is the time spent waiting for the messages of the exchanges
-between the ranks and copying them from the receive buffers. In the
-single-rate step it is the wait for the ghost cells of the block connections
-between ranks, with their copy into the ghost cells, and for the donor cells of
-chimera faces; the exchanges of the tangential ghost values `Pg` and of the
-connection fluxes, and the wait for the sends, are not part of it. In multirate
-runs it covers every exchange of the stages (ghost cells, tangential ghost
-values, connection fluxes) and of the level map and its lists. Filling the send
-buffers, and in multirate runs computing the tangential values that are sent,
-count as the work of the rank; a multirate run on more than one rank gives the
-start of its exchanges on a line of the block, `Exchange start`: the time of the
-master thread from the first receive posted to the start of the wait, in every
-exchange of the multirate (posting the receives, filling the send buffers, in
-viscous runs also computing the tangential values that are sent, posting the
-sends). It is part of the work of the rank, not of the exchange wait, so the
-compute spread does not change. The
-collective wait is the time in the reduction of the local time steps, in the
-reduction of the residual and in the broadcasts of the controls, and in
-multirate runs in the reductions of the macro step. A multirate run on more
-than one rank ends with the minimum, mean and maximum over the ranks, per level,
-of the time of the stages without their exchanges and of the time of the
-exchanges ([Multirate time stepping](input.md#multirate-time-stepping)).
-
-For a running report rather than a single summary, set `timer-diter` in
-`[MOSE-IO]` to the number of iterations between reports:
-
-```ini
-[MOSE-IO]
-timer-diter = 100
-```
-
-```
- MOSE Timing | Level 1 | Iter 100 | 100 iters | wall/iter  9.2450E-01 s | rank min  9.1120E-01 avg  9.1934E-01 | imbalance     0.6 % | exchange wait     3.1 % | collective wait     0.9 %
- MOSE Ranks  | compute/iter max  8.8600E-01 s (rank 3) | min  8.6010E-01 s (rank 7) | mean  8.7412E-01 s | spread     1.4 %
-```
-
-Times are the **maximum** over the ranks — the critical path, which is what
-sets the time to solution. `imbalance` is how far the slowest rank is above the
-mean; a large `compute/iter` spread with a small `imbalance` means the ranks are
-unevenly loaded and the fast ones are absorbing it in the exchange wait.
-Reporting is off by default (`timer-diter = 0`). The timers run in every run:
-they read the clock a few times per iteration, and in multirate runs twice per
-stage, per evaluation of the certificate and, with several ranks, per reduction
-of the macro step, and four times per exchange.
+    Times are the **maximum** over the ranks — the critical path, which is what
+    sets the time to solution. `imbalance` is how far the slowest rank is above the
+    mean; a large `compute/iter` spread with a small `imbalance` means the ranks are
+    unevenly loaded and the fast ones are absorbing it in the exchange wait.
+    Reporting is off by default (`timer-diter = 0`). The timers run in every run:
+    they read the clock a few times per iteration, and in multirate runs twice per
+    stage, per evaluation of the certificate and, with several ranks, per reduction
+    of the macro step, and four times per exchange.
 
 ## Output
 
