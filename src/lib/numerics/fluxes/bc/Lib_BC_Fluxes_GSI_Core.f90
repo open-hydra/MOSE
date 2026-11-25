@@ -63,6 +63,10 @@ module MOSE_Lib_BC_Fluxes_GSI_Core
   !> with Ovar): wall partial densities and species surface fluxes. Read by MOSE_IO_Wall (keyword 'species').
   real(R8), allocatable, public :: gsi_wall_roi(:), gsi_wall_omega(:)
   logical, public :: gsi_wall_species_set = .false.
+  !> Diffusive heat flux into the gas at that wall cell, sum over the species of J_s h_s(T_wall), with J_s the diffusive
+  !> mass flux of species s into the gas: J_s = omega_s - mdot Y_w,s along the face normal of the solver, times `into`
+  !> (+1 when that normal points into the gas, as in Compute_Wall_Properties). Column "qdiff" of the wall output.
+  real(R8), public :: gsi_wall_qdiff = 0d0
 
   !> Family of gas-surface interaction model, selecting the GSI dispatch.
   integer, parameter :: GSI_KIND_PYROLYSIS = 1  !< Arrhenius pyrolysis of a solid fuel
@@ -511,6 +515,7 @@ contains
     real(R8) :: Prim(nprim), rho, Rgas, T_cell
     real(R8) :: T_wall, rho_wall, Prim_wall(nprim), mu_wall, k_wall
     real(R8) :: grad_T(3), q_conv, q_pyro, q_rad, omega(nsc), mdot
+    integer  :: s
 
     call Get_Wall_Face ( Im, Jm, Km, Fm, Blk, face )
 
@@ -543,6 +548,12 @@ contains
     if ( present(Ovar) ) then
       if ( .not. allocated(gsi_wall_roi) ) allocate ( gsi_wall_roi(nsc), gsi_wall_omega(nsc) )
       gsi_wall_roi = Prim_wall(1:nsc) ; gsi_wall_omega = omega ; gsi_wall_species_set = .true.
+      gsi_wall_qdiff = 0d0
+      do s = 1, nsc
+        gsi_wall_qdiff = gsi_wall_qdiff + ( omega(s) - mdot * Prim_wall(s) / rho_wall ) * f_tabT ( T_wall, s, h_tab )
+      end do
+      gsi_wall_qdiff = - face % modfm2 * gsi_wall_qdiff
+      if ( gsi_wall_qdiff == 0d0 ) gsi_wall_qdiff = 0d0   ! -0 written as +0, as Compute_Wall_Properties does
     end if
 
     ! q_rad closes the wall temperature balance above; the gas only ever loses q_conv.

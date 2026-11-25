@@ -10,6 +10,10 @@ module MOSE_IO_Wall
   type(ORION_data), allocatable :: IOwall(:)
   ! keyword 'species' of wall-variables: wall partial densities and species surface fluxes of the GSI walls
   logical :: write_wall_species = .false.
+  ! column "qdiff" of the group 'thermal', written when the gas has more than one species: the diffusive heat flux into
+  ! the gas, sum of J_s h_s(Tw) over the species (J_s the diffusive mass flux of species s into the gas); it is that of
+  ! the ablating walls 504-506 (pyrolysis, surface reactions, pyrolysing ablator) and zero on the other walls
+  logical :: write_wall_qdiff = .false.
 
 contains
 
@@ -40,6 +44,11 @@ contains
       obj_io%Onwall = obj_io%Onwall + 2
       obj_io%Owallnames = trim(obj_io%Owallnames)//' "Tw" "qw"'
       obj_io%write_wall_thermal = .true.
+    endif
+    write_wall_qdiff = obj_io%write_wall_thermal .and. nsc > 1
+    if (write_wall_qdiff) then
+      obj_io%Onwall = obj_io%Onwall + 1
+      obj_io%Owallnames = trim(obj_io%Owallnames)//' "qdiff"'
     endif
     if (index(obj_io%wall_variables,'mass')>0) then
       obj_io%Onwall = obj_io%Onwall + 1
@@ -194,7 +203,7 @@ contains
     use MOSE_Lib_BC_Fluxes_GSI_Char_Pyrolysis
     use MOSE_Config_Types_m,    only: obj_rot
     use MOSE_Lib_RotatingFrame, only: RF_Is_Stationary_Face, RF_Wall_Velocity, RF_Wall_Velocity_Gradient, RF_Face_Center
-    use MOSE_Lib_BC_Fluxes_GSI_Core, only: gsi_wall_roi, gsi_wall_omega, gsi_wall_species_set
+    use MOSE_Lib_BC_Fluxes_GSI_Core, only: gsi_wall_roi, gsi_wall_omega, gsi_wall_species_set, gsi_wall_qdiff
     implicit none
     type(MOSE_domain_type), intent(inout) :: domain
     ! Local
@@ -220,8 +229,9 @@ contains
       end do
     end do
 
-    NO = 8
-    if (write_wall_species) NO = 8 + 2*nsc
+    ! per wall cell: Ovar(1:8), qdiff, then with the keyword 'species' the wall partial densities and surface fluxes
+    NO = 9
+    if (write_wall_species) NO = 9 + 2*nsc
     allocate(Oext(2*nsc))
     allocate(wall_buf(NO * n_wall_total))
     wall_buf = 0d0
@@ -338,8 +348,9 @@ contains
           domain % blk(Bm) % r (:,Im,Jm,Km) = r_keep
 
           wall_buf(NO*(wall_i-1)+1 : NO*(wall_i-1)+8) = Ovar
+          if (gsi_wall_species_set) wall_buf(NO*(wall_i-1)+9) = gsi_wall_qdiff
           if (write_wall_species .and. gsi_wall_species_set) &
-            wall_buf(NO*(wall_i-1)+9 : NO*wall_i) = [ gsi_wall_roi, gsi_wall_omega ]
+            wall_buf(NO*(wall_i-1)+10 : NO*wall_i) = [ gsi_wall_roi, gsi_wall_omega ]
         enddo
 
       enddo ! face
@@ -363,7 +374,7 @@ contains
             i = order(ii)
             wall_i = wall_i + 1
             Ovar = wall_buf(NO*(wall_i-1)+1 : NO*(wall_i-1)+8)
-            if (write_wall_species) Oext = wall_buf(NO*(wall_i-1)+9 : NO*wall_i)
+            if (write_wall_species) Oext = wall_buf(NO*(wall_i-1)+10 : NO*wall_i)
 
             select case(f)
               case(1,2); Is = 1               ; Js = domain%bc(i)%j ; Ks = domain%bc(i)%k
@@ -379,6 +390,10 @@ contains
             if (obj_io%write_wall_thermal) then
               IOwall(lv)%block(bb)%vars(pv+1:pv+2, Is, Js, Ks) = Ovar(6:7)
               pv = pv + 2
+            endif
+            if (write_wall_qdiff) then
+              IOwall(lv)%block(bb)%vars(pv+1, Is, Js, Ks) = wall_buf(NO*(wall_i-1)+9)
+              pv = pv + 1
             endif
             if (obj_io%write_wall_mass) then
               IOwall(lv)%block(bb)%vars(pv+1, Is, Js, Ks) = Ovar(8)
