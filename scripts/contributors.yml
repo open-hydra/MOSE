@@ -16,8 +16,8 @@ original_authors:
 
 present_maintainers:
   - name: Marco Grossi
-  - name: Alex Falco
   - name: Alessandro Montanari
+  - name: Alex Falco
 
 # Substring-matched against the whole "Name <email>" identity.
 exclude:
