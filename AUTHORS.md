@@ -21,13 +21,12 @@ removed from this file; per-release credit is recorded in `CITATION.cff`.
 ## Present Maintainers
 
 - Marco Grossi
-- Alex Falco
 - Alessandro Montanari
+- Alex Falco
 
 ## Contributors
 
 Automatically sourced from git history.
 
-- AndreaGiacomi
+- Andrea Giacomi
 - Matteo Fiore
-- PeppeJump

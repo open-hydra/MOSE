@@ -105,14 +105,39 @@ nav:
     - Quick Start: getting-started/quick-start.md
 
   - User Guide:
-    - user/index.md
-    - Using MOSE: user/using.md
-    - Parallel Execution: user/parallel.md
-    - Input File: user/input.md
-    - Input Parameters: user/registry.md
-    - Initial Conditions: user/initial-conditions.md
-    - Restarts in Detail: user/restart.md
-    - Boundary Conditions: user/boundary-conditions.md
+    - user-guide/index.md
+    - Prepare a Case:
+      - Initial Conditions: user-guide/initial-conditions.md
+      - Boundary Conditions:
+        - Overview: user-guide/boundary-conditions.md
+        - By Family: user/boundaries/index.md
+        - Connections: user/boundaries/connections.md
+        - Euler Boundaries: user/boundaries/euler.md
+        - Inlets & Outlets: user/boundaries/inlets-outlets.md
+        - Viscous Walls: user/boundaries/viscous-walls.md
+        - Manifold: user/boundaries/manifold.md
+        - Gas–Surface Interaction: user/boundaries/gas-surface.md
+    - Configure:
+      - Input File Essentials: user-guide/input-file.md
+      - Common Switches: user-guide/switches.md
+      - Validation & Runtime Changes: user/input-validation.md
+    - Run:
+      - Run a Case: user-guide/run-a-case.md
+      - Parallel Execution: user-guide/parallel.md
+      - Diagnostics & Troubleshooting: user/diagnostics.md
+    - Restart a Simulation: user-guide/restart.md
+    - Advanced Topics:
+      - Multigrid & FAS: user/multigrid.md
+      - Multirate Time Stepping: user/multirate.md
+    - Reference:
+      - Reference Index: user/index.md
+      - Parameter Registry: user/registry.md
+      - Running MOSE (Full): user/using.md
+      - Input File (Full): user/input.md
+      - Initial-Condition File Format: user/initial-conditions.md
+      - Restart Details & Limits: user/restart.md
+      - Parallel Details & Benchmarks: user/parallel.md
+      - Boundary-Condition Records: user/boundary-conditions.md
 
   - Theoretical Guide:
     - theory/index.md

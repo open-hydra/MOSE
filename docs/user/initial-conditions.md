@@ -115,22 +115,10 @@ every rank stops, also when one rank alone holds the value.
 
 ## Restart
 
-To resume a run, set `newrun = false` in `input.ini`. MOSE then reads the initial condition from the latest solution in
-`OUTPUT/` instead of `INPUT/`: `OUTPUT/field.*`, written at the end of a run, or else the highest-numbered `OUTPUT/field<N>.*`
-(`sol-overwrite = false`), in the `sol-format` format.
+A restart and a new run from an old flow field are different operations:
 
-A restart restores the flow field, the physical time of a time-accurate run or the global iteration count of a steady run, and
-the counters that decide what the run does and writes next. A run split in two parts then writes the same files as the run in
-one go, byte for byte, within the [limits](restart.md#limits).
+- Set `newrun = false` to continue from a solution in `OUTPUT/`, restoring its time or iteration state.
+- Keep `newrun = true` and copy a solution to `INPUT/ic.*` to reuse only the flow field while starting time and run counters from zero.
 
-- A solution that holds no time (a vtk file without `TIME`, a Tecplot ASCII file without `SOLUTIONTIME`) cannot be restarted
-  from: the run stops at set-up. Use it as the initial condition (`INPUT/ic.*`, `newrun = true`), which starts at $t = 0$.
-- A time-accurate restart from a steady solution starts a new transient at $t = 0$.
-- `residual-history.dat`, the probe files and `torque.dat` keep the rows written after the solution the restart reads; the
-  restart drops them and appends its own.
-- Solutions written by earlier versions of MOSE hold no counters: the restart restores the field and the time, and starts the
-  other counters as a new run does.
+See [Restart a simulation](restart.md) for the practical resume procedure and [Restarts in detail](restart.md#limits) for format details and limitations.
 
-!!! info "Going deeper"
-    [Restarts in Detail](restart.md): how each format stores the time and the counters, what a restart continues exactly, and
-    the cases where it does not.

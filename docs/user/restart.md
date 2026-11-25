@@ -1,4 +1,23 @@
-# Restarts in Detail
+# Restart & Recovery
+
+## Do I need a restart?
+
+No, not for a new simulation. The default `newrun = true` starts from `INPUT/ic.*`. A restart is only for continuing a previous run from a solution already written in `OUTPUT/`.
+
+To continue a run, keep the case directory and its output files, set `newrun = false` in `[MOSE-Parameters]`, and launch a new MOSE process. The setting is read at startup; changing it while the solver is running does nothing.
+
+```ini
+[MOSE-Parameters]
+newrun = false
+```
+
+At startup MOSE looks for `OUTPUT/field.*` in the format selected by `sol-format`. If there is no `field.*`, it searches the numbered `field<N>.*` snapshots. A usable solution must contain its simulation time; a file without time metadata cannot be used as a restart.
+
+**Plan checkpoints before a long job.** Set `sol-diter` for steady runs or `sol-dtime` for time-accurate runs. The defaults are so large that they do not provide regular recovery points. With `sol-overwrite = true`, the checkpoint is replaced each time; with `false`, numbered snapshots are retained.
+
+To start a *new* run from a previous flow field instead, copy the solution to `INPUT/ic.*`, select its format with `ic-format`, and leave `newrun = true`. That reuses the field but resets time and run counters.
+
+---
 
 This page gives the details behind [Restart](initial-conditions.md#restart): how a solution is read, what a restart continues
 exactly, what each format keeps, and the cases where a restart is not identical to the run in one go.
